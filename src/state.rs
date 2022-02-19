@@ -120,6 +120,29 @@ mod tests {
     }
 
     #[test]
+    fn resource_variables_neq() {
+        let a = ResourceVariables {
+            integer_variables: vec![1, 2],
+            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0)],
+        };
+        let b = ResourceVariables {
+            integer_variables: vec![3, 2],
+            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(-1.0)],
+        };
+        assert_eq!(a.partial_cmp(&b), None);
+        let b = ResourceVariables {
+            integer_variables: vec![3, 1],
+            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(-1.0)],
+        };
+        assert_eq!(a.partial_cmp(&b), None);
+        let b = ResourceVariables {
+            integer_variables: vec![1, 1],
+            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(3.0)],
+        };
+        assert_eq!(a.partial_cmp(&b), None);
+    }
+
+    #[test]
     #[should_panic]
     fn resource_variables_integer_length_panic() {
         let a = ResourceVariables {
