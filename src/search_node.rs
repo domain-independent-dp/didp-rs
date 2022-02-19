@@ -55,6 +55,7 @@ impl<T: Ord + Copy> StateRegistry<T> {
         let entry = self.0.entry(state.signature_variables.clone());
         let v = match entry {
             collections::hash_map::Entry::Occupied(entry) => {
+                // use signature variables already stored
                 state.signature_variables = entry.key().clone();
                 let v = entry.into_mut();
                 for (i, other) in v.iter().enumerate() {
@@ -63,17 +64,25 @@ impl<T: Ord + Copy> StateRegistry<T> {
                         .resource_variables
                         .partial_cmp(&state.resource_variables);
                     match result {
-                        // dominated
                         Some(Ordering::Equal) | Some(Ordering::Greater) if g >= other.g => {
+                            // dominated
                             return None;
                         }
-                        // dominating
                         Some(Ordering::Equal) | Some(Ordering::Less) if g <= other.g => {
+                            // dominating
                             if !*other.closed.borrow() {
                                 *other.closed.borrow_mut() = true;
                             }
                             let h = match result.unwrap() {
-                                Ordering::Equal => RefCell::new(*other.h.borrow()),
+                                Ordering::Equal => {
+                                    if let Some(h) = *other.h.borrow() {
+                                        // cached value
+                                        RefCell::new(Some(h))
+                                    } else {
+                                        // dead end
+                                        return None;
+                                    }
+                                }
                                 _ => RefCell::new(None),
                             };
                             let node = Rc::new(SearchNode {
