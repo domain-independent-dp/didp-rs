@@ -6,7 +6,7 @@ use crate::variable;
 #[derive(Debug, PartialEq, Eq)]
 pub struct State {
     pub signature_variables: Rc<SignatureVariables>,
-    pub resource_variables: Option<Rc<ResourceVariables>>,
+    pub resource_variables: ResourceVariables,
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
