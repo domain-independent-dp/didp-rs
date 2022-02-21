@@ -3,13 +3,13 @@ use std::rc::Rc;
 
 use crate::variable;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct State {
     pub signature_variables: Rc<SignatureVariables>,
     pub resource_variables: ResourceVariables,
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct SignatureVariables {
     pub set_variables: Vec<variable::SetVariable>,
     pub permutation_variables: Vec<variable::PermutationVariable>,
@@ -18,7 +18,7 @@ pub struct SignatureVariables {
     pub continuous_variables: Vec<variable::ContinuousVariable>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ResourceVariables {
     pub integer_variables: Vec<variable::IntegerVariable>,
     pub continuous_variables: Vec<variable::ContinuousVariable>,
