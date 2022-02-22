@@ -296,6 +296,24 @@ mod tests {
     }
 
     #[test]
+    fn node_dead_end() {
+        let mut registry = SearchNodeRegistry::new();
+
+        let state = state::State {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![1, 2]),
+        };
+        registry.get_node(state, 2, None);
+
+        let state = state::State {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![1, 2]),
+        };
+        let node = registry.get_node(state, 1, None);
+        assert!(node.is_none());
+    }
+
+    #[test]
     fn get_dominating_node() {
         let mut registry = SearchNodeRegistry::new();
 
