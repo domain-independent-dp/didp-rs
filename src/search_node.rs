@@ -1,14 +1,14 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections;
-use std::fmt::Display;
 use std::rc::Rc;
 
 use crate::state;
+use crate::variable;
 
 #[derive(Debug, Eq)]
-pub struct SearchNode<T: Ord + Copy> {
-    pub state: state::State,
+pub struct SearchNode<T: variable::Numeric> {
+    pub state: state::State<T>,
     pub g: T,
     pub h: RefCell<Option<T>>,
     pub f: RefCell<Option<T>>,
@@ -16,29 +16,29 @@ pub struct SearchNode<T: Ord + Copy> {
     pub closed: RefCell<bool>,
 }
 
-impl<T: Ord + Copy> Ord for SearchNode<T> {
+impl<T: variable::Numeric> Ord for SearchNode<T> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.f.cmp(&other.f).reverse()
     }
 }
 
-impl<T: Ord + Copy> PartialOrd for SearchNode<T> {
+impl<T: variable::Numeric> PartialOrd for SearchNode<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<T: Ord + Copy> PartialEq for SearchNode<T> {
+impl<T: variable::Numeric> PartialEq for SearchNode<T> {
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f
     }
 }
 
-pub struct SearchNodeRegistry<T: Ord + Copy>(
-    collections::HashMap<Rc<state::SignatureVariables>, Vec<Rc<SearchNode<T>>>>,
+pub struct SearchNodeRegistry<T: variable::Numeric>(
+    collections::HashMap<Rc<state::SignatureVariables<T>>, Vec<Rc<SearchNode<T>>>>,
 );
 
-impl<T: Ord + Copy> SearchNodeRegistry<T> {
+impl<T: variable::Numeric> SearchNodeRegistry<T> {
     pub fn new() -> SearchNodeRegistry<T> {
         SearchNodeRegistry(collections::HashMap::new())
     }
@@ -49,7 +49,7 @@ impl<T: Ord + Copy> SearchNodeRegistry<T> {
 
     pub fn get_node(
         &mut self,
-        mut state: state::State,
+        mut state: state::State<T>,
         g: T,
         parent: Option<Rc<SearchNode<T>>>,
     ) -> Option<Rc<SearchNode<T>>> {
@@ -121,36 +121,31 @@ impl<T: Ord + Copy> SearchNodeRegistry<T> {
 mod tests {
     use super::*;
     use crate::variable;
-    use std::ops;
 
     fn generate_signature_variables(
-        integer_variables: Vec<variable::IntegerVariable>,
-    ) -> Rc<state::SignatureVariables> {
+        numeric_variables: Vec<variable::IntegerVariable>,
+    ) -> Rc<state::SignatureVariables<variable::IntegerVariable>> {
         Rc::new(state::SignatureVariables {
             set_variables: Vec::new(),
             permutation_variables: Vec::new(),
             element_variables: Vec::new(),
-            integer_variables,
-            continuous_variables: Vec::new(),
+            numeric_variables,
         })
     }
 
     fn generate_resource_variables(
-        integer_variables: Vec<variable::IntegerVariable>,
-    ) -> state::ResourceVariables {
-        state::ResourceVariables {
-            integer_variables,
-            continuous_variables: Vec::new(),
-        }
+        numeric_variables: Vec<variable::IntegerVariable>,
+    ) -> state::ResourceVariables<variable::IntegerVariable> {
+        state::ResourceVariables { numeric_variables }
     }
 
-    fn generate_node<T: Ord + Copy + ops::Add>(
-        signature_variables: Rc<state::SignatureVariables>,
-        resource_variables: state::ResourceVariables,
-        g: T,
-        h: T,
-        f: T,
-    ) -> SearchNode<T> {
+    fn generate_node(
+        signature_variables: Rc<state::SignatureVariables<variable::IntegerVariable>>,
+        resource_variables: state::ResourceVariables<variable::IntegerVariable>,
+        g: variable::IntegerVariable,
+        h: variable::IntegerVariable,
+        f: variable::IntegerVariable,
+    ) -> SearchNode<variable::IntegerVariable> {
         SearchNode {
             state: state::State {
                 signature_variables,

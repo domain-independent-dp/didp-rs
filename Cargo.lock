@@ -11,6 +11,7 @@ name = "didp"
 version = "0.1.0"
 dependencies = [
  "fixedbitset",
+ "num-traits",
  "ordered-float",
 ]
 

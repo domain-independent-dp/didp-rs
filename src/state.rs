@@ -4,39 +4,32 @@ use std::rc::Rc;
 use crate::variable;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct State {
-    pub signature_variables: Rc<SignatureVariables>,
-    pub resource_variables: ResourceVariables,
+pub struct State<T: variable::Numeric> {
+    pub signature_variables: Rc<SignatureVariables<T>>,
+    pub resource_variables: ResourceVariables<T>,
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
-pub struct SignatureVariables {
+pub struct SignatureVariables<T: variable::Numeric> {
     pub set_variables: Vec<variable::SetVariable>,
     pub permutation_variables: Vec<variable::PermutationVariable>,
     pub element_variables: Vec<variable::ElementVariable>,
-    pub integer_variables: Vec<variable::IntegerVariable>,
-    pub continuous_variables: Vec<variable::ContinuousVariable>,
+    pub numeric_variables: Vec<T>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct ResourceVariables {
-    pub integer_variables: Vec<variable::IntegerVariable>,
-    pub continuous_variables: Vec<variable::ContinuousVariable>,
+pub struct ResourceVariables<T: variable::Numeric> {
+    pub numeric_variables: Vec<T>,
 }
 
-impl PartialOrd for ResourceVariables {
+impl<T: variable::Numeric> PartialOrd for ResourceVariables<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let state = Some(Ordering::Equal);
-        let state = dominance(state, &self.integer_variables, &other.integer_variables);
-        dominance(
-            state,
-            &self.continuous_variables,
-            &other.continuous_variables,
-        )
+        dominance(state, &self.numeric_variables, &other.numeric_variables)
     }
 }
 
-fn dominance<T: PartialOrd>(state: Option<Ordering>, a: &[T], b: &[T]) -> Option<Ordering> {
+fn dominance<T: variable::Numeric>(state: Option<Ordering>, a: &[T], b: &[T]) -> Option<Ordering> {
     debug_assert!(a.len() == b.len());
 
     let mut result = match state {
@@ -72,46 +65,25 @@ fn dominance<T: PartialOrd>(state: Option<Ordering>, a: &[T], b: &[T]) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ordered_float::OrderedFloat;
 
     #[test]
     fn resource_variables_eq() {
         let a = ResourceVariables {
-            integer_variables: vec![1, 2],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0)],
+            numeric_variables: vec![1, 2],
         };
         let b = ResourceVariables {
-            integer_variables: vec![1, 2],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0)],
+            numeric_variables: vec![1, 2],
         };
         assert_eq!(a, b);
     }
 
     #[test]
-    fn resource_variables_integer_lt() {
+    fn resource_variables_lt() {
         let a = ResourceVariables {
-            integer_variables: vec![1, 2],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0)],
+            numeric_variables: vec![1, 2],
         };
         let b = ResourceVariables {
-            integer_variables: vec![1, -2],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0)],
-        };
-        assert!(a >= b);
-        assert!(a > b);
-        assert!(b <= a);
-        assert!(b < a);
-    }
-
-    #[test]
-    fn resource_variables_continuous_lt() {
-        let a = ResourceVariables {
-            integer_variables: vec![1, 2],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0)],
-        };
-        let b = ResourceVariables {
-            integer_variables: vec![1, 2],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(-1.0)],
+            numeric_variables: vec![1, -2],
         };
         assert!(a >= b);
         assert!(a > b);
@@ -122,50 +94,22 @@ mod tests {
     #[test]
     fn resource_variables_neq() {
         let a = ResourceVariables {
-            integer_variables: vec![1, 2],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0)],
+            numeric_variables: vec![1, 2],
         };
         let b = ResourceVariables {
-            integer_variables: vec![3, 2],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(-1.0)],
-        };
-        assert_eq!(a.partial_cmp(&b), None);
-        let b = ResourceVariables {
-            integer_variables: vec![3, 1],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(-1.0)],
-        };
-        assert_eq!(a.partial_cmp(&b), None);
-        let b = ResourceVariables {
-            integer_variables: vec![1, 1],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(3.0)],
+            numeric_variables: vec![3, 1],
         };
         assert_eq!(a.partial_cmp(&b), None);
     }
 
     #[test]
     #[should_panic]
-    fn resource_variables_integer_length_panic() {
+    fn resource_variables_ilength_panic() {
         let a = ResourceVariables {
-            integer_variables: vec![1, 2],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0)],
+            numeric_variables: vec![1, 2],
         };
         let b = ResourceVariables {
-            integer_variables: vec![1],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0)],
-        };
-        let _ = a < b;
-    }
-
-    #[test]
-    #[should_panic]
-    fn resource_variables_continuous_length_panic() {
-        let a = ResourceVariables {
-            integer_variables: vec![1, 2],
-            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0)],
-        };
-        let b = ResourceVariables {
-            integer_variables: vec![1, 2],
-            continuous_variables: vec![OrderedFloat(1.0)],
+            numeric_variables: vec![1],
         };
         let _ = a < b;
     }
