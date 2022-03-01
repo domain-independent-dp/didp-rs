@@ -12,6 +12,18 @@ pub enum ParseErr {
     Reason(String),
 }
 
+pub fn parse<T: variable::Numeric>(
+    text: String,
+    problem: &problem::Problem<T>,
+) -> Result<NumericExpression<T>, ParseErr>
+where
+    <T as str::FromStr>::Err: fmt::Debug,
+{
+    let tokens = tokenize(text);
+    let (expression, _) = parse_tokens(&tokens, problem)?;
+    Ok(expression)
+}
+
 pub fn tokenize(text: String) -> Vec<String> {
     text.replace("(", " ( ")
         .replace(")", " ) ")
@@ -21,7 +33,7 @@ pub fn tokenize(text: String) -> Vec<String> {
         .collect()
 }
 
-pub fn parse<'a, 'b, T: variable::Numeric>(
+pub fn parse_tokens<'a, 'b, T: variable::Numeric>(
     tokens: &'a [String],
     problem: &'b problem::Problem<T>,
 ) -> Result<(NumericExpression<'b, T>, &'a [String]), ParseErr>
@@ -64,8 +76,8 @@ where
     if let Some(f) = problem.functions.get(name) {
         return parse_function(f, tokens, problem);
     }
-    let (x, rest) = parse(rest, problem)?;
-    let (y, rest) = parse(rest, problem)?;
+    let (x, rest) = parse_tokens(rest, problem)?;
+    let (y, rest) = parse_tokens(rest, problem)?;
     let rest = parse_closing(rest)?;
     match &name[..] {
         "+" => Ok((
@@ -402,7 +414,7 @@ fn parse_argument_atom(token: &str) -> Result<ArgumentExpression, ParseErr> {
     Ok(ArgumentExpression::Element(ElementExpression::Number(n)))
 }
 
-pub fn parse_closing(tokens: &[String]) -> Result<&[String], ParseErr> {
+fn parse_closing(tokens: &[String]) -> Result<&[String], ParseErr> {
     let (token, rest) = tokens
         .split_first()
         .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
