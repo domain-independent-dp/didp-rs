@@ -41,6 +41,42 @@ pub enum NumericExpression<'a, T: variable::Numeric> {
         SetExpression,
         SetExpression,
     ),
+    Function3DSumX(
+        &'a NumericFunction3D<T>,
+        SetExpression,
+        ElementExpression,
+        ElementExpression,
+    ),
+    Function3DSumY(
+        &'a NumericFunction3D<T>,
+        ElementExpression,
+        SetExpression,
+        ElementExpression,
+    ),
+    Function3DSumZ(
+        &'a NumericFunction3D<T>,
+        ElementExpression,
+        ElementExpression,
+        SetExpression,
+    ),
+    Function3DSumXY(
+        &'a NumericFunction3D<T>,
+        SetExpression,
+        SetExpression,
+        ElementExpression,
+    ),
+    Function3DSumXZ(
+        &'a NumericFunction3D<T>,
+        SetExpression,
+        ElementExpression,
+        SetExpression,
+    ),
+    Function3DSumYZ(
+        &'a NumericFunction3D<T>,
+        ElementExpression,
+        SetExpression,
+        SetExpression,
+    ),
     Function(&'a NumericFunction<T>, Vec<ElementExpression>),
     FunctionSum(&'a NumericFunction<T>, Vec<ArgumentExpression>),
 }
@@ -77,6 +113,18 @@ impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
             NumericExpression::Function2DSumY(f, x, y) => f.sum_y(x, y, &node.state, problem),
             NumericExpression::Function3D(f, x, y, z) => f.eval(x, y, z, &node.state),
             NumericExpression::Function3DSum(f, x, y, z) => f.sum(x, y, z, &node.state, problem),
+            NumericExpression::Function3DSumX(f, x, y, z) => f.sum_x(x, y, z, &node.state, problem),
+            NumericExpression::Function3DSumY(f, x, y, z) => f.sum_y(x, y, z, &node.state, problem),
+            NumericExpression::Function3DSumZ(f, x, y, z) => f.sum_z(x, y, z, &node.state, problem),
+            NumericExpression::Function3DSumXY(f, x, y, z) => {
+                f.sum_xy(x, y, z, &node.state, problem)
+            }
+            NumericExpression::Function3DSumXZ(f, x, y, z) => {
+                f.sum_xz(x, y, z, &node.state, problem)
+            }
+            NumericExpression::Function3DSumYZ(f, x, y, z) => {
+                f.sum_yz(x, y, z, &node.state, problem)
+            }
             NumericExpression::Function(f, args) => f.eval(args, &node.state),
             NumericExpression::FunctionSum(f, args) => f.sum(args, &node.state, problem),
         }
@@ -274,6 +322,96 @@ impl<T: variable::Numeric> NumericFunction3D<T> {
                     .map(|y| z.ones().map(|z| self.0[x][y][z]).sum())
                     .sum()
             })
+            .sum()
+    }
+
+    pub fn sum_x(
+        &self,
+        x: &SetExpression,
+        y: &ElementExpression,
+        z: &ElementExpression,
+        state: &state::State<T>,
+        problem: &problem::Problem,
+    ) -> T {
+        let x = x.eval(state, problem);
+        let y = y.eval(state);
+        let z = z.eval(state);
+        x.ones().map(|x| self.0[x][y][z]).sum()
+    }
+
+    pub fn sum_y(
+        &self,
+        x: &ElementExpression,
+        y: &SetExpression,
+        z: &ElementExpression,
+        state: &state::State<T>,
+        problem: &problem::Problem,
+    ) -> T {
+        let x = x.eval(state);
+        let y = y.eval(state, problem);
+        let z = z.eval(state);
+        y.ones().map(|y| self.0[x][y][z]).sum()
+    }
+
+    pub fn sum_z(
+        &self,
+        x: &ElementExpression,
+        y: &ElementExpression,
+        z: &SetExpression,
+        state: &state::State<T>,
+        problem: &problem::Problem,
+    ) -> T {
+        let x = x.eval(state);
+        let y = y.eval(state);
+        let z = z.eval(state, problem);
+        z.ones().map(|z| self.0[x][y][z]).sum()
+    }
+
+    pub fn sum_xy(
+        &self,
+        x: &SetExpression,
+        y: &SetExpression,
+        z: &ElementExpression,
+        state: &state::State<T>,
+        problem: &problem::Problem,
+    ) -> T {
+        let x = x.eval(state, problem);
+        let y = y.eval(state, problem);
+        let z = z.eval(state);
+        x.ones()
+            .map(|x| y.ones().map(|y| self.0[x][y][z]).sum())
+            .sum()
+    }
+
+    pub fn sum_xz(
+        &self,
+        x: &SetExpression,
+        y: &ElementExpression,
+        z: &SetExpression,
+        state: &state::State<T>,
+        problem: &problem::Problem,
+    ) -> T {
+        let x = x.eval(state, problem);
+        let y = y.eval(state);
+        let z = z.eval(state, problem);
+        x.ones()
+            .map(|x| z.ones().map(|z| self.0[x][y][z]).sum())
+            .sum()
+    }
+
+    pub fn sum_yz(
+        &self,
+        x: &ElementExpression,
+        y: &SetExpression,
+        z: &SetExpression,
+        state: &state::State<T>,
+        problem: &problem::Problem,
+    ) -> T {
+        let x = x.eval(state);
+        let y = y.eval(state, problem);
+        let z = z.eval(state, problem);
+        y.ones()
+            .map(|y| z.ones().map(|z| self.0[x][y][z]).sum())
             .sum()
     }
 }
@@ -762,6 +900,114 @@ mod tests {
             SetExpression::SetVariable(1),
         );
         assert_eq!(expression.eval(&node, &problem), 240);
+    }
+
+    #[test]
+    fn function_3d_sum_x_eval() {
+        let problem = generate_problem();
+        let node = generate_node();
+        let f = NumericFunction3D(vec![
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+        ]);
+        let expression = NumericExpression::Function3DSumX(
+            &f,
+            SetExpression::SetVariable(0),
+            ElementExpression::Number(1),
+            ElementExpression::Number(2),
+        );
+        assert_eq!(expression.eval(&node, &problem), 120);
+    }
+
+    #[test]
+    fn function_3d_sum_y_eval() {
+        let problem = generate_problem();
+        let node = generate_node();
+        let f = NumericFunction3D(vec![
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+        ]);
+        let expression = NumericExpression::Function3DSumY(
+            &f,
+            ElementExpression::Number(1),
+            SetExpression::SetVariable(0),
+            ElementExpression::Number(2),
+        );
+        assert_eq!(expression.eval(&node, &problem), 120);
+    }
+
+    #[test]
+    fn function_3d_sum_z_eval() {
+        let problem = generate_problem();
+        let node = generate_node();
+        let f = NumericFunction3D(vec![
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+        ]);
+        let expression = NumericExpression::Function3DSumZ(
+            &f,
+            ElementExpression::Number(1),
+            ElementExpression::Number(2),
+            SetExpression::SetVariable(0),
+        );
+        assert_eq!(expression.eval(&node, &problem), 160);
+    }
+
+    #[test]
+    fn function_3d_sum_xy_eval() {
+        let problem = generate_problem();
+        let node = generate_node();
+        let f = NumericFunction3D(vec![
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+        ]);
+        let expression = NumericExpression::Function3DSumXY(
+            &f,
+            SetExpression::SetVariable(0),
+            SetExpression::SetVariable(1),
+            ElementExpression::Number(2),
+        );
+        assert_eq!(expression.eval(&node, &problem), 180);
+    }
+
+    #[test]
+    fn function_3d_sum_xz_eval() {
+        let problem = generate_problem();
+        let node = generate_node();
+        let f = NumericFunction3D(vec![
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+        ]);
+        let expression = NumericExpression::Function3DSumXZ(
+            &f,
+            SetExpression::SetVariable(0),
+            ElementExpression::Number(2),
+            SetExpression::SetVariable(1),
+        );
+        assert_eq!(expression.eval(&node, &problem), 300);
+    }
+
+    #[test]
+    fn function_3d_sum_yz_eval() {
+        let problem = generate_problem();
+        let node = generate_node();
+        let f = NumericFunction3D(vec![
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+        ]);
+        let expression = NumericExpression::Function3DSumYZ(
+            &f,
+            ElementExpression::Number(2),
+            SetExpression::SetVariable(0),
+            SetExpression::SetVariable(1),
+        );
+        assert_eq!(expression.eval(&node, &problem), 180);
     }
 
     #[test]
