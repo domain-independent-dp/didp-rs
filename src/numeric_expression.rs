@@ -1,8 +1,8 @@
 use std::boxed::Box;
 use std::cmp;
-use std::collections;
 use std::iter;
 
+use crate::numeric_function;
 use crate::problem;
 use crate::search_node;
 use crate::state;
@@ -19,70 +19,91 @@ pub enum NumericExpression<'a, T: variable::Numeric> {
         Box<NumericExpression<'a, T>>,
     ),
     Cardinality(SetExpression),
-    Function1D(&'a NumericFunction1D<T>, ElementExpression),
-    Function1DSum(&'a NumericFunction1D<T>, SetExpression),
+    Function1D(
+        &'a numeric_function::NumericFunction1D<T>,
+        ElementExpression,
+    ),
+    Function1DSum(&'a numeric_function::NumericFunction1D<T>, SetExpression),
     Function2D(
-        &'a NumericFunction2D<T>,
+        &'a numeric_function::NumericFunction2D<T>,
         ElementExpression,
         ElementExpression,
     ),
-    Function2DSum(&'a NumericFunction2D<T>, SetExpression, SetExpression),
-    Function2DSumX(&'a NumericFunction2D<T>, SetExpression, ElementExpression),
-    Function2DSumY(&'a NumericFunction2D<T>, ElementExpression, SetExpression),
+    Function2DSum(
+        &'a numeric_function::NumericFunction2D<T>,
+        SetExpression,
+        SetExpression,
+    ),
+    Function2DSumX(
+        &'a numeric_function::NumericFunction2D<T>,
+        SetExpression,
+        ElementExpression,
+    ),
+    Function2DSumY(
+        &'a numeric_function::NumericFunction2D<T>,
+        ElementExpression,
+        SetExpression,
+    ),
     Function3D(
-        &'a NumericFunction3D<T>,
+        &'a numeric_function::NumericFunction3D<T>,
         ElementExpression,
         ElementExpression,
         ElementExpression,
     ),
     Function3DSum(
-        &'a NumericFunction3D<T>,
+        &'a numeric_function::NumericFunction3D<T>,
         SetExpression,
         SetExpression,
         SetExpression,
     ),
     Function3DSumX(
-        &'a NumericFunction3D<T>,
+        &'a numeric_function::NumericFunction3D<T>,
         SetExpression,
         ElementExpression,
         ElementExpression,
     ),
     Function3DSumY(
-        &'a NumericFunction3D<T>,
+        &'a numeric_function::NumericFunction3D<T>,
         ElementExpression,
         SetExpression,
         ElementExpression,
     ),
     Function3DSumZ(
-        &'a NumericFunction3D<T>,
+        &'a numeric_function::NumericFunction3D<T>,
         ElementExpression,
         ElementExpression,
         SetExpression,
     ),
     Function3DSumXY(
-        &'a NumericFunction3D<T>,
+        &'a numeric_function::NumericFunction3D<T>,
         SetExpression,
         SetExpression,
         ElementExpression,
     ),
     Function3DSumXZ(
-        &'a NumericFunction3D<T>,
+        &'a numeric_function::NumericFunction3D<T>,
         SetExpression,
         ElementExpression,
         SetExpression,
     ),
     Function3DSumYZ(
-        &'a NumericFunction3D<T>,
+        &'a numeric_function::NumericFunction3D<T>,
         ElementExpression,
         SetExpression,
         SetExpression,
     ),
-    Function(&'a NumericFunction<T>, Vec<ElementExpression>),
-    FunctionSum(&'a NumericFunction<T>, Vec<ArgumentExpression>),
+    Function(
+        &'a numeric_function::NumericFunction<T>,
+        Vec<ElementExpression>,
+    ),
+    FunctionSum(
+        &'a numeric_function::NumericFunction<T>,
+        Vec<ArgumentExpression>,
+    ),
 }
 
 impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
-    pub fn eval(&self, node: &search_node::SearchNode<T>, problem: &problem::Problem) -> T {
+    pub fn eval(&self, node: &search_node::SearchNode<T>, problem: &problem::Problem<T>) -> T {
         match self {
             NumericExpression::Number(x) => *x,
             NumericExpression::Variable(i) => node.state.signature_variables.numeric_variables[*i],
@@ -105,28 +126,64 @@ impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
             NumericExpression::Cardinality(set) => {
                 T::from(set.eval(&node.state, problem).count_ones(..)).unwrap()
             }
-            NumericExpression::Function1D(f, x) => f.eval(x, &node.state),
-            NumericExpression::Function1DSum(f, x) => f.sum(x, &node.state, problem),
-            NumericExpression::Function2D(f, x, y) => f.eval(x, y, &node.state),
-            NumericExpression::Function2DSum(f, x, y) => f.sum(x, y, &node.state, problem),
-            NumericExpression::Function2DSumX(f, x, y) => f.sum_x(x, y, &node.state, problem),
-            NumericExpression::Function2DSumY(f, x, y) => f.sum_y(x, y, &node.state, problem),
-            NumericExpression::Function3D(f, x, y, z) => f.eval(x, y, z, &node.state),
-            NumericExpression::Function3DSum(f, x, y, z) => f.sum(x, y, z, &node.state, problem),
-            NumericExpression::Function3DSumX(f, x, y, z) => f.sum_x(x, y, z, &node.state, problem),
-            NumericExpression::Function3DSumY(f, x, y, z) => f.sum_y(x, y, z, &node.state, problem),
-            NumericExpression::Function3DSumZ(f, x, y, z) => f.sum_z(x, y, z, &node.state, problem),
-            NumericExpression::Function3DSumXY(f, x, y, z) => {
-                f.sum_xy(x, y, z, &node.state, problem)
+            NumericExpression::Function1D(f, x) => f.eval(x.eval(&node.state)),
+            NumericExpression::Function1DSum(f, x) => f.sum(&x.eval(&node.state, problem)),
+            NumericExpression::Function2D(f, x, y) => {
+                f.eval(x.eval(&node.state), y.eval(&node.state))
             }
-            NumericExpression::Function3DSumXZ(f, x, y, z) => {
-                f.sum_xz(x, y, z, &node.state, problem)
+            NumericExpression::Function2DSum(f, x, y) => {
+                f.sum(&x.eval(&node.state, problem), &y.eval(&node.state, problem))
             }
-            NumericExpression::Function3DSumYZ(f, x, y, z) => {
-                f.sum_yz(x, y, z, &node.state, problem)
+            NumericExpression::Function2DSumX(f, x, y) => {
+                f.sum_x(&x.eval(&node.state, problem), y.eval(&node.state))
             }
-            NumericExpression::Function(f, args) => f.eval(args, &node.state),
-            NumericExpression::FunctionSum(f, args) => f.sum(args, &node.state, problem),
+            NumericExpression::Function2DSumY(f, x, y) => {
+                f.sum_y(x.eval(&node.state), &y.eval(&node.state, problem))
+            }
+            NumericExpression::Function3D(f, x, y, z) => f.eval(
+                x.eval(&node.state),
+                y.eval(&node.state),
+                z.eval(&node.state),
+            ),
+            NumericExpression::Function3DSum(f, x, y, z) => f.sum(
+                &x.eval(&node.state, problem),
+                &y.eval(&node.state, problem),
+                &z.eval(&node.state, problem),
+            ),
+            NumericExpression::Function3DSumX(f, x, y, z) => f.sum_x(
+                &x.eval(&node.state, problem),
+                y.eval(&node.state),
+                z.eval(&node.state),
+            ),
+            NumericExpression::Function3DSumY(f, x, y, z) => f.sum_y(
+                x.eval(&node.state),
+                &y.eval(&node.state, problem),
+                z.eval(&node.state),
+            ),
+            NumericExpression::Function3DSumZ(f, x, y, z) => f.sum_z(
+                x.eval(&node.state),
+                y.eval(&node.state),
+                &z.eval(&node.state, problem),
+            ),
+            NumericExpression::Function3DSumXY(f, x, y, z) => f.sum_xy(
+                &x.eval(&node.state, problem),
+                &y.eval(&node.state, problem),
+                z.eval(&node.state),
+            ),
+            NumericExpression::Function3DSumXZ(f, x, y, z) => f.sum_xz(
+                &x.eval(&node.state, problem),
+                y.eval(&node.state),
+                &z.eval(&node.state, problem),
+            ),
+            NumericExpression::Function3DSumYZ(f, x, y, z) => f.sum_yz(
+                x.eval(&node.state),
+                &y.eval(&node.state, problem),
+                &z.eval(&node.state, problem),
+            ),
+            NumericExpression::Function(f, args) => eval_numeric_function(f, args, &node.state),
+            NumericExpression::FunctionSum(f, args) => {
+                sum_numeric_function(f, args, &node.state, problem)
+            }
         }
     }
 }
@@ -158,7 +215,7 @@ impl SetExpression {
     pub fn eval<T: variable::Numeric>(
         &self,
         state: &state::State<T>,
-        problem: &problem::Problem,
+        problem: &problem::Problem<T>,
     ) -> variable::SetVariable {
         match self {
             SetExpression::SetVariable(i) => state.signature_variables.set_variables[*i].clone(),
@@ -232,246 +289,65 @@ pub enum SetElementOperator {
     Remove,
 }
 
-pub struct NumericFunction1D<T: variable::Numeric>(Vec<T>);
-
-impl<T: variable::Numeric> NumericFunction1D<T> {
-    pub fn eval(&self, x: &ElementExpression, state: &state::State<T>) -> T {
-        self.0[x.eval(state)]
-    }
-
-    pub fn sum(&self, x: &SetExpression, state: &state::State<T>, problem: &problem::Problem) -> T {
-        x.eval(state, problem).ones().map(|x| self.0[x]).sum()
-    }
+fn eval_numeric_function<T: variable::Numeric>(
+    f: &numeric_function::NumericFunction<T>,
+    args: &[ElementExpression],
+    state: &state::State<T>,
+) -> T {
+    let args: Vec<variable::ElementVariable> = args.iter().map(|x| x.eval(state)).collect();
+    f.eval(&args)
 }
 
-pub struct NumericFunction2D<T: variable::Numeric>(Vec<Vec<T>>);
-
-impl<T: variable::Numeric> NumericFunction2D<T> {
-    pub fn eval(&self, x: &ElementExpression, y: &ElementExpression, state: &state::State<T>) -> T {
-        self.0[x.eval(state)][y.eval(state)]
-    }
-
-    pub fn sum(
-        &self,
-        x: &SetExpression,
-        y: &SetExpression,
-        state: &state::State<T>,
-        problem: &problem::Problem,
-    ) -> T {
-        let x = x.eval(state, problem);
-        let y = y.eval(state, problem);
-        x.ones().map(|x| y.ones().map(|y| self.0[x][y]).sum()).sum()
-    }
-
-    pub fn sum_x(
-        &self,
-        x: &SetExpression,
-        y: &ElementExpression,
-        state: &state::State<T>,
-        problem: &problem::Problem,
-    ) -> T {
-        x.eval(state, problem)
-            .ones()
-            .zip(iter::repeat(y.eval(state)))
-            .map(|(x, y)| self.0[x][y])
-            .sum()
-    }
-
-    pub fn sum_y(
-        &self,
-        x: &ElementExpression,
-        y: &SetExpression,
-        state: &state::State<T>,
-        problem: &problem::Problem,
-    ) -> T {
-        y.eval(state, problem)
-            .ones()
-            .zip(iter::repeat(x.eval(state)))
-            .map(|(y, x)| self.0[x][y])
-            .sum()
-    }
-}
-
-pub struct NumericFunction3D<T: variable::Numeric>(Vec<Vec<Vec<T>>>);
-
-impl<T: variable::Numeric> NumericFunction3D<T> {
-    pub fn eval(
-        &self,
-        x: &ElementExpression,
-        y: &ElementExpression,
-        z: &ElementExpression,
-        state: &state::State<T>,
-    ) -> T {
-        self.0[x.eval(state)][y.eval(state)][z.eval(state)]
-    }
-
-    pub fn sum(
-        &self,
-        x: &SetExpression,
-        y: &SetExpression,
-        z: &SetExpression,
-        state: &state::State<T>,
-        problem: &problem::Problem,
-    ) -> T {
-        let x = x.eval(state, problem);
-        let y = y.eval(state, problem);
-        let z = z.eval(state, problem);
-        x.ones()
-            .map(|x| {
-                y.ones()
-                    .map(|y| z.ones().map(|z| self.0[x][y][z]).sum())
-                    .sum()
-            })
-            .sum()
-    }
-
-    pub fn sum_x(
-        &self,
-        x: &SetExpression,
-        y: &ElementExpression,
-        z: &ElementExpression,
-        state: &state::State<T>,
-        problem: &problem::Problem,
-    ) -> T {
-        let x = x.eval(state, problem);
-        let y = y.eval(state);
-        let z = z.eval(state);
-        x.ones().map(|x| self.0[x][y][z]).sum()
-    }
-
-    pub fn sum_y(
-        &self,
-        x: &ElementExpression,
-        y: &SetExpression,
-        z: &ElementExpression,
-        state: &state::State<T>,
-        problem: &problem::Problem,
-    ) -> T {
-        let x = x.eval(state);
-        let y = y.eval(state, problem);
-        let z = z.eval(state);
-        y.ones().map(|y| self.0[x][y][z]).sum()
-    }
-
-    pub fn sum_z(
-        &self,
-        x: &ElementExpression,
-        y: &ElementExpression,
-        z: &SetExpression,
-        state: &state::State<T>,
-        problem: &problem::Problem,
-    ) -> T {
-        let x = x.eval(state);
-        let y = y.eval(state);
-        let z = z.eval(state, problem);
-        z.ones().map(|z| self.0[x][y][z]).sum()
-    }
-
-    pub fn sum_xy(
-        &self,
-        x: &SetExpression,
-        y: &SetExpression,
-        z: &ElementExpression,
-        state: &state::State<T>,
-        problem: &problem::Problem,
-    ) -> T {
-        let x = x.eval(state, problem);
-        let y = y.eval(state, problem);
-        let z = z.eval(state);
-        x.ones()
-            .map(|x| y.ones().map(|y| self.0[x][y][z]).sum())
-            .sum()
-    }
-
-    pub fn sum_xz(
-        &self,
-        x: &SetExpression,
-        y: &ElementExpression,
-        z: &SetExpression,
-        state: &state::State<T>,
-        problem: &problem::Problem,
-    ) -> T {
-        let x = x.eval(state, problem);
-        let y = y.eval(state);
-        let z = z.eval(state, problem);
-        x.ones()
-            .map(|x| z.ones().map(|z| self.0[x][y][z]).sum())
-            .sum()
-    }
-
-    pub fn sum_yz(
-        &self,
-        x: &ElementExpression,
-        y: &SetExpression,
-        z: &SetExpression,
-        state: &state::State<T>,
-        problem: &problem::Problem,
-    ) -> T {
-        let x = x.eval(state);
-        let y = y.eval(state, problem);
-        let z = z.eval(state, problem);
-        y.ones()
-            .map(|y| z.ones().map(|z| self.0[x][y][z]).sum())
-            .sum()
-    }
-}
-
-pub struct NumericFunction<T: variable::Numeric>(
-    collections::HashMap<Vec<variable::ElementVariable>, T>,
-);
-
-impl<T: variable::Numeric> NumericFunction<T> {
-    pub fn eval(&self, args: &[ElementExpression], state: &state::State<T>) -> T {
-        let args: Vec<variable::ElementVariable> = args.iter().map(|x| x.eval(state)).collect();
-        self.0[&args]
-    }
-
-    pub fn sum(
-        &self,
-        args: &[ArgumentExpression],
-        state: &state::State<T>,
-        problem: &problem::Problem,
-    ) -> T {
-        let mut result = vec![vec![]];
-        for v in args {
-            match v {
-                ArgumentExpression::Set(s) => {
-                    let s = s.eval(state, problem);
-                    result = result
-                        .into_iter()
-                        .flat_map(|r| {
-                            iter::repeat(r)
-                                .zip(s.ones())
-                                .map(|(mut r, e)| {
-                                    r.push(e);
-                                    r
-                                })
-                                .collect::<Vec<Vec<variable::ElementVariable>>>()
-                        })
-                        .collect();
-                }
-                ArgumentExpression::Element(e) => {
-                    for r in &mut result {
-                        r.push(e.eval(state));
-                    }
+fn sum_numeric_function<T: variable::Numeric>(
+    f: &numeric_function::NumericFunction<T>,
+    args: &[ArgumentExpression],
+    state: &state::State<T>,
+    problem: &problem::Problem<T>,
+) -> T {
+    let mut result = vec![vec![]];
+    for v in args {
+        match v {
+            ArgumentExpression::Set(s) => {
+                let s = s.eval(state, problem);
+                result = result
+                    .into_iter()
+                    .flat_map(|r| {
+                        iter::repeat(r)
+                            .zip(s.ones())
+                            .map(|(mut r, e)| {
+                                r.push(e);
+                                r
+                            })
+                            .collect::<Vec<Vec<variable::ElementVariable>>>()
+                    })
+                    .collect();
+            }
+            ArgumentExpression::Element(e) => {
+                for r in &mut result {
+                    r.push(e.eval(state));
                 }
             }
         }
-        result.into_iter().map(|x| self.0[&x]).sum()
     }
+    result.into_iter().map(|x| f.eval(&x)).sum()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::cell::RefCell;
+    use std::collections::HashMap;
     use std::rc::Rc;
 
-    fn generate_problem() -> problem::Problem {
+    fn generate_problem() -> problem::Problem<variable::IntegerVariable> {
         problem::Problem {
             set_variable_to_max_size: vec![3],
             permutation_variable_to_max_length: vec![3],
             element_to_set: vec![0],
+            functions_1d: HashMap::new(),
+            functions_2d: HashMap::new(),
+            functions_3d: HashMap::new(),
+            functions: HashMap::new(),
         }
     }
 
@@ -794,7 +670,7 @@ mod tests {
     fn function_1d_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction1D(vec![10, 20, 30]);
+        let f = numeric_function::NumericFunction1D::new(vec![10, 20, 30]);
         let expression = NumericExpression::Function1D(&f, ElementExpression::Number(0));
         assert_eq!(expression.eval(&node, &problem), 10);
         let expression = NumericExpression::Function1D(&f, ElementExpression::Number(1));
@@ -807,7 +683,7 @@ mod tests {
     fn function_1d_sum_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction1D(vec![10, 20, 30]);
+        let f = numeric_function::NumericFunction1D::new(vec![10, 20, 30]);
         let expression = NumericExpression::Function1DSum(&f, SetExpression::SetVariable(0));
         assert_eq!(expression.eval(&node, &problem), 40);
         let expression = NumericExpression::Function1DSum(&f, SetExpression::SetVariable(1));
@@ -818,7 +694,11 @@ mod tests {
     fn function_2d_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction2D(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
+        let f = numeric_function::NumericFunction2D::new(vec![
+            vec![10, 20, 30],
+            vec![40, 50, 60],
+            vec![70, 80, 90],
+        ]);
         let expression = NumericExpression::Function2D(
             &f,
             ElementExpression::Number(0),
@@ -831,7 +711,11 @@ mod tests {
     fn function_2d_sum_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction2D(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
+        let f = numeric_function::NumericFunction2D::new(vec![
+            vec![10, 20, 30],
+            vec![40, 50, 60],
+            vec![70, 80, 90],
+        ]);
         let expression = NumericExpression::Function2DSum(
             &f,
             SetExpression::SetVariable(0),
@@ -844,7 +728,11 @@ mod tests {
     fn function_2d_sum_x_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction2D(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
+        let f = numeric_function::NumericFunction2D::new(vec![
+            vec![10, 20, 30],
+            vec![40, 50, 60],
+            vec![70, 80, 90],
+        ]);
         let expression = NumericExpression::Function2DSumX(
             &f,
             SetExpression::SetVariable(0),
@@ -857,7 +745,11 @@ mod tests {
     fn function_2d_sum_y_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction2D(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
+        let f = numeric_function::NumericFunction2D::new(vec![
+            vec![10, 20, 30],
+            vec![40, 50, 60],
+            vec![70, 80, 90],
+        ]);
         let expression = NumericExpression::Function2DSumY(
             &f,
             ElementExpression::Number(0),
@@ -870,7 +762,7 @@ mod tests {
     fn function_3d_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction3D(vec![
+        let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -888,7 +780,7 @@ mod tests {
     fn function_3d_sum_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction3D(vec![
+        let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -906,7 +798,7 @@ mod tests {
     fn function_3d_sum_x_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction3D(vec![
+        let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -924,7 +816,7 @@ mod tests {
     fn function_3d_sum_y_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction3D(vec![
+        let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -942,7 +834,8 @@ mod tests {
     fn function_3d_sum_z_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction3D(vec![
+        let f = numeric_function::NumericFunction3D::new(vec![
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -960,7 +853,7 @@ mod tests {
     fn function_3d_sum_xy_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction3D(vec![
+        let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -978,7 +871,7 @@ mod tests {
     fn function_3d_sum_xz_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction3D(vec![
+        let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -996,7 +889,7 @@ mod tests {
     fn function_3d_sum_yz_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let f = NumericFunction3D(vec![
+        let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -1014,9 +907,7 @@ mod tests {
     fn function_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let mut map =
-            collections::HashMap::<Vec<variable::ElementVariable>, variable::IntegerVariable>::new(
-            );
+        let mut map = HashMap::<Vec<variable::ElementVariable>, variable::IntegerVariable>::new();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 100);
         let key = vec![0, 1, 0, 1];
@@ -1025,7 +916,7 @@ mod tests {
         map.insert(key, 300);
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400);
-        let f = NumericFunction(map);
+        let f = numeric_function::NumericFunction::new(map);
         let expression = NumericExpression::Function(
             &f,
             vec![
@@ -1072,9 +963,7 @@ mod tests {
     fn function_sum_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let mut map =
-            collections::HashMap::<Vec<variable::ElementVariable>, variable::IntegerVariable>::new(
-            );
+        let mut map = HashMap::<Vec<variable::ElementVariable>, variable::IntegerVariable>::new();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 100);
         let key = vec![0, 1, 0, 1];
@@ -1083,7 +972,7 @@ mod tests {
         map.insert(key, 300);
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400);
-        let f = NumericFunction(map);
+        let f = numeric_function::NumericFunction::new(map);
         let expression = NumericExpression::FunctionSum(
             &f,
             vec![
