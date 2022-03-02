@@ -34,15 +34,12 @@ impl<T: variable::Numeric> PartialEq for SearchNode<T> {
     }
 }
 
+#[derive(Default)]
 pub struct SearchNodeRegistry<T: variable::Numeric>(
     collections::HashMap<Rc<state::SignatureVariables<T>>, Vec<Rc<SearchNode<T>>>>,
 );
 
 impl<T: variable::Numeric> SearchNodeRegistry<T> {
-    pub fn new() -> SearchNodeRegistry<T> {
-        SearchNodeRegistry(collections::HashMap::new())
-    }
-
     pub fn with_capcaity(capacity: usize) -> SearchNodeRegistry<T> {
         SearchNodeRegistry(collections::HashMap::with_capacity(capacity))
     }
@@ -183,7 +180,7 @@ mod tests {
 
     #[test]
     fn get_new_node() {
-        let mut registry = SearchNodeRegistry::new();
+        let mut registry = SearchNodeRegistry::default();
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -260,7 +257,7 @@ mod tests {
 
     #[test]
     fn node_dominated() {
-        let mut registry = SearchNodeRegistry::new();
+        let mut registry = SearchNodeRegistry::default();
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -292,7 +289,7 @@ mod tests {
 
     #[test]
     fn node_dead_end() {
-        let mut registry = SearchNodeRegistry::new();
+        let mut registry = SearchNodeRegistry::default();
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -310,7 +307,7 @@ mod tests {
 
     #[test]
     fn get_dominating_node() {
-        let mut registry = SearchNodeRegistry::new();
+        let mut registry = SearchNodeRegistry::default();
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),

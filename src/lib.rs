@@ -1,7 +1,7 @@
-mod numeric_expression;
-mod numeric_function;
-mod numeric_parser;
-mod problem;
-mod search_node;
-mod state;
-mod variable;
+pub mod expression;
+pub mod numeric_function;
+pub mod parser;
+pub mod problem;
+pub mod search_node;
+pub mod state;
+pub mod variable;
