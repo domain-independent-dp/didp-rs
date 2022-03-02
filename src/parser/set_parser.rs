@@ -13,7 +13,10 @@ pub fn parse_expression<'a, 'b, T: variable::Numeric>(
     let (expression, rest) = parse_argument(tokens, problem)?;
     match expression {
         ArgumentExpression::Set(expression) => Ok((expression, rest)),
-        _ => Err(ParseErr::Reason("not a set expression".to_string())),
+        _ => Err(ParseErr::Reason(format!(
+            "not a set expression: {:?}",
+            expression
+        ))),
     }
 }
 
@@ -25,6 +28,10 @@ pub fn parse_argument<'a, 'b, T: variable::Numeric>(
         .split_first()
         .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
     match &token[..] {
+        "!" => {
+            let (expression, rest) = parse_complement(rest, problem)?;
+            Ok((ArgumentExpression::Set(expression), rest))
+        }
         "(" => {
             let (expression, rest) = parse_operation(rest, problem)?;
             Ok((ArgumentExpression::Set(expression), rest))
@@ -34,6 +41,22 @@ pub fn parse_argument<'a, 'b, T: variable::Numeric>(
             let argument = parse_atom(token)?;
             Ok((argument, rest))
         }
+    }
+}
+
+fn parse_complement<'a, 'b, T: variable::Numeric>(
+    tokens: &'a [String],
+    problem: &'b problem::Problem<T>,
+) -> Result<(SetExpression, &'a [String]), ParseErr> {
+    let (expression, rest) = parse_argument(tokens, problem)?;
+    match expression {
+        ArgumentExpression::Set(expression) => {
+            Ok((SetExpression::Complement(Box::new(expression)), rest))
+        }
+        _ => Err(ParseErr::Reason(format!(
+            "not a set expression: {:?}",
+            expression
+        ))),
     }
 }
 
@@ -58,7 +81,10 @@ fn parse_operation<'a, 'b, T: variable::Numeric>(
                 SetExpression::SetElementOperation(SetElementOperator::Add, Box::new(x), y),
                 rest,
             )),
-            _ => Err(ParseErr::Reason("unexpected arguments for `+`".to_string())),
+            args => Err(ParseErr::Reason(format!(
+                "unexpected arguments for `+`: {:?}",
+                args
+            ))),
         },
         "-" => match (x, y) {
             (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => Ok((
@@ -69,14 +95,20 @@ fn parse_operation<'a, 'b, T: variable::Numeric>(
                 SetExpression::SetElementOperation(SetElementOperator::Remove, Box::new(x), y),
                 rest,
             )),
-            _ => Err(ParseErr::Reason("unexpected arguments for `-`".to_string())),
+            args => Err(ParseErr::Reason(format!(
+                "unexpected arguments for `-`: {:?}",
+                args
+            ))),
         },
         "*" => match (x, y) {
             (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => Ok((
                 SetExpression::SetOperation(SetOperator::Intersect, Box::new(x), Box::new(y)),
                 rest,
             )),
-            _ => Err(ParseErr::Reason("unexpected arguments for `*`".to_string())),
+            args => Err(ParseErr::Reason(format!(
+                "unexpected arguments for `*`: {:?}",
+                args
+            ))),
         },
         op => Err(ParseErr::Reason(format!("no such operator: {}", op))),
     }
@@ -148,6 +180,22 @@ mod tests {
     fn parse_argument_ok() {
         let problem = generate_problem();
 
+        let tokens: Vec<String> = ["!", "s[2]", "s[1]", ")", "e[0]", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_argument(&tokens, &problem);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(
+            expression,
+            ArgumentExpression::Set(SetExpression::Complement(_))
+        ));
+        if let ArgumentExpression::Set(SetExpression::Complement(s)) = expression {
+            assert!(matches!(*s, SetExpression::SetVariable(2)));
+        }
+        assert_eq!(rest, &tokens[2..]);
+
         let tokens: Vec<String> = ["(", "+", "s[2]", "s[1]", ")", "e[0]", ")"]
             .iter()
             .map(|x| x.to_string())
@@ -190,6 +238,42 @@ mod tests {
             .map(|x| x.to_string())
             .collect();
         let result = parse_argument(&tokens, &problem);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_complemnt_ok() {
+        let problem = generate_problem();
+        let tokens: Vec<String> = ["s[2]", "s[1]", ")", "e[0]", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_complement(&tokens, &problem);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(expression, SetExpression::Complement(_)));
+        if let SetExpression::Complement(s) = expression {
+            assert!(matches!(*s, SetExpression::SetVariable(2)));
+        }
+        assert_eq!(rest, &tokens[1..]);
+    }
+
+    #[test]
+    fn parse_complenent_err() {
+        let problem = generate_problem();
+
+        let tokens: Vec<String> = ["e[2]", "s[1]", ")", "e[0]", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_complement(&tokens, &problem);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["n[2]", "s[1]", ")", "e[0]", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_complement(&tokens, &problem);
         assert!(result.is_err());
     }
 

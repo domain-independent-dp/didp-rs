@@ -128,9 +128,10 @@ fn parse_cardinality<'a, 'b, T: variable::Numeric>(
         ArgumentExpression::Set(expression) => {
             Ok((NumericExpression::Cardinality(expression), rest))
         }
-        _ => Err(ParseErr::Reason(
-            "cardinality of not a set expression".to_string(),
-        )),
+        _ => Err(ParseErr::Reason(format!(
+            "cardinality of not a set expression: {:?}",
+            expression
+        ))),
     }
 }
 
@@ -212,7 +213,7 @@ mod tests {
     #[test]
     fn parse_ok() {
         let problem = generate_problem();
-        let text = "(+ (- 5 (/ (f4 4 s[2] e[0] 3) (max (f2 2 e[1]) n[0]))) (* r[1] (min 3 |(+ (* s[0] (- s[2] (+ s[3] 2))) (- s[1] 1))|)))".to_string();
+        let text = "(+ (- 5 (/ (f4 4 !s[2] e[0] 3) (max (f2 2 e[1]) n[0]))) (* r[1] (min 3 |(+ (* s[0] (- s[2] (+ s[3] 2))) (- s[1] 1))|)))".to_string();
         let result = parse(text, &problem);
         assert!(result.is_ok());
     }

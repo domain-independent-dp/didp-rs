@@ -6,8 +6,22 @@ use crate::variable;
 pub enum SetExpression {
     SetVariable(usize),
     PermutationVariable(usize),
+    Complement(Box<SetExpression>),
     SetOperation(SetOperator, Box<SetExpression>, Box<SetExpression>),
     SetElementOperation(SetElementOperator, Box<SetExpression>, ElementExpression),
+}
+
+#[derive(Debug)]
+pub enum SetOperator {
+    Union,
+    Difference,
+    Intersect,
+}
+
+#[derive(Debug)]
+pub enum SetElementOperator {
+    Add,
+    Remove,
 }
 
 impl SetExpression {
@@ -26,6 +40,11 @@ impl SetExpression {
                     set.insert(*v);
                 }
                 set
+            }
+            SetExpression::Complement(s) => {
+                let mut s = s.eval(&state, problem);
+                s.toggle_range(..);
+                s
             }
             SetExpression::SetOperation(op, a, b) => {
                 let mut a = a.eval(&state, problem);
@@ -82,19 +101,6 @@ impl ElementExpression {
 pub enum ArgumentExpression {
     Set(SetExpression),
     Element(ElementExpression),
-}
-
-#[derive(Debug)]
-pub enum SetOperator {
-    Union,
-    Difference,
-    Intersect,
-}
-
-#[derive(Debug)]
-pub enum SetElementOperator {
-    Add,
-    Remove,
 }
 
 #[cfg(test)]
@@ -172,6 +178,16 @@ mod tests {
         let mut set = variable::SetVariable::with_capacity(3);
         set.insert(0);
         set.insert(2);
+        assert_eq!(expression.eval(&state, &problem), set);
+    }
+
+    #[test]
+    fn complement_eval() {
+        let problem = generate_problem();
+        let state = generate_state();
+        let expression = SetExpression::Complement(Box::new(SetExpression::SetVariable(0)));
+        let mut set = variable::SetVariable::with_capacity(3);
+        set.insert(1);
         assert_eq!(expression.eval(&state, &problem), set);
     }
 

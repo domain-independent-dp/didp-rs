@@ -18,7 +18,6 @@ pub fn parse_expression<'a, 'b, T: variable::Numeric>(
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    println!("{}", name);
     if let Some(f) = problem.functions_1d.get(name) {
         let result = parse_function_1d(f, tokens, problem)?;
         Ok(Some(result))
