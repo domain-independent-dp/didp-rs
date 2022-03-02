@@ -8,8 +8,9 @@ use crate::search_node;
 use crate::state;
 use crate::variable;
 
+#[derive(Debug)]
 pub enum NumericExpression<'a, T: variable::Numeric> {
-    Number(T),
+    Constant(T),
     Variable(usize),
     ResourceVariable(usize),
     G,
@@ -105,7 +106,7 @@ pub enum NumericExpression<'a, T: variable::Numeric> {
 impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
     pub fn eval(&self, node: &search_node::SearchNode<T>, problem: &problem::Problem<T>) -> T {
         match self {
-            NumericExpression::Number(x) => *x,
+            NumericExpression::Constant(x) => *x,
             NumericExpression::Variable(i) => node.state.signature_variables.numeric_variables[*i],
             NumericExpression::ResourceVariable(i) => {
                 node.state.resource_variables.numeric_variables[*i]
@@ -188,22 +189,22 @@ impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
     }
 }
 
+#[derive(Debug)]
 pub enum ElementExpression {
-    Number(variable::ElementVariable),
-    ElementVariable(usize),
+    Constant(variable::ElementVariable),
+    Variable(usize),
 }
 
 impl ElementExpression {
     pub fn eval<T: variable::Numeric>(&self, state: &state::State<T>) -> variable::ElementVariable {
         match self {
-            ElementExpression::Number(x) => *x,
-            ElementExpression::ElementVariable(i) => {
-                state.signature_variables.element_variables[*i]
-            }
+            ElementExpression::Constant(x) => *x,
+            ElementExpression::Variable(i) => state.signature_variables.element_variables[*i],
         }
     }
 }
 
+#[derive(Debug)]
 pub enum SetExpression {
     SetVariable(usize),
     PermutationVariable(usize),
@@ -264,11 +265,13 @@ impl SetExpression {
     }
 }
 
+#[derive(Debug)]
 pub enum ArgumentExpression {
     Set(SetExpression),
     Element(ElementExpression),
 }
 
+#[derive(Debug)]
 pub enum NumericOperator {
     Add,
     Subtract,
@@ -278,12 +281,14 @@ pub enum NumericOperator {
     Min,
 }
 
+#[derive(Debug)]
 pub enum SetOperator {
     Union,
     Difference,
     Intersect,
 }
 
+#[derive(Debug)]
 pub enum SetElementOperator {
     Add,
     Remove,
@@ -382,7 +387,7 @@ mod tests {
     fn number_eval() {
         let problem = generate_problem();
         let node = generate_node();
-        let expression = NumericExpression::Number(2);
+        let expression = NumericExpression::Constant(2);
         assert_eq!(expression.eval(&node, &problem), 2);
     }
 
@@ -425,8 +430,8 @@ mod tests {
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
                 NumericOperator::Add,
-                Box::new(NumericExpression::Number(3)),
-                Box::new(NumericExpression::Number(2)),
+                Box::new(NumericExpression::Constant(3)),
+                Box::new(NumericExpression::Constant(2)),
             );
         assert_eq!(expression.eval(&node, &problem), 5);
     }
@@ -438,8 +443,8 @@ mod tests {
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
                 NumericOperator::Subtract,
-                Box::new(NumericExpression::Number(3)),
-                Box::new(NumericExpression::Number(2)),
+                Box::new(NumericExpression::Constant(3)),
+                Box::new(NumericExpression::Constant(2)),
             );
         assert_eq!(expression.eval(&node, &problem), 1);
     }
@@ -451,8 +456,8 @@ mod tests {
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
                 NumericOperator::Multiply,
-                Box::new(NumericExpression::Number(3)),
-                Box::new(NumericExpression::Number(2)),
+                Box::new(NumericExpression::Constant(3)),
+                Box::new(NumericExpression::Constant(2)),
             );
         assert_eq!(expression.eval(&node, &problem), 6);
     }
@@ -464,8 +469,8 @@ mod tests {
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
                 NumericOperator::Divide,
-                Box::new(NumericExpression::Number(3)),
-                Box::new(NumericExpression::Number(2)),
+                Box::new(NumericExpression::Constant(3)),
+                Box::new(NumericExpression::Constant(2)),
             );
         assert_eq!(expression.eval(&node, &problem), 1);
     }
@@ -477,8 +482,8 @@ mod tests {
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
                 NumericOperator::Max,
-                Box::new(NumericExpression::Number(3)),
-                Box::new(NumericExpression::Number(2)),
+                Box::new(NumericExpression::Constant(3)),
+                Box::new(NumericExpression::Constant(2)),
             );
         assert_eq!(expression.eval(&node, &problem), 3);
     }
@@ -490,8 +495,8 @@ mod tests {
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
                 NumericOperator::Min,
-                Box::new(NumericExpression::Number(3)),
-                Box::new(NumericExpression::Number(2)),
+                Box::new(NumericExpression::Constant(3)),
+                Box::new(NumericExpression::Constant(2)),
             );
         assert_eq!(expression.eval(&node, &problem), 2);
     }
@@ -499,14 +504,14 @@ mod tests {
     #[test]
     fn element_number_eval() {
         let node = generate_node();
-        let expression = ElementExpression::Number(2);
+        let expression = ElementExpression::Constant(2);
         assert_eq!(expression.eval(&node.state), 2);
     }
 
     #[test]
     fn element_variable_eval() {
         let node = generate_node();
-        let expression = ElementExpression::ElementVariable(0);
+        let expression = ElementExpression::Variable(0);
         assert_eq!(expression.eval(&node.state), 1);
     }
 
@@ -615,7 +620,7 @@ mod tests {
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
             Box::new(SetExpression::SetVariable(0)),
-            ElementExpression::Number(1),
+            ElementExpression::Constant(1),
         );
         let mut set = variable::SetVariable::with_capacity(3);
         set.insert(0);
@@ -625,7 +630,7 @@ mod tests {
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
             Box::new(SetExpression::SetVariable(0)),
-            ElementExpression::Number(0),
+            ElementExpression::Constant(0),
         );
         assert_eq!(
             expression.eval(&node.state, &problem),
@@ -640,7 +645,7 @@ mod tests {
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
             Box::new(SetExpression::SetVariable(0)),
-            ElementExpression::Number(2),
+            ElementExpression::Constant(2),
         );
         let mut set = variable::SetVariable::with_capacity(3);
         set.insert(0);
@@ -648,7 +653,7 @@ mod tests {
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
             Box::new(SetExpression::SetVariable(0)),
-            ElementExpression::Number(1),
+            ElementExpression::Constant(1),
         );
         assert_eq!(
             expression.eval(&node.state, &problem),
@@ -671,11 +676,11 @@ mod tests {
         let problem = generate_problem();
         let node = generate_node();
         let f = numeric_function::NumericFunction1D::new(vec![10, 20, 30]);
-        let expression = NumericExpression::Function1D(&f, ElementExpression::Number(0));
+        let expression = NumericExpression::Function1D(&f, ElementExpression::Constant(0));
         assert_eq!(expression.eval(&node, &problem), 10);
-        let expression = NumericExpression::Function1D(&f, ElementExpression::Number(1));
+        let expression = NumericExpression::Function1D(&f, ElementExpression::Constant(1));
         assert_eq!(expression.eval(&node, &problem), 20);
-        let expression = NumericExpression::Function1D(&f, ElementExpression::Number(2));
+        let expression = NumericExpression::Function1D(&f, ElementExpression::Constant(2));
         assert_eq!(expression.eval(&node, &problem), 30);
     }
 
@@ -701,8 +706,8 @@ mod tests {
         ]);
         let expression = NumericExpression::Function2D(
             &f,
-            ElementExpression::Number(0),
-            ElementExpression::Number(1),
+            ElementExpression::Constant(0),
+            ElementExpression::Constant(1),
         );
         assert_eq!(expression.eval(&node, &problem), 20);
     }
@@ -736,7 +741,7 @@ mod tests {
         let expression = NumericExpression::Function2DSumX(
             &f,
             SetExpression::SetVariable(0),
-            ElementExpression::Number(0),
+            ElementExpression::Constant(0),
         );
         assert_eq!(expression.eval(&node, &problem), 80);
     }
@@ -752,7 +757,7 @@ mod tests {
         ]);
         let expression = NumericExpression::Function2DSumY(
             &f,
-            ElementExpression::Number(0),
+            ElementExpression::Constant(0),
             SetExpression::SetVariable(0),
         );
         assert_eq!(expression.eval(&node, &problem), 40);
@@ -769,9 +774,9 @@ mod tests {
         ]);
         let expression = NumericExpression::Function3D(
             &f,
-            ElementExpression::Number(0),
-            ElementExpression::Number(1),
-            ElementExpression::Number(2),
+            ElementExpression::Constant(0),
+            ElementExpression::Constant(1),
+            ElementExpression::Constant(2),
         );
         assert_eq!(expression.eval(&node, &problem), 60);
     }
@@ -806,8 +811,8 @@ mod tests {
         let expression = NumericExpression::Function3DSumX(
             &f,
             SetExpression::SetVariable(0),
-            ElementExpression::Number(1),
-            ElementExpression::Number(2),
+            ElementExpression::Constant(1),
+            ElementExpression::Constant(2),
         );
         assert_eq!(expression.eval(&node, &problem), 120);
     }
@@ -823,9 +828,9 @@ mod tests {
         ]);
         let expression = NumericExpression::Function3DSumY(
             &f,
-            ElementExpression::Number(1),
+            ElementExpression::Constant(1),
             SetExpression::SetVariable(0),
-            ElementExpression::Number(2),
+            ElementExpression::Constant(2),
         );
         assert_eq!(expression.eval(&node, &problem), 120);
     }
@@ -842,8 +847,8 @@ mod tests {
         ]);
         let expression = NumericExpression::Function3DSumZ(
             &f,
-            ElementExpression::Number(1),
-            ElementExpression::Number(2),
+            ElementExpression::Constant(1),
+            ElementExpression::Constant(2),
             SetExpression::SetVariable(0),
         );
         assert_eq!(expression.eval(&node, &problem), 160);
@@ -862,7 +867,7 @@ mod tests {
             &f,
             SetExpression::SetVariable(0),
             SetExpression::SetVariable(1),
-            ElementExpression::Number(2),
+            ElementExpression::Constant(2),
         );
         assert_eq!(expression.eval(&node, &problem), 180);
     }
@@ -879,7 +884,7 @@ mod tests {
         let expression = NumericExpression::Function3DSumXZ(
             &f,
             SetExpression::SetVariable(0),
-            ElementExpression::Number(2),
+            ElementExpression::Constant(2),
             SetExpression::SetVariable(1),
         );
         assert_eq!(expression.eval(&node, &problem), 300);
@@ -896,7 +901,7 @@ mod tests {
         ]);
         let expression = NumericExpression::Function3DSumYZ(
             &f,
-            ElementExpression::Number(2),
+            ElementExpression::Constant(2),
             SetExpression::SetVariable(0),
             SetExpression::SetVariable(1),
         );
@@ -920,40 +925,40 @@ mod tests {
         let expression = NumericExpression::Function(
             &f,
             vec![
-                ElementExpression::Number(0),
-                ElementExpression::Number(1),
-                ElementExpression::Number(0),
-                ElementExpression::Number(0),
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(1),
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(0),
             ],
         );
         assert_eq!(expression.eval(&node, &problem), 100);
         let expression = NumericExpression::Function(
             &f,
             vec![
-                ElementExpression::Number(0),
-                ElementExpression::Number(1),
-                ElementExpression::Number(0),
-                ElementExpression::Number(1),
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(1),
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(1),
             ],
         );
         assert_eq!(expression.eval(&node, &problem), 200);
         let expression = NumericExpression::Function(
             &f,
             vec![
-                ElementExpression::Number(0),
-                ElementExpression::Number(1),
-                ElementExpression::Number(2),
-                ElementExpression::Number(0),
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(1),
+                ElementExpression::Constant(2),
+                ElementExpression::Constant(0),
             ],
         );
         assert_eq!(expression.eval(&node, &problem), 300);
         let expression = NumericExpression::Function(
             &f,
             vec![
-                ElementExpression::Number(0),
-                ElementExpression::Number(1),
-                ElementExpression::Number(2),
-                ElementExpression::Number(1),
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(1),
+                ElementExpression::Constant(2),
+                ElementExpression::Constant(1),
             ],
         );
         assert_eq!(expression.eval(&node, &problem), 400);
@@ -976,8 +981,8 @@ mod tests {
         let expression = NumericExpression::FunctionSum(
             &f,
             vec![
-                ArgumentExpression::Element(ElementExpression::Number(0)),
-                ArgumentExpression::Element(ElementExpression::Number(1)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
                 ArgumentExpression::Set(SetExpression::SetVariable(0)),
                 ArgumentExpression::Set(SetExpression::SetVariable(1)),
             ],

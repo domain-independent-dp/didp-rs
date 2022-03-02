@@ -2,6 +2,7 @@ use crate::variable;
 use std::collections;
 use std::iter;
 
+#[derive(Debug)]
 pub struct NumericFunction1D<T: variable::Numeric>(Vec<T>);
 
 impl<T: variable::Numeric> NumericFunction1D<T> {
@@ -18,6 +19,7 @@ impl<T: variable::Numeric> NumericFunction1D<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct NumericFunction2D<T: variable::Numeric>(Vec<Vec<T>>);
 
 impl<T: variable::Numeric> NumericFunction2D<T> {
@@ -50,6 +52,7 @@ impl<T: variable::Numeric> NumericFunction2D<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct NumericFunction3D<T: variable::Numeric>(Vec<Vec<Vec<T>>>);
 
 impl<T: variable::Numeric> NumericFunction3D<T> {
@@ -142,6 +145,7 @@ impl<T: variable::Numeric> NumericFunction3D<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct NumericFunction<T: variable::Numeric>(
     collections::HashMap<Vec<variable::ElementVariable>, T>,
 );
