@@ -427,3 +427,165 @@ fn parse_closing(tokens: &[String]) -> Result<&[String], ParseErr> {
         Ok(rest)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn create_problem() -> problem::Problem<variable::IntegerVariable> {
+        let mut functions_1d = HashMap::new();
+        let f1 = numeric_function::NumericFunction1D::new(vec![0, 2, 4, 6]);
+        functions_1d.insert("f1".to_string(), f1);
+
+        let mut functions_2d = HashMap::new();
+        let f2 = numeric_function::NumericFunction2D::new(vec![vec![0, 1], vec![2, 3]]);
+        functions_2d.insert("f2".to_string(), f2);
+
+        let mut functions_3d = HashMap::new();
+        let f3 = numeric_function::NumericFunction3D::new(vec![vec![
+            vec![0, 1, 2],
+            vec![3, 4, 5],
+            vec![6, 7, 8],
+        ]]);
+        functions_3d.insert("f3".to_string(), f3);
+
+        let mut functions = HashMap::new();
+        let mut map = HashMap::new();
+        map.insert(vec![0, 0, 0, 0], 0);
+        map.insert(vec![0, 0, 0, 1], 1);
+        map.insert(vec![0, 0, 1, 0], 2);
+        map.insert(vec![0, 0, 1, 1], 3);
+        map.insert(vec![0, 1, 0, 0], 4);
+        map.insert(vec![0, 1, 0, 1], 5);
+        map.insert(vec![0, 1, 1, 0], 6);
+        map.insert(vec![0, 1, 1, 1], 7);
+        map.insert(vec![1, 0, 0, 0], 8);
+        map.insert(vec![1, 0, 0, 1], 9);
+        map.insert(vec![1, 0, 1, 0], 10);
+        map.insert(vec![1, 0, 1, 1], 11);
+        map.insert(vec![1, 1, 0, 0], 12);
+        map.insert(vec![1, 1, 0, 1], 13);
+        map.insert(vec![1, 1, 1, 0], 14);
+        map.insert(vec![1, 1, 1, 1], 15);
+        let f4 = numeric_function::NumericFunction::new(map);
+        functions.insert("f4".to_string(), f4);
+
+        problem::Problem {
+            set_variable_to_max_size: vec![4],
+            permutation_variable_to_max_length: vec![3],
+            element_to_set: vec![0, 1],
+            functions_1d,
+            functions_2d,
+            functions_3d,
+            functions,
+        }
+    }
+
+    #[test]
+    fn parse_ok() {}
+
+    #[test]
+    fn parse_err() {}
+
+    #[test]
+    fn tokenize_text() {
+        let text = "(+ (- 5 (/ (f3 4 s[2] e[0] 3) (max (f4 2 e[1]) n[0]))) (* r[1] (min 3 |(+ (* s[0] (- s[2] (+ s[3] 2))) (- s[1] 1))|)))".to_string();
+        assert_eq!(
+            tokenize(text),
+            [
+                "(", "+", "(", "-", "5", "(", "/", "(", "f3", "4", "s[2]", "e[0]", "3", ")", "(",
+                "max", "(", "f4", "2", "e[1]", ")", "n[0]", ")", ")", ")", "(", "*", "r[1]", "(",
+                "min", "3", "|", "(", "+", "(", "*", "s[0]", "(", "-", "s[2]", "(", "+", "s[3]",
+                "2", ")", ")", ")", "(", "-", "s[1]", "1", ")", ")", "|", ")", ")", ")",
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_token_ok() {}
+
+    #[test]
+    fn parse_token_err() {}
+
+    #[test]
+    fn parse_operation_ok() {}
+
+    #[test]
+    fn parse_operation_err() {}
+
+    #[test]
+    fn parse_function_1d_ok() {}
+
+    #[test]
+    fn parse_function_1d_err() {}
+
+    #[test]
+    fn parse_function_2d_ok() {}
+
+    #[test]
+    fn parse_function_2d_err() {}
+
+    #[test]
+    fn parse_function_3d_ok() {}
+
+    #[test]
+    fn parse_function_3d_err() {}
+
+    #[test]
+    fn parse_function_ok() {}
+
+    #[test]
+    fn parse_function_err() {}
+
+    #[test]
+    fn pare_cardinality_ok() {}
+
+    #[test]
+    fn pare_cardinality_err() {}
+
+    #[test]
+    fn parse_atom_ok() {}
+
+    #[test]
+    fn parse_atom_err() {}
+
+    #[test]
+    fn parse_argument_ok() {}
+
+    #[test]
+    fn parse_argument_err() {}
+
+    #[test]
+    fn pare_set_operation_ok() {}
+
+    #[test]
+    fn pare_set_operation_err() {}
+
+    #[test]
+    fn parse_argument_atom_ok() {}
+
+    #[test]
+    fn parse_argument_atom_err() {}
+
+    #[test]
+    fn parse_closing_ok() {
+        let tokens: Vec<String> = [")", "(", "+", "2", "n[0]", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_closing(&tokens);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), &tokens[1..]);
+    }
+
+    #[test]
+    fn parse_closing_err() {
+        let tokens: Vec<String> = ["(", "+", "2", "n[0]", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_closing(&tokens);
+        assert!(result.is_err());
+    }
+}
