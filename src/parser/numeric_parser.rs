@@ -1,32 +1,13 @@
 use super::function_parser;
 use super::set_parser;
 use super::ParseErr;
-use crate::expression::numeric_expression::*;
+use crate::expression::{NumericExpression, NumericOperator};
 use crate::problem;
 use crate::variable;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::fmt;
 use std::str;
-
-pub fn parse<T: variable::Numeric>(
-    text: String,
-    problem: &problem::Problem<T>,
-) -> Result<NumericExpression<T>, ParseErr>
-where
-    <T as str::FromStr>::Err: fmt::Debug,
-{
-    let tokens = super::tokenize(text);
-    let (expression, rest) = parse_expression(&tokens, problem)?;
-    if rest.is_empty() {
-        Ok(expression)
-    } else {
-        Err(ParseErr::Reason(format!(
-            "unexpected tokens: `{}`",
-            rest.join(" ")
-        )))
-    }
-}
 
 pub fn parse_expression<'a, 'b, T: variable::Numeric>(
     tokens: &'a [String],
@@ -112,7 +93,7 @@ fn parse_cardinality<'a, 'b, T: variable::Numeric>(
     tokens: &'a [String],
     problem: &'b problem::Problem<T>,
 ) -> Result<(NumericExpression<'b, T>, &'a [String]), ParseErr> {
-    let (expression, rest) = set_parser::parse_set(tokens, problem)?;
+    let (expression, rest) = set_parser::parse_set_expression(tokens, problem)?;
     let (token, rest) = rest
         .split_first()
         .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
@@ -169,8 +150,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::expression::function_expression::FunctionExpression;
-    use crate::expression::set_expression::*;
+    use crate::expression::*;
     use crate::numeric_function;
     use std::collections::HashMap;
 
@@ -197,22 +177,6 @@ mod tests {
             functions_3d,
             functions,
         }
-    }
-
-    #[test]
-    fn parse_ok() {
-        let problem = generate_problem();
-        let text = "(+ (- 5 (/ (f4 4 !s[2] e[0] 3) (max (f2 2 e[1]) n[0]))) (* r[1] (min 3 |(+ (* s[0] (- s[2] (+ s[3] 2))) (- s[1] 1))|)))".to_string();
-        let result = parse(text, &problem);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn parse_err() {
-        let problem = generate_problem();
-        let text = "(+ g 1))".to_string();
-        let result = parse(text, &problem);
-        assert!(result.is_err());
     }
 
     #[test]

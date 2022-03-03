@@ -8,8 +8,8 @@ use crate::variable;
 pub enum SetCondition {
     Eq(ElementExpression, ElementExpression),
     Ne(ElementExpression, ElementExpression),
-    In(ElementExpression, SetExpression),
-    SubsetOf(SetExpression, SetExpression),
+    IsIn(ElementExpression, SetExpression),
+    IsSubset(SetExpression, SetExpression),
     IsEmpty(SetExpression),
 }
 
@@ -30,12 +30,12 @@ impl SetCondition {
                 let y = y.eval(state);
                 x != y
             }
-            SetCondition::In(e, s) => {
+            SetCondition::IsIn(e, s) => {
                 let e = e.eval(state);
                 let s = s.eval(state, problem);
                 s.contains(e)
             }
-            SetCondition::SubsetOf(x, y) => {
+            SetCondition::IsSubset(x, y) => {
                 let x = x.eval(state, problem);
                 let y = y.eval(state, problem);
                 x.is_subset(&y)
@@ -154,19 +154,19 @@ mod tests {
         let problem = generate_problem();
         let state = generate_state();
 
-        let expression = SetCondition::In(
+        let expression = SetCondition::IsIn(
             ElementExpression::Constant(0),
             SetExpression::SetVariable(0),
         );
         assert!(expression.eval(&state, &problem));
 
-        let expression = SetCondition::In(
+        let expression = SetCondition::IsIn(
             ElementExpression::Constant(1),
             SetExpression::SetVariable(0),
         );
         assert!(!expression.eval(&state, &problem));
 
-        let expression = SetCondition::In(
+        let expression = SetCondition::IsIn(
             ElementExpression::Constant(2),
             SetExpression::SetVariable(0),
         );
@@ -179,31 +179,31 @@ mod tests {
         let state = generate_state();
 
         let expression =
-            SetCondition::SubsetOf(SetExpression::SetVariable(0), SetExpression::SetVariable(0));
+            SetCondition::IsSubset(SetExpression::SetVariable(0), SetExpression::SetVariable(0));
         assert!(expression.eval(&state, &problem));
 
         let expression =
-            SetCondition::SubsetOf(SetExpression::SetVariable(0), SetExpression::SetVariable(1));
+            SetCondition::IsSubset(SetExpression::SetVariable(0), SetExpression::SetVariable(1));
         assert!(!expression.eval(&state, &problem));
 
         let expression =
-            SetCondition::SubsetOf(SetExpression::SetVariable(0), SetExpression::SetVariable(2));
+            SetCondition::IsSubset(SetExpression::SetVariable(0), SetExpression::SetVariable(2));
         assert!(!expression.eval(&state, &problem));
 
         let expression =
-            SetCondition::SubsetOf(SetExpression::SetVariable(0), SetExpression::SetVariable(3));
+            SetCondition::IsSubset(SetExpression::SetVariable(0), SetExpression::SetVariable(3));
         assert!(!expression.eval(&state, &problem));
 
         let expression =
-            SetCondition::SubsetOf(SetExpression::SetVariable(1), SetExpression::SetVariable(0));
+            SetCondition::IsSubset(SetExpression::SetVariable(1), SetExpression::SetVariable(0));
         assert!(expression.eval(&state, &problem));
 
         let expression =
-            SetCondition::SubsetOf(SetExpression::SetVariable(2), SetExpression::SetVariable(0));
+            SetCondition::IsSubset(SetExpression::SetVariable(2), SetExpression::SetVariable(0));
         assert!(!expression.eval(&state, &problem));
 
         let expression =
-            SetCondition::SubsetOf(SetExpression::SetVariable(3), SetExpression::SetVariable(1));
+            SetCondition::IsSubset(SetExpression::SetVariable(3), SetExpression::SetVariable(1));
         assert!(expression.eval(&state, &problem));
     }
 

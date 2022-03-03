@@ -1,11 +1,13 @@
 use super::ParseErr;
-use crate::expression::set_expression::*;
+use crate::expression::{
+    ArgumentExpression, ElementExpression, SetElementOperator, SetExpression, SetOperator,
+};
 use crate::problem;
 use crate::variable;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-pub fn parse_set<'a, 'b, T: variable::Numeric>(
+pub fn parse_set_expression<'a, 'b, T: variable::Numeric>(
     tokens: &'a [String],
     problem: &'b problem::Problem<T>,
 ) -> Result<(SetExpression, &'a [String]), ParseErr> {
@@ -19,7 +21,7 @@ pub fn parse_set<'a, 'b, T: variable::Numeric>(
     }
 }
 
-pub fn parse_element<'a, 'b, T: variable::Numeric>(
+pub fn parse_element_expression<'a, 'b, T: variable::Numeric>(
     tokens: &'a [String],
     problem: &'b problem::Problem<T>,
 ) -> Result<(ElementExpression, &'a [String]), ParseErr> {
@@ -42,7 +44,7 @@ pub fn parse_argument<'a, 'b, T: variable::Numeric>(
         .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
     match &token[..] {
         "!" => {
-            let (expression, rest) = parse_set(rest, problem)?;
+            let (expression, rest) = parse_set_expression(rest, problem)?;
             Ok((
                 ArgumentExpression::Set(SetExpression::Complement(Box::new(expression))),
                 rest,
@@ -177,18 +179,18 @@ mod tests {
     }
 
     #[test]
-    fn parse_set_ok() {
+    fn parse_set_expression_ok() {
         let problem = generate_problem();
 
         let tokens: Vec<String> = ["s[11]", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, SetExpression::SetVariable(11)));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["p[11]", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, SetExpression::PermutationVariable(11)));
@@ -196,15 +198,15 @@ mod tests {
     }
 
     #[test]
-    fn parse_set_err() {
+    fn parse_set_expression_err() {
         let problem = generate_problem();
 
         let tokens: Vec<String> = ["e[11]", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["11", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_err());
     }
 
@@ -215,7 +217,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, SetExpression::Complement(_)));
@@ -233,14 +235,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["!", "n[2]", "s[1]", ")", "e[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_err());
     }
 
@@ -252,7 +254,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -269,7 +271,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -286,7 +288,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -303,7 +305,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -320,7 +322,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -342,40 +344,40 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "-", "s[2]", "n[1]", ")", "e[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "*", "s[2]", "e[1]", ")", "e[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "/", "s[2]", "s[1]", ")", "e[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set(&tokens, &problem);
+        let result = parse_set_expression(&tokens, &problem);
         assert!(result.is_err());
     }
 
     #[test]
-    fn parse_element_ok() {
+    fn parse_element_expression_ok() {
         let problem = generate_problem();
 
         let tokens: Vec<String> = ["e[11]", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_element(&tokens, &problem);
+        let result = parse_element_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, ElementExpression::Variable(11)));
@@ -385,7 +387,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_element(&tokens, &problem);
+        let result = parse_element_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, ElementExpression::Constant(11)));
@@ -393,21 +395,21 @@ mod tests {
     }
 
     #[test]
-    fn parse_element_err() {
+    fn parse_element_expression_err() {
         let problem = generate_problem();
 
         let tokens: Vec<String> = ["s[11]", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_element(&tokens, &problem);
+        let result = parse_element_expression(&tokens, &problem);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["p[11]", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_element(&tokens, &problem);
+        let result = parse_element_expression(&tokens, &problem);
         assert!(result.is_err());
     }
 

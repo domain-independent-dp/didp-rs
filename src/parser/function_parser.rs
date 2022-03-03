@@ -1,7 +1,6 @@
 use super::set_parser;
 use super::ParseErr;
-use crate::expression::function_expression::*;
-use crate::expression::set_expression::*;
+use crate::expression::{ArgumentExpression, FunctionExpression};
 use crate::numeric_function;
 use crate::problem;
 use crate::variable;
@@ -158,6 +157,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::expression::*;
     use std::collections::HashMap;
 
     fn generate_problem() -> problem::Problem<variable::IntegerVariable> {
