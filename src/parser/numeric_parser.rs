@@ -169,6 +169,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::expression::function_expression::FunctionExpression;
     use crate::expression::set_expression::*;
     use crate::numeric_function;
     use std::collections::HashMap;
@@ -177,15 +178,12 @@ mod tests {
         let mut functions_1d = HashMap::new();
         let f1 = numeric_function::NumericFunction1D::new(Vec::new());
         functions_1d.insert("f1".to_string(), f1);
-
         let mut functions_2d = HashMap::new();
         let f2 = numeric_function::NumericFunction2D::new(Vec::new());
         functions_2d.insert("f2".to_string(), f2);
-
         let mut functions_3d = HashMap::new();
         let f3 = numeric_function::NumericFunction3D::new(Vec::new());
         functions_3d.insert("f3".to_string(), f3);
-
         let mut functions = HashMap::new();
         let f4 = numeric_function::NumericFunction::new(HashMap::new());
         functions.insert("f4".to_string(), f4);
@@ -218,48 +216,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_expression_ok() {
-        let problem = generate_problem();
-
-        let tokens: Vec<String> = ["(", "+", "g", "1", ")", "2", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &problem);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(
-            expression,
-            NumericExpression::NumericOperation(NumericOperator::Add, _, _)
-        ));
-        if let NumericExpression::NumericOperation(NumericOperator::Add, x, y) = expression {
-            assert!(matches!(*x, NumericExpression::G));
-            assert!(matches!(*y, NumericExpression::Constant(1)));
-        }
-        assert_eq!(rest, &tokens[5..]);
-
-        let tokens: Vec<String> = ["|", "s[0]", "|", "2", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &problem);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(
-            expression,
-            NumericExpression::Cardinality(SetExpression::SetVariable(0))
-        ));
-        assert_eq!(rest, &tokens[3..]);
-
-        let tokens: Vec<String> = ["r[0]", "2", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &problem);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, NumericExpression::ResourceVariable(0)));
-        assert_eq!(rest, &tokens[1..]);
-    }
-
-    #[test]
     fn parse_expression_err() {
         let problem = generate_problem();
 
@@ -276,14 +232,65 @@ mod tests {
     }
 
     #[test]
-    fn parse_operation_ok() {
+    fn parse_function_ok() {
         let problem = generate_problem();
-
-        let tokens: Vec<String> = ["0", "n[0]", ")", "n[0]", ")"]
+        let f = &problem.functions["f4"];
+        let tokens: Vec<String> = ["(", "f4", "0", "e[0]", "s[0]", "p[0]", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_operation("+", &tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(
+            expression,
+            NumericExpression::Function(FunctionExpression::FunctionSum(_, _))
+        ));
+        if let NumericExpression::Function(FunctionExpression::FunctionSum(g, args)) = expression {
+            assert_eq!(g as *const _, f as *const _);
+            assert_eq!(args.len(), 4);
+            assert!(matches!(
+                args[0],
+                ArgumentExpression::Element(ElementExpression::Constant(0))
+            ));
+            assert!(matches!(
+                args[1],
+                ArgumentExpression::Element(ElementExpression::Variable(0))
+            ));
+            assert!(matches!(
+                args[2],
+                ArgumentExpression::Set(SetExpression::SetVariable(0))
+            ));
+            assert!(matches!(
+                args[3],
+                ArgumentExpression::Set(SetExpression::PermutationVariable(0))
+            ));
+        }
+        assert_eq!(rest, &tokens[7..]);
+    }
+
+    #[test]
+    fn parse_function_err() {
+        let problem = generate_problem();
+        let tokens: Vec<String> = [
+            "(", "f4", "0", "e[0]", "s[0]", "p[0]", "n[0]", ")", "n[0]", ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_expression(&tokens, &problem);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_operation_ok() {
+        let problem = generate_problem();
+
+        let tokens: Vec<String> = ["(", "+", "0", "n[0]", ")", "n[0]", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -294,13 +301,13 @@ mod tests {
             assert!(matches!(*x, NumericExpression::Constant(0)));
             assert!(matches!(*y, NumericExpression::Variable(0)));
         }
-        assert_eq!(rest, &tokens[3..]);
+        assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["0", "n[0]", ")", "n[0]", ")"]
+        let tokens: Vec<String> = ["(", "-", "0", "n[0]", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_operation("-", &tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -311,13 +318,13 @@ mod tests {
             assert!(matches!(*x, NumericExpression::Constant(0)));
             assert!(matches!(*y, NumericExpression::Variable(0)));
         }
-        assert_eq!(rest, &tokens[3..]);
+        assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["0", "n[0]", ")", "n[0]", ")"]
+        let tokens: Vec<String> = ["(", "*", "0", "n[0]", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_operation("*", &tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -328,13 +335,13 @@ mod tests {
             assert!(matches!(*x, NumericExpression::Constant(0)));
             assert!(matches!(*y, NumericExpression::Variable(0)));
         }
-        assert_eq!(rest, &tokens[3..]);
+        assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["0", "n[0]", ")", "n[0]", ")"]
+        let tokens: Vec<String> = ["(", "/", "0", "n[0]", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_operation("/", &tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -345,13 +352,13 @@ mod tests {
             assert!(matches!(*x, NumericExpression::Constant(0)));
             assert!(matches!(*y, NumericExpression::Variable(0)));
         }
-        assert_eq!(rest, &tokens[3..]);
+        assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["0", "n[0]", ")", "n[0]", ")"]
+        let tokens: Vec<String> = ["(", "min", "0", "n[0]", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_operation("min", &tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -362,13 +369,13 @@ mod tests {
             assert!(matches!(*x, NumericExpression::Constant(0)));
             assert!(matches!(*y, NumericExpression::Variable(0)));
         }
-        assert_eq!(rest, &tokens[3..]);
+        assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["0", "n[0]", ")", "n[0]", ")"]
+        let tokens: Vec<String> = ["(", "max", "0", "n[0]", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_operation("max", &tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -379,7 +386,7 @@ mod tests {
             assert!(matches!(*x, NumericExpression::Constant(0)));
             assert!(matches!(*y, NumericExpression::Variable(0)));
         }
-        assert_eq!(rest, &tokens[3..]);
+        assert_eq!(rest, &tokens[5..]);
     }
 
     #[test]
@@ -387,106 +394,112 @@ mod tests {
         let problem = generate_problem();
 
         let tokens = Vec::new();
-        let result = parse_operation("+", &tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["0", "n[0]", "n[1]", ")", "n[0]", ")"]
+        let tokens: Vec<String> = ["(", "+", "0", "n[0]", "n[1]", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_operation("+", &tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["0", ")", "n[0]", ")"]
+        let tokens: Vec<String> = ["(", "+", "0", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_operation("+", &tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["0", "n[0]", ")", "n[0]", ")"]
+        let tokens: Vec<String> = ["(", "^", "0", "n[0]", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_operation("^", &tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_err());
     }
 
     #[test]
     fn pare_cardinality_ok() {
         let problem = generate_problem();
-        let tokens: Vec<String> = ["s[2]", "|", "n[0]", ")"]
+        let tokens: Vec<String> = ["|", "s[2]", "|", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_cardinality(&tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
             NumericExpression::Cardinality(SetExpression::SetVariable(2))
         ));
-        assert_eq!(rest, &tokens[2..]);
+        assert_eq!(rest, &tokens[3..]);
     }
 
     #[test]
     fn pare_cardinality_err() {
         let problem = generate_problem();
-        let tokens: Vec<String> = ["e[2]", "|", "n[0]", ")"]
+        let tokens: Vec<String> = ["|", "e[2]", "|", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_cardinality(&tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["s[2]", "s[0]", "|", ")"]
+        let tokens: Vec<String> = ["|", "s[2]", "s[0]", "|", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_cardinality(&tokens, &problem);
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_atom_ok() {
-        let token = "g";
-        let result: Result<NumericExpression<variable::IntegerVariable>, ParseErr> =
-            parse_atom(&token);
-        assert!(result.is_ok());
-        assert!(matches!(result.unwrap(), NumericExpression::G));
+        let problem = generate_problem();
 
-        let token = "n[11]";
-        let result: Result<NumericExpression<variable::IntegerVariable>, ParseErr> =
-            parse_atom(&token);
+        let tokens: Vec<String> = ["g", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_ok());
-        assert!(matches!(result.unwrap(), NumericExpression::Variable(11)));
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(expression, NumericExpression::G));
+        assert_eq!(rest, &tokens[1..]);
 
-        let token = "r[11]";
-        let result: Result<NumericExpression<variable::IntegerVariable>, ParseErr> =
-            parse_atom(&token);
+        let tokens: Vec<String> = ["n[11]", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(expression, NumericExpression::Variable(11)));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["r[11]", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result = parse_expression(&tokens, &problem);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
         assert!(matches!(
-            result.unwrap(),
+            expression,
             NumericExpression::ResourceVariable(11)
         ));
+        assert_eq!(rest, &tokens[1..]);
 
-        let token = "11";
-        let result: Result<NumericExpression<variable::IntegerVariable>, ParseErr> =
-            parse_atom(&token);
+        let tokens: Vec<String> = ["11", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_ok());
-        assert!(matches!(result.unwrap(), NumericExpression::Constant(11)));
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(expression, NumericExpression::Constant(11)));
+        assert_eq!(rest, &tokens[1..]);
     }
 
     #[test]
     fn parse_atom_err() {
-        let token = "h";
-        let result: Result<NumericExpression<variable::IntegerVariable>, ParseErr> =
-            parse_atom(&token);
+        let problem = generate_problem();
+
+        let tokens: Vec<String> = ["h", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_err());
 
-        let token = "e[1]";
-        let result: Result<NumericExpression<variable::IntegerVariable>, ParseErr> =
-            parse_atom(&token);
+        let tokens: Vec<String> = ["e[1]", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result = parse_expression(&tokens, &problem);
         assert!(result.is_err());
     }
 }

@@ -192,75 +192,14 @@ mod tests {
     fn parse_expression_ok() {
         let problem = generate_problem();
 
-        let tokens: Vec<String> = ["e[0]", ")", "n[0]", ")"]
+        let tokens: Vec<String> = ["n[0]", "1", ")", "n[1]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f1", &tokens, &problem);
+        let result = parse_expression("max", &tokens, &problem);
         assert!(result.is_ok());
         let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, FunctionExpression::Function1D(_, _)));
-        assert_eq!(rest, &tokens[2..]);
-
-        let tokens: Vec<String> = ["0", "e[0]", ")", "n[0]", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression("f2", &tokens, &problem);
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(
-            expression,
-            FunctionExpression::Function2D(_, _, _)
-        ));
-        assert_eq!(rest, &tokens[3..]);
-
-        let tokens: Vec<String> = ["0", "e[0]", "s[0]", ")", "n[0]", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression("f3", &tokens, &problem);
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(
-            expression,
-            FunctionExpression::Function3DSumZ(_, _, _, _)
-        ));
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["0", "e[0]", "s[0]", "p[0]", ")", "n[0]", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression("f4", &tokens, &problem);
-        assert!(result.is_ok());
-        let result = result.unwrap();
-        assert!(result.is_some());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, FunctionExpression::FunctionSum(_, _)));
-        assert_eq!(rest, &tokens[5..]);
-    }
-
-    #[test]
-    fn parse_expression_err() {
-        let problem = generate_problem();
-
-        let tokens = Vec::new();
-        let result = parse_expression("f1", &tokens, &problem);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = ["0", "e[0]", "s[0]", ")", "n[0]", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression("f1", &tokens, &problem);
-        assert!(result.is_err());
+        assert!(result.is_none());
     }
 
     #[test]
@@ -272,8 +211,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_1d(f, &tokens, &problem);
+        let result = parse_expression("f1", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, FunctionExpression::Function1D(_, _)));
         if let FunctionExpression::Function1D(g, x) = expression {
@@ -286,8 +227,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_1d(f, &tokens, &problem);
+        let result = parse_expression("f1", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -303,17 +246,23 @@ mod tests {
     #[test]
     fn parse_function_1d_err() {
         let problem = generate_problem();
-        let f = &problem.functions_1d["f1"];
+
+        let tokens: Vec<String> = ["n[0]", ")", "n[0]", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression("f1", &tokens, &problem);
+        assert!(result.is_err());
 
         let tokens: Vec<String> = ["e[0]", "0", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_1d(f, &tokens, &problem);
+        let result = parse_expression("f1", &tokens, &problem);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [")", "n[0]", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_function_1d(f, &tokens, &problem);
+        let result = parse_expression("f1", &tokens, &problem);
         assert!(result.is_err());
     }
 
@@ -326,8 +275,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_2d(f, &tokens, &problem);
+        let result = parse_expression("f2", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -344,8 +295,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_2d(f, &tokens, &problem);
+        let result = parse_expression("f2", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -362,8 +315,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_2d(f, &tokens, &problem);
+        let result = parse_expression("f2", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -380,8 +335,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_2d(f, &tokens, &problem);
+        let result = parse_expression("f2", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -398,20 +355,26 @@ mod tests {
     #[test]
     fn parse_function_2d_err() {
         let problem = generate_problem();
-        let f = &problem.functions_2d["f2"];
+
+        let tokens: Vec<String> = ["0", "n[0]", ")", "n[0]", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression("f2", &tokens, &problem);
+        assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "e[0]", "p[0]", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_2d(f, &tokens, &problem);
+        let result = parse_expression("f2", &tokens, &problem);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_2d(f, &tokens, &problem);
+        let result = parse_expression("f2", &tokens, &problem);
         assert!(result.is_err());
     }
 
@@ -424,8 +387,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_3d(f, &tokens, &problem);
+        let result = parse_expression("f3", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -443,8 +408,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_3d(f, &tokens, &problem);
+        let result = parse_expression("f3", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -462,8 +429,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_3d(f, &tokens, &problem);
+        let result = parse_expression("f3", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -481,8 +450,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_3d(f, &tokens, &problem);
+        let result = parse_expression("f3", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -500,8 +471,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_3d(f, &tokens, &problem);
+        let result = parse_expression("f3", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -519,8 +492,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_3d(f, &tokens, &problem);
+        let result = parse_expression("f3", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -538,8 +513,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_3d(f, &tokens, &problem);
+        let result = parse_expression("f3", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -557,8 +534,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_3d(f, &tokens, &problem);
+        let result = parse_expression("f3", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
@@ -576,20 +555,26 @@ mod tests {
     #[test]
     fn parse_function_3d_err() {
         let problem = generate_problem();
-        let f = &problem.functions_3d["f3"];
+
+        let tokens: Vec<String> = ["0", "1", "n[0]", ")", "n[0]", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression("f3", &tokens, &problem);
+        assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "1", "e[0]", "2", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_3d(f, &tokens, &problem);
+        let result = parse_expression("f3", &tokens, &problem);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "1", ")", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function_3d(f, &tokens, &problem);
+        let result = parse_expression("f3", &tokens, &problem);
         assert!(result.is_err());
     }
 
@@ -601,8 +586,10 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function(f, &tokens, &problem);
+        let result = parse_expression("f4", &tokens, &problem);
         assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, FunctionExpression::FunctionSum(_, _)));
         if let FunctionExpression::FunctionSum(g, args) = expression {
@@ -631,20 +618,19 @@ mod tests {
     #[test]
     fn parse_function_err() {
         let problem = generate_problem();
-        let f = &problem.functions["f4"];
 
         let tokens: Vec<String> = ["s[2]", "1", "e[0]", "p[3]", "n[0]", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function(f, &tokens, &problem);
+        let result = parse_expression("f4", &tokens, &problem);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["s[2]", "1", "e[0]", "p[3]", "n[0]"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_function(f, &tokens, &problem);
+        let result = parse_expression("f4", &tokens, &problem);
         assert!(result.is_err());
     }
 }
