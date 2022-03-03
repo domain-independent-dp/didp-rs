@@ -1,3 +1,4 @@
+pub mod condition_parser;
 pub mod function_parser;
 pub mod numeric_parser;
 pub mod set_parser;

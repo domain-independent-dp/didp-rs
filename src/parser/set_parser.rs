@@ -1,12 +1,11 @@
+use super::ParseErr;
 use crate::expression::set_expression::*;
-use crate::parser;
-use crate::parser::ParseErr;
 use crate::problem;
 use crate::variable;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-pub fn parse_expression<'a, 'b, T: variable::Numeric>(
+pub fn parse_set<'a, 'b, T: variable::Numeric>(
     tokens: &'a [String],
     problem: &'b problem::Problem<T>,
 ) -> Result<(SetExpression, &'a [String]), ParseErr> {
@@ -15,6 +14,20 @@ pub fn parse_expression<'a, 'b, T: variable::Numeric>(
         ArgumentExpression::Set(expression) => Ok((expression, rest)),
         _ => Err(ParseErr::Reason(format!(
             "not a set expression: {:?}",
+            expression
+        ))),
+    }
+}
+
+pub fn parse_element<'a, 'b, T: variable::Numeric>(
+    tokens: &'a [String],
+    problem: &'b problem::Problem<T>,
+) -> Result<(ElementExpression, &'a [String]), ParseErr> {
+    let (expression, rest) = parse_argument(tokens, problem)?;
+    match expression {
+        ArgumentExpression::Element(expression) => Ok((expression, rest)),
+        _ => Err(ParseErr::Reason(format!(
+            "not an element expression: {:?}",
             expression
         ))),
     }
@@ -48,16 +61,8 @@ fn parse_complement<'a, 'b, T: variable::Numeric>(
     tokens: &'a [String],
     problem: &'b problem::Problem<T>,
 ) -> Result<(SetExpression, &'a [String]), ParseErr> {
-    let (expression, rest) = parse_argument(tokens, problem)?;
-    match expression {
-        ArgumentExpression::Set(expression) => {
-            Ok((SetExpression::Complement(Box::new(expression)), rest))
-        }
-        _ => Err(ParseErr::Reason(format!(
-            "not a set expression: {:?}",
-            expression
-        ))),
-    }
+    let (expression, rest) = parse_set(tokens, problem)?;
+    Ok((SetExpression::Complement(Box::new(expression)), rest))
 }
 
 fn parse_operation<'a, 'b, T: variable::Numeric>(
@@ -69,7 +74,7 @@ fn parse_operation<'a, 'b, T: variable::Numeric>(
         .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
     let (x, rest) = parse_argument(rest, problem)?;
     let (y, rest) = parse_argument(rest, problem)?;
-    let rest = parser::parse_closing(rest)?;
+    let rest = super::parse_closing(rest)?;
 
     match &token[..] {
         "+" => match (x, y) {

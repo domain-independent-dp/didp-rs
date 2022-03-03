@@ -1,9 +1,7 @@
 use super::function_parser;
 use super::set_parser;
+use super::ParseErr;
 use crate::expression::numeric_expression::*;
-use crate::expression::set_expression::*;
-use crate::parser;
-use crate::parser::ParseErr;
 use crate::problem;
 use crate::variable;
 use lazy_static::lazy_static;
@@ -18,13 +16,13 @@ pub fn parse<T: variable::Numeric>(
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let tokens = parser::tokenize(text);
+    let tokens = super::tokenize(text);
     let (expression, rest) = parse_expression(&tokens, problem)?;
     if rest.is_empty() {
         Ok(expression)
     } else {
         Err(ParseErr::Reason(format!(
-            "unexpected tokens at the end: {}",
+            "unexpected tokens: `{}`",
             rest.join(" ")
         )))
     }
@@ -72,7 +70,7 @@ where
 {
     let (x, rest) = parse_expression(tokens, problem)?;
     let (y, rest) = parse_expression(rest, problem)?;
-    let rest = parser::parse_closing(rest)?;
+    let rest = super::parse_closing(rest)?;
     match &name[..] {
         "+" => Ok((
             NumericExpression::NumericOperation(NumericOperator::Add, Box::new(x), Box::new(y)),
@@ -106,7 +104,7 @@ where
             NumericExpression::NumericOperation(NumericOperator::Max, Box::new(x), Box::new(y)),
             rest,
         )),
-        op => Err(ParseErr::Reason(format!("no such operator {}", op))),
+        _ => Err(ParseErr::Reason(format!("no such operator: `{}`", name))),
     }
 }
 
@@ -114,25 +112,17 @@ fn parse_cardinality<'a, 'b, T: variable::Numeric>(
     tokens: &'a [String],
     problem: &'b problem::Problem<T>,
 ) -> Result<(NumericExpression<'b, T>, &'a [String]), ParseErr> {
-    let (expression, rest) = set_parser::parse_argument(tokens, problem)?;
+    let (expression, rest) = set_parser::parse_set(tokens, problem)?;
     let (token, rest) = rest
         .split_first()
         .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
     if token != "|" {
         return Err(ParseErr::Reason(format!(
-            "unexpected {}, expected `|`",
+            "unexpected token: `{}`, expected `|`",
             token
         )));
     }
-    match expression {
-        ArgumentExpression::Set(expression) => {
-            Ok((NumericExpression::Cardinality(expression), rest))
-        }
-        _ => Err(ParseErr::Reason(format!(
-            "cardinality of not a set expression: {:?}",
-            expression
-        ))),
-    }
+    Ok((NumericExpression::Cardinality(expression), rest))
 }
 
 fn parse_atom<'a, 'b, T: variable::Numeric>(
@@ -179,6 +169,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::expression::set_expression::*;
     use crate::numeric_function;
     use std::collections::HashMap;
 

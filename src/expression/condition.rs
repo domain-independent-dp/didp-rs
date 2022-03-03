@@ -4,6 +4,7 @@ use crate::problem;
 use crate::search_node;
 use crate::variable;
 
+#[derive(Debug)]
 pub enum Condition<'a, T: variable::Numeric> {
     Not(Box<Condition<'a, T>>),
     And(Box<Condition<'a, T>>, Box<Condition<'a, T>>),
@@ -16,6 +17,7 @@ pub enum Condition<'a, T: variable::Numeric> {
     Set(set_condition::SetCondition),
 }
 
+#[derive(Debug)]
 pub enum ComparisonOperator {
     Eq,
     Ne,

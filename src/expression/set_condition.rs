@@ -4,7 +4,10 @@ use crate::problem;
 use crate::state;
 use crate::variable;
 
+#[derive(Debug)]
 pub enum SetCondition {
+    Eq(ElementExpression, ElementExpression),
+    Ne(ElementExpression, ElementExpression),
     In(ElementExpression, SetExpression),
     SubsetOf(SetExpression, SetExpression),
     IsEmpty(SetExpression),
@@ -17,6 +20,16 @@ impl SetCondition {
         problem: &problem::Problem<T>,
     ) -> bool {
         match self {
+            SetCondition::Eq(x, y) => {
+                let x = x.eval(state);
+                let y = y.eval(state);
+                x == y
+            }
+            SetCondition::Ne(x, y) => {
+                let x = x.eval(state);
+                let y = y.eval(state);
+                x != y
+            }
             SetCondition::In(e, s) => {
                 let e = e.eval(state);
                 let s = s.eval(state, problem);
@@ -74,6 +87,66 @@ mod tests {
                 numeric_variables: vec![4, 5, 6],
             },
         }
+    }
+
+    #[test]
+    fn element_eq() {
+        let problem = generate_problem();
+        let state = generate_state();
+
+        let expression = SetCondition::Eq(
+            ElementExpression::Constant(1),
+            ElementExpression::Constant(1),
+        );
+        assert!(expression.eval(&state, &problem));
+
+        let expression = SetCondition::Eq(
+            ElementExpression::Constant(0),
+            ElementExpression::Constant(1),
+        );
+        assert!(!expression.eval(&state, &problem));
+
+        let expression = SetCondition::Eq(
+            ElementExpression::Constant(1),
+            ElementExpression::Variable(0),
+        );
+        assert!(expression.eval(&state, &problem));
+
+        let expression = SetCondition::Eq(
+            ElementExpression::Constant(0),
+            ElementExpression::Variable(0),
+        );
+        assert!(!expression.eval(&state, &problem));
+    }
+
+    #[test]
+    fn element_ne() {
+        let problem = generate_problem();
+        let state = generate_state();
+
+        let expression = SetCondition::Ne(
+            ElementExpression::Constant(1),
+            ElementExpression::Constant(1),
+        );
+        assert!(!expression.eval(&state, &problem));
+
+        let expression = SetCondition::Ne(
+            ElementExpression::Constant(0),
+            ElementExpression::Constant(1),
+        );
+        assert!(expression.eval(&state, &problem));
+
+        let expression = SetCondition::Ne(
+            ElementExpression::Constant(1),
+            ElementExpression::Variable(0),
+        );
+        assert!(!expression.eval(&state, &problem));
+
+        let expression = SetCondition::Ne(
+            ElementExpression::Constant(0),
+            ElementExpression::Variable(0),
+        );
+        assert!(expression.eval(&state, &problem));
     }
 
     #[test]
