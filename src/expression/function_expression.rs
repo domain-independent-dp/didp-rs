@@ -94,7 +94,7 @@ pub enum FunctionExpression<'a, T: variable::Numeric> {
 }
 
 impl<'a, T: variable::Numeric> FunctionExpression<'a, T> {
-    pub fn eval(&self, state: &state::State<T>, problem: &problem::Problem<T>) -> T {
+    pub fn eval(&self, state: &state::State<T>, problem: &problem::Problem) -> T {
         match self {
             Self::Function1D(f, x) => f.eval(x.eval(&state)),
             Self::Function1DSum(f, x) => f.sum(&x.eval(&state, problem)),
@@ -153,7 +153,7 @@ fn sum_numeric_function<T: variable::Numeric>(
     f: &numeric_function::NumericFunction<T>,
     args: &[set_expression::ArgumentExpression],
     state: &state::State<T>,
-    problem: &problem::Problem<T>,
+    problem: &problem::Problem,
 ) -> T {
     let mut result = vec![vec![]];
     for v in args {
@@ -189,15 +189,11 @@ mod tests {
     use std::collections::HashMap;
     use std::rc::Rc;
 
-    fn generate_problem() -> problem::Problem<variable::IntegerVariable> {
+    fn generate_problem() -> problem::Problem {
         problem::Problem {
             set_variable_to_max_size: vec![3],
             permutation_variable_to_max_length: vec![3],
             element_to_set: vec![0],
-            functions_1d: HashMap::new(),
-            functions_2d: HashMap::new(),
-            functions_3d: HashMap::new(),
-            functions: HashMap::new(),
         }
     }
 

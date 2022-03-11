@@ -28,7 +28,7 @@ impl SetExpression {
     pub fn eval<T: variable::Numeric>(
         &self,
         state: &state::State<T>,
-        problem: &problem::Problem<T>,
+        problem: &problem::Problem,
     ) -> variable::SetVariable {
         match self {
             SetExpression::SetVariable(i) => state.signature_variables.set_variables[*i].clone(),
@@ -106,18 +106,13 @@ pub enum ArgumentExpression {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use std::rc::Rc;
 
-    fn generate_problem() -> problem::Problem<variable::IntegerVariable> {
+    fn generate_problem() -> problem::Problem {
         problem::Problem {
             set_variable_to_max_size: vec![3],
             permutation_variable_to_max_length: vec![3],
             element_to_set: vec![0],
-            functions_1d: HashMap::new(),
-            functions_2d: HashMap::new(),
-            functions_3d: HashMap::new(),
-            functions: HashMap::new(),
         }
     }
 
