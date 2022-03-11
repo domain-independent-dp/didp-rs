@@ -18,7 +18,7 @@ pub enum ParseErr {
 
 pub fn parse_numeric<T: variable::Numeric>(
     text: String,
-    env: &environment::Environment<T>,
+    env: &Environment<T>,
 ) -> Result<expression::NumericExpression<T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -37,7 +37,7 @@ where
 
 pub fn parse_set<T: variable::Numeric>(
     text: String,
-    env: &environment::Environment<T>,
+    env: &Environment<T>,
 ) -> Result<expression::SetExpression, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -56,7 +56,7 @@ where
 
 pub fn parse_element<T: variable::Numeric>(
     text: String,
-    env: &environment::Environment<T>,
+    env: &Environment<T>,
 ) -> Result<expression::ElementExpression, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -75,7 +75,7 @@ where
 
 pub fn parse_condition<T: variable::Numeric>(
     text: String,
-    env: &environment::Environment<T>,
+    env: &Environment<T>,
 ) -> Result<expression::Condition<T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -123,7 +123,7 @@ mod tests {
     use crate::numeric_function;
     use std::collections::HashMap;
 
-    fn generate_env() -> environment::Environment<variable::IntegerVariable> {
+    fn generate_env() -> Environment<variable::IntegerVariable> {
         let mut set_variables = HashMap::new();
         set_variables.insert("s0".to_string(), 0);
         set_variables.insert("s1".to_string(), 1);
@@ -167,7 +167,7 @@ mod tests {
         let f4 = numeric_function::NumericFunction::new(HashMap::new());
         functions.insert("f4".to_string(), f4);
 
-        environment::Environment {
+        Environment {
             set_variables,
             permutation_variables,
             element_variables,
