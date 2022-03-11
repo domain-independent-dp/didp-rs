@@ -117,8 +117,8 @@ where
         static ref RESOURCE: Regex = Regex::new(r"^r\[(\d+)\]$").unwrap();
     }
 
-    if token == "g" {
-        return Ok(NumericExpression::G);
+    if token == "cost" {
+        return Ok(NumericExpression::Cost);
     }
 
     if let Some(caps) = NUMERIC.captures(token) {
@@ -422,11 +422,11 @@ mod tests {
     fn parse_atom_ok() {
         let problem = generate_problem();
 
-        let tokens: Vec<String> = ["g", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let tokens: Vec<String> = ["cost", "1", ")"].iter().map(|x| x.to_string()).collect();
         let result = parse_expression(&tokens, &problem);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, NumericExpression::G));
+        assert!(matches!(expression, NumericExpression::Cost));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["n[11]", "1", ")"].iter().map(|x| x.to_string()).collect();

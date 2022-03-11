@@ -1,7 +1,7 @@
 use super::numeric_expression::NumericExpression;
 use super::set_condition;
 use crate::problem;
-use crate::search_node;
+use crate::state;
 use crate::variable;
 
 #[derive(Debug)]
@@ -28,15 +28,15 @@ pub enum ComparisonOperator {
 }
 
 impl<'a, T: variable::Numeric> Condition<'a, T> {
-    pub fn eval(&self, node: &search_node::SearchNode<T>, problem: &problem::Problem<T>) -> bool {
+    pub fn eval(&self, state: &state::State<T>, problem: &problem::Problem<T>) -> bool {
         match self {
-            Condition::Not(c) => !c.eval(node, problem),
-            Condition::And(x, y) => x.eval(node, problem) && y.eval(node, problem),
-            Condition::Or(x, y) => x.eval(node, problem) || y.eval(node, problem),
+            Condition::Not(c) => !c.eval(state, problem),
+            Condition::And(x, y) => x.eval(state, problem) && y.eval(state, problem),
+            Condition::Or(x, y) => x.eval(state, problem) || y.eval(state, problem),
             Condition::Comparison(op, x, y) => {
-                Self::eval_comparison(op, x.eval(node, problem), y.eval(node, problem))
+                Self::eval_comparison(op, x.eval(state, problem), y.eval(state, problem))
             }
-            Condition::Set(c) => c.eval(&node.state, problem),
+            Condition::Set(c) => c.eval(state, problem),
         }
     }
 
@@ -56,7 +56,6 @@ impl<'a, T: variable::Numeric> Condition<'a, T> {
 mod tests {
     use super::*;
     use crate::state;
-    use std::cell::RefCell;
     use std::collections::HashMap;
     use std::rc::Rc;
 
@@ -72,205 +71,199 @@ mod tests {
         }
     }
 
-    fn generate_node() -> search_node::SearchNode<variable::IntegerVariable> {
+    fn generate_state() -> state::State<variable::IntegerVariable> {
         let mut set1 = variable::SetVariable::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
         let mut set2 = variable::SetVariable::with_capacity(3);
         set2.insert(0);
         set2.insert(1);
-        search_node::SearchNode {
-            state: state::State {
-                signature_variables: Rc::new(state::SignatureVariables {
-                    set_variables: vec![set1, set2],
-                    permutation_variables: vec![vec![0, 2]],
-                    element_variables: vec![1],
-                    numeric_variables: vec![1, 2, 3],
-                }),
-                resource_variables: state::ResourceVariables {
-                    numeric_variables: vec![4, 5, 6],
-                },
+        state::State {
+            signature_variables: Rc::new(state::SignatureVariables {
+                set_variables: vec![set1, set2],
+                permutation_variables: vec![vec![0, 2]],
+                element_variables: vec![1],
+                numeric_variables: vec![1, 2, 3],
+            }),
+            resource_variables: state::ResourceVariables {
+                numeric_variables: vec![4, 5, 6],
             },
-            g: 0,
-            h: RefCell::new(None),
-            f: RefCell::new(None),
-            parent: None,
-            closed: RefCell::new(false),
+            cost: 0,
         }
     }
 
     #[test]
     fn eval_eq() {
         let problem = generate_problem();
-        let node = generate_node();
+        let state = generate_state();
 
         let expression = Condition::Comparison(
             ComparisonOperator::Eq,
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Eq,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
     }
 
     #[test]
     fn eval_neq() {
         let problem = generate_problem();
-        let node = generate_node();
+        let state = generate_state();
 
         let expression = Condition::Comparison(
             ComparisonOperator::Ne,
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Ne,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
     }
 
     #[test]
     fn eval_ge() {
         let problem = generate_problem();
-        let node = generate_node();
+        let state = generate_state();
 
         let expression = Condition::Comparison(
             ComparisonOperator::Ge,
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Ge,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Ge,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
     }
 
     #[test]
     fn eval_gt() {
         let problem = generate_problem();
-        let node = generate_node();
+        let state = generate_state();
 
         let expression = Condition::Comparison(
             ComparisonOperator::Gt,
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Gt,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Gt,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
     }
 
     #[test]
     fn eval_le() {
         let problem = generate_problem();
-        let node = generate_node();
+        let state = generate_state();
 
         let expression = Condition::Comparison(
             ComparisonOperator::Le,
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Le,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Le,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
     }
 
     #[test]
     fn eval_lt() {
         let problem = generate_problem();
-        let node = generate_node();
+        let state = generate_state();
 
         let expression = Condition::Comparison(
             ComparisonOperator::Lt,
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Lt,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Lt,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
     }
 
     #[test]
     fn eval_not() {
         let problem = generate_problem();
-        let node = generate_node();
+        let state = generate_state();
 
         let expression = Condition::Not(Box::new(Condition::Comparison(
             ComparisonOperator::Eq,
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         )));
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
 
         let expression = Condition::Not(Box::new(Condition::Comparison(
             ComparisonOperator::Eq,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         )));
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
     }
 
     #[test]
     fn eval_and() {
         let problem = generate_problem();
-        let node = generate_node();
+        let state = generate_state();
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -283,7 +276,7 @@ mod tests {
             NumericExpression::Constant(0),
         );
         let expression = Condition::And(Box::new(x), Box::new(y));
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -296,7 +289,7 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::And(Box::new(x), Box::new(y));
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -309,13 +302,13 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::And(Box::new(x), Box::new(y));
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
     }
 
     #[test]
     fn eval_or() {
         let problem = generate_problem();
-        let node = generate_node();
+        let state = generate_state();
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -328,7 +321,7 @@ mod tests {
             NumericExpression::Constant(0),
         );
         let expression = Condition::Or(Box::new(x), Box::new(y));
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -341,7 +334,7 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::Or(Box::new(x), Box::new(y));
-        assert!(expression.eval(&node, &problem));
+        assert!(expression.eval(&state, &problem));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -354,6 +347,6 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::Or(Box::new(x), Box::new(y));
-        assert!(!expression.eval(&node, &problem));
+        assert!(!expression.eval(&state, &problem));
     }
 }

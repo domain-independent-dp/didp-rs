@@ -9,7 +9,6 @@ use crate::variable;
 #[derive(Debug, Eq)]
 pub struct SearchNode<T: variable::Numeric> {
     pub state: state::State<T>,
-    pub g: T,
     pub h: RefCell<Option<T>>,
     pub f: RefCell<Option<T>>,
     pub parent: Option<Rc<SearchNode<T>>>,
@@ -47,7 +46,6 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
     pub fn get_node(
         &mut self,
         mut state: state::State<T>,
-        g: T,
         parent: Option<Rc<SearchNode<T>>>,
     ) -> Option<Rc<SearchNode<T>>> {
         let entry = self.0.entry(state.signature_variables.clone());
@@ -57,16 +55,19 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
                 state.signature_variables = entry.key().clone();
                 let v = entry.into_mut();
                 for (i, other) in v.iter().enumerate() {
-                    let result = other
-                        .state
+                    let result = state
                         .resource_variables
-                        .partial_cmp(&state.resource_variables);
+                        .partial_cmp(&other.state.resource_variables);
                     match result {
-                        Some(Ordering::Equal) | Some(Ordering::Greater) if g >= other.g => {
+                        Some(Ordering::Equal) | Some(Ordering::Less)
+                            if state.cost >= other.state.cost =>
+                        {
                             // dominated
                             return None;
                         }
-                        Some(Ordering::Equal) | Some(Ordering::Less) if g <= other.g => {
+                        Some(Ordering::Equal) | Some(Ordering::Greater)
+                            if state.cost <= other.state.cost =>
+                        {
                             // dominating
                             if !*other.closed.borrow() {
                                 *other.closed.borrow_mut() = true;
@@ -85,7 +86,6 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
                             };
                             let node = Rc::new(SearchNode {
                                 state,
-                                g,
                                 h,
                                 f: RefCell::new(None),
                                 parent,
@@ -103,7 +103,6 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
         };
         let node = Rc::new(SearchNode {
             state,
-            g,
             h: RefCell::new(None),
             f: RefCell::new(None),
             parent,
@@ -139,7 +138,7 @@ mod tests {
     fn generate_node(
         signature_variables: Rc<state::SignatureVariables<variable::IntegerVariable>>,
         resource_variables: state::ResourceVariables<variable::IntegerVariable>,
-        g: variable::IntegerVariable,
+        cost: variable::IntegerVariable,
         h: variable::IntegerVariable,
         f: variable::IntegerVariable,
     ) -> SearchNode<variable::IntegerVariable> {
@@ -147,8 +146,8 @@ mod tests {
             state: state::State {
                 signature_variables,
                 resource_variables,
+                cost,
             },
-            g,
             h: RefCell::new(Some(h)),
             f: RefCell::new(Some(f)),
             parent: None,
@@ -185,16 +184,17 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2]),
+            cost: 1,
         };
-        let node = registry.get_node(state, 1, None);
+        let node = registry.get_node(state, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2]),
+            cost: 1,
         };
         assert_eq!(node.state, state);
-        assert_eq!(node.g, 1);
         assert!(node.h.borrow().is_none());
         assert!(node.f.borrow().is_none());
         assert!(node.parent.is_none());
@@ -203,16 +203,17 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![1, 2]),
+            cost: 1,
         };
-        let node = registry.get_node(state, 1, None);
+        let node = registry.get_node(state, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![1, 2]),
+            cost: 1,
         };
         assert_eq!(node.state, state);
-        assert_eq!(node.g, 1);
         assert!(node.h.borrow().is_none());
         assert!(node.f.borrow().is_none());
         assert!(node.parent.is_none());
@@ -221,16 +222,17 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![3, 1]),
+            cost: 1,
         };
-        let node = registry.get_node(state, 1, None);
+        let node = registry.get_node(state, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![3, 1]),
+            cost: 1,
         };
         assert_eq!(node.state, state);
-        assert_eq!(node.g, 1);
         assert!(node.h.borrow().is_none());
         assert!(node.f.borrow().is_none());
         assert!(node.parent.is_none());
@@ -239,16 +241,17 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![0, 1]),
+            cost: 0,
         };
-        let node = registry.get_node(state, 0, None);
+        let node = registry.get_node(state, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![0, 1]),
+            cost: 0,
         };
         assert_eq!(node.state, state);
-        assert_eq!(node.g, 0);
         assert!(node.h.borrow().is_none());
         assert!(node.f.borrow().is_none());
         assert!(node.parent.is_none());
@@ -262,28 +265,32 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2]),
+            cost: 2,
         };
-        registry.get_node(state, 2, None);
+        registry.get_node(state, None);
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2]),
+            cost: 2,
         };
-        let node = registry.get_node(state, 2, None);
+        let node = registry.get_node(state, None);
         assert!(node.is_none());
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![0, 2]),
+            cost: 2,
         };
-        let node = registry.get_node(state, 2, None);
+        let node = registry.get_node(state, None);
         assert!(node.is_none());
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2]),
+            cost: 3,
         };
-        let node = registry.get_node(state, 3, None);
+        let node = registry.get_node(state, None);
         assert!(node.is_none());
     }
 
@@ -294,14 +301,19 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2]),
+            cost: 2,
         };
-        registry.get_node(state, 2, None);
+        let node = registry.get_node(state, None);
+        assert!(node.is_some());
+        let node = node.unwrap();
+        assert!(node.h.borrow().is_none());
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2]),
+            cost: 1,
         };
-        let node = registry.get_node(state, 1, None);
+        let node = registry.get_node(state, None);
         assert!(node.is_none());
     }
 
@@ -312,8 +324,9 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2]),
+            cost: 2,
         };
-        let node1 = registry.get_node(state, 2, None);
+        let node1 = registry.get_node(state, None);
         assert!(node1.is_some());
         let node1 = node1.unwrap();
         *node1.h.borrow_mut() = Some(3);
@@ -321,12 +334,20 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2]),
+            cost: 1,
         };
-        let node2 = registry.get_node(state, 1, Some(node1.clone()));
+        let node2 = registry.get_node(state, Some(node1.clone()));
         assert!(node2.is_some());
         let node2 = node2.unwrap();
-        assert_eq!(node2.state, node1.state);
-        assert!(node2.g < node1.g);
+        assert_eq!(
+            node2.state.signature_variables,
+            node1.state.signature_variables
+        );
+        assert_eq!(
+            node2.state.resource_variables,
+            node1.state.resource_variables
+        );
+        assert!(node2.state.cost < node1.state.cost);
         assert_eq!(*node2.h.borrow(), *node1.h.borrow());
         assert!(node2.f.borrow().is_none());
         assert!(*node1.closed.borrow());
@@ -336,8 +357,9 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![2, 3]),
+            cost: 1,
         };
-        let node3 = registry.get_node(state, 1, None);
+        let node3 = registry.get_node(state, None);
         assert!(node3.is_some());
         let node3 = node3.unwrap();
         assert_eq!(
@@ -346,9 +368,9 @@ mod tests {
         );
         assert_ne!(
             node3.state.resource_variables,
-            node2.state.resource_variables
+            node2.state.resource_variables,
         );
-        assert_eq!(node3.g, node2.g);
+        assert_eq!(node3.state.cost, node2.state.cost);
         assert!(node3.h.borrow().is_none());
         assert!(node3.f.borrow().is_none());
         assert!(*node2.closed.borrow());

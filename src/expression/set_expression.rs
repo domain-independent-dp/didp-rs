@@ -138,6 +138,7 @@ mod tests {
             resource_variables: state::ResourceVariables {
                 numeric_variables: vec![4, 5, 6],
             },
+            cost: 0,
         }
     }
     #[test]

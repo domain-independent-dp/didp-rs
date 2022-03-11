@@ -7,6 +7,7 @@ use crate::variable;
 pub struct State<T: variable::Numeric> {
     pub signature_variables: Rc<SignatureVariables<T>>,
     pub resource_variables: ResourceVariables<T>,
+    pub cost: T,
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
