@@ -14,3 +14,8 @@ pub struct Environment<T: variable::Numeric> {
     pub functions_3d: collections::HashMap<String, numeric_function::NumericFunction3D<T>>,
     pub functions: collections::HashMap<String, numeric_function::NumericFunction<T>>,
 }
+
+pub struct Parameters {
+    pub set_parameters: collections::HashMap<usize, usize>,
+    pub permutation_parameters: collections::HashMap<usize, usize>,
+}

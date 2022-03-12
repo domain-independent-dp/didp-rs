@@ -37,9 +37,7 @@ impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
         match self {
             NumericExpression::Constant(x) => *x,
             NumericExpression::Variable(i) => state.signature_variables.numeric_variables[*i],
-            NumericExpression::ResourceVariable(i) => {
-                state.resource_variables.numeric_variables[*i]
-            }
+            NumericExpression::ResourceVariable(i) => state.resource_variables[*i],
             NumericExpression::Cost => state.cost,
             NumericExpression::NumericOperation(op, a, b) => {
                 let a = a.eval(state, problem);
@@ -89,9 +87,7 @@ mod tests {
                 element_variables: vec![1],
                 numeric_variables: vec![1, 2, 3],
             }),
-            resource_variables: state::ResourceVariables {
-                numeric_variables: vec![4, 5, 6],
-            },
+            resource_variables: vec![4, 5, 6],
             cost: 0,
         }
     }

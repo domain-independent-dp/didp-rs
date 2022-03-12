@@ -3,8 +3,7 @@ use std::cmp::Ordering;
 use std::collections;
 use std::rc::Rc;
 
-use crate::state;
-use crate::variable;
+use didp_parser::{state, variable};
 
 #[derive(Debug, Eq)]
 pub struct SearchNode<T: variable::Numeric> {
@@ -47,6 +46,7 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
         &mut self,
         mut state: state::State<T>,
         parent: Option<Rc<SearchNode<T>>>,
+        metadata: &state::StateMetadata,
     ) -> Option<Rc<SearchNode<T>>> {
         let entry = self.0.entry(state.signature_variables.clone());
         let v = match entry {
@@ -55,9 +55,8 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
                 state.signature_variables = entry.key().clone();
                 let v = entry.into_mut();
                 for (i, other) in v.iter().enumerate() {
-                    let result = state
-                        .resource_variables
-                        .partial_cmp(&other.state.resource_variables);
+                    let result = metadata
+                        .dominance(&state.resource_variables, &other.state.resource_variables);
                     match result {
                         Some(Ordering::Equal) | Some(Ordering::Less)
                             if state.cost >= other.state.cost =>
@@ -116,7 +115,38 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::variable;
+    use didp_parser::variable;
+
+    fn generate_state_metadata() -> state::StateMetadata {
+        let mut name_to_numeric_variable = collections::HashMap::new();
+        name_to_numeric_variable.insert("n1".to_string(), 0);
+        name_to_numeric_variable.insert("n2".to_string(), 1);
+        name_to_numeric_variable.insert("n3".to_string(), 2);
+
+        let mut name_to_resource_variable = collections::HashMap::new();
+        name_to_resource_variable.insert("r1".to_string(), 0);
+        name_to_resource_variable.insert("r2".to_string(), 1);
+        name_to_resource_variable.insert("r3".to_string(), 2);
+
+        state::StateMetadata {
+            object_names: Vec::new(),
+            name_to_object: collections::HashMap::new(),
+            set_variable_to_name: Vec::new(),
+            name_to_set_variable: collections::HashMap::new(),
+            set_variable_to_object: Vec::new(),
+            permutation_variable_to_name: Vec::new(),
+            name_to_permutation_variable: collections::HashMap::new(),
+            permutation_variable_to_object: Vec::new(),
+            element_variable_to_name: Vec::new(),
+            name_to_element_variable: collections::HashMap::new(),
+            element_variable_to_object: Vec::new(),
+            numeric_variable_to_name: vec!["n1".to_string(), "n2".to_string(), "n3".to_string()],
+            name_to_numeric_variable,
+            resource_variable_to_name: vec!["r1".to_string(), "r2".to_string(), "r3".to_string()],
+            name_to_resource_variable,
+            less_is_better: vec![false, false, true],
+        }
+    }
 
     fn generate_signature_variables(
         numeric_variables: Vec<variable::IntegerVariable>,
@@ -129,15 +159,9 @@ mod tests {
         })
     }
 
-    fn generate_resource_variables(
-        numeric_variables: Vec<variable::IntegerVariable>,
-    ) -> state::ResourceVariables<variable::IntegerVariable> {
-        state::ResourceVariables { numeric_variables }
-    }
-
     fn generate_node(
         signature_variables: Rc<state::SignatureVariables<variable::IntegerVariable>>,
-        resource_variables: state::ResourceVariables<variable::IntegerVariable>,
+        resource_variables: Vec<variable::IntegerVariable>,
         cost: variable::IntegerVariable,
         h: variable::IntegerVariable,
         f: variable::IntegerVariable,
@@ -158,40 +182,37 @@ mod tests {
     #[test]
     fn search_node_eq() {
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let resource_variables = generate_resource_variables(vec![]);
-        let node1 = generate_node(signature_variables, resource_variables, 1, 1, 2);
+        let node1 = generate_node(signature_variables, vec![0, 0, 0], 1, 1, 2);
         let signature_variables = generate_signature_variables(vec![1, 2, 3]);
-        let resource_variables = generate_resource_variables(vec![]);
-        let node2 = generate_node(signature_variables, resource_variables, 1, 1, 2);
+        let node2 = generate_node(signature_variables, vec![0, 0, 0], 1, 1, 2);
         assert_eq!(node1, node2);
     }
 
     #[test]
     fn search_node_neq() {
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let resource_variables = generate_resource_variables(vec![]);
-        let node1 = generate_node(signature_variables, resource_variables, 1, 1, 2);
+        let node1 = generate_node(signature_variables, vec![0, 0, 0], 1, 1, 2);
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let resource_variables = generate_resource_variables(vec![]);
-        let node2 = generate_node(signature_variables, resource_variables, 1, 2, 3);
+        let node2 = generate_node(signature_variables, vec![0, 0, 0], 1, 2, 3);
         assert!(node1 > node2);
     }
 
     #[test]
     fn get_new_node() {
+        let metadata = generate_state_metadata();
         let mut registry = SearchNodeRegistry::default();
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![1, 2]),
+            resource_variables: vec![1, 2, 3],
             cost: 1,
         };
-        let node = registry.get_node(state, None);
+        let node = registry.get_node(state, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![1, 2]),
+            resource_variables: vec![1, 2, 3],
             cost: 1,
         };
         assert_eq!(node.state, state);
@@ -202,15 +223,15 @@ mod tests {
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: generate_resource_variables(vec![1, 2]),
+            resource_variables: vec![1, 2, 3],
             cost: 1,
         };
-        let node = registry.get_node(state, None);
+        let node = registry.get_node(state, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: generate_resource_variables(vec![1, 2]),
+            resource_variables: vec![1, 2, 3],
             cost: 1,
         };
         assert_eq!(node.state, state);
@@ -221,15 +242,15 @@ mod tests {
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: generate_resource_variables(vec![3, 1]),
+            resource_variables: vec![3, 1, 3],
             cost: 1,
         };
-        let node = registry.get_node(state, None);
+        let node = registry.get_node(state, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: generate_resource_variables(vec![3, 1]),
+            resource_variables: vec![3, 1, 3],
             cost: 1,
         };
         assert_eq!(node.state, state);
@@ -240,15 +261,15 @@ mod tests {
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: generate_resource_variables(vec![0, 1]),
+            resource_variables: vec![0, 1, 3],
             cost: 0,
         };
-        let node = registry.get_node(state, None);
+        let node = registry.get_node(state, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: generate_resource_variables(vec![0, 1]),
+            resource_variables: vec![0, 1, 3],
             cost: 0,
         };
         assert_eq!(node.state, state);
@@ -260,83 +281,86 @@ mod tests {
 
     #[test]
     fn node_dominated() {
+        let metadata = generate_state_metadata();
         let mut registry = SearchNodeRegistry::default();
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![1, 2]),
+            resource_variables: vec![1, 2, 3],
             cost: 2,
         };
-        registry.get_node(state, None);
+        registry.get_node(state, None, &metadata);
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![1, 2]),
+            resource_variables: vec![1, 2, 3],
             cost: 2,
         };
-        let node = registry.get_node(state, None);
+        let node = registry.get_node(state, None, &metadata);
         assert!(node.is_none());
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![0, 2]),
+            resource_variables: vec![0, 2, 3],
             cost: 2,
         };
-        let node = registry.get_node(state, None);
+        let node = registry.get_node(state, None, &metadata);
         assert!(node.is_none());
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![1, 2]),
+            resource_variables: vec![1, 2, 3],
             cost: 3,
         };
-        let node = registry.get_node(state, None);
+        let node = registry.get_node(state, None, &metadata);
         assert!(node.is_none());
     }
 
     #[test]
     fn node_dead_end() {
+        let metadata = generate_state_metadata();
         let mut registry = SearchNodeRegistry::default();
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![1, 2]),
+            resource_variables: vec![1, 2, 3],
             cost: 2,
         };
-        let node = registry.get_node(state, None);
+        let node = registry.get_node(state, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
         assert!(node.h.borrow().is_none());
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![1, 2]),
+            resource_variables: vec![1, 2, 3],
             cost: 1,
         };
-        let node = registry.get_node(state, None);
+        let node = registry.get_node(state, None, &metadata);
         assert!(node.is_none());
     }
 
     #[test]
     fn get_dominating_node() {
+        let metadata = generate_state_metadata();
         let mut registry = SearchNodeRegistry::default();
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![1, 2]),
+            resource_variables: vec![1, 2, 3],
             cost: 2,
         };
-        let node1 = registry.get_node(state, None);
+        let node1 = registry.get_node(state, None, &metadata);
         assert!(node1.is_some());
         let node1 = node1.unwrap();
         *node1.h.borrow_mut() = Some(3);
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![1, 2]),
+            resource_variables: vec![1, 2, 3],
             cost: 1,
         };
-        let node2 = registry.get_node(state, Some(node1.clone()));
+        let node2 = registry.get_node(state, Some(node1.clone()), &metadata);
         assert!(node2.is_some());
         let node2 = node2.unwrap();
         assert_eq!(
@@ -356,10 +380,10 @@ mod tests {
 
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![2, 3]),
+            resource_variables: vec![2, 3, 3],
             cost: 1,
         };
-        let node3 = registry.get_node(state, None);
+        let node3 = registry.get_node(state, None, &metadata);
         assert!(node3.is_some());
         let node3 = node3.unwrap();
         assert_eq!(

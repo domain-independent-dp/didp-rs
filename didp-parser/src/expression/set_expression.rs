@@ -130,9 +130,7 @@ mod tests {
                 element_variables: vec![1],
                 numeric_variables: vec![1, 2, 3],
             }),
-            resource_variables: state::ResourceVariables {
-                numeric_variables: vec![4, 5, 6],
-            },
+            resource_variables: vec![4, 5, 6],
             cost: 0,
         }
     }

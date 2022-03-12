@@ -61,9 +61,9 @@ impl<'a, T: variable::Numeric> Operator<'a, T> {
             numeric_variables[e.0] = e.1.eval(state, problem);
         }
 
-        let mut resource_numeric_variables = state.resource_variables.numeric_variables.clone();
+        let mut resource_variables = state.resource_variables.clone();
         for e in &self.resource_effects {
-            resource_numeric_variables[e.0] = e.1.eval(state, problem);
+            resource_variables[e.0] = e.1.eval(state, problem);
         }
 
         let cost = self.cost.eval(state, problem);
@@ -77,11 +77,7 @@ impl<'a, T: variable::Numeric> Operator<'a, T> {
                     numeric_variables,
                 })
             },
-            resource_variables: {
-                state::ResourceVariables {
-                    numeric_variables: resource_numeric_variables,
-                }
-            },
+            resource_variables,
             cost,
         }
     }
@@ -114,9 +110,7 @@ mod tests {
                 element_variables: vec![1, 2],
                 numeric_variables: vec![1, 2, 3],
             }),
-            resource_variables: state::ResourceVariables {
-                numeric_variables: vec![4, 5, 6],
-            },
+            resource_variables: vec![4, 5, 6],
             cost: 0,
         }
     }
@@ -236,9 +230,7 @@ mod tests {
                 element_variables: vec![2, 1],
                 numeric_variables: vec![0, 4, 3],
             }),
-            resource_variables: state::ResourceVariables {
-                numeric_variables: vec![5, 2, 6],
-            },
+            resource_variables: vec![5, 2, 6],
             cost: 1,
         };
         let successor = operator.apply_effects(&state, &problem);
