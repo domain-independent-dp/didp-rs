@@ -66,6 +66,7 @@ impl<'a, T: variable::Numeric> Operator<'a, T> {
             resource_variables[e.0] = e.1.eval(state, problem);
         }
 
+        let stage = state.stage + 1;
         let cost = self.cost.eval(state, problem);
 
         state::State {
@@ -78,6 +79,7 @@ impl<'a, T: variable::Numeric> Operator<'a, T> {
                 })
             },
             resource_variables,
+            stage,
             cost,
         }
     }
@@ -111,6 +113,7 @@ mod tests {
                 numeric_variables: vec![1, 2, 3],
             }),
             resource_variables: vec![4, 5, 6],
+            stage: 0,
             cost: 0,
         }
     }
@@ -231,6 +234,7 @@ mod tests {
                 numeric_variables: vec![0, 4, 3],
             }),
             resource_variables: vec![5, 2, 6],
+            stage: 1,
             cost: 1,
         };
         let successor = operator.apply_effects(&state, &problem);

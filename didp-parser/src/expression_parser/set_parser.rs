@@ -118,7 +118,9 @@ fn parse_atom<T: variable::Numeric>(
     token: &str,
     env: &environment::Environment<T>,
 ) -> Result<ArgumentExpression, ParseErr> {
-    if let Some(i) = env.element_variables.get(token) {
+    if token == "stage" {
+        Ok(ArgumentExpression::Element(ElementExpression::Stage))
+    } else if let Some(i) = env.element_variables.get(token) {
         Ok(ArgumentExpression::Element(ElementExpression::Variable(*i)))
     } else if let Some(i) = env.set_variables.get(token) {
         Ok(ArgumentExpression::Set(SetExpression::SetVariable(*i)))
@@ -474,6 +476,19 @@ mod tests {
     fn parse_atom_ok() {
         let env = generate_env();
 
+        let tokens: Vec<String> = ["stage", ")", "1", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_argument(&tokens, &env);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(
+            expression,
+            ArgumentExpression::Element(ElementExpression::Stage)
+        ));
+
+        assert_eq!(rest, &tokens[1..]);
         let tokens: Vec<String> = ["e1", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())

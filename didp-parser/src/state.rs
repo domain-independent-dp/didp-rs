@@ -2,6 +2,7 @@ use crate::variable;
 use crate::yaml_util;
 use std::cmp::Ordering;
 use std::collections;
+use std::convert::TryFrom;
 use std::error::Error;
 use std::rc::Rc;
 use yaml_rust::Yaml;
@@ -10,6 +11,7 @@ use yaml_rust::Yaml;
 pub struct State<T: variable::Numeric> {
     pub signature_variables: Rc<SignatureVariables<T>>,
     pub resource_variables: Vec<T>,
+    pub stage: variable::ElementVariable,
     pub cost: T,
 }
 
@@ -26,22 +28,22 @@ pub struct StateMetadata {
     pub name_to_object: collections::HashMap<String, usize>,
     pub object_numbers: Vec<usize>,
 
-    pub set_variable_to_name: Vec<String>,
+    pub set_variable_names: Vec<String>,
     pub name_to_set_variable: collections::HashMap<String, usize>,
     pub set_variable_to_object: Vec<usize>,
 
-    pub permutation_variable_to_name: Vec<String>,
+    pub permutation_variable_names: Vec<String>,
     pub name_to_permutation_variable: collections::HashMap<String, usize>,
     pub permutation_variable_to_object: Vec<usize>,
 
-    pub element_variable_to_name: Vec<String>,
+    pub element_variable_names: Vec<String>,
     pub name_to_element_variable: collections::HashMap<String, usize>,
     pub element_variable_to_object: Vec<usize>,
 
-    pub numeric_variable_to_name: Vec<String>,
+    pub numeric_variable_names: Vec<String>,
     pub name_to_numeric_variable: collections::HashMap<String, usize>,
 
-    pub resource_variable_to_name: Vec<String>,
+    pub resource_variable_names: Vec<String>,
     pub name_to_resource_variable: collections::HashMap<String, usize>,
     pub less_is_better: Vec<bool>,
 }
@@ -102,20 +104,20 @@ impl StateMetadata {
         for (i, name) in object_names.iter().enumerate() {
             name_to_object.insert(name.clone(), i);
         }
-        let object_numbers = Self::collect_object_numbers(problem, &name_to_object)?;
+        let object_numbers = Self::collect_object_numbers(problem, &object_names)?;
 
-        let mut set_variable_to_name = Vec::new();
+        let mut set_variable_names = Vec::new();
         let mut name_to_set_variable = collections::HashMap::new();
         let mut set_variable_to_object = Vec::new();
-        let mut permutation_variable_to_name = Vec::new();
+        let mut permutation_variable_names = Vec::new();
         let mut name_to_permutation_variable = collections::HashMap::new();
         let mut permutation_variable_to_object = Vec::new();
-        let mut element_variable_to_name = Vec::new();
+        let mut element_variable_names = Vec::new();
         let mut name_to_element_variable = collections::HashMap::new();
         let mut element_variable_to_object = Vec::new();
-        let mut numeric_variable_to_name = Vec::new();
+        let mut numeric_variable_names = Vec::new();
         let mut name_to_numeric_variable = collections::HashMap::new();
-        let mut resource_variable_to_name = Vec::new();
+        let mut resource_variable_names = Vec::new();
         let mut name_to_resource_variable = collections::HashMap::new();
         let mut less_is_better = Vec::new();
 
@@ -128,28 +130,28 @@ impl StateMetadata {
                 "set" => {
                     let id = Self::get_object_id(&annotation, &name_to_object)?;
                     set_variable_to_object.push(id);
-                    name_to_set_variable.insert(name.clone(), set_variable_to_name.len());
-                    set_variable_to_name.push(name.clone());
+                    name_to_set_variable.insert(name.clone(), set_variable_names.len());
+                    set_variable_names.push(name);
                 }
                 "permutation" => {
                     let id = Self::get_object_id(&annotation, &name_to_object)?;
                     permutation_variable_to_object.push(id);
-                    name_to_permutation_variable.insert(name.clone(), set_variable_to_name.len());
-                    permutation_variable_to_name.push(name.clone());
+                    name_to_permutation_variable.insert(name.clone(), set_variable_names.len());
+                    permutation_variable_names.push(name);
                 }
                 "element" => {
                     let id = Self::get_object_id(&annotation, &name_to_object)?;
                     element_variable_to_object.push(id);
-                    name_to_element_variable.insert(name.clone(), set_variable_to_name.len());
-                    element_variable_to_name.push(name.clone());
+                    name_to_element_variable.insert(name.clone(), set_variable_names.len());
+                    element_variable_names.push(name);
                 }
                 "numeric" => {
-                    name_to_numeric_variable.insert(name.clone(), numeric_variable_to_name.len());
-                    numeric_variable_to_name.push(name.clone());
+                    name_to_numeric_variable.insert(name.clone(), numeric_variable_names.len());
+                    numeric_variable_names.push(name);
                 }
                 "resource" => {
-                    name_to_resource_variable.insert(name.clone(), numeric_variable_to_name.len());
-                    resource_variable_to_name.push(name.clone());
+                    name_to_resource_variable.insert(name.clone(), numeric_variable_names.len());
+                    resource_variable_names.push(name);
                     let preference = match annotation
                         .get(&Yaml::String("less_is_better".to_string()))
                     {
@@ -175,18 +177,18 @@ impl StateMetadata {
             object_names,
             name_to_object,
             object_numbers,
-            set_variable_to_name,
+            set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            permutation_variable_to_name,
+            permutation_variable_names,
             name_to_permutation_variable,
             permutation_variable_to_object,
-            element_variable_to_name,
+            element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
-            numeric_variable_to_name,
+            numeric_variable_names,
             name_to_numeric_variable,
-            resource_variable_to_name,
+            resource_variable_names,
             name_to_resource_variable,
             less_is_better,
         })
@@ -208,20 +210,23 @@ impl StateMetadata {
 
     fn collect_object_numbers(
         map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-        name_to_object: &collections::HashMap<String, usize>,
+        object_names: &[String],
     ) -> Result<Vec<usize>, Box<dyn Error>> {
-        let mut object_numbers: Vec<usize> = (0..name_to_object.len()).map(|_| 0).collect();
-        for (key, value) in map {
-            let key = yaml_util::get_string(key)?;
-            let value = yaml_util::get_usize(value)?;
-            match name_to_object.get(&key) {
-                Some(i) => object_numbers[*i] = value,
-                None => {
+        let mut object_numbers = Vec::with_capacity(object_names.len());
+        for (i, name) in object_names.iter().enumerate() {
+            match map.get(&Yaml::String(name.clone())) {
+                Some(Yaml::Integer(value)) => object_numbers[i] = usize::try_from(*value)?,
+                Some(value) => {
                     return Err(yaml_util::YamlContentErr::new(format!(
-                        "object `{}` not found",
-                        key
+                        "the value of key `{}` is not Integer, but {:?}",
+                        name, value
                     ))
                     .into())
+                }
+                None => {
+                    return Err(
+                        yaml_util::YamlContentErr::new(format!("key `{}` not found", name)).into(),
+                    )
                 }
             }
         }
@@ -233,7 +238,8 @@ impl StateMetadata {
 mod tests {
     use super::*;
 
-    fn generate_state_metadata() -> StateMetadata {
+    fn generate_state_metadata<'a>() -> StateMetadata {
+        let resource_variable_names = vec!["r1".to_string(), "r2".to_string(), "r3".to_string()];
         let mut name_to_resource_variable = collections::HashMap::new();
         name_to_resource_variable.insert("r1".to_string(), 0);
         name_to_resource_variable.insert("r2".to_string(), 1);
@@ -243,18 +249,18 @@ mod tests {
             object_names: Vec::new(),
             name_to_object: collections::HashMap::new(),
             object_numbers: Vec::new(),
-            set_variable_to_name: Vec::new(),
+            set_variable_names: Vec::new(),
             name_to_set_variable: collections::HashMap::new(),
             set_variable_to_object: Vec::new(),
-            permutation_variable_to_name: Vec::new(),
+            permutation_variable_names: Vec::new(),
             name_to_permutation_variable: collections::HashMap::new(),
             permutation_variable_to_object: Vec::new(),
-            element_variable_to_name: Vec::new(),
+            element_variable_names: Vec::new(),
             name_to_element_variable: collections::HashMap::new(),
             element_variable_to_object: Vec::new(),
-            numeric_variable_to_name: Vec::new(),
+            numeric_variable_names: Vec::new(),
             name_to_numeric_variable: collections::HashMap::new(),
-            resource_variable_to_name: vec!["r1".to_string(), "r2".to_string(), "r3".to_string()],
+            resource_variable_names: vec!["r1".to_string(), "r2".to_string(), "r3".to_string()],
             name_to_resource_variable,
             less_is_better: vec![false, false, true],
         }

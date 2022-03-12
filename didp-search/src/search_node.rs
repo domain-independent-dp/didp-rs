@@ -132,18 +132,18 @@ mod tests {
             object_names: Vec::new(),
             name_to_object: collections::HashMap::new(),
             object_numbers: Vec::new(),
-            set_variable_to_name: Vec::new(),
+            set_variable_names: Vec::new(),
             name_to_set_variable: collections::HashMap::new(),
             set_variable_to_object: Vec::new(),
-            permutation_variable_to_name: Vec::new(),
+            permutation_variable_names: Vec::new(),
             name_to_permutation_variable: collections::HashMap::new(),
             permutation_variable_to_object: Vec::new(),
-            element_variable_to_name: Vec::new(),
+            element_variable_names: Vec::new(),
             name_to_element_variable: collections::HashMap::new(),
             element_variable_to_object: Vec::new(),
-            numeric_variable_to_name: vec!["n1".to_string(), "n2".to_string(), "n3".to_string()],
+            numeric_variable_names: vec!["n1".to_string(), "n2".to_string(), "n3".to_string()],
             name_to_numeric_variable,
-            resource_variable_to_name: vec!["r1".to_string(), "r2".to_string(), "r3".to_string()],
+            resource_variable_names: vec!["r1".to_string(), "r2".to_string(), "r3".to_string()],
             name_to_resource_variable,
             less_is_better: vec![false, false, true],
         }
@@ -171,6 +171,7 @@ mod tests {
             state: state::State {
                 signature_variables,
                 resource_variables,
+                stage: 0,
                 cost,
             },
             h: RefCell::new(Some(h)),
@@ -206,6 +207,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
+            stage: 0,
             cost: 1,
         };
         let node = registry.get_node(state, None, &metadata);
@@ -214,6 +216,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
+            stage: 0,
             cost: 1,
         };
         assert_eq!(node.state, state);
@@ -225,6 +228,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![1, 2, 3],
+            stage: 0,
             cost: 1,
         };
         let node = registry.get_node(state, None, &metadata);
@@ -233,6 +237,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![1, 2, 3],
+            stage: 0,
             cost: 1,
         };
         assert_eq!(node.state, state);
@@ -244,6 +249,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![3, 1, 3],
+            stage: 0,
             cost: 1,
         };
         let node = registry.get_node(state, None, &metadata);
@@ -252,6 +258,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![3, 1, 3],
+            stage: 0,
             cost: 1,
         };
         assert_eq!(node.state, state);
@@ -263,6 +270,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![0, 1, 3],
+            stage: 0,
             cost: 0,
         };
         let node = registry.get_node(state, None, &metadata);
@@ -271,6 +279,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![0, 1, 3],
+            stage: 0,
             cost: 0,
         };
         assert_eq!(node.state, state);
@@ -288,6 +297,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
+            stage: 0,
             cost: 2,
         };
         registry.get_node(state, None, &metadata);
@@ -295,6 +305,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
+            stage: 0,
             cost: 2,
         };
         let node = registry.get_node(state, None, &metadata);
@@ -303,6 +314,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![0, 2, 3],
+            stage: 0,
             cost: 2,
         };
         let node = registry.get_node(state, None, &metadata);
@@ -311,6 +323,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
+            stage: 0,
             cost: 3,
         };
         let node = registry.get_node(state, None, &metadata);
@@ -325,6 +338,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
+            stage: 0,
             cost: 2,
         };
         let node = registry.get_node(state, None, &metadata);
@@ -335,6 +349,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
+            stage: 0,
             cost: 1,
         };
         let node = registry.get_node(state, None, &metadata);
@@ -349,6 +364,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
+            stage: 0,
             cost: 2,
         };
         let node1 = registry.get_node(state, None, &metadata);
@@ -359,6 +375,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
+            stage: 1,
             cost: 1,
         };
         let node2 = registry.get_node(state, Some(node1.clone()), &metadata);
@@ -382,6 +399,7 @@ mod tests {
         let state = state::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![2, 3, 3],
+            stage: 0,
             cost: 1,
         };
         let node3 = registry.get_node(state, None, &metadata);

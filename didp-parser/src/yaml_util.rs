@@ -1,4 +1,3 @@
-use std::convert::TryFrom;
 use std::error;
 use std::fmt;
 use yaml_rust::Yaml;
@@ -39,13 +38,6 @@ pub fn get_hash_value<'a, 'b>(
     match map.get(&Yaml::String(key.to_string())) {
         Some(value) => get_hash(value),
         None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
-    }
-}
-
-pub fn get_usize(value: &Yaml) -> Result<usize, Box<dyn error::Error>> {
-    match value {
-        Yaml::Integer(i) => Ok(usize::try_from(*i)?),
-        _ => Err(YamlContentErr::new(format!("expected Integer, but {:?}", value)).into()),
     }
 }
 

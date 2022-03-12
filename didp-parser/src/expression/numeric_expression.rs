@@ -88,6 +88,7 @@ mod tests {
                 numeric_variables: vec![1, 2, 3],
             }),
             resource_variables: vec![4, 5, 6],
+            stage: 0,
             cost: 0,
         }
     }

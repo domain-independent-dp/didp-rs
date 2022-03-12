@@ -84,6 +84,7 @@ impl SetExpression {
 
 #[derive(Debug)]
 pub enum ElementExpression {
+    Stage,
     Constant(variable::ElementVariable),
     Variable(usize),
 }
@@ -91,6 +92,7 @@ pub enum ElementExpression {
 impl ElementExpression {
     pub fn eval<T: variable::Numeric>(&self, state: &state::State<T>) -> variable::ElementVariable {
         match self {
+            ElementExpression::Stage => state.stage,
             ElementExpression::Constant(x) => *x,
             ElementExpression::Variable(i) => state.signature_variables.element_variables[*i],
         }
@@ -131,6 +133,7 @@ mod tests {
                 numeric_variables: vec![1, 2, 3],
             }),
             resource_variables: vec![4, 5, 6],
+            stage: 0,
             cost: 0,
         }
     }
