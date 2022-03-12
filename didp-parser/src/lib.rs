@@ -1,7 +1,7 @@
 use std::collections;
+use std::error::Error;
 use yaml_rust::Yaml;
 
-pub mod errors;
 pub mod expression;
 pub mod expression_parser;
 pub mod numeric_function;
@@ -9,14 +9,12 @@ pub mod operator;
 pub mod problem;
 pub mod state;
 pub mod variable;
-
-pub use errors::ProblemErr;
+pub mod yaml_util;
 
 pub struct Problem<'a, T: variable::Numeric> {
     pub domain_name: String,
     pub problem_name: String,
     pub state_metadata: state::StateMetadata,
-    pub object_numbers: Vec<usize>,
     pub function_registry: FunctionRegistry<T>,
     pub initial_state: state::State<T>,
     pub goal_families: Vec<Vec<expression::Condition<'a, T>>>,
@@ -25,43 +23,18 @@ pub struct Problem<'a, T: variable::Numeric> {
 }
 
 impl<'a, T: variable::Numeric> Problem<'a, T> {
-    pub fn new(domain: &str, problem: &str) -> Result<Problem<'a, T>, ProblemErr> {
+    pub fn new(domain: &str, problem: &str) -> Result<Problem<'a, T>, Box<dyn Error>> {
         let domain = Yaml::from_str(domain);
-        let domain = match domain {
-            Yaml::Hash(map) => map,
-            _ => {
-                return Err(ProblemErr::Reason(format!(
-                    "expected Yaml::Hash for the domain yaml, but was {:?}",
-                    domain
-                )))
-            }
-        };
-        let domain_name = match domain.get(&Yaml::String("domain".to_string())) {
-            Some(Yaml::String(name)) => name,
-            Some(_) => {
-                return Err(ProblemErr::Reason(
-                    "key `domain` found in the domain yaml but not String".to_string(),
-                ))
-            }
-            None => {
-                return Err(ProblemErr::Reason(
-                    "key `domain` not found in the domain yaml".to_string(),
-                ))
-            }
-        };
+        let domain = yaml_util::get_hash(&domain)?;
+        let domain_name = yaml_util::get_string_value(domain, "domain")?;
 
         let problem = Yaml::from_str(problem);
-        let problem = match problem {
-            Yaml::Hash(map) => map,
-            _ => {
-                return Err(ProblemErr::Reason(format!(
-                    "expected Yaml::Hash for the domain texts, but was {:?}",
-                    problem
-                )))
-            }
-        };
+        let problem = yaml_util::get_hash(&problem)?;
+        let problem_name = yaml_util::get_string_value(problem, "problem")?;
 
-        Err(ProblemErr::Reason("aaa".to_string()))
+        let state_metadata = state::StateMetadata::new(&domain, &problem)?;
+
+        Err(yaml_util::YamlContentErr::new("not implemented".to_string()).into())
     }
 }
 

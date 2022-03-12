@@ -1,7 +1,8 @@
-use crate::errors::ProblemErr;
 use crate::variable;
+use crate::yaml_util;
 use std::cmp::Ordering;
 use std::collections;
+use std::error::Error;
 use std::rc::Rc;
 use yaml_rust::Yaml;
 
@@ -23,6 +24,7 @@ pub struct SignatureVariables<T: variable::Numeric> {
 pub struct StateMetadata {
     pub object_names: Vec<String>,
     pub name_to_object: collections::HashMap<String, usize>,
+    pub object_numbers: Vec<usize>,
 
     pub set_variable_to_name: Vec<String>,
     pub name_to_set_variable: collections::HashMap<String, usize>,
@@ -91,49 +93,16 @@ impl StateMetadata {
         result
     }
 
-    pub fn from_yaml(data: &Yaml) -> Result<StateMetadata, ProblemErr> {
-        let map = match data {
-            Yaml::Hash(map) => map,
-            _ => {
-                return Err(ProblemErr::Reason(format!(
-                    "the value is not Hash, but `{:?}`",
-                    data
-                )))
-            }
-        };
-        let object_names = match map.get(&Yaml::String("objects".to_string())) {
-            Some(Yaml::Array(array)) => Self::parse_string_array(array)?,
-            Some(value) => {
-                return Err(ProblemErr::Reason(format!(
-                    "the value of key `objects` is not Array, but `{:?}`",
-                    value
-                )))
-            }
-            None => {
-                return Err(ProblemErr::Reason(
-                    "key `objects` not found in the domain yaml".to_string(),
-                ))
-            }
-        };
+    pub fn new(
+        domain: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+        problem: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+    ) -> Result<StateMetadata, Box<dyn Error>> {
+        let object_names = yaml_util::get_string_array(domain, "objects")?;
         let mut name_to_object = collections::HashMap::new();
         for (i, name) in object_names.iter().enumerate() {
             name_to_object.insert(name.clone(), i);
         }
-
-        let variables = match map.get(&Yaml::String("variables".to_string())) {
-            Some(Yaml::Hash(value)) => value,
-            Some(value) => {
-                return Err(ProblemErr::Reason(format!(
-                    "the value of key `variables` is not Array, but `{:?}`",
-                    value
-                )))
-            }
-            None => {
-                return Err(ProblemErr::Reason(
-                    "key `varaibles` not found in the domain yaml".to_string(),
-                ))
-            }
-        };
+        let object_numbers = Self::collect_object_numbers(problem, &name_to_object)?;
 
         let mut set_variable_to_name = Vec::new();
         let mut name_to_set_variable = collections::HashMap::new();
@@ -150,38 +119,11 @@ impl StateMetadata {
         let mut name_to_resource_variable = collections::HashMap::new();
         let mut less_is_better = Vec::new();
 
+        let variables = yaml_util::get_hash_value(problem, "variables")?;
         for (key, value) in variables {
-            let name = match key {
-                Yaml::String(name) => name,
-                _ => {
-                    return Err(ProblemErr::Reason(format!(
-                        "variable name is not String but `{:?}`",
-                        key
-                    )))
-                }
-            };
-            let annotation = match value {
-                Yaml::Hash(value) => value,
-                _ => {
-                    return Err(ProblemErr::Reason(format!(
-                        "expected Hash for variable annotation but `{:?}`",
-                        value
-                    )))
-                }
-            };
-            let variable_type = match annotation.get(&Yaml::String("type".to_string())) {
-                Some(Yaml::String(name)) => name,
-                Some(_) => {
-                    return Err(ProblemErr::Reason(
-                        "key `type` found in the variable annotation but not String".to_string(),
-                    ))
-                }
-                None => {
-                    return Err(ProblemErr::Reason(
-                        "key `type` not found in the variable annotaiton".to_string(),
-                    ))
-                }
-            };
+            let name = yaml_util::get_string(key)?;
+            let annotation = yaml_util::get_hash(value)?;
+            let variable_type = yaml_util::get_string_value(annotation, "type")?;
             match &variable_type[..] {
                 "set" => {
                     let id = Self::get_object_id(&annotation, &name_to_object)?;
@@ -212,18 +154,19 @@ impl StateMetadata {
                         .get(&Yaml::String("less_is_better".to_string()))
                     {
                         Some(Yaml::Boolean(value)) => *value,
-                        Some(value) => return Err(ProblemErr::Reason(format!(
+                        Some(value) => return Err(yaml_util::YamlContentErr::new(format!(
                             "key `less_is_better` found in the variable annotation but not Boolean, but {:?}", value),
-                        )),
+                        ).into()),
                         None => false,
                     };
                     less_is_better.push(preference);
                 }
                 value => {
-                    return Err(ProblemErr::Reason(format!(
+                    return Err(yaml_util::YamlContentErr::new(format!(
                         "`{:?}` is not a variable type",
                         value
-                    )))
+                    ))
+                    .into())
                 }
             }
         }
@@ -231,6 +174,7 @@ impl StateMetadata {
         Ok(StateMetadata {
             object_names,
             name_to_object,
+            object_numbers,
             set_variable_to_name,
             name_to_set_variable,
             set_variable_to_object,
@@ -248,46 +192,40 @@ impl StateMetadata {
         })
     }
 
-    fn parse_string_array(array: &[Yaml]) -> Result<Vec<String>, ProblemErr> {
-        let mut result = Vec::with_capacity(array.len());
-        for v in array {
-            match v {
-                Yaml::String(string) => result.push(string.clone()),
-                _ => {
-                    return Err(ProblemErr::Reason(format!(
-                        "expected String but is `{:?}`",
-                        v
-                    )))
-                }
-            }
-        }
-        Ok(result)
-    }
-
     fn get_object_id(
-        value: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+        map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
         name_to_object: &collections::HashMap<String, usize>,
-    ) -> Result<usize, ProblemErr> {
-        let name = match value.get(&Yaml::String("object".to_string())) {
-            Some(Yaml::String(name)) => name,
-            Some(_) => {
-                return Err(ProblemErr::Reason(
-                    "key `object` found in the variable annotation but not String".to_string(),
-                ))
-            }
-            None => {
-                return Err(ProblemErr::Reason(
-                    "key `object` not found in the variable annotaiton".to_string(),
-                ))
-            }
-        };
-        match name_to_object.get(name) {
+    ) -> Result<usize, yaml_util::YamlContentErr> {
+        let name = yaml_util::get_string_value(map, "object")?;
+        match name_to_object.get(&name) {
             Some(id) => Ok(*id),
-            None => Err(ProblemErr::Reason(format!(
+            None => Err(yaml_util::YamlContentErr::new(format!(
                 "object `{}` does not exist",
                 name
             ))),
         }
+    }
+
+    fn collect_object_numbers(
+        map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+        name_to_object: &collections::HashMap<String, usize>,
+    ) -> Result<Vec<usize>, Box<dyn Error>> {
+        let mut object_numbers: Vec<usize> = (0..name_to_object.len()).map(|_| 0).collect();
+        for (key, value) in map {
+            let key = yaml_util::get_string(key)?;
+            let value = yaml_util::get_usize(value)?;
+            match name_to_object.get(&key) {
+                Some(i) => object_numbers[*i] = value,
+                None => {
+                    return Err(yaml_util::YamlContentErr::new(format!(
+                        "object `{}` not found",
+                        key
+                    ))
+                    .into())
+                }
+            }
+        }
+        Ok(object_numbers)
     }
 }
 
@@ -304,6 +242,7 @@ mod tests {
         StateMetadata {
             object_names: Vec::new(),
             name_to_object: collections::HashMap::new(),
+            object_numbers: Vec::new(),
             set_variable_to_name: Vec::new(),
             name_to_set_variable: collections::HashMap::new(),
             set_variable_to_object: Vec::new(),

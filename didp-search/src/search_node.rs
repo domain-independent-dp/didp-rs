@@ -131,6 +131,7 @@ mod tests {
         state::StateMetadata {
             object_names: Vec::new(),
             name_to_object: collections::HashMap::new(),
+            object_numbers: Vec::new(),
             set_variable_to_name: Vec::new(),
             name_to_set_variable: collections::HashMap::new(),
             set_variable_to_object: Vec::new(),
