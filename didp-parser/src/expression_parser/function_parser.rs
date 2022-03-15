@@ -204,7 +204,7 @@ mod tests {
         functions_3d.insert("f3".to_string(), f3);
 
         let mut functions = HashMap::new();
-        let f4 = numeric_function::NumericFunction::new(HashMap::new());
+        let f4 = numeric_function::NumericFunction::new(HashMap::new(), 0);
         functions.insert("f4".to_string(), f4);
 
         environment::Environment {

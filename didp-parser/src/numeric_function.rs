@@ -146,17 +146,24 @@ impl<T: variable::Numeric> NumericFunction3D<T> {
 }
 
 #[derive(Debug)]
-pub struct NumericFunction<T: variable::Numeric>(
-    collections::HashMap<Vec<variable::ElementVariable>, T>,
-);
+pub struct NumericFunction<T: variable::Numeric> {
+    map: collections::HashMap<Vec<variable::ElementVariable>, T>,
+    default: T,
+}
 
 impl<T: variable::Numeric> NumericFunction<T> {
-    pub fn new(map: collections::HashMap<Vec<variable::ElementVariable>, T>) -> NumericFunction<T> {
-        NumericFunction(map)
+    pub fn new(
+        map: collections::HashMap<Vec<variable::ElementVariable>, T>,
+        default: T,
+    ) -> NumericFunction<T> {
+        NumericFunction { map, default }
     }
 
     pub fn eval(&self, args: &[variable::ElementVariable]) -> T {
-        self.0[args]
+        match self.map.get(args) {
+            Some(value) => *value,
+            None => self.default,
+        }
     }
 }
 
@@ -347,10 +354,11 @@ mod tests {
         map.insert(key, 300);
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400);
-        let f = NumericFunction::new(map);
+        let f = NumericFunction::new(map, 0);
         assert_eq!(f.eval(&[0, 1, 0, 0]), 100);
         assert_eq!(f.eval(&[0, 1, 0, 1]), 200);
         assert_eq!(f.eval(&[0, 1, 2, 0]), 300);
         assert_eq!(f.eval(&[0, 1, 2, 1]), 400);
+        assert_eq!(f.eval(&[0, 1, 2, 2]), 0);
     }
 }
