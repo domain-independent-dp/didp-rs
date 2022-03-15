@@ -24,27 +24,42 @@ pub struct SignatureVariables<T: variable::Numeric> {
 }
 
 impl<T: variable::Numeric> State<T> {
-    pub fn load_initial_state_from_yaml_map(
-        problem: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+    pub fn load_initial_state_from_yaml(
+        problem: &Yaml,
         metadata: &StateMetadata,
     ) -> Result<State<T>, yaml_util::YamlContentErr>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
-        let map = yaml_util::get_hash_from_map(problem, "initial_state")?;
-        Self::load_from_yaml_map(map, metadata)
+        let map = match problem {
+            Yaml::Hash(map) => map,
+            _ => {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "expected Hash, but is `{:?}`",
+                    problem
+                )))
+            }
+        };
+        if let Some(value) = map.get(&Yaml::String("initial_state".to_string())) {
+            Self::load_from_yaml(value, metadata)
+        } else {
+            Err(yaml_util::YamlContentErr::new(
+                "key `initial_state` not found".to_string(),
+            ))
+        }
     }
 
-    fn load_from_yaml_map(
-        map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+    fn load_from_yaml(
+        value: &Yaml,
         metadata: &StateMetadata,
     ) -> Result<State<T>, yaml_util::YamlContentErr>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
+        let value = yaml_util::get_map(value)?;
         let mut set_variables = Vec::with_capacity(metadata.set_variable_names.len());
         for name in &metadata.set_variable_names {
-            let values = yaml_util::get_usize_array_from_map(map, name)?;
+            let values = yaml_util::get_usize_array_by_key(value, name)?;
             let mut set = variable::SetVariable::with_capacity(
                 metadata.get_set_variable_capacity_from_name(name),
             );
@@ -56,31 +71,31 @@ impl<T: variable::Numeric> State<T> {
         let mut permutation_variables =
             Vec::with_capacity(metadata.permutation_variable_names.len());
         for name in &metadata.permutation_variable_names {
-            let permutation = yaml_util::get_usize_array_from_map(map, name)?;
+            let permutation = yaml_util::get_usize_array_by_key(value, name)?;
             permutation_variables.push(permutation);
         }
         let mut element_variables = Vec::with_capacity(metadata.element_variable_names.len());
         for name in &metadata.element_variable_names {
-            let element = yaml_util::get_usize_from_map(map, name)?;
+            let element = yaml_util::get_usize_by_key(value, name)?;
             element_variables.push(element);
         }
         let mut numeric_variables = Vec::with_capacity(metadata.numeric_variable_names.len());
         for name in &metadata.numeric_variable_names {
-            let value = yaml_util::get_numeric_from_map::<T>(map, name)?;
+            let value = yaml_util::get_numeric_by_key::<T>(value, name)?;
             numeric_variables.push(value);
         }
         let mut resource_variables = Vec::with_capacity(metadata.resource_variable_names.len());
         for name in &metadata.resource_variable_names {
-            let value = yaml_util::get_numeric_from_map(map, name)?;
+            let value = yaml_util::get_numeric_by_key(value, name)?;
             resource_variables.push(value);
         }
-        let stage = if let Some(value) = map.get(&Yaml::String("stage".to_string())) {
-            yaml_util::get_usize(value)?
+        let stage = if let Ok(value) = yaml_util::get_usize_by_key(value, "stage") {
+            value
         } else {
             0
         };
-        let cost = if let Some(value) = map.get(&Yaml::String("cost".to_string())) {
-            yaml_util::get_numeric(value)?
+        let cost = if let Ok(value) = yaml_util::get_numeric_by_key(value, "cost") {
+            value
         } else {
             T::zero()
         };
@@ -195,18 +210,20 @@ impl StateMetadata {
         result
     }
 
-    pub fn load_from_yaml_maps(
-        domain: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-        problem: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+    pub fn load_from_yaml(
+        domain: &Yaml,
+        problem: &Yaml,
     ) -> Result<StateMetadata, yaml_util::YamlContentErr> {
-        let object_names = yaml_util::get_string_array_from_map(domain, "objects")?;
+        let domain = yaml_util::get_map(domain)?;
+        let problem = yaml_util::get_map(problem)?;
+        let object_names = yaml_util::get_string_array_by_key(domain, "objects")?;
         let mut name_to_object = collections::HashMap::new();
         for (i, name) in object_names.iter().enumerate() {
             name_to_object.insert(name.clone(), i);
         }
         let mut object_numbers = Vec::with_capacity(object_names.len());
         for (i, name) in object_names.iter().enumerate() {
-            object_numbers[i] = yaml_util::get_usize_from_map(problem, name)?;
+            object_numbers[i] = yaml_util::get_usize_by_key(problem, name)?;
         }
 
         let mut set_variable_names = Vec::new();
@@ -224,26 +241,26 @@ impl StateMetadata {
         let mut name_to_resource_variable = collections::HashMap::new();
         let mut less_is_better = Vec::new();
 
-        let variables = yaml_util::get_hash_from_map(problem, "variables")?;
+        let variables = yaml_util::get_map_by_key(domain, "variables")?;
         for (key, value) in variables {
             let name = yaml_util::get_string(key)?;
-            let annotation = yaml_util::get_hash(value)?;
-            let variable_type = yaml_util::get_string_from_map(annotation, "type")?;
+            let value = yaml_util::get_map(value)?;
+            let variable_type = yaml_util::get_string_by_key(value, "type")?;
             match &variable_type[..] {
                 "set" => {
-                    let id = Self::get_object_id(&annotation, &name_to_object)?;
+                    let id = Self::get_object_id(value, &name_to_object)?;
                     set_variable_to_object.push(id);
                     name_to_set_variable.insert(name.clone(), set_variable_names.len());
                     set_variable_names.push(name);
                 }
                 "permutation" => {
-                    let id = Self::get_object_id(&annotation, &name_to_object)?;
+                    let id = Self::get_object_id(value, &name_to_object)?;
                     permutation_variable_to_object.push(id);
                     name_to_permutation_variable.insert(name.clone(), set_variable_names.len());
                     permutation_variable_names.push(name);
                 }
                 "element" => {
-                    let id = Self::get_object_id(&annotation, &name_to_object)?;
+                    let id = Self::get_object_id(value, &name_to_object)?;
                     element_variable_to_object.push(id);
                     name_to_element_variable.insert(name.clone(), set_variable_names.len());
                     element_variable_names.push(name);
@@ -255,14 +272,9 @@ impl StateMetadata {
                 "resource" => {
                     name_to_resource_variable.insert(name.clone(), numeric_variable_names.len());
                     resource_variable_names.push(name);
-                    let preference = match annotation
-                        .get(&Yaml::String("less_is_better".to_string()))
-                    {
-                        Some(Yaml::Boolean(value)) => *value,
-                        Some(value) => return Err(yaml_util::YamlContentErr::new(format!(
-                            "key `less_is_better` found in the variable annotation but not Boolean, but {:?}", value),
-                        )),
-                        None => false,
+                    let preference = match yaml_util::get_bool_by_key(value, "less_is_better") {
+                        Ok(value) => value,
+                        _ => false,
                     };
                     less_is_better.push(preference);
                 }
@@ -297,10 +309,10 @@ impl StateMetadata {
     }
 
     fn get_object_id(
-        map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+        value: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
         name_to_object: &collections::HashMap<String, usize>,
     ) -> Result<usize, yaml_util::YamlContentErr> {
-        let name = yaml_util::get_string_from_map(map, "object")?;
+        let name = yaml_util::get_string_by_key(value, "object")?;
         match name_to_object.get(&name) {
             Some(id) => Ok(*id),
             None => Err(yaml_util::YamlContentErr::new(format!(

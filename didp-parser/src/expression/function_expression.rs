@@ -472,7 +472,7 @@ mod tests {
         map.insert(key, 300);
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400);
-        let f = numeric_function::NumericFunction::new(map);
+        let f = numeric_function::NumericFunction::new(map, 0);
         let expression = FunctionExpression::Function(
             &f,
             vec![
@@ -528,7 +528,7 @@ mod tests {
         map.insert(key, 300);
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400);
-        let f = numeric_function::NumericFunction::new(map);
+        let f = numeric_function::NumericFunction::new(map, 0);
         let expression = FunctionExpression::FunctionSum(
             &f,
             vec![

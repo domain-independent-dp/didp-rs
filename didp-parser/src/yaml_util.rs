@@ -23,7 +23,7 @@ impl fmt::Display for YamlContentErr {
 
 impl error::Error for YamlContentErr {}
 
-pub fn get_hash(
+pub fn get_map(
     value: &Yaml,
 ) -> Result<&linked_hash_map::LinkedHashMap<Yaml, Yaml>, YamlContentErr> {
     match value {
@@ -35,12 +35,48 @@ pub fn get_hash(
     }
 }
 
-pub fn get_hash_from_map<'a, 'b>(
+pub fn get_map_by_key<'a, 'b>(
     map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &'b str,
 ) -> Result<&'a linked_hash_map::LinkedHashMap<Yaml, Yaml>, YamlContentErr> {
     match map.get(&Yaml::String(key.to_string())) {
-        Some(value) => get_hash(value),
+        Some(value) => get_map(value),
+        None => Err(YamlContentErr::new(format!(
+            "no such key `{}` in yaml",
+            key
+        ))),
+    }
+}
+
+pub fn get_yaml_by_key<'a, 'b>(
+    map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+    key: &'b str,
+) -> Result<&'a Yaml, YamlContentErr> {
+    match map.get(&Yaml::String(key.to_string())) {
+        Some(value) => Ok(value),
+        None => Err(YamlContentErr::new(format!(
+            "no such key `{}` in yaml",
+            key
+        ))),
+    }
+}
+
+pub fn get_bool(value: &Yaml) -> Result<bool, YamlContentErr> {
+    match value {
+        Yaml::Boolean(value) => Ok(*value),
+        _ => Err(YamlContentErr::new(format!(
+            "expected Boolean, but is `{:?}`",
+            value
+        ))),
+    }
+}
+
+pub fn get_bool_by_key(
+    map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+    key: &str,
+) -> Result<bool, YamlContentErr> {
+    match map.get(&Yaml::String(key.to_string())) {
+        Some(value) => get_bool(value),
         None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
     }
 }
@@ -77,7 +113,7 @@ pub fn get_usize_array(value: &Yaml) -> Result<Vec<usize>, YamlContentErr> {
     }
 }
 
-pub fn get_usize_from_map(
+pub fn get_usize_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
 ) -> Result<usize, YamlContentErr> {
@@ -87,7 +123,7 @@ pub fn get_usize_from_map(
     }
 }
 
-pub fn get_usize_array_from_map(
+pub fn get_usize_array_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
 ) -> Result<Vec<usize>, YamlContentErr> {
@@ -122,7 +158,7 @@ where
     }
 }
 
-pub fn get_numeric_from_map<T: variable::Numeric>(
+pub fn get_numeric_by_key<T: variable::Numeric>(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
 ) -> Result<T, YamlContentErr>
@@ -145,7 +181,7 @@ pub fn get_string(value: &Yaml) -> Result<String, YamlContentErr> {
     }
 }
 
-pub fn get_string_from_map(
+pub fn get_string_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
 ) -> Result<String, YamlContentErr> {
@@ -155,7 +191,7 @@ pub fn get_string_from_map(
     }
 }
 
-pub fn get_string_array_from_map(
+pub fn get_string_array_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
 ) -> Result<Vec<String>, YamlContentErr> {
@@ -169,7 +205,7 @@ pub fn get_string_array_from_map(
     }
 }
 
-pub fn parse_string_array(array: &[Yaml]) -> Result<Vec<String>, YamlContentErr> {
+fn parse_string_array(array: &[Yaml]) -> Result<Vec<String>, YamlContentErr> {
     let mut result = Vec::with_capacity(array.len());
     for v in array {
         result.push(get_string(v)?);

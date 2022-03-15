@@ -30,19 +30,23 @@ impl<'a, T: variable::Numeric> Problem<'a, T> {
         <T as str::FromStr>::Err: fmt::Debug,
     {
         let domain = Yaml::from_str(domain);
-        let domain = yaml_util::get_hash(&domain)?;
-        let domain_name = yaml_util::get_string_from_map(domain, "domain")?;
-
         let problem = Yaml::from_str(problem);
-        let problem = yaml_util::get_hash(&problem)?;
-        let problem_name = yaml_util::get_string_from_map(problem, "problem")?;
+        let state_metadata = state::StateMetadata::load_from_yaml(&domain, &problem)?;
 
-        let state_metadata = state::StateMetadata::load_from_yaml_maps(&domain, &problem)?;
+        let domain = yaml_util::get_map(&domain)?;
+        let domain_name = yaml_util::get_string_by_key(&domain, "domain")?;
+        let problem = yaml_util::get_map(&problem)?;
+        let problem_name = yaml_util::get_string_by_key(&problem, "problem")?;
+
+        let initial_state = yaml_util::get_yaml_by_key(&problem, "initial_state")?;
         let initial_state =
-            state::State::<T>::load_initial_state_from_yaml_map(&problem, &state_metadata)?;
-        let function_registry = function_registry::FunctionRegistry::<T>::load_from_yaml_maps(
-            &domain,
-            &problem,
+            state::State::<T>::load_initial_state_from_yaml(initial_state, &state_metadata)?;
+
+        let function_domain = yaml_util::get_yaml_by_key(&domain, "functions")?;
+        let function_problem = yaml_util::get_yaml_by_key(&problem, "functions")?;
+        let function_registry = function_registry::FunctionRegistry::<T>::load_from_yaml(
+            &function_domain,
+            &function_problem,
             &state_metadata,
         );
 

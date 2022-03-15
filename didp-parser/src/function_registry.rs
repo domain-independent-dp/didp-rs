@@ -15,9 +15,9 @@ pub struct FunctionRegistry<T: variable::Numeric> {
 }
 
 impl<T: variable::Numeric> FunctionRegistry<T> {
-    pub fn load_from_yaml_maps(
-        domain: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-        problem: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+    pub fn load_from_yaml(
+        domain: &Yaml,
+        problem: &Yaml,
         metadata: &state::StateMetadata,
     ) -> Result<FunctionRegistry<T>, yaml_util::YamlContentErr>
     where
@@ -25,11 +25,11 @@ impl<T: variable::Numeric> FunctionRegistry<T> {
     {
         let mut name_to_arg_types = collections::HashMap::new();
         let mut name_to_default_value = collections::HashMap::new();
-        let functions = yaml_util::get_hash_from_map(domain, "functions")?;
-        for (key, value) in functions {
+        let domain = yaml_util::get_map(domain)?;
+        for (key, value) in domain {
             let name = yaml_util::get_string(key)?;
-            let map = yaml_util::get_hash(value)?;
-            let args = yaml_util::get_string_array_from_map(map, "args")?;
+            let value = yaml_util::get_map(value)?;
+            let args = yaml_util::get_string_array_by_key(value, "args")?;
             if args.is_empty() {
                 return Err(yaml_util::YamlContentErr::new(
                     "function has no arguments".to_string(),
@@ -47,42 +47,41 @@ impl<T: variable::Numeric> FunctionRegistry<T> {
                 }
             }
             name_to_arg_types.insert(name.clone(), arg_types);
-            if let Some(value) = map.get(&Yaml::String("default".to_string())) {
-                let value = yaml_util::get_numeric(value)?;
+            if let Ok(value) = yaml_util::get_numeric_by_key(value, "default") {
                 name_to_default_value.insert(name.clone(), value);
             } else {
                 name_to_default_value.insert(name.clone(), T::zero());
             }
         }
-        let function_map = yaml_util::get_hash_from_map(problem, "functions")?;
         let mut functions_1d = collections::HashMap::new();
         let mut functions_2d = collections::HashMap::new();
         let mut functions_3d = collections::HashMap::new();
         let mut functions = collections::HashMap::new();
+        let problem = yaml_util::get_map(problem)?;
         for (name, args_types) in name_to_arg_types {
-            let map = yaml_util::get_hash_from_map(&function_map, &name)?;
+            let value = yaml_util::get_yaml_by_key(problem, &name)?;
             let default = *name_to_default_value.get(&name).unwrap();
             if args_types.len() == 1 {
                 let size = metadata.object_numbers[args_types[0]];
-                let f = Self::load_function_1d(size, default, map)?;
+                let f = Self::load_function_1d_from_yaml(value, size, default)?;
                 functions_1d.insert(name, f);
             } else if args_types.len() == 2 {
                 let size_x = metadata.object_numbers[args_types[0]];
                 let size_y = metadata.object_numbers[args_types[1]];
-                let f = Self::load_function_2d(size_x, size_y, default, map)?;
+                let f = Self::load_function_2d_from_yaml(value, size_x, size_y, default)?;
                 functions_2d.insert(name, f);
             } else if args_types.len() == 3 {
                 let size_x = metadata.object_numbers[args_types[0]];
                 let size_y = metadata.object_numbers[args_types[1]];
                 let size_z = metadata.object_numbers[args_types[2]];
-                let f = Self::load_function_3d(size_x, size_y, size_z, default, map)?;
+                let f = Self::load_function_3d_from_yaml(value, size_x, size_y, size_z, default)?;
                 functions_3d.insert(name, f);
             } else {
                 let size: Vec<usize> = args_types
                     .iter()
                     .map(|i| metadata.object_numbers[*i])
                     .collect();
-                let f = Self::load_function(size, default, map)?;
+                let f = Self::load_function_from_yaml(value, size, default)?;
                 functions.insert(name, f);
             }
         }
@@ -94,15 +93,16 @@ impl<T: variable::Numeric> FunctionRegistry<T> {
         })
     }
 
-    fn load_function_1d(
+    fn load_function_1d_from_yaml(
+        value: &Yaml,
         size: usize,
         default: T,
-        map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     ) -> Result<numeric_function::NumericFunction1D<T>, yaml_util::YamlContentErr>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
         let mut body: Vec<T> = (0..size).map(|_| default).collect();
+        let map = yaml_util::get_map(value)?;
         for (args, value) in map {
             let args = yaml_util::get_usize(args)?;
             let value = yaml_util::get_numeric(value)?;
@@ -117,11 +117,11 @@ impl<T: variable::Numeric> FunctionRegistry<T> {
         Ok(numeric_function::NumericFunction1D::new(body))
     }
 
-    fn load_function_2d(
+    fn load_function_2d_from_yaml(
+        value: &Yaml,
         size_x: usize,
         size_y: usize,
         default: T,
-        map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     ) -> Result<numeric_function::NumericFunction2D<T>, yaml_util::YamlContentErr>
     where
         <T as str::FromStr>::Err: fmt::Debug,
@@ -129,6 +129,7 @@ impl<T: variable::Numeric> FunctionRegistry<T> {
         let mut body: Vec<Vec<T>> = (0..size_x)
             .map(|_| (0..size_y).map(|_| default).collect())
             .collect();
+        let map = yaml_util::get_map(value)?;
         for (args, value) in map {
             let args = yaml_util::get_usize_array(args)?;
             let x = args[0];
@@ -145,12 +146,12 @@ impl<T: variable::Numeric> FunctionRegistry<T> {
         Ok(numeric_function::NumericFunction2D::new(body))
     }
 
-    fn load_function_3d(
+    fn load_function_3d_from_yaml(
+        value: &Yaml,
         size_x: usize,
         size_y: usize,
         size_z: usize,
         default: T,
-        map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     ) -> Result<numeric_function::NumericFunction3D<T>, yaml_util::YamlContentErr>
     where
         <T as str::FromStr>::Err: fmt::Debug,
@@ -162,6 +163,7 @@ impl<T: variable::Numeric> FunctionRegistry<T> {
                     .collect()
             })
             .collect();
+        let map = yaml_util::get_map(value)?;
         for (args, value) in map {
             let args = yaml_util::get_usize_array(args)?;
             let x = args[0];
@@ -179,14 +181,15 @@ impl<T: variable::Numeric> FunctionRegistry<T> {
         Ok(numeric_function::NumericFunction3D::new(body))
     }
 
-    fn load_function(
+    fn load_function_from_yaml(
+        value: &Yaml,
         size: Vec<usize>,
         default: T,
-        map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     ) -> Result<numeric_function::NumericFunction<T>, yaml_util::YamlContentErr>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
+        let map = yaml_util::get_map(value)?;
         let mut body = collections::HashMap::with_capacity(map.len());
         for (args, value) in map {
             let args = yaml_util::get_usize_array(args)?;
