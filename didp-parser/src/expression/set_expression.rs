@@ -1,4 +1,3 @@
-use crate::problem;
 use crate::state;
 use crate::variable;
 
@@ -28,13 +27,13 @@ impl SetExpression {
     pub fn eval<T: variable::Numeric>(
         &self,
         state: &state::State<T>,
-        problem: &problem::Problem,
+        metadata: &state::StateMetadata,
     ) -> variable::SetVariable {
         match self {
             SetExpression::SetVariable(i) => state.signature_variables.set_variables[*i].clone(),
             SetExpression::PermutationVariable(i) => {
                 let mut set = variable::SetVariable::with_capacity(
-                    problem.permutation_variable_to_max_length[*i],
+                    metadata.get_permutaiton_variable_capacity(*i),
                 );
                 for v in &state.signature_variables.permutation_variables[*i] {
                     set.insert(*v);
@@ -42,13 +41,13 @@ impl SetExpression {
                 set
             }
             SetExpression::Complement(s) => {
-                let mut s = s.eval(&state, problem);
+                let mut s = s.eval(&state, metadata);
                 s.toggle_range(..);
                 s
             }
             SetExpression::SetOperation(op, a, b) => {
-                let mut a = a.eval(&state, problem);
-                let b = b.eval(&state, problem);
+                let mut a = a.eval(&state, metadata);
+                let b = b.eval(&state, metadata);
                 match op {
                     SetOperator::Union => {
                         a.union_with(&b);
@@ -65,7 +64,7 @@ impl SetExpression {
                 }
             }
             SetExpression::SetElementOperation(op, s, e) => {
-                let mut s = s.eval(&state, problem);
+                let mut s = s.eval(&state, metadata);
                 let e = e.eval(&state);
                 match op {
                     SetElementOperator::Add => {
@@ -108,13 +107,96 @@ pub enum ArgumentExpression {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::rc::Rc;
 
-    fn generate_problem() -> problem::Problem {
-        problem::Problem {
-            set_variable_to_max_size: vec![3],
-            permutation_variable_to_max_length: vec![3],
-            element_to_set: vec![0],
+    fn generate_metadata() -> state::StateMetadata {
+        let object_names = vec!["object".to_string()];
+        let object_numbers = vec![10];
+        let mut name_to_object = HashMap::new();
+        name_to_object.insert("object".to_string(), 0);
+
+        let set_variable_names = vec![
+            "s0".to_string(),
+            "s1".to_string(),
+            "s2".to_string(),
+            "s3".to_string(),
+        ];
+        let mut name_to_set_variable = HashMap::new();
+        name_to_set_variable.insert("s0".to_string(), 0);
+        name_to_set_variable.insert("s1".to_string(), 1);
+        name_to_set_variable.insert("s2".to_string(), 2);
+        name_to_set_variable.insert("s3".to_string(), 3);
+        let set_variable_to_object = vec![0, 0, 0, 0];
+
+        let permutation_variable_names = vec![
+            "p0".to_string(),
+            "p1".to_string(),
+            "p2".to_string(),
+            "p3".to_string(),
+        ];
+        let mut name_to_permutation_variable = HashMap::new();
+        name_to_permutation_variable.insert("p0".to_string(), 0);
+        name_to_permutation_variable.insert("p1".to_string(), 1);
+        name_to_permutation_variable.insert("p2".to_string(), 2);
+        name_to_permutation_variable.insert("p3".to_string(), 3);
+        let permutation_variable_to_object = vec![0, 0, 0, 0];
+
+        let element_variable_names = vec![
+            "e0".to_string(),
+            "e1".to_string(),
+            "e2".to_string(),
+            "e3".to_string(),
+        ];
+        let mut name_to_element_variable = HashMap::new();
+        name_to_element_variable.insert("e0".to_string(), 0);
+        name_to_element_variable.insert("e1".to_string(), 1);
+        name_to_element_variable.insert("e2".to_string(), 2);
+        name_to_element_variable.insert("e3".to_string(), 3);
+        let element_variable_to_object = vec![0, 0, 0, 0];
+
+        let numeric_variable_names = vec![
+            "n0".to_string(),
+            "n1".to_string(),
+            "n2".to_string(),
+            "n3".to_string(),
+        ];
+        let mut name_to_numeric_variable = HashMap::new();
+        name_to_numeric_variable.insert("n0".to_string(), 0);
+        name_to_numeric_variable.insert("n1".to_string(), 1);
+        name_to_numeric_variable.insert("n2".to_string(), 2);
+        name_to_numeric_variable.insert("n3".to_string(), 3);
+
+        let resource_variable_names = vec![
+            "r0".to_string(),
+            "r1".to_string(),
+            "r2".to_string(),
+            "r3".to_string(),
+        ];
+        let mut name_to_resource_variable = HashMap::new();
+        name_to_resource_variable.insert("r0".to_string(), 0);
+        name_to_resource_variable.insert("r1".to_string(), 1);
+        name_to_resource_variable.insert("r2".to_string(), 2);
+        name_to_resource_variable.insert("r3".to_string(), 3);
+
+        state::StateMetadata {
+            object_names,
+            name_to_object,
+            object_numbers,
+            set_variable_names,
+            name_to_set_variable,
+            set_variable_to_object,
+            permutation_variable_names,
+            name_to_permutation_variable,
+            permutation_variable_to_object,
+            element_variable_names,
+            name_to_element_variable,
+            element_variable_to_object,
+            numeric_variable_names,
+            name_to_numeric_variable,
+            resource_variable_names,
+            name_to_resource_variable,
+            less_is_better: vec![false, false, true, false],
         }
     }
 
@@ -153,44 +235,44 @@ mod tests {
 
     #[test]
     fn set_variable_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression = SetExpression::SetVariable(0);
         assert_eq!(
-            expression.eval(&state, &problem),
+            expression.eval(&state, &metadata),
             state.signature_variables.set_variables[0]
         );
         let expression = SetExpression::SetVariable(1);
         assert_eq!(
-            expression.eval(&state, &problem),
+            expression.eval(&state, &metadata),
             state.signature_variables.set_variables[1]
         );
     }
 
     #[test]
     fn permutation_variable_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression = SetExpression::PermutationVariable(0);
-        let mut set = variable::SetVariable::with_capacity(3);
+        let mut set = variable::SetVariable::with_capacity(10);
         set.insert(0);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &problem), set);
+        assert_eq!(expression.eval(&state, &metadata), set);
     }
 
     #[test]
     fn complement_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression = SetExpression::Complement(Box::new(SetExpression::SetVariable(0)));
         let mut set = variable::SetVariable::with_capacity(3);
         set.insert(1);
-        assert_eq!(expression.eval(&state, &problem), set);
+        assert_eq!(expression.eval(&state, &metadata), set);
     }
 
     #[test]
     fn union_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression = SetExpression::SetOperation(
             SetOperator::Union,
@@ -201,21 +283,21 @@ mod tests {
         set.insert(0);
         set.insert(1);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &problem), set);
+        assert_eq!(expression.eval(&state, &metadata), set);
         let expression = SetExpression::SetOperation(
             SetOperator::Union,
             Box::new(SetExpression::SetVariable(0)),
             Box::new(SetExpression::SetVariable(0)),
         );
         assert_eq!(
-            expression.eval(&state, &problem),
+            expression.eval(&state, &metadata),
             state.signature_variables.set_variables[0]
         );
     }
 
     #[test]
     fn difference_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression = SetExpression::SetOperation(
             SetOperator::Difference,
@@ -224,21 +306,21 @@ mod tests {
         );
         let mut set = variable::SetVariable::with_capacity(3);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &problem), set);
+        assert_eq!(expression.eval(&state, &metadata), set);
         let expression = SetExpression::SetOperation(
             SetOperator::Difference,
             Box::new(SetExpression::SetVariable(0)),
             Box::new(SetExpression::SetVariable(0)),
         );
         assert_eq!(
-            expression.eval(&state, &problem),
+            expression.eval(&state, &metadata),
             variable::SetVariable::with_capacity(3)
         );
     }
 
     #[test]
     fn intersect_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression = SetExpression::SetOperation(
             SetOperator::Intersect,
@@ -247,21 +329,21 @@ mod tests {
         );
         let mut set = variable::SetVariable::with_capacity(3);
         set.insert(0);
-        assert_eq!(expression.eval(&state, &problem), set);
+        assert_eq!(expression.eval(&state, &metadata), set);
         let expression = SetExpression::SetOperation(
             SetOperator::Intersect,
             Box::new(SetExpression::SetVariable(0)),
             Box::new(SetExpression::SetVariable(0)),
         );
         assert_eq!(
-            expression.eval(&state, &problem),
+            expression.eval(&state, &metadata),
             state.signature_variables.set_variables[0]
         );
     }
 
     #[test]
     fn set_add_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
@@ -272,21 +354,21 @@ mod tests {
         set.insert(0);
         set.insert(1);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &problem), set);
+        assert_eq!(expression.eval(&state, &metadata), set);
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
             Box::new(SetExpression::SetVariable(0)),
             ElementExpression::Constant(0),
         );
         assert_eq!(
-            expression.eval(&state, &problem),
+            expression.eval(&state, &metadata),
             state.signature_variables.set_variables[0]
         );
     }
 
     #[test]
     fn set_remove_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
@@ -295,14 +377,14 @@ mod tests {
         );
         let mut set = variable::SetVariable::with_capacity(3);
         set.insert(0);
-        assert_eq!(expression.eval(&state, &problem), set);
+        assert_eq!(expression.eval(&state, &metadata), set);
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
             Box::new(SetExpression::SetVariable(0)),
             ElementExpression::Constant(1),
         );
         assert_eq!(
-            expression.eval(&state, &problem),
+            expression.eval(&state, &metadata),
             state.signature_variables.set_variables[0]
         );
     }

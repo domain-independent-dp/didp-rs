@@ -1,15 +1,18 @@
-use super::environment;
-use super::ParseErr;
+use super::util;
+use super::util::ParseErr;
 use crate::expression::{
     ArgumentExpression, ElementExpression, SetElementOperator, SetExpression, SetOperator,
 };
+use crate::state;
 use crate::variable;
+use std::collections;
 
-pub fn parse_set_expression<'a, 'b, T: variable::Numeric>(
+pub fn parse_set_expression<'a, 'b, 'c>(
     tokens: &'a [String],
-    env: &'b environment::Environment<T>,
+    metadata: &'b state::StateMetadata,
+    parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<(SetExpression, &'a [String]), ParseErr> {
-    let (expression, rest) = parse_argument(tokens, env)?;
+    let (expression, rest) = parse_argument(tokens, metadata, parameters)?;
     match expression {
         ArgumentExpression::Set(expression) => Ok((expression, rest)),
         _ => Err(ParseErr::Reason(format!(
@@ -19,11 +22,12 @@ pub fn parse_set_expression<'a, 'b, T: variable::Numeric>(
     }
 }
 
-pub fn parse_element_expression<'a, 'b, T: variable::Numeric>(
+pub fn parse_element_expression<'a, 'b, 'c>(
     tokens: &'a [String],
-    env: &'b environment::Environment<T>,
+    metadata: &'b state::StateMetadata,
+    parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<(ElementExpression, &'a [String]), ParseErr> {
-    let (expression, rest) = parse_argument(tokens, env)?;
+    let (expression, rest) = parse_argument(tokens, metadata, parameters)?;
     match expression {
         ArgumentExpression::Element(expression) => Ok((expression, rest)),
         _ => Err(ParseErr::Reason(format!(
@@ -33,43 +37,45 @@ pub fn parse_element_expression<'a, 'b, T: variable::Numeric>(
     }
 }
 
-pub fn parse_argument<'a, 'b, T: variable::Numeric>(
+pub fn parse_argument<'a, 'b, 'c>(
     tokens: &'a [String],
-    env: &'b environment::Environment<T>,
+    metadata: &'b state::StateMetadata,
+    parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<(ArgumentExpression, &'a [String]), ParseErr> {
     let (token, rest) = tokens
         .split_first()
         .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
     match &token[..] {
         "!" => {
-            let (expression, rest) = parse_set_expression(rest, env)?;
+            let (expression, rest) = parse_set_expression(rest, metadata, parameters)?;
             Ok((
                 ArgumentExpression::Set(SetExpression::Complement(Box::new(expression))),
                 rest,
             ))
         }
         "(" => {
-            let (expression, rest) = parse_operation(rest, env)?;
+            let (expression, rest) = parse_operation(rest, metadata, parameters)?;
             Ok((ArgumentExpression::Set(expression), rest))
         }
         ")" => Err(ParseErr::Reason("unexpected `)`".to_string())),
         _ => {
-            let argument = parse_atom(token, env)?;
+            let argument = parse_atom(token, metadata, parameters)?;
             Ok((argument, rest))
         }
     }
 }
 
-fn parse_operation<'a, 'b, T: variable::Numeric>(
+fn parse_operation<'a, 'b, 'c>(
     tokens: &'a [String],
-    env: &'b environment::Environment<T>,
+    metadata: &'b state::StateMetadata,
+    parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<(SetExpression, &'a [String]), ParseErr> {
     let (token, rest) = tokens
         .split_first()
         .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
-    let (x, rest) = parse_argument(rest, env)?;
-    let (y, rest) = parse_argument(rest, env)?;
-    let rest = super::parse_closing(rest)?;
+    let (x, rest) = parse_argument(rest, metadata, parameters)?;
+    let (y, rest) = parse_argument(rest, metadata, parameters)?;
+    let rest = util::parse_closing(rest)?;
 
     match &token[..] {
         "+" => match (x, y) {
@@ -114,25 +120,28 @@ fn parse_operation<'a, 'b, T: variable::Numeric>(
     }
 }
 
-fn parse_atom<T: variable::Numeric>(
+fn parse_atom(
     token: &str,
-    env: &environment::Environment<T>,
+    metadata: &state::StateMetadata,
+    parameters: &collections::HashMap<String, usize>,
 ) -> Result<ArgumentExpression, ParseErr> {
     if token == "stage" {
         Ok(ArgumentExpression::Element(ElementExpression::Stage))
-    } else if let Some(i) = env.element_variables.get(token) {
+    } else if let Some(i) = metadata.name_to_element_variable.get(token) {
         Ok(ArgumentExpression::Element(ElementExpression::Variable(*i)))
-    } else if let Some(i) = env.set_variables.get(token) {
+    } else if let Some(i) = metadata.name_to_set_variable.get(token) {
         Ok(ArgumentExpression::Set(SetExpression::SetVariable(*i)))
-    } else if let Some(i) = env.permutation_variables.get(token) {
+    } else if let Some(i) = metadata.name_to_permutation_variable.get(token) {
         Ok(ArgumentExpression::Set(SetExpression::PermutationVariable(
             *i,
         )))
+    } else if let Some(v) = parameters.get(token) {
+        Ok(ArgumentExpression::Element(ElementExpression::Constant(*v)))
     } else {
-        let n: variable::ElementVariable = token.parse().map_err(|e| {
+        let v: variable::ElementVariable = token.parse().map_err(|e| {
             ParseErr::Reason(format!("could not parse {} as a number: {:?}", token, e))
         })?;
-        Ok(ArgumentExpression::Element(ElementExpression::Constant(n)))
+        Ok(ArgumentExpression::Element(ElementExpression::Constant(v)))
     }
 }
 
@@ -141,63 +150,116 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    fn generate_env() -> environment::Environment<variable::IntegerVariable> {
-        let mut set_variables = HashMap::new();
-        set_variables.insert("s0".to_string(), 0);
-        set_variables.insert("s1".to_string(), 1);
-        set_variables.insert("s2".to_string(), 2);
-        set_variables.insert("s3".to_string(), 3);
+    fn generate_metadata() -> state::StateMetadata {
+        let object_names = vec!["object".to_string()];
+        let object_numbers = vec![10];
+        let mut name_to_object = HashMap::new();
+        name_to_object.insert("object".to_string(), 0);
 
-        let mut permutation_variables = HashMap::new();
-        permutation_variables.insert("p0".to_string(), 0);
-        permutation_variables.insert("p1".to_string(), 1);
-        permutation_variables.insert("p2".to_string(), 2);
-        permutation_variables.insert("p3".to_string(), 3);
+        let set_variable_names = vec![
+            "s0".to_string(),
+            "s1".to_string(),
+            "s2".to_string(),
+            "s3".to_string(),
+        ];
+        let mut name_to_set_variable = HashMap::new();
+        name_to_set_variable.insert("s0".to_string(), 0);
+        name_to_set_variable.insert("s1".to_string(), 1);
+        name_to_set_variable.insert("s2".to_string(), 2);
+        name_to_set_variable.insert("s3".to_string(), 3);
+        let set_variable_to_object = vec![0, 0, 0, 0];
 
-        let mut element_variables = HashMap::new();
-        element_variables.insert("e0".to_string(), 0);
-        element_variables.insert("e1".to_string(), 1);
-        element_variables.insert("e2".to_string(), 2);
-        element_variables.insert("e3".to_string(), 3);
+        let permutation_variable_names = vec![
+            "p0".to_string(),
+            "p1".to_string(),
+            "p2".to_string(),
+            "p3".to_string(),
+        ];
+        let mut name_to_permutation_variable = HashMap::new();
+        name_to_permutation_variable.insert("p0".to_string(), 0);
+        name_to_permutation_variable.insert("p1".to_string(), 1);
+        name_to_permutation_variable.insert("p2".to_string(), 2);
+        name_to_permutation_variable.insert("p3".to_string(), 3);
+        let permutation_variable_to_object = vec![0, 0, 0, 0];
 
-        let mut numeric_variables = HashMap::new();
-        numeric_variables.insert("n0".to_string(), 0);
-        numeric_variables.insert("n1".to_string(), 1);
-        numeric_variables.insert("n2".to_string(), 2);
-        numeric_variables.insert("n3".to_string(), 3);
+        let element_variable_names = vec![
+            "e0".to_string(),
+            "e1".to_string(),
+            "e2".to_string(),
+            "e3".to_string(),
+        ];
+        let mut name_to_element_variable = HashMap::new();
+        name_to_element_variable.insert("e0".to_string(), 0);
+        name_to_element_variable.insert("e1".to_string(), 1);
+        name_to_element_variable.insert("e2".to_string(), 2);
+        name_to_element_variable.insert("e3".to_string(), 3);
+        let element_variable_to_object = vec![0, 0, 0, 0];
 
-        let mut resource_variables = HashMap::new();
-        resource_variables.insert("r0".to_string(), 0);
-        resource_variables.insert("r1".to_string(), 1);
-        resource_variables.insert("r2".to_string(), 2);
-        resource_variables.insert("r3".to_string(), 3);
+        let numeric_variable_names = vec![
+            "n0".to_string(),
+            "n1".to_string(),
+            "n2".to_string(),
+            "n3".to_string(),
+        ];
+        let mut name_to_numeric_variable = HashMap::new();
+        name_to_numeric_variable.insert("n0".to_string(), 0);
+        name_to_numeric_variable.insert("n1".to_string(), 1);
+        name_to_numeric_variable.insert("n2".to_string(), 2);
+        name_to_numeric_variable.insert("n3".to_string(), 3);
 
-        environment::Environment {
-            set_variables,
-            permutation_variables,
-            element_variables,
-            numeric_variables,
-            resource_variables,
-            functions_1d: HashMap::new(),
-            functions_2d: HashMap::new(),
-            functions_3d: HashMap::new(),
-            functions: HashMap::new(),
+        let resource_variable_names = vec![
+            "r0".to_string(),
+            "r1".to_string(),
+            "r2".to_string(),
+            "r3".to_string(),
+        ];
+        let mut name_to_resource_variable = HashMap::new();
+        name_to_resource_variable.insert("r0".to_string(), 0);
+        name_to_resource_variable.insert("r1".to_string(), 1);
+        name_to_resource_variable.insert("r2".to_string(), 2);
+        name_to_resource_variable.insert("r3".to_string(), 3);
+
+        state::StateMetadata {
+            object_names,
+            name_to_object,
+            object_numbers,
+            set_variable_names,
+            name_to_set_variable,
+            set_variable_to_object,
+            permutation_variable_names,
+            name_to_permutation_variable,
+            permutation_variable_to_object,
+            element_variable_names,
+            name_to_element_variable,
+            element_variable_to_object,
+            numeric_variable_names,
+            name_to_numeric_variable,
+            resource_variable_names,
+            name_to_resource_variable,
+            less_is_better: vec![false, false, true, false],
         }
+    }
+
+    fn generate_parameters() -> collections::HashMap<String, usize> {
+        let mut parameters = collections::HashMap::new();
+        parameters.insert("param".to_string(), 0);
+        parameters
     }
 
     #[test]
     fn parse_set_expression_ok() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["s0", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, SetExpression::SetVariable(0)));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["p0", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, SetExpression::PermutationVariable(0)));
@@ -206,25 +268,27 @@ mod tests {
 
     #[test]
     fn parse_set_expression_err() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["e1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["11", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_complemnt_ok() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
         let tokens: Vec<String> = ["!", "s2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, SetExpression::Complement(_)));
@@ -236,32 +300,34 @@ mod tests {
 
     #[test]
     fn parse_complenent_err() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["!", "e2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["!", "n2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn pare_set_operation_ok() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["(", "+", "s2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -278,7 +344,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -295,7 +361,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -312,7 +378,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -329,7 +395,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -345,46 +411,48 @@ mod tests {
 
     #[test]
     fn pare_set_operation_err() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["(", "+", "s2", "n1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "-", "s2", "n1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "*", "s2", "e1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "/", "s2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &env);
+        let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_element_expression_ok() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["e1", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_element_expression(&tokens, &env);
+        let result = parse_element_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, ElementExpression::Variable(1)));
@@ -394,7 +462,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_element_expression(&tokens, &env);
+        let result = parse_element_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, ElementExpression::Constant(11)));
@@ -403,32 +471,34 @@ mod tests {
 
     #[test]
     fn parse_element_expression_err() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["s1", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_element_expression(&tokens, &env);
+        let result = parse_element_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["p1", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_element_expression(&tokens, &env);
+        let result = parse_element_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_argument_ok() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["!", "s2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &env);
+        let result = parse_argument(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -444,7 +514,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &env);
+        let result = parse_argument(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -462,25 +532,27 @@ mod tests {
 
     #[test]
     fn parse_argument_err() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
 
         let tokens: Vec<String> = [")", "(", "+", "s2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &env);
+        let result = parse_argument(&tokens, &metadata, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_atom_ok() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["stage", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &env);
+        let result = parse_argument(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -493,7 +565,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &env);
+        let result = parse_argument(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -506,7 +578,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &env);
+        let result = parse_argument(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -519,7 +591,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &env);
+        let result = parse_argument(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -532,7 +604,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &env);
+        let result = parse_argument(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -540,17 +612,31 @@ mod tests {
             ArgumentExpression::Element(ElementExpression::Constant(11))
         ));
         assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["param", ")", "1", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_argument(&tokens, &metadata, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(
+            expression,
+            ArgumentExpression::Element(ElementExpression::Constant(0))
+        ));
+        assert_eq!(rest, &tokens[1..]);
     }
 
     #[test]
     fn parse_atom_err() {
-        let env = generate_env();
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["e4", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &env);
+        let result = parse_argument(&tokens, &metadata, &parameters);
         assert!(result.is_err());
     }
 }

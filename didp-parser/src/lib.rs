@@ -14,6 +14,7 @@ pub mod variable;
 pub mod yaml_util;
 
 pub struct Problem<'a, T: variable::Numeric> {
+    pub minimize: bool,
     pub domain_name: String,
     pub problem_name: String,
     pub state_metadata: state::StateMetadata,
@@ -25,17 +26,37 @@ pub struct Problem<'a, T: variable::Numeric> {
 }
 
 impl<'a, T: variable::Numeric> Problem<'a, T> {
-    pub fn new(domain: &str, problem: &str) -> Result<Problem<'a, T>, Box<dyn Error>>
+    pub fn load_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Problem<'a, T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
-        let domain = Yaml::from_str(domain);
-        let problem = Yaml::from_str(problem);
         let state_metadata = state::StateMetadata::load_from_yaml(&domain, &problem)?;
 
         let domain = yaml_util::get_map(&domain)?;
+        let minimize = match yaml_util::get_string_by_key(&domain, "metric") {
+            Ok(value) => match &value[..] {
+                "minimize" => true,
+                "maximize" => false,
+                _ => {
+                    return Err(yaml_util::YamlContentErr::new(format!(
+                        "expected `minimize` or `maximize`, but is {}",
+                        value
+                    ))
+                    .into())
+                }
+            },
+            Err(_) => true,
+        };
         let domain_name = yaml_util::get_string_by_key(&domain, "domain")?;
         let problem = yaml_util::get_map(&problem)?;
+        let domain_name2 = yaml_util::get_string_by_key(&problem, "domain")?;
+        if domain_name != domain_name2 {
+            return Err(yaml_util::YamlContentErr::new(format!(
+                "domain mismatch: expected `{}`, but is `{}`",
+                domain_name, domain_name2
+            ))
+            .into());
+        }
         let problem_name = yaml_util::get_string_by_key(&problem, "problem")?;
 
         let initial_state = yaml_util::get_yaml_by_key(&problem, "initial_state")?;

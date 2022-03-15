@@ -1,6 +1,5 @@
 use super::numeric_expression::NumericExpression;
 use super::set_condition;
-use crate::problem;
 use crate::state;
 use crate::variable;
 
@@ -28,15 +27,15 @@ pub enum ComparisonOperator {
 }
 
 impl<'a, T: variable::Numeric> Condition<'a, T> {
-    pub fn eval(&self, state: &state::State<T>, problem: &problem::Problem) -> bool {
+    pub fn eval(&self, state: &state::State<T>, metadata: &state::StateMetadata) -> bool {
         match self {
-            Condition::Not(c) => !c.eval(state, problem),
-            Condition::And(x, y) => x.eval(state, problem) && y.eval(state, problem),
-            Condition::Or(x, y) => x.eval(state, problem) || y.eval(state, problem),
+            Condition::Not(c) => !c.eval(state, metadata),
+            Condition::And(x, y) => x.eval(state, metadata) && y.eval(state, metadata),
+            Condition::Or(x, y) => x.eval(state, metadata) || y.eval(state, metadata),
             Condition::Comparison(op, x, y) => {
-                Self::eval_comparison(op, x.eval(state, problem), y.eval(state, problem))
+                Self::eval_comparison(op, x.eval(state, metadata), y.eval(state, metadata))
             }
-            Condition::Set(c) => c.eval(state, problem),
+            Condition::Set(c) => c.eval(state, metadata),
         }
     }
 
@@ -56,13 +55,96 @@ impl<'a, T: variable::Numeric> Condition<'a, T> {
 mod tests {
     use super::*;
     use crate::state;
+    use std::collections::HashMap;
     use std::rc::Rc;
 
-    fn generate_problem() -> problem::Problem {
-        problem::Problem {
-            set_variable_to_max_size: vec![3],
-            permutation_variable_to_max_length: vec![3],
-            element_to_set: vec![0],
+    fn generate_metadata() -> state::StateMetadata {
+        let object_names = vec!["object".to_string()];
+        let object_numbers = vec![10];
+        let mut name_to_object = HashMap::new();
+        name_to_object.insert("object".to_string(), 0);
+
+        let set_variable_names = vec![
+            "s0".to_string(),
+            "s1".to_string(),
+            "s2".to_string(),
+            "s3".to_string(),
+        ];
+        let mut name_to_set_variable = HashMap::new();
+        name_to_set_variable.insert("s0".to_string(), 0);
+        name_to_set_variable.insert("s1".to_string(), 1);
+        name_to_set_variable.insert("s2".to_string(), 2);
+        name_to_set_variable.insert("s3".to_string(), 3);
+        let set_variable_to_object = vec![0, 0, 0, 0];
+
+        let permutation_variable_names = vec![
+            "p0".to_string(),
+            "p1".to_string(),
+            "p2".to_string(),
+            "p3".to_string(),
+        ];
+        let mut name_to_permutation_variable = HashMap::new();
+        name_to_permutation_variable.insert("p0".to_string(), 0);
+        name_to_permutation_variable.insert("p1".to_string(), 1);
+        name_to_permutation_variable.insert("p2".to_string(), 2);
+        name_to_permutation_variable.insert("p3".to_string(), 3);
+        let permutation_variable_to_object = vec![0, 0, 0, 0];
+
+        let element_variable_names = vec![
+            "e0".to_string(),
+            "e1".to_string(),
+            "e2".to_string(),
+            "e3".to_string(),
+        ];
+        let mut name_to_element_variable = HashMap::new();
+        name_to_element_variable.insert("e0".to_string(), 0);
+        name_to_element_variable.insert("e1".to_string(), 1);
+        name_to_element_variable.insert("e2".to_string(), 2);
+        name_to_element_variable.insert("e3".to_string(), 3);
+        let element_variable_to_object = vec![0, 0, 0, 0];
+
+        let numeric_variable_names = vec![
+            "n0".to_string(),
+            "n1".to_string(),
+            "n2".to_string(),
+            "n3".to_string(),
+        ];
+        let mut name_to_numeric_variable = HashMap::new();
+        name_to_numeric_variable.insert("n0".to_string(), 0);
+        name_to_numeric_variable.insert("n1".to_string(), 1);
+        name_to_numeric_variable.insert("n2".to_string(), 2);
+        name_to_numeric_variable.insert("n3".to_string(), 3);
+
+        let resource_variable_names = vec![
+            "r0".to_string(),
+            "r1".to_string(),
+            "r2".to_string(),
+            "r3".to_string(),
+        ];
+        let mut name_to_resource_variable = HashMap::new();
+        name_to_resource_variable.insert("r0".to_string(), 0);
+        name_to_resource_variable.insert("r1".to_string(), 1);
+        name_to_resource_variable.insert("r2".to_string(), 2);
+        name_to_resource_variable.insert("r3".to_string(), 3);
+
+        state::StateMetadata {
+            object_names,
+            name_to_object,
+            object_numbers,
+            set_variable_names,
+            name_to_set_variable,
+            set_variable_to_object,
+            permutation_variable_names,
+            name_to_permutation_variable,
+            permutation_variable_to_object,
+            element_variable_names,
+            name_to_element_variable,
+            element_variable_to_object,
+            numeric_variable_names,
+            name_to_numeric_variable,
+            resource_variable_names,
+            name_to_resource_variable,
+            less_is_better: vec![false, false, true, false],
         }
     }
 
@@ -88,7 +170,7 @@ mod tests {
 
     #[test]
     fn eval_eq() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -96,19 +178,19 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Eq,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
     }
 
     #[test]
     fn eval_neq() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -116,19 +198,19 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Ne,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
     }
 
     #[test]
     fn eval_ge() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -136,26 +218,26 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Ge,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Ge,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
     }
 
     #[test]
     fn eval_gt() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -163,26 +245,26 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Gt,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Gt,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
     }
 
     #[test]
     fn eval_le() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -190,26 +272,26 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Le,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Le,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
     }
 
     #[test]
     fn eval_lt() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -217,26 +299,26 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Lt,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Lt,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
     }
 
     #[test]
     fn eval_not() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression = Condition::Not(Box::new(Condition::Comparison(
@@ -244,19 +326,19 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         )));
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression = Condition::Not(Box::new(Condition::Comparison(
             ComparisonOperator::Eq,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         )));
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
     }
 
     #[test]
     fn eval_and() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let x = Condition::Comparison(
@@ -270,7 +352,7 @@ mod tests {
             NumericExpression::Constant(0),
         );
         let expression = Condition::And(Box::new(x), Box::new(y));
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -283,7 +365,7 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::And(Box::new(x), Box::new(y));
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -296,12 +378,12 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::And(Box::new(x), Box::new(y));
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
     }
 
     #[test]
     fn eval_or() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let x = Condition::Comparison(
@@ -315,7 +397,7 @@ mod tests {
             NumericExpression::Constant(0),
         );
         let expression = Condition::Or(Box::new(x), Box::new(y));
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -328,7 +410,7 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::Or(Box::new(x), Box::new(y));
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -341,6 +423,6 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::Or(Box::new(x), Box::new(y));
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
     }
 }

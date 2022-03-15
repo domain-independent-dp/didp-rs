@@ -1,6 +1,5 @@
 use super::set_expression::ElementExpression;
 use super::set_expression::SetExpression;
-use crate::problem;
 use crate::state;
 use crate::variable;
 
@@ -17,7 +16,7 @@ impl SetCondition {
     pub fn eval<T: variable::Numeric>(
         &self,
         state: &state::State<T>,
-        problem: &problem::Problem,
+        metadata: &state::StateMetadata,
     ) -> bool {
         match self {
             SetCondition::Eq(x, y) => {
@@ -32,16 +31,16 @@ impl SetCondition {
             }
             SetCondition::IsIn(e, s) => {
                 let e = e.eval(state);
-                let s = s.eval(state, problem);
+                let s = s.eval(state, metadata);
                 s.contains(e)
             }
             SetCondition::IsSubset(x, y) => {
-                let x = x.eval(state, problem);
-                let y = y.eval(state, problem);
+                let x = x.eval(state, metadata);
+                let y = y.eval(state, metadata);
                 x.is_subset(&y)
             }
             SetCondition::IsEmpty(s) => {
-                let s = s.eval(state, problem);
+                let s = s.eval(state, metadata);
                 s.count_ones(..) == 0
             }
         }
@@ -51,13 +50,96 @@ impl SetCondition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::rc::Rc;
 
-    fn generate_problem() -> problem::Problem {
-        problem::Problem {
-            set_variable_to_max_size: vec![3],
-            permutation_variable_to_max_length: vec![3],
-            element_to_set: vec![0],
+    fn generate_metadata() -> state::StateMetadata {
+        let object_names = vec!["object".to_string()];
+        let object_numbers = vec![10];
+        let mut name_to_object = HashMap::new();
+        name_to_object.insert("object".to_string(), 0);
+
+        let set_variable_names = vec![
+            "s0".to_string(),
+            "s1".to_string(),
+            "s2".to_string(),
+            "s3".to_string(),
+        ];
+        let mut name_to_set_variable = HashMap::new();
+        name_to_set_variable.insert("s0".to_string(), 0);
+        name_to_set_variable.insert("s1".to_string(), 1);
+        name_to_set_variable.insert("s2".to_string(), 2);
+        name_to_set_variable.insert("s3".to_string(), 3);
+        let set_variable_to_object = vec![0, 0, 0, 0];
+
+        let permutation_variable_names = vec![
+            "p0".to_string(),
+            "p1".to_string(),
+            "p2".to_string(),
+            "p3".to_string(),
+        ];
+        let mut name_to_permutation_variable = HashMap::new();
+        name_to_permutation_variable.insert("p0".to_string(), 0);
+        name_to_permutation_variable.insert("p1".to_string(), 1);
+        name_to_permutation_variable.insert("p2".to_string(), 2);
+        name_to_permutation_variable.insert("p3".to_string(), 3);
+        let permutation_variable_to_object = vec![0, 0, 0, 0];
+
+        let element_variable_names = vec![
+            "e0".to_string(),
+            "e1".to_string(),
+            "e2".to_string(),
+            "e3".to_string(),
+        ];
+        let mut name_to_element_variable = HashMap::new();
+        name_to_element_variable.insert("e0".to_string(), 0);
+        name_to_element_variable.insert("e1".to_string(), 1);
+        name_to_element_variable.insert("e2".to_string(), 2);
+        name_to_element_variable.insert("e3".to_string(), 3);
+        let element_variable_to_object = vec![0, 0, 0, 0];
+
+        let numeric_variable_names = vec![
+            "n0".to_string(),
+            "n1".to_string(),
+            "n2".to_string(),
+            "n3".to_string(),
+        ];
+        let mut name_to_numeric_variable = HashMap::new();
+        name_to_numeric_variable.insert("n0".to_string(), 0);
+        name_to_numeric_variable.insert("n1".to_string(), 1);
+        name_to_numeric_variable.insert("n2".to_string(), 2);
+        name_to_numeric_variable.insert("n3".to_string(), 3);
+
+        let resource_variable_names = vec![
+            "r0".to_string(),
+            "r1".to_string(),
+            "r2".to_string(),
+            "r3".to_string(),
+        ];
+        let mut name_to_resource_variable = HashMap::new();
+        name_to_resource_variable.insert("r0".to_string(), 0);
+        name_to_resource_variable.insert("r1".to_string(), 1);
+        name_to_resource_variable.insert("r2".to_string(), 2);
+        name_to_resource_variable.insert("r3".to_string(), 3);
+
+        state::StateMetadata {
+            object_names,
+            name_to_object,
+            object_numbers,
+            set_variable_names,
+            name_to_set_variable,
+            set_variable_to_object,
+            permutation_variable_names,
+            name_to_permutation_variable,
+            permutation_variable_to_object,
+            element_variable_names,
+            name_to_element_variable,
+            element_variable_to_object,
+            numeric_variable_names,
+            name_to_numeric_variable,
+            resource_variable_names,
+            name_to_resource_variable,
+            less_is_better: vec![false, false, true, false],
         }
     }
 
@@ -86,131 +168,131 @@ mod tests {
 
     #[test]
     fn element_eq() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression = SetCondition::Eq(
             ElementExpression::Constant(1),
             ElementExpression::Constant(1),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let expression = SetCondition::Eq(
             ElementExpression::Constant(0),
             ElementExpression::Constant(1),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression = SetCondition::Eq(
             ElementExpression::Constant(1),
             ElementExpression::Variable(0),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let expression = SetCondition::Eq(
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
     }
 
     #[test]
     fn element_ne() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression = SetCondition::Ne(
             ElementExpression::Constant(1),
             ElementExpression::Constant(1),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression = SetCondition::Ne(
             ElementExpression::Constant(0),
             ElementExpression::Constant(1),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let expression = SetCondition::Ne(
             ElementExpression::Constant(1),
             ElementExpression::Variable(0),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression = SetCondition::Ne(
             ElementExpression::Constant(0),
             ElementExpression::Variable(0),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
     }
 
     #[test]
     fn element_in_set() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression = SetCondition::IsIn(
             ElementExpression::Constant(0),
             SetExpression::SetVariable(0),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let expression = SetCondition::IsIn(
             ElementExpression::Constant(1),
             SetExpression::SetVariable(0),
         );
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression = SetCondition::IsIn(
             ElementExpression::Constant(2),
             SetExpression::SetVariable(0),
         );
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
     }
 
     #[test]
     fn subset_of() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression =
             SetCondition::IsSubset(SetExpression::SetVariable(0), SetExpression::SetVariable(0));
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let expression =
             SetCondition::IsSubset(SetExpression::SetVariable(0), SetExpression::SetVariable(1));
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression =
             SetCondition::IsSubset(SetExpression::SetVariable(0), SetExpression::SetVariable(2));
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression =
             SetCondition::IsSubset(SetExpression::SetVariable(0), SetExpression::SetVariable(3));
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression =
             SetCondition::IsSubset(SetExpression::SetVariable(1), SetExpression::SetVariable(0));
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
 
         let expression =
             SetCondition::IsSubset(SetExpression::SetVariable(2), SetExpression::SetVariable(0));
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression =
             SetCondition::IsSubset(SetExpression::SetVariable(3), SetExpression::SetVariable(1));
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
     }
 
     #[test]
     fn is_empty() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
 
         let expression = SetCondition::IsEmpty(SetExpression::SetVariable(0));
-        assert!(!expression.eval(&state, &problem));
+        assert!(!expression.eval(&state, &metadata));
 
         let expression = SetCondition::IsEmpty(SetExpression::SetVariable(3));
-        assert!(expression.eval(&state, &problem));
+        assert!(expression.eval(&state, &metadata));
     }
 }

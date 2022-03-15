@@ -1,6 +1,5 @@
 use super::set_expression;
 use crate::numeric_function;
-use crate::problem;
 use crate::state;
 use crate::variable;
 use std::iter;
@@ -94,48 +93,48 @@ pub enum FunctionExpression<'a, T: variable::Numeric> {
 }
 
 impl<'a, T: variable::Numeric> FunctionExpression<'a, T> {
-    pub fn eval(&self, state: &state::State<T>, problem: &problem::Problem) -> T {
+    pub fn eval(&self, state: &state::State<T>, metadata: &state::StateMetadata) -> T {
         match self {
             Self::Function1D(f, x) => f.eval(x.eval(&state)),
-            Self::Function1DSum(f, x) => f.sum(&x.eval(&state, problem)),
+            Self::Function1DSum(f, x) => f.sum(&x.eval(&state, metadata)),
             Self::Function2D(f, x, y) => f.eval(x.eval(&state), y.eval(&state)),
             Self::Function2DSum(f, x, y) => {
-                f.sum(&x.eval(&state, problem), &y.eval(&state, problem))
+                f.sum(&x.eval(&state, metadata), &y.eval(&state, metadata))
             }
-            Self::Function2DSumX(f, x, y) => f.sum_x(&x.eval(&state, problem), y.eval(&state)),
-            Self::Function2DSumY(f, x, y) => f.sum_y(x.eval(&state), &y.eval(&state, problem)),
+            Self::Function2DSumX(f, x, y) => f.sum_x(&x.eval(&state, metadata), y.eval(&state)),
+            Self::Function2DSumY(f, x, y) => f.sum_y(x.eval(&state), &y.eval(&state, metadata)),
             Self::Function3D(f, x, y, z) => f.eval(x.eval(&state), y.eval(&state), z.eval(&state)),
             Self::Function3DSum(f, x, y, z) => f.sum(
-                &x.eval(&state, problem),
-                &y.eval(&state, problem),
-                &z.eval(&state, problem),
+                &x.eval(&state, metadata),
+                &y.eval(&state, metadata),
+                &z.eval(&state, metadata),
             ),
             Self::Function3DSumX(f, x, y, z) => {
-                f.sum_x(&x.eval(&state, problem), y.eval(&state), z.eval(&state))
+                f.sum_x(&x.eval(&state, metadata), y.eval(&state), z.eval(&state))
             }
             Self::Function3DSumY(f, x, y, z) => {
-                f.sum_y(x.eval(&state), &y.eval(&state, problem), z.eval(&state))
+                f.sum_y(x.eval(&state), &y.eval(&state, metadata), z.eval(&state))
             }
             Self::Function3DSumZ(f, x, y, z) => {
-                f.sum_z(x.eval(&state), y.eval(&state), &z.eval(&state, problem))
+                f.sum_z(x.eval(&state), y.eval(&state), &z.eval(&state, metadata))
             }
             Self::Function3DSumXY(f, x, y, z) => f.sum_xy(
-                &x.eval(&state, problem),
-                &y.eval(&state, problem),
+                &x.eval(&state, metadata),
+                &y.eval(&state, metadata),
                 z.eval(&state),
             ),
             Self::Function3DSumXZ(f, x, y, z) => f.sum_xz(
-                &x.eval(&state, problem),
+                &x.eval(&state, metadata),
                 y.eval(&state),
-                &z.eval(&state, problem),
+                &z.eval(&state, metadata),
             ),
             Self::Function3DSumYZ(f, x, y, z) => f.sum_yz(
                 x.eval(&state),
-                &y.eval(&state, problem),
-                &z.eval(&state, problem),
+                &y.eval(&state, metadata),
+                &z.eval(&state, metadata),
             ),
             Self::Function(f, args) => eval_numeric_function(f, args, &state),
-            Self::FunctionSum(f, args) => sum_numeric_function(f, args, &state, problem),
+            Self::FunctionSum(f, args) => sum_numeric_function(f, args, &state, metadata),
         }
     }
 }
@@ -153,13 +152,13 @@ fn sum_numeric_function<T: variable::Numeric>(
     f: &numeric_function::NumericFunction<T>,
     args: &[set_expression::ArgumentExpression],
     state: &state::State<T>,
-    problem: &problem::Problem,
+    metadata: &state::StateMetadata,
 ) -> T {
     let mut result = vec![vec![]];
     for v in args {
         match v {
             set_expression::ArgumentExpression::Set(s) => {
-                let s = s.eval(state, problem);
+                let s = s.eval(state, metadata);
                 result = result
                     .into_iter()
                     .flat_map(|r| {
@@ -189,11 +188,93 @@ mod tests {
     use std::collections::HashMap;
     use std::rc::Rc;
 
-    fn generate_problem() -> problem::Problem {
-        problem::Problem {
-            set_variable_to_max_size: vec![3],
-            permutation_variable_to_max_length: vec![3],
-            element_to_set: vec![0],
+    fn generate_metadata() -> state::StateMetadata {
+        let object_names = vec!["object".to_string()];
+        let object_numbers = vec![10];
+        let mut name_to_object = HashMap::new();
+        name_to_object.insert("object".to_string(), 0);
+
+        let set_variable_names = vec![
+            "s0".to_string(),
+            "s1".to_string(),
+            "s2".to_string(),
+            "s3".to_string(),
+        ];
+        let mut name_to_set_variable = HashMap::new();
+        name_to_set_variable.insert("s0".to_string(), 0);
+        name_to_set_variable.insert("s1".to_string(), 1);
+        name_to_set_variable.insert("s2".to_string(), 2);
+        name_to_set_variable.insert("s3".to_string(), 3);
+        let set_variable_to_object = vec![0, 0, 0, 0];
+
+        let permutation_variable_names = vec![
+            "p0".to_string(),
+            "p1".to_string(),
+            "p2".to_string(),
+            "p3".to_string(),
+        ];
+        let mut name_to_permutation_variable = HashMap::new();
+        name_to_permutation_variable.insert("p0".to_string(), 0);
+        name_to_permutation_variable.insert("p1".to_string(), 1);
+        name_to_permutation_variable.insert("p2".to_string(), 2);
+        name_to_permutation_variable.insert("p3".to_string(), 3);
+        let permutation_variable_to_object = vec![0, 0, 0, 0];
+
+        let element_variable_names = vec![
+            "e0".to_string(),
+            "e1".to_string(),
+            "e2".to_string(),
+            "e3".to_string(),
+        ];
+        let mut name_to_element_variable = HashMap::new();
+        name_to_element_variable.insert("e0".to_string(), 0);
+        name_to_element_variable.insert("e1".to_string(), 1);
+        name_to_element_variable.insert("e2".to_string(), 2);
+        name_to_element_variable.insert("e3".to_string(), 3);
+        let element_variable_to_object = vec![0, 0, 0, 0];
+
+        let numeric_variable_names = vec![
+            "n0".to_string(),
+            "n1".to_string(),
+            "n2".to_string(),
+            "n3".to_string(),
+        ];
+        let mut name_to_numeric_variable = HashMap::new();
+        name_to_numeric_variable.insert("n0".to_string(), 0);
+        name_to_numeric_variable.insert("n1".to_string(), 1);
+        name_to_numeric_variable.insert("n2".to_string(), 2);
+        name_to_numeric_variable.insert("n3".to_string(), 3);
+
+        let resource_variable_names = vec![
+            "r0".to_string(),
+            "r1".to_string(),
+            "r2".to_string(),
+            "r3".to_string(),
+        ];
+        let mut name_to_resource_variable = HashMap::new();
+        name_to_resource_variable.insert("r0".to_string(), 0);
+        name_to_resource_variable.insert("r1".to_string(), 1);
+        name_to_resource_variable.insert("r2".to_string(), 2);
+        name_to_resource_variable.insert("r3".to_string(), 3);
+
+        state::StateMetadata {
+            object_names,
+            name_to_object,
+            object_numbers,
+            set_variable_names,
+            name_to_set_variable,
+            set_variable_to_object,
+            permutation_variable_names,
+            name_to_permutation_variable,
+            permutation_variable_to_object,
+            element_variable_names,
+            name_to_element_variable,
+            element_variable_to_object,
+            numeric_variable_names,
+            name_to_numeric_variable,
+            resource_variable_names,
+            name_to_resource_variable,
+            less_is_better: vec![false, false, true, false],
         }
     }
 
@@ -219,36 +300,36 @@ mod tests {
 
     #[test]
     fn function_1d_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction1D::new(vec![10, 20, 30]);
         let expression =
             FunctionExpression::Function1D(&f, set_expression::ElementExpression::Constant(0));
-        assert_eq!(expression.eval(&state, &problem), 10);
+        assert_eq!(expression.eval(&state, &metadata), 10);
         let expression =
             FunctionExpression::Function1D(&f, set_expression::ElementExpression::Constant(1));
-        assert_eq!(expression.eval(&state, &problem), 20);
+        assert_eq!(expression.eval(&state, &metadata), 20);
         let expression =
             FunctionExpression::Function1D(&f, set_expression::ElementExpression::Constant(2));
-        assert_eq!(expression.eval(&state, &problem), 30);
+        assert_eq!(expression.eval(&state, &metadata), 30);
     }
 
     #[test]
     fn function_1d_sum_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction1D::new(vec![10, 20, 30]);
         let expression =
             FunctionExpression::Function1DSum(&f, set_expression::SetExpression::SetVariable(0));
-        assert_eq!(expression.eval(&state, &problem), 40);
+        assert_eq!(expression.eval(&state, &metadata), 40);
         let expression =
             FunctionExpression::Function1DSum(&f, set_expression::SetExpression::SetVariable(1));
-        assert_eq!(expression.eval(&state, &problem), 30);
+        assert_eq!(expression.eval(&state, &metadata), 30);
     }
 
     #[test]
     fn function_2d_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction2D::new(vec![
             vec![10, 20, 30],
@@ -260,12 +341,12 @@ mod tests {
             set_expression::ElementExpression::Constant(0),
             set_expression::ElementExpression::Constant(1),
         );
-        assert_eq!(expression.eval(&state, &problem), 20);
+        assert_eq!(expression.eval(&state, &metadata), 20);
     }
 
     #[test]
     fn function_2d_sum_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction2D::new(vec![
             vec![10, 20, 30],
@@ -277,12 +358,12 @@ mod tests {
             set_expression::SetExpression::SetVariable(0),
             set_expression::SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &problem), 180);
+        assert_eq!(expression.eval(&state, &metadata), 180);
     }
 
     #[test]
     fn function_2d_sum_x_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction2D::new(vec![
             vec![10, 20, 30],
@@ -294,12 +375,12 @@ mod tests {
             set_expression::SetExpression::SetVariable(0),
             set_expression::ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &problem), 80);
+        assert_eq!(expression.eval(&state, &metadata), 80);
     }
 
     #[test]
     fn function_2d_sum_y_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction2D::new(vec![
             vec![10, 20, 30],
@@ -311,12 +392,12 @@ mod tests {
             set_expression::ElementExpression::Constant(0),
             set_expression::SetExpression::SetVariable(0),
         );
-        assert_eq!(expression.eval(&state, &problem), 40);
+        assert_eq!(expression.eval(&state, &metadata), 40);
     }
 
     #[test]
     fn function_3d_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -329,12 +410,12 @@ mod tests {
             set_expression::ElementExpression::Constant(1),
             set_expression::ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &problem), 60);
+        assert_eq!(expression.eval(&state, &metadata), 60);
     }
 
     #[test]
     fn function_3d_sum_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -347,12 +428,12 @@ mod tests {
             set_expression::SetExpression::SetVariable(1),
             set_expression::SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &problem), 240);
+        assert_eq!(expression.eval(&state, &metadata), 240);
     }
 
     #[test]
     fn function_3d_sum_x_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -365,12 +446,12 @@ mod tests {
             set_expression::ElementExpression::Constant(1),
             set_expression::ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &problem), 120);
+        assert_eq!(expression.eval(&state, &metadata), 120);
     }
 
     #[test]
     fn function_3d_sum_y_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -383,12 +464,12 @@ mod tests {
             set_expression::SetExpression::SetVariable(0),
             set_expression::ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &problem), 120);
+        assert_eq!(expression.eval(&state, &metadata), 120);
     }
 
     #[test]
     fn function_3d_sum_z_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -402,12 +483,12 @@ mod tests {
             set_expression::ElementExpression::Constant(2),
             set_expression::SetExpression::SetVariable(0),
         );
-        assert_eq!(expression.eval(&state, &problem), 160);
+        assert_eq!(expression.eval(&state, &metadata), 160);
     }
 
     #[test]
     fn function_3d_sum_xy_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -420,12 +501,12 @@ mod tests {
             set_expression::SetExpression::SetVariable(1),
             set_expression::ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &problem), 180);
+        assert_eq!(expression.eval(&state, &metadata), 180);
     }
 
     #[test]
     fn function_3d_sum_xz_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -438,12 +519,12 @@ mod tests {
             set_expression::ElementExpression::Constant(2),
             set_expression::SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &problem), 300);
+        assert_eq!(expression.eval(&state, &metadata), 300);
     }
 
     #[test]
     fn function_3d_sum_yz_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let f = numeric_function::NumericFunction3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -456,12 +537,12 @@ mod tests {
             set_expression::SetExpression::SetVariable(0),
             set_expression::SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &problem), 180);
+        assert_eq!(expression.eval(&state, &metadata), 180);
     }
 
     #[test]
     fn function_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let mut map = HashMap::<Vec<variable::ElementVariable>, variable::IntegerVariable>::new();
         let key = vec![0, 1, 0, 0];
@@ -482,7 +563,7 @@ mod tests {
                 set_expression::ElementExpression::Constant(0),
             ],
         );
-        assert_eq!(expression.eval(&state, &problem), 100);
+        assert_eq!(expression.eval(&state, &metadata), 100);
         let expression = FunctionExpression::Function(
             &f,
             vec![
@@ -492,32 +573,32 @@ mod tests {
                 set_expression::ElementExpression::Constant(1),
             ],
         );
-        assert_eq!(expression.eval(&state, &problem), 200);
-        let expression = FunctionExpression::Function(
-            &f,
-            vec![
-                set_expression::ElementExpression::Constant(0),
-                set_expression::ElementExpression::Constant(1),
-                set_expression::ElementExpression::Constant(2),
-                set_expression::ElementExpression::Constant(0),
-            ],
-        );
-        assert_eq!(expression.eval(&state, &problem), 300);
+        assert_eq!(expression.eval(&state, &metadata), 200);
         let expression = FunctionExpression::Function(
             &f,
             vec![
                 set_expression::ElementExpression::Constant(0),
                 set_expression::ElementExpression::Constant(1),
                 set_expression::ElementExpression::Constant(2),
+                set_expression::ElementExpression::Constant(0),
+            ],
+        );
+        assert_eq!(expression.eval(&state, &metadata), 300);
+        let expression = FunctionExpression::Function(
+            &f,
+            vec![
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(1),
+                set_expression::ElementExpression::Constant(2),
                 set_expression::ElementExpression::Constant(1),
             ],
         );
-        assert_eq!(expression.eval(&state, &problem), 400);
+        assert_eq!(expression.eval(&state, &metadata), 400);
     }
 
     #[test]
     fn function_sum_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let mut map = HashMap::<Vec<variable::ElementVariable>, variable::IntegerVariable>::new();
         let key = vec![0, 1, 0, 0];
@@ -546,6 +627,6 @@ mod tests {
                 ),
             ],
         );
-        assert_eq!(expression.eval(&state, &problem), 1000);
+        assert_eq!(expression.eval(&state, &metadata), 1000);
     }
 }

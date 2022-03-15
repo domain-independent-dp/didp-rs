@@ -3,7 +3,6 @@ use super::set_expression;
 use std::boxed::Box;
 use std::cmp;
 
-use crate::problem;
 use crate::state;
 use crate::variable;
 
@@ -33,15 +32,15 @@ pub enum NumericOperator {
 }
 
 impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
-    pub fn eval(&self, state: &state::State<T>, problem: &problem::Problem) -> T {
+    pub fn eval(&self, state: &state::State<T>, metadata: &state::StateMetadata) -> T {
         match self {
             NumericExpression::Constant(x) => *x,
             NumericExpression::Variable(i) => state.signature_variables.numeric_variables[*i],
             NumericExpression::ResourceVariable(i) => state.resource_variables[*i],
             NumericExpression::Cost => state.cost,
             NumericExpression::NumericOperation(op, a, b) => {
-                let a = a.eval(state, problem);
-                let b = b.eval(state, problem);
+                let a = a.eval(state, metadata);
+                let b = b.eval(state, metadata);
                 match op {
                     NumericOperator::Add => a + b,
                     NumericOperator::Subtract => a - b,
@@ -52,9 +51,9 @@ impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
                 }
             }
             NumericExpression::Cardinality(set) => {
-                T::from(set.eval(state, problem).count_ones(..)).unwrap()
+                T::from(set.eval(state, metadata).count_ones(..)).unwrap()
             }
-            NumericExpression::Function(f) => f.eval(state, &problem),
+            NumericExpression::Function(f) => f.eval(state, &metadata),
         }
     }
 }
@@ -63,13 +62,96 @@ impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
 mod tests {
     use super::*;
     use crate::state;
+    use std::collections::HashMap;
     use std::rc::Rc;
 
-    fn generate_problem() -> problem::Problem {
-        problem::Problem {
-            set_variable_to_max_size: vec![3],
-            permutation_variable_to_max_length: vec![3],
-            element_to_set: vec![0],
+    fn generate_metadata() -> state::StateMetadata {
+        let object_names = vec!["object".to_string()];
+        let object_numbers = vec![10];
+        let mut name_to_object = HashMap::new();
+        name_to_object.insert("object".to_string(), 0);
+
+        let set_variable_names = vec![
+            "s0".to_string(),
+            "s1".to_string(),
+            "s2".to_string(),
+            "s3".to_string(),
+        ];
+        let mut name_to_set_variable = HashMap::new();
+        name_to_set_variable.insert("s0".to_string(), 0);
+        name_to_set_variable.insert("s1".to_string(), 1);
+        name_to_set_variable.insert("s2".to_string(), 2);
+        name_to_set_variable.insert("s3".to_string(), 3);
+        let set_variable_to_object = vec![0, 0, 0, 0];
+
+        let permutation_variable_names = vec![
+            "p0".to_string(),
+            "p1".to_string(),
+            "p2".to_string(),
+            "p3".to_string(),
+        ];
+        let mut name_to_permutation_variable = HashMap::new();
+        name_to_permutation_variable.insert("p0".to_string(), 0);
+        name_to_permutation_variable.insert("p1".to_string(), 1);
+        name_to_permutation_variable.insert("p2".to_string(), 2);
+        name_to_permutation_variable.insert("p3".to_string(), 3);
+        let permutation_variable_to_object = vec![0, 0, 0, 0];
+
+        let element_variable_names = vec![
+            "e0".to_string(),
+            "e1".to_string(),
+            "e2".to_string(),
+            "e3".to_string(),
+        ];
+        let mut name_to_element_variable = HashMap::new();
+        name_to_element_variable.insert("e0".to_string(), 0);
+        name_to_element_variable.insert("e1".to_string(), 1);
+        name_to_element_variable.insert("e2".to_string(), 2);
+        name_to_element_variable.insert("e3".to_string(), 3);
+        let element_variable_to_object = vec![0, 0, 0, 0];
+
+        let numeric_variable_names = vec![
+            "n0".to_string(),
+            "n1".to_string(),
+            "n2".to_string(),
+            "n3".to_string(),
+        ];
+        let mut name_to_numeric_variable = HashMap::new();
+        name_to_numeric_variable.insert("n0".to_string(), 0);
+        name_to_numeric_variable.insert("n1".to_string(), 1);
+        name_to_numeric_variable.insert("n2".to_string(), 2);
+        name_to_numeric_variable.insert("n3".to_string(), 3);
+
+        let resource_variable_names = vec![
+            "r0".to_string(),
+            "r1".to_string(),
+            "r2".to_string(),
+            "r3".to_string(),
+        ];
+        let mut name_to_resource_variable = HashMap::new();
+        name_to_resource_variable.insert("r0".to_string(), 0);
+        name_to_resource_variable.insert("r1".to_string(), 1);
+        name_to_resource_variable.insert("r2".to_string(), 2);
+        name_to_resource_variable.insert("r3".to_string(), 3);
+
+        state::StateMetadata {
+            object_names,
+            name_to_object,
+            object_numbers,
+            set_variable_names,
+            name_to_set_variable,
+            set_variable_to_object,
+            permutation_variable_names,
+            name_to_permutation_variable,
+            permutation_variable_to_object,
+            element_variable_names,
+            name_to_element_variable,
+            element_variable_to_object,
+            numeric_variable_names,
+            name_to_numeric_variable,
+            resource_variable_names,
+            name_to_resource_variable,
+            less_is_better: vec![false, false, true, false],
         }
     }
 
@@ -95,47 +177,47 @@ mod tests {
 
     #[test]
     fn number_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression = NumericExpression::Constant(2);
-        assert_eq!(expression.eval(&state, &problem), 2);
+        assert_eq!(expression.eval(&state, &metadata), 2);
     }
 
     #[test]
     fn numeric_variable_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression = NumericExpression::Variable(0);
-        assert_eq!(expression.eval(&state, &problem), 1);
+        assert_eq!(expression.eval(&state, &metadata), 1);
         let expression = NumericExpression::Variable(1);
-        assert_eq!(expression.eval(&state, &problem), 2);
+        assert_eq!(expression.eval(&state, &metadata), 2);
         let expression = NumericExpression::Variable(2);
-        assert_eq!(expression.eval(&state, &problem), 3);
+        assert_eq!(expression.eval(&state, &metadata), 3);
     }
 
     #[test]
     fn resource_variable_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression = NumericExpression::ResourceVariable(0);
-        assert_eq!(expression.eval(&state, &problem), 4);
+        assert_eq!(expression.eval(&state, &metadata), 4);
         let expression = NumericExpression::ResourceVariable(1);
-        assert_eq!(expression.eval(&state, &problem), 5);
+        assert_eq!(expression.eval(&state, &metadata), 5);
         let expression = NumericExpression::ResourceVariable(2);
-        assert_eq!(expression.eval(&state, &problem), 6);
+        assert_eq!(expression.eval(&state, &metadata), 6);
     }
 
     #[test]
     fn cost_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> = NumericExpression::Cost {};
-        assert_eq!(expression.eval(&state, &problem), 0);
+        assert_eq!(expression.eval(&state, &metadata), 0);
     }
 
     #[test]
     fn add_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -143,12 +225,12 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &problem), 5);
+        assert_eq!(expression.eval(&state, &metadata), 5);
     }
 
     #[test]
     fn subtract_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -156,12 +238,12 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &problem), 1);
+        assert_eq!(expression.eval(&state, &metadata), 1);
     }
 
     #[test]
     fn multiply_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -169,12 +251,12 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &problem), 6);
+        assert_eq!(expression.eval(&state, &metadata), 6);
     }
 
     #[test]
     fn divide_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -182,12 +264,12 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &problem), 1);
+        assert_eq!(expression.eval(&state, &metadata), 1);
     }
 
     #[test]
     fn max_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -195,12 +277,12 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &problem), 3);
+        assert_eq!(expression.eval(&state, &metadata), 3);
     }
 
     #[test]
     fn min_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -208,18 +290,18 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &problem), 2);
+        assert_eq!(expression.eval(&state, &metadata), 2);
     }
 
     #[test]
     fn cardinality_eval() {
-        let problem = generate_problem();
+        let metadata = generate_metadata();
         let state = generate_state();
         let expression =
             NumericExpression::Cardinality(set_expression::SetExpression::SetVariable(0));
-        assert_eq!(expression.eval(&state, &problem), 2);
+        assert_eq!(expression.eval(&state, &metadata), 2);
         let expression =
             NumericExpression::Cardinality(set_expression::SetExpression::SetVariable(1));
-        assert_eq!(expression.eval(&state, &problem), 2);
+        assert_eq!(expression.eval(&state, &metadata), 2);
     }
 }
