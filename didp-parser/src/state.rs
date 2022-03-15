@@ -74,6 +74,16 @@ impl<T: variable::Numeric> State<T> {
             let value = yaml_util::get_numeric_from_map(map, name)?;
             resource_variables.push(value);
         }
+        let stage = if let Some(value) = map.get(&Yaml::String("stage".to_string())) {
+            yaml_util::get_usize(value)?
+        } else {
+            0
+        };
+        let cost = if let Some(value) = map.get(&Yaml::String("cost".to_string())) {
+            yaml_util::get_numeric(value)?
+        } else {
+            T::zero()
+        };
         Ok(State {
             signature_variables: Rc::new(SignatureVariables {
                 set_variables,
@@ -82,8 +92,8 @@ impl<T: variable::Numeric> State<T> {
                 numeric_variables,
             }),
             resource_variables,
-            stage: 0,
-            cost: T::zero(),
+            stage,
+            cost,
         })
     }
 }
