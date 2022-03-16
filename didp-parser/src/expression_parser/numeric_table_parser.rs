@@ -9,13 +9,15 @@ use std::collections;
 use std::fmt;
 use std::str;
 
+type NumericTableParsingResult<'a, T> = Option<(NumericTableExpression<T>, &'a [String])>;
+
 pub fn parse_expression<'a, 'b, 'c, T: variable::Numeric>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     registry: &'b table_registry::TableRegistry<T>,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<Option<(NumericTableExpression, &'a [String])>, ParseErr>
+) -> Result<NumericTableParsingResult<'a, T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
@@ -37,12 +39,12 @@ where
     }
 }
 
-fn parse_table_1d<'a, 'b, 'c>(
+fn parse_table_1d<'a, 'b, 'c, T: variable::Numeric>(
     i: usize,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(NumericTableExpression, &'a [String]), ParseErr> {
+) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
     let (x, rest) = set_parser::parse_argument(tokens, metadata, parameters)?;
     let rest = util::parse_closing(rest)?;
     match x {
@@ -51,12 +53,12 @@ fn parse_table_1d<'a, 'b, 'c>(
     }
 }
 
-fn parse_table_2d<'a, 'b, 'c>(
+fn parse_table_2d<'a, 'b, 'c, T: variable::Numeric>(
     i: usize,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(NumericTableExpression, &'a [String]), ParseErr> {
+) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
     let (x, rest) = set_parser::parse_argument(tokens, metadata, parameters)?;
     let (y, rest) = set_parser::parse_argument(rest, metadata, parameters)?;
     let rest = util::parse_closing(rest)?;
@@ -76,12 +78,12 @@ fn parse_table_2d<'a, 'b, 'c>(
     }
 }
 
-fn parse_table_3d<'a, 'b, 'c>(
+fn parse_table_3d<'a, 'b, 'c, T: variable::Numeric>(
     i: usize,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(NumericTableExpression, &'a [String]), ParseErr> {
+) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
     let (x, rest) = set_parser::parse_argument(tokens, metadata, parameters)?;
     let (y, rest) = set_parser::parse_argument(rest, metadata, parameters)?;
     let (z, rest) = set_parser::parse_argument(rest, metadata, parameters)?;
@@ -128,12 +130,12 @@ fn parse_table_3d<'a, 'b, 'c>(
     }
 }
 
-fn parse_table<'a, 'b, 'c>(
+fn parse_table<'a, 'b, 'c, T: variable::Numeric>(
     i: usize,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(NumericTableExpression, &'a [String]), ParseErr> {
+) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
     let mut args = Vec::new();
     let mut xs = tokens;
     loop {

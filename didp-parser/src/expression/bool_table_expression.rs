@@ -3,8 +3,9 @@ use crate::state;
 use crate::table_registry;
 use crate::variable;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BoolTableExpression {
+    Constant(bool),
     Table1D(usize, set_expression::ElementExpression),
     Table2D(
         usize,
@@ -28,18 +29,52 @@ impl BoolTableExpression {
     ) -> bool {
         let tables = &registry.bool_tables;
         match self {
-            BoolTableExpression::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(state)),
-            BoolTableExpression::Table2D(i, x, y) => {
-                tables.tables_2d[*i].eval(x.eval(state), y.eval(state))
-            }
-            BoolTableExpression::Table3D(i, x, y, z) => {
+            Self::Constant(value) => *value,
+            Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(state)),
+            Self::Table2D(i, x, y) => tables.tables_2d[*i].eval(x.eval(state), y.eval(state)),
+            Self::Table3D(i, x, y, z) => {
                 tables.tables_3d[*i].eval(x.eval(state), y.eval(state), z.eval(state))
             }
-            BoolTableExpression::Table(i, args) => {
+            Self::Table(i, args) => {
                 let args: Vec<variable::ElementVariable> =
                     args.iter().map(|x| x.eval(state)).collect();
                 tables.tables[*i].eval(&args)
             }
+        }
+    }
+
+    pub fn simplify<T: variable::Numeric>(
+        &self,
+        registry: &table_registry::TableRegistry<T>,
+    ) -> BoolTableExpression {
+        match self {
+            Self::Table1D(i, set_expression::ElementExpression::Constant(x)) => {
+                Self::Constant(registry.bool_tables.tables_1d[*i].eval(*x))
+            }
+            Self::Table2D(
+                i,
+                set_expression::ElementExpression::Constant(x),
+                set_expression::ElementExpression::Constant(y),
+            ) => Self::Constant(registry.bool_tables.tables_2d[*i].eval(*x, *y)),
+            Self::Table3D(
+                i,
+                set_expression::ElementExpression::Constant(x),
+                set_expression::ElementExpression::Constant(y),
+                set_expression::ElementExpression::Constant(z),
+            ) => Self::Constant(registry.bool_tables.tables_3d[*i].eval(*x, *y, *z)),
+            Self::Table(i, args) => {
+                let mut simplified_args = Vec::with_capacity(args.len());
+                for arg in args {
+                    match arg {
+                        set_expression::ElementExpression::Constant(arg) => {
+                            simplified_args.push(*arg)
+                        }
+                        _ => return self.clone(),
+                    }
+                }
+                Self::Constant(registry.bool_tables.tables[*i].eval(&simplified_args))
+            }
+            _ => self.clone(),
         }
     }
 }
@@ -116,6 +151,18 @@ mod tests {
             stage: 0,
             cost: 0,
         }
+    }
+
+    #[test]
+    fn constant_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+
+        let expression = BoolTableExpression::Constant(true);
+        assert!(expression.eval(&state, &registry));
+
+        let expression = BoolTableExpression::Constant(false);
+        assert!(!expression.eval(&state, &registry));
     }
 
     #[test]
@@ -202,5 +249,201 @@ mod tests {
             ],
         );
         assert!(!expression.eval(&state, &registry));
+    }
+
+    #[test]
+    fn constant_simplify() {
+        let registry = generate_registry();
+        let expression = BoolTableExpression::Constant(true);
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Constant(true)
+        ));
+    }
+
+    #[test]
+    fn table_1d_simplify() {
+        let registry = generate_registry();
+
+        let expression =
+            BoolTableExpression::Table1D(0, set_expression::ElementExpression::Constant(0));
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Constant(true)
+        ));
+
+        let expression =
+            BoolTableExpression::Table1D(0, set_expression::ElementExpression::Constant(1));
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Constant(false)
+        ));
+
+        let expression =
+            BoolTableExpression::Table1D(0, set_expression::ElementExpression::Variable(0));
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Table1D(0, set_expression::ElementExpression::Variable(0))
+        ));
+    }
+
+    #[test]
+    fn table_2d_simplify() {
+        let registry = generate_registry();
+
+        let expression = BoolTableExpression::Table2D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Constant(true)
+        ));
+
+        let expression = BoolTableExpression::Table2D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Constant(false)
+        ));
+
+        let expression = BoolTableExpression::Table2D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Table2D(
+                0,
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Variable(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_3d_simplify() {
+        let registry = generate_registry();
+
+        let expression = BoolTableExpression::Table3D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Constant(true)
+        ));
+
+        let expression = BoolTableExpression::Table3D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Constant(false)
+        ));
+
+        let expression = BoolTableExpression::Table3D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Table3D(
+                0,
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Variable(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_simplify() {
+        let registry = generate_registry();
+
+        let expression = BoolTableExpression::Table(
+            0,
+            vec![
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+            ],
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Constant(true)
+        ));
+
+        let expression = BoolTableExpression::Table(
+            0,
+            vec![
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(1),
+            ],
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Constant(false)
+        ));
+
+        let expression = BoolTableExpression::Table(
+            0,
+            vec![
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(2),
+            ],
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            BoolTableExpression::Constant(false)
+        ));
+
+        let expression = BoolTableExpression::Table(
+            0,
+            vec![
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Variable(0),
+            ],
+        );
+        let simplified = expression.simplify(&registry);
+        assert!(matches!(simplified, BoolTableExpression::Table(0, _)));
+        if let BoolTableExpression::Table(_, args) = simplified {
+            assert_eq!(args.len(), 4);
+            assert!(matches!(
+                args[0],
+                set_expression::ElementExpression::Constant(0)
+            ));
+            assert!(matches!(
+                args[1],
+                set_expression::ElementExpression::Constant(0)
+            ));
+            assert!(matches!(
+                args[2],
+                set_expression::ElementExpression::Constant(0)
+            ));
+            assert!(matches!(
+                args[3],
+                set_expression::ElementExpression::Variable(0)
+            ));
+        }
     }
 }

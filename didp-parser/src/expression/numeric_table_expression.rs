@@ -5,8 +5,9 @@ use crate::table_registry;
 use crate::variable;
 use std::iter;
 
-#[derive(Debug)]
-pub enum NumericTableExpression {
+#[derive(Debug, Clone)]
+pub enum NumericTableExpression<T: variable::Numeric> {
+    Constant(T),
     Table1D(usize, set_expression::ElementExpression),
     Table1DSum(usize, set_expression::SetExpression),
     Table2D(
@@ -81,8 +82,8 @@ pub enum NumericTableExpression {
     TableSum(usize, Vec<set_expression::ArgumentExpression>),
 }
 
-impl NumericTableExpression {
-    pub fn eval<T: variable::Numeric>(
+impl<T: variable::Numeric> NumericTableExpression<T> {
+    pub fn eval(
         &self,
         state: &state::State<T>,
         metadata: &state::StateMetadata,
@@ -90,6 +91,7 @@ impl NumericTableExpression {
     ) -> T {
         let tables = &registry.numeric_tables;
         match self {
+            Self::Constant(value) => *value,
             Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(&state)),
             Self::Table1DSum(i, x) => tables.tables_1d[*i].sum(&x.eval(&state, metadata)),
             Self::Table2D(i, x, y) => tables.tables_2d[*i].eval(x.eval(&state), y.eval(&state)),
@@ -146,6 +148,55 @@ impl NumericTableExpression {
                 tables.tables[*i].eval(&args)
             }
             Self::TableSum(i, args) => sum_table(&tables.tables[*i], args, &state, metadata),
+        }
+    }
+
+    pub fn simplify(
+        &self,
+        registry: &table_registry::TableRegistry<T>,
+    ) -> NumericTableExpression<T> {
+        match self {
+            Self::Table1D(i, set_expression::ElementExpression::Constant(x)) => {
+                Self::Constant(registry.numeric_tables.tables_1d[*i].eval(*x))
+            }
+            Self::Table2D(
+                i,
+                set_expression::ElementExpression::Constant(x),
+                set_expression::ElementExpression::Constant(y),
+            ) => Self::Constant(registry.numeric_tables.tables_2d[*i].eval(*x, *y)),
+            Self::Table3D(
+                i,
+                set_expression::ElementExpression::Constant(x),
+                set_expression::ElementExpression::Constant(y),
+                set_expression::ElementExpression::Constant(z),
+            ) => Self::Constant(registry.numeric_tables.tables_3d[*i].eval(*x, *y, *z)),
+            Self::Table(i, args) => {
+                let mut simplified_args = Vec::with_capacity(args.len());
+                for arg in args {
+                    match arg {
+                        set_expression::ElementExpression::Constant(arg) => {
+                            simplified_args.push(*arg);
+                        }
+                        _ => return self.clone(),
+                    }
+                }
+                Self::Constant(registry.numeric_tables.tables[*i].eval(&simplified_args))
+            }
+            Self::TableSum(i, args) => {
+                let mut simplified_args = Vec::with_capacity(args.len());
+                for arg in args {
+                    match arg {
+                        set_expression::ArgumentExpression::Element(
+                            set_expression::ElementExpression::Constant(arg),
+                        ) => {
+                            simplified_args.push(*arg);
+                        }
+                        _ => return self.clone(),
+                    }
+                }
+                Self::Constant(registry.numeric_tables.tables[*i].eval(&simplified_args))
+            }
+            _ => self.clone(),
         }
     }
 }
@@ -356,6 +407,15 @@ mod tests {
             stage: 0,
             cost: 0,
         }
+    }
+
+    #[test]
+    fn constant_eval() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let state = generate_state();
+        let expression = NumericTableExpression::Constant(10);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 10);
     }
 
     #[test]
@@ -621,5 +681,434 @@ mod tests {
             ],
         );
         assert_eq!(expression.eval(&state, &metadata, &registry), 1000);
+    }
+
+    #[test]
+    fn constant_simplify() {
+        let registry = generate_registry();
+        let expression = NumericTableExpression::Constant(0);
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Constant(0)
+        ));
+    }
+
+    #[test]
+    fn table_1d_simplify() {
+        let registry = generate_registry();
+
+        let expression =
+            NumericTableExpression::Table1D(0, set_expression::ElementExpression::Constant(0));
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Constant(10)
+        ));
+
+        let expression =
+            NumericTableExpression::Table1D(0, set_expression::ElementExpression::Variable(0));
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table1D(0, set_expression::ElementExpression::Variable(0))
+        ));
+    }
+
+    #[test]
+    fn table_1d_sum_simplify() {
+        let registry = generate_registry();
+
+        let expression =
+            NumericTableExpression::Table1DSum(0, set_expression::SetExpression::SetVariable(0));
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table1DSum(0, set_expression::SetExpression::SetVariable(0),)
+        ));
+    }
+
+    #[test]
+    fn table_2d_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table2D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Constant(10)
+        ));
+
+        let expression = NumericTableExpression::Table2D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table2D(
+                0,
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Variable(0)
+            )
+        ));
+    }
+
+    #[test]
+    fn table_2d_sum_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table2DSum(
+            0,
+            set_expression::SetExpression::SetVariable(0),
+            set_expression::SetExpression::SetVariable(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table2DSum(
+                0,
+                set_expression::SetExpression::SetVariable(0),
+                set_expression::SetExpression::SetVariable(1),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_2d_sum_x_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table2DSumX(
+            0,
+            set_expression::SetExpression::SetVariable(0),
+            set_expression::ElementExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table2DSumX(
+                0,
+                set_expression::SetExpression::SetVariable(0),
+                set_expression::ElementExpression::Constant(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_2d_sum_y_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table2DSumY(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::SetExpression::SetVariable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table2DSumY(
+                0,
+                set_expression::ElementExpression::Constant(0),
+                set_expression::SetExpression::SetVariable(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_3d_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table3D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Constant(10)
+        ));
+
+        let expression = NumericTableExpression::Table3D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table3D(
+                0,
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Variable(0)
+            )
+        ));
+    }
+
+    #[test]
+    fn table_3d_sum_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table3DSum(
+            0,
+            set_expression::SetExpression::SetVariable(0),
+            set_expression::SetExpression::SetVariable(1),
+            set_expression::SetExpression::SetVariable(2),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table3DSum(
+                0,
+                set_expression::SetExpression::SetVariable(0),
+                set_expression::SetExpression::SetVariable(1),
+                set_expression::SetExpression::SetVariable(2),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_3d_sum_x_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table3DSumX(
+            0,
+            set_expression::SetExpression::SetVariable(0),
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table3DSumX(
+                0,
+                set_expression::SetExpression::SetVariable(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_3d_sum_y_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table3DSumY(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::SetExpression::SetVariable(0),
+            set_expression::ElementExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table3DSumY(
+                0,
+                set_expression::ElementExpression::Constant(0),
+                set_expression::SetExpression::SetVariable(0),
+                set_expression::ElementExpression::Constant(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_3d_sum_z_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table3DSumZ(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::ElementExpression::Constant(0),
+            set_expression::SetExpression::SetVariable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table3DSumZ(
+                0,
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::SetExpression::SetVariable(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_3d_sum_xy_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table3DSumXY(
+            0,
+            set_expression::SetExpression::SetVariable(0),
+            set_expression::SetExpression::SetVariable(0),
+            set_expression::ElementExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table3DSumXY(
+                0,
+                set_expression::SetExpression::SetVariable(0),
+                set_expression::SetExpression::SetVariable(0),
+                set_expression::ElementExpression::Constant(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_3d_sum_xz_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table3DSumXZ(
+            0,
+            set_expression::SetExpression::SetVariable(0),
+            set_expression::ElementExpression::Constant(0),
+            set_expression::SetExpression::SetVariable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table3DSumXZ(
+                0,
+                set_expression::SetExpression::SetVariable(0),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::SetExpression::SetVariable(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_3d_sum_yz_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table3DSumYZ(
+            0,
+            set_expression::ElementExpression::Constant(0),
+            set_expression::SetExpression::SetVariable(0),
+            set_expression::SetExpression::SetVariable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Table3DSumYZ(
+                0,
+                set_expression::ElementExpression::Constant(0),
+                set_expression::SetExpression::SetVariable(0),
+                set_expression::SetExpression::SetVariable(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn table_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table(
+            0,
+            vec![
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(1),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(0),
+            ],
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Constant(100)
+        ));
+
+        let expression = NumericTableExpression::Table(
+            0,
+            vec![
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Constant(1),
+                set_expression::ElementExpression::Constant(0),
+                set_expression::ElementExpression::Variable(0),
+            ],
+        );
+        let simplified = expression.simplify(&registry);
+        assert!(matches!(simplified, NumericTableExpression::Table(0, _)));
+        if let NumericTableExpression::Table(_, args) = simplified {
+            assert_eq!(args.len(), 4);
+            assert!(matches!(
+                args[0],
+                set_expression::ElementExpression::Constant(0)
+            ));
+            assert!(matches!(
+                args[1],
+                set_expression::ElementExpression::Constant(1)
+            ));
+            assert!(matches!(
+                args[2],
+                set_expression::ElementExpression::Constant(0)
+            ));
+            assert!(matches!(
+                args[3],
+                set_expression::ElementExpression::Variable(0)
+            ));
+        }
+    }
+    #[test]
+    fn table_sum_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::TableSum(
+            0,
+            vec![
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Constant(0),
+                ),
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Constant(1),
+                ),
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Constant(0),
+                ),
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Constant(0),
+                ),
+            ],
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            NumericTableExpression::Constant(100)
+        ));
+
+        let expression = NumericTableExpression::TableSum(
+            0,
+            vec![
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Constant(0),
+                ),
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Constant(1),
+                ),
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Constant(0),
+                ),
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Variable(0),
+                ),
+            ],
+        );
+        let simplified = expression.simplify(&registry);
+        assert!(matches!(simplified, NumericTableExpression::TableSum(0, _)));
+        if let NumericTableExpression::TableSum(_, args) = simplified {
+            assert_eq!(args.len(), 4);
+            assert!(matches!(
+                args[0],
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Constant(0)
+                )
+            ));
+            assert!(matches!(
+                args[1],
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Constant(1)
+                )
+            ));
+            assert!(matches!(
+                args[2],
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Constant(0)
+                )
+            ));
+            assert!(matches!(
+                args[3],
+                set_expression::ArgumentExpression::Element(
+                    set_expression::ElementExpression::Variable(0)
+                )
+            ));
+        }
     }
 }

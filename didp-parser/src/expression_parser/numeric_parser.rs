@@ -30,7 +30,7 @@ where
             if let Some((expression, rest)) =
                 numeric_table_parser::parse_expression(name, rest, metadata, registry, parameters)?
             {
-                Ok((NumericExpression::NumericTable(expression), rest))
+                Ok((NumericExpression::Table(expression), rest))
             } else {
                 parse_operation(name, rest, metadata, registry, parameters)
             }
@@ -309,11 +309,9 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
-            NumericExpression::NumericTable(NumericTableExpression::TableSum(_, _))
+            NumericExpression::Table(NumericTableExpression::TableSum(_, _))
         ));
-        if let NumericExpression::NumericTable(NumericTableExpression::TableSum(i, args)) =
-            expression
-        {
+        if let NumericExpression::Table(NumericTableExpression::TableSum(i, args)) = expression {
             assert_eq!(i, 0);
             assert_eq!(args.len(), 4);
             assert!(matches!(

@@ -36,8 +36,8 @@ where
                 parse_operation(name, rest, metadata, registry, parameters)
             }
         }
-        "true" => Ok((Condition::True, rest)),
-        "false" => Ok((Condition::False, rest)),
+        "true" => Ok((Condition::Constant(true), rest)),
+        "false" => Ok((Condition::Constant(false), rest)),
         _ => Err(ParseErr::new(format!("unexpected token: `{}`", token))),
     }
 }
@@ -316,23 +316,21 @@ mod tests {
     }
 
     #[test]
-    fn pare_true_ok() {
+    fn pare_constant_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["true", ")"].iter().map(|x| String::from(*x)).collect();
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
-    }
+        let (expression, _) = result.unwrap();
+        assert!(matches!(expression, Condition::Constant(true)));
 
-    #[test]
-    fn pare_false_ok() {
-        let metadata = generate_metadata();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
         let tokens: Vec<String> = ["false", ")"].iter().map(|x| String::from(*x)).collect();
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
+        let (expression, _) = result.unwrap();
+        assert!(matches!(expression, Condition::Constant(false)));
     }
 
     #[test]

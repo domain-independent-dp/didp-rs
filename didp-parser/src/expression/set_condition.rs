@@ -3,8 +3,9 @@ use super::set_expression::SetExpression;
 use crate::state;
 use crate::variable;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SetCondition {
+    Constant(bool),
     Eq(ElementExpression, ElementExpression),
     Ne(ElementExpression, ElementExpression),
     IsIn(ElementExpression, SetExpression),
@@ -19,30 +20,54 @@ impl SetCondition {
         metadata: &state::StateMetadata,
     ) -> bool {
         match self {
-            SetCondition::Eq(x, y) => {
+            Self::Constant(value) => *value,
+            Self::Eq(x, y) => {
                 let x = x.eval(state);
                 let y = y.eval(state);
                 x == y
             }
-            SetCondition::Ne(x, y) => {
+            Self::Ne(x, y) => {
                 let x = x.eval(state);
                 let y = y.eval(state);
                 x != y
             }
-            SetCondition::IsIn(e, s) => {
+            Self::IsIn(e, s) => {
                 let e = e.eval(state);
                 let s = s.eval(state, metadata);
                 s.contains(e)
             }
-            SetCondition::IsSubset(x, y) => {
+            Self::IsSubset(x, y) => {
                 let x = x.eval(state, metadata);
                 let y = y.eval(state, metadata);
                 x.is_subset(&y)
             }
-            SetCondition::IsEmpty(s) => {
+            Self::IsEmpty(s) => {
                 let s = s.eval(state, metadata);
                 s.count_ones(..) == 0
             }
+        }
+    }
+
+    pub fn simplify(&self) -> SetCondition {
+        match self {
+            Self::Eq(ElementExpression::Constant(x), ElementExpression::Constant(y)) => {
+                Self::Constant(x == y)
+            }
+            Self::Eq(ElementExpression::Variable(x), ElementExpression::Variable(y)) if x == y => {
+                Self::Constant(true)
+            }
+            Self::Ne(ElementExpression::Constant(x), ElementExpression::Constant(y)) => {
+                Self::Constant(x != y)
+            }
+            Self::Ne(ElementExpression::Variable(x), ElementExpression::Variable(y)) if x == y => {
+                Self::Constant(false)
+            }
+            Self::IsSubset(SetExpression::SetVariable(x), SetExpression::SetVariable(y))
+            | Self::IsSubset(
+                SetExpression::PermutationVariable(x),
+                SetExpression::PermutationVariable(y),
+            ) if x == y => Self::Constant(true),
+            _ => self.clone(),
         }
     }
 }
@@ -167,7 +192,19 @@ mod tests {
     }
 
     #[test]
-    fn element_eq() {
+    fn constant_eval() {
+        let metadata = generate_metadata();
+        let state = generate_state();
+
+        let expression = SetCondition::Constant(true);
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::Constant(false);
+        assert!(!expression.eval(&state, &metadata));
+    }
+
+    #[test]
+    fn eq_eval() {
         let metadata = generate_metadata();
         let state = generate_state();
 
@@ -197,7 +234,7 @@ mod tests {
     }
 
     #[test]
-    fn element_ne() {
+    fn ne_eval() {
         let metadata = generate_metadata();
         let state = generate_state();
 
@@ -227,7 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn element_in_set() {
+    fn is_in_eval() {
         let metadata = generate_metadata();
         let state = generate_state();
 
@@ -251,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn subset_of() {
+    fn is_subset_eval() {
         let metadata = generate_metadata();
         let state = generate_state();
 
@@ -285,7 +322,7 @@ mod tests {
     }
 
     #[test]
-    fn is_empty() {
+    fn is_empty_eval() {
         let metadata = generate_metadata();
         let state = generate_state();
 
@@ -294,5 +331,178 @@ mod tests {
 
         let expression = SetCondition::IsEmpty(SetExpression::SetVariable(3));
         assert!(expression.eval(&state, &metadata));
+    }
+
+    #[test]
+    fn constant_simplify() {
+        let expression = SetCondition::Constant(true);
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Constant(true)
+        ));
+
+        let expression = SetCondition::Constant(false);
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Constant(false)
+        ));
+    }
+
+    #[test]
+    fn eq_simplify() {
+        let expression = SetCondition::Eq(
+            ElementExpression::Constant(1),
+            ElementExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Constant(true)
+        ));
+
+        let expression = SetCondition::Eq(
+            ElementExpression::Constant(0),
+            ElementExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Constant(false)
+        ));
+
+        let expression = SetCondition::Eq(
+            ElementExpression::Variable(1),
+            ElementExpression::Variable(1),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Constant(true)
+        ));
+
+        let expression = SetCondition::Eq(
+            ElementExpression::Variable(0),
+            ElementExpression::Variable(1),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Eq(
+                ElementExpression::Variable(0),
+                ElementExpression::Variable(1),
+            )
+        ));
+
+        let expression = SetCondition::Eq(
+            ElementExpression::Constant(1),
+            ElementExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Eq(
+                ElementExpression::Constant(1),
+                ElementExpression::Variable(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn ne_simplify() {
+        let expression = SetCondition::Ne(
+            ElementExpression::Constant(1),
+            ElementExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Constant(false)
+        ));
+
+        let expression = SetCondition::Ne(
+            ElementExpression::Constant(0),
+            ElementExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Constant(true)
+        ));
+
+        let expression = SetCondition::Eq(
+            ElementExpression::Variable(1),
+            ElementExpression::Variable(1),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Constant(true)
+        ));
+
+        let expression = SetCondition::Eq(
+            ElementExpression::Variable(0),
+            ElementExpression::Variable(1),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Eq(
+                ElementExpression::Variable(0),
+                ElementExpression::Variable(1),
+            )
+        ));
+
+        let expression = SetCondition::Eq(
+            ElementExpression::Constant(1),
+            ElementExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Eq(
+                ElementExpression::Constant(1),
+                ElementExpression::Variable(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn is_in_simplify() {
+        let expression = SetCondition::IsIn(
+            ElementExpression::Constant(0),
+            SetExpression::SetVariable(0),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::IsIn(
+                ElementExpression::Constant(0),
+                SetExpression::SetVariable(0),
+            )
+        ));
+    }
+
+    #[test]
+    fn is_subset_simplify() {
+        let expression =
+            SetCondition::IsSubset(SetExpression::SetVariable(0), SetExpression::SetVariable(0));
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Constant(true)
+        ));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::PermutationVariable(0),
+            SetExpression::PermutationVariable(0),
+        );
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::Constant(true)
+        ));
+
+        let expression =
+            SetCondition::IsSubset(SetExpression::SetVariable(0), SetExpression::SetVariable(1));
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::IsSubset(SetExpression::SetVariable(0), SetExpression::SetVariable(1))
+        ));
+    }
+
+    #[test]
+    fn is_empty_simplify() {
+        let expression = SetCondition::IsEmpty(SetExpression::SetVariable(0));
+        assert!(matches!(
+            expression.simplify(),
+            SetCondition::IsEmpty(SetExpression::SetVariable(0))
+        ));
     }
 }

@@ -5,10 +5,9 @@ use crate::state;
 use crate::table_registry;
 use crate::variable;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Condition<T: variable::Numeric> {
-    True,
-    False,
+    Constant(bool),
     Not(Box<Condition<T>>),
     And(Box<Condition<T>>, Box<Condition<T>>),
     Or(Box<Condition<T>>, Box<Condition<T>>),
@@ -21,7 +20,7 @@ pub enum Condition<T: variable::Numeric> {
     Table(bool_table_expression::BoolTableExpression),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ComparisonOperator {
     Eq,
     Ne,
@@ -39,22 +38,71 @@ impl<T: variable::Numeric> Condition<T> {
         registry: &table_registry::TableRegistry<T>,
     ) -> bool {
         match self {
-            Condition::True => true,
-            Condition::False => false,
-            Condition::Not(c) => !c.eval(state, metadata, registry),
-            Condition::And(x, y) => {
+            Self::Constant(value) => *value,
+            Self::Not(c) => !c.eval(state, metadata, registry),
+            Self::And(x, y) => {
                 x.eval(state, metadata, registry) && y.eval(state, metadata, registry)
             }
-            Condition::Or(x, y) => {
+            Self::Or(x, y) => {
                 x.eval(state, metadata, registry) || y.eval(state, metadata, registry)
             }
-            Condition::Comparison(op, x, y) => Self::eval_comparison(
+            Self::Comparison(op, x, y) => Self::eval_comparison(
                 op,
                 x.eval(state, metadata, registry),
                 y.eval(state, metadata, registry),
             ),
-            Condition::Set(c) => c.eval(state, metadata),
-            Condition::Table(c) => c.eval(state, registry),
+            Self::Set(c) => c.eval(state, metadata),
+            Self::Table(c) => c.eval(state, registry),
+        }
+    }
+
+    pub fn simplify(&self, registry: &table_registry::TableRegistry<T>) -> Condition<T> {
+        match self {
+            Self::Not(c) => match c.simplify(registry) {
+                Self::Constant(value) => Self::Constant(!value),
+                c => Self::Not(Box::new(c)),
+            },
+            Self::And(x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (x, Self::Constant(true)) => x,
+                (Self::Constant(true), y) => y,
+                (Self::Constant(false), _) | (_, Self::Constant(false)) => Self::Constant(false),
+                (x, y) => Self::And(Box::new(x), Box::new(y)),
+            },
+            Self::Or(x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (x, Self::Constant(false)) => x,
+                (Self::Constant(false), y) => y,
+                (Self::Constant(true), _) | (_, Self::Constant(true)) => Self::Constant(true),
+                (x, y) => Self::And(Box::new(x), Box::new(y)),
+            },
+            Self::Comparison(op, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (NumericExpression::Constant(x), NumericExpression::Constant(y)) => {
+                    Self::Constant(Self::eval_comparison(op, x, y))
+                }
+                (NumericExpression::Variable(x), NumericExpression::Variable(y))
+                | (
+                    NumericExpression::ResourceVariable(x),
+                    NumericExpression::ResourceVariable(y),
+                ) if x == y => match op {
+                    ComparisonOperator::Eq | ComparisonOperator::Ge | ComparisonOperator::Le => {
+                        Self::Constant(true)
+                    }
+                    ComparisonOperator::Ne | ComparisonOperator::Gt | ComparisonOperator::Lt => {
+                        Self::Constant(false)
+                    }
+                },
+                (x, y) => Self::Comparison(op.clone(), x, y),
+            },
+            Self::Set(condition) => match condition.simplify() {
+                set_condition::SetCondition::Constant(value) => Self::Constant(value),
+                condition => Self::Set(condition),
+            },
+            Self::Table(condition) => match condition.simplify(registry) {
+                bool_table_expression::BoolTableExpression::Constant(value) => {
+                    Self::Constant(value)
+                }
+                condition => Self::Table(condition),
+            },
+            _ => self.clone(),
         }
     }
 
@@ -235,27 +283,19 @@ mod tests {
     }
 
     #[test]
-    fn eval_true() {
+    fn constant_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
 
-        let expression = Condition::True;
+        let expression = Condition::Constant(true);
         assert!(expression.eval(&state, &metadata, &registry));
-    }
-
-    #[test]
-    fn eval_false() {
-        let metadata = generate_metadata();
-        let registry = generate_registry();
-        let state = generate_state();
-
-        let expression = Condition::False;
+        let expression = Condition::Constant(false);
         assert!(!expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
-    fn eval_eq() {
+    fn eq_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
@@ -276,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_neq() {
+    fn ne_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
@@ -297,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_ge() {
+    fn ge_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
@@ -325,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_gt() {
+    fn gt_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
@@ -353,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_le() {
+    fn le_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
@@ -381,7 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_lt() {
+    fn lt_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
@@ -409,7 +449,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_not() {
+    fn not_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
@@ -430,7 +470,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_and() {
+    fn and_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
@@ -476,7 +516,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_or() {
+    fn or_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
@@ -522,7 +562,7 @@ mod tests {
     }
 
     #[test]
-    fn eval_table() {
+    fn table_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
@@ -531,5 +571,747 @@ mod tests {
             set_expression::ElementExpression::Constant(0),
         ));
         assert!(expression.eval(&state, &metadata, &registry));
+    }
+
+    #[test]
+    fn set_eval() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let state = generate_state();
+        let expression = Condition::Set(set_condition::SetCondition::Eq(
+            set_expression::ElementExpression::Variable(0),
+            set_expression::ElementExpression::Constant(1),
+        ));
+        assert!(expression.eval(&state, &metadata, &registry));
+    }
+
+    #[test]
+    fn constant_simplify() {
+        let registry = generate_registry();
+
+        let expression = Condition::Constant(true);
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Constant(false);
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+    }
+
+    #[test]
+    fn eq_simplify() {
+        let registry = generate_registry();
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Eq,
+                NumericExpression::Constant(0),
+                NumericExpression::Variable(0)
+            )
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Eq,
+                NumericExpression::Variable(0),
+                NumericExpression::Variable(1)
+            )
+        ));
+    }
+
+    #[test]
+    fn ne_simplify() {
+        let registry = generate_registry();
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Ne,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Ne,
+                NumericExpression::Constant(0),
+                NumericExpression::Variable(0)
+            )
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Ne,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Ne,
+                NumericExpression::Variable(0),
+                NumericExpression::Variable(1)
+            )
+        ));
+    }
+
+    #[test]
+    fn ge_simplify() {
+        let registry = generate_registry();
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(1),
+            NumericExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Ge,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Ge,
+                NumericExpression::Constant(0),
+                NumericExpression::Variable(0)
+            )
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Ge,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Ge,
+                NumericExpression::Variable(0),
+                NumericExpression::Variable(1)
+            )
+        ));
+    }
+
+    #[test]
+    fn gt_simplify() {
+        let registry = generate_registry();
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(1),
+            NumericExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Gt,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Gt,
+                NumericExpression::Constant(0),
+                NumericExpression::Variable(0)
+            )
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Gt,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Gt,
+                NumericExpression::Variable(0),
+                NumericExpression::Variable(1)
+            )
+        ));
+    }
+
+    #[test]
+    fn le_simplify() {
+        let registry = generate_registry();
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(1),
+            NumericExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Le,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Le,
+                NumericExpression::Constant(0),
+                NumericExpression::Variable(0)
+            )
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Le,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Le,
+                NumericExpression::Variable(0),
+                NumericExpression::Variable(1)
+            )
+        ));
+    }
+
+    #[test]
+    fn lt_simplify() {
+        let registry = generate_registry();
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(1),
+            NumericExpression::Constant(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Lt,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(0),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Lt,
+                NumericExpression::Constant(0),
+                NumericExpression::Variable(0)
+            )
+        ));
+
+        let expression = Condition::Comparison(
+            ComparisonOperator::Lt,
+            NumericExpression::Variable(0),
+            NumericExpression::Variable(1),
+        );
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Lt,
+                NumericExpression::Variable(0),
+                NumericExpression::Variable(1)
+            )
+        ));
+    }
+
+    #[test]
+    fn not_simplify() {
+        let registry = generate_registry();
+
+        let expression = Condition::Not(Box::new(Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        )));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let expression = Condition::Not(Box::new(Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        )));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Not(Box::new(Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(0),
+        )));
+        let simplified = expression.simplify(&registry);
+        assert!(matches!(simplified, Condition::Not(_)));
+        if let Condition::Not(simplified) = simplified {
+            assert!(matches!(
+                *simplified,
+                Condition::Comparison(
+                    ComparisonOperator::Eq,
+                    NumericExpression::Constant(0),
+                    NumericExpression::Variable(0),
+                )
+            ));
+        }
+    }
+
+    #[test]
+    fn and_simplify() {
+        let registry = generate_registry();
+
+        let x = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        let y = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        let expression = Condition::And(Box::new(x), Box::new(y));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let x = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        let y = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        let expression = Condition::And(Box::new(x), Box::new(y));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let x = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        let y = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        let expression = Condition::And(Box::new(x), Box::new(y));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let x = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(1),
+        );
+        let y = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        let expression = Condition::And(Box::new(x), Box::new(y));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Eq,
+                NumericExpression::Constant(0),
+                NumericExpression::Variable(1),
+            )
+        ));
+
+        let x = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(1),
+        );
+        let y = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(0),
+        );
+        let expression = Condition::And(Box::new(x), Box::new(y));
+        let simplified = expression.simplify(&registry);
+        assert!(matches!(simplified, Condition::And(_, _)));
+        if let Condition::And(x, y) = simplified {
+            assert!(matches!(
+                *x,
+                Condition::Comparison(
+                    ComparisonOperator::Eq,
+                    NumericExpression::Constant(0),
+                    NumericExpression::Variable(1),
+                )
+            ));
+            assert!(matches!(
+                *y,
+                Condition::Comparison(
+                    ComparisonOperator::Eq,
+                    NumericExpression::Constant(0),
+                    NumericExpression::Variable(0),
+                )
+            ));
+        }
+    }
+
+    #[test]
+    fn or_simplify() {
+        let registry = generate_registry();
+
+        let x = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        let y = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        let expression = Condition::Or(Box::new(x), Box::new(y));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let x = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        let y = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        let expression = Condition::Or(Box::new(x), Box::new(y));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let x = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        let y = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        let expression = Condition::Or(Box::new(x), Box::new(y));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(false)
+        ));
+
+        let x = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(1),
+        );
+        let y = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        let expression = Condition::Or(Box::new(x), Box::new(y));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Comparison(
+                ComparisonOperator::Eq,
+                NumericExpression::Constant(0),
+                NumericExpression::Variable(1),
+            )
+        ));
+
+        let x = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(1),
+        );
+        let y = Condition::Comparison(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Variable(0),
+        );
+        let expression = Condition::Or(Box::new(x), Box::new(y));
+        let simplified = expression.simplify(&registry);
+        assert!(matches!(simplified, Condition::And(_, _)));
+        if let Condition::Or(x, y) = simplified {
+            assert!(matches!(
+                *x,
+                Condition::Comparison(
+                    ComparisonOperator::Eq,
+                    NumericExpression::Constant(0),
+                    NumericExpression::Variable(1),
+                )
+            ));
+            assert!(matches!(
+                *y,
+                Condition::Comparison(
+                    ComparisonOperator::Eq,
+                    NumericExpression::Constant(0),
+                    NumericExpression::Variable(0),
+                )
+            ));
+        }
+    }
+
+    #[test]
+    fn table_simplify() {
+        let registry = generate_registry();
+
+        let expression = Condition::Table(bool_table_expression::BoolTableExpression::Table1D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+        ));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Constant(true)
+        ));
+
+        let expression = Condition::Table(bool_table_expression::BoolTableExpression::Table1D(
+            0,
+            set_expression::ElementExpression::Variable(0),
+        ));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Table(bool_table_expression::BoolTableExpression::Table1D(
+                0,
+                set_expression::ElementExpression::Variable(0),
+            ))
+        ));
+    }
+
+    #[test]
+    fn set_simplify() {
+        let registry = generate_registry();
+        let expression = Condition::Set(set_condition::SetCondition::Eq(
+            set_expression::ElementExpression::Variable(0),
+            set_expression::ElementExpression::Constant(1),
+        ));
+        assert!(matches!(
+            expression.simplify(&registry),
+            Condition::Set(set_condition::SetCondition::Eq(
+                set_expression::ElementExpression::Variable(0),
+                set_expression::ElementExpression::Constant(1),
+            ))
+        ));
     }
 }
