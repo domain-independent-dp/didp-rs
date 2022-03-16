@@ -187,7 +187,7 @@ impl StateMetadata {
     pub fn get_grounded_parameter_set_from_yaml(
         &self,
         value: &yaml_rust::Yaml,
-    ) -> Result<GroundedParameterTrpet, yaml_util::YamlContentErr> {
+    ) -> Result<GroundedParameterTriplet, yaml_util::YamlContentErr> {
         let map = yaml_util::get_map(value)?;
         let mut parameters_set: Vec<collections::HashMap<String, usize>> =
             Vec::with_capacity(map.len());
@@ -364,7 +364,7 @@ impl StateMetadata {
     }
 }
 
-type GroundedParameterTrpet = (
+type GroundedParameterTriplet = (
     Vec<collections::HashMap<String, usize>>,
     Vec<Vec<(usize, usize)>>,
     Vec<Vec<(usize, usize)>>,
