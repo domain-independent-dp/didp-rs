@@ -1,21 +1,33 @@
+use std::error;
+use std::fmt;
+
 #[derive(Debug)]
-pub enum ParseErr {
-    Reason(String),
+pub struct ParseErr(String);
+
+impl ParseErr {
+    pub fn new(message: String) -> ParseErr {
+        ParseErr(format!("Error in parsing expression: {}", message))
+    }
 }
 
 pub fn parse_closing(tokens: &[String]) -> Result<&[String], ParseErr> {
     let (token, rest) = tokens
         .split_first()
-        .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
+        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     if token != ")" {
-        Err(ParseErr::Reason(format!(
-            "unexpected {}, expected `)`",
-            token
-        )))
+        Err(ParseErr::new(format!("unexpected {}, expected `)`", token)))
     } else {
         Ok(rest)
     }
 }
+
+impl fmt::Display for ParseErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl error::Error for ParseErr {}
 
 #[cfg(test)]
 mod tests {

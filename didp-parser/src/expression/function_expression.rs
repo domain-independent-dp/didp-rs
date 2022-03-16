@@ -1,140 +1,150 @@
 use super::set_expression;
+use crate::function_registry;
 use crate::numeric_function;
 use crate::state;
 use crate::variable;
 use std::iter;
 
 #[derive(Debug)]
-pub enum FunctionExpression<'a, T: variable::Numeric> {
-    Function1D(
-        &'a numeric_function::NumericFunction1D<T>,
-        set_expression::ElementExpression,
-    ),
-    Function1DSum(
-        &'a numeric_function::NumericFunction1D<T>,
-        set_expression::SetExpression,
-    ),
+pub enum FunctionExpression {
+    Function1D(usize, set_expression::ElementExpression),
+    Function1DSum(usize, set_expression::SetExpression),
     Function2D(
-        &'a numeric_function::NumericFunction2D<T>,
+        usize,
         set_expression::ElementExpression,
         set_expression::ElementExpression,
     ),
     Function2DSum(
-        &'a numeric_function::NumericFunction2D<T>,
+        usize,
         set_expression::SetExpression,
         set_expression::SetExpression,
     ),
     Function2DSumX(
-        &'a numeric_function::NumericFunction2D<T>,
+        usize,
         set_expression::SetExpression,
         set_expression::ElementExpression,
     ),
     Function2DSumY(
-        &'a numeric_function::NumericFunction2D<T>,
+        usize,
         set_expression::ElementExpression,
         set_expression::SetExpression,
     ),
     Function3D(
-        &'a numeric_function::NumericFunction3D<T>,
+        usize,
         set_expression::ElementExpression,
         set_expression::ElementExpression,
         set_expression::ElementExpression,
     ),
     Function3DSum(
-        &'a numeric_function::NumericFunction3D<T>,
+        usize,
         set_expression::SetExpression,
         set_expression::SetExpression,
         set_expression::SetExpression,
     ),
     Function3DSumX(
-        &'a numeric_function::NumericFunction3D<T>,
+        usize,
         set_expression::SetExpression,
         set_expression::ElementExpression,
         set_expression::ElementExpression,
     ),
     Function3DSumY(
-        &'a numeric_function::NumericFunction3D<T>,
+        usize,
         set_expression::ElementExpression,
         set_expression::SetExpression,
         set_expression::ElementExpression,
     ),
     Function3DSumZ(
-        &'a numeric_function::NumericFunction3D<T>,
+        usize,
         set_expression::ElementExpression,
         set_expression::ElementExpression,
         set_expression::SetExpression,
     ),
     Function3DSumXY(
-        &'a numeric_function::NumericFunction3D<T>,
+        usize,
         set_expression::SetExpression,
         set_expression::SetExpression,
         set_expression::ElementExpression,
     ),
     Function3DSumXZ(
-        &'a numeric_function::NumericFunction3D<T>,
+        usize,
         set_expression::SetExpression,
         set_expression::ElementExpression,
         set_expression::SetExpression,
     ),
     Function3DSumYZ(
-        &'a numeric_function::NumericFunction3D<T>,
+        usize,
         set_expression::ElementExpression,
         set_expression::SetExpression,
         set_expression::SetExpression,
     ),
-    Function(
-        &'a numeric_function::NumericFunction<T>,
-        Vec<set_expression::ElementExpression>,
-    ),
-    FunctionSum(
-        &'a numeric_function::NumericFunction<T>,
-        Vec<set_expression::ArgumentExpression>,
-    ),
+    Function(usize, Vec<set_expression::ElementExpression>),
+    FunctionSum(usize, Vec<set_expression::ArgumentExpression>),
 }
 
-impl<'a, T: variable::Numeric> FunctionExpression<'a, T> {
-    pub fn eval(&self, state: &state::State<T>, metadata: &state::StateMetadata) -> T {
+impl FunctionExpression {
+    pub fn eval<T: variable::Numeric>(
+        &self,
+        state: &state::State<T>,
+        metadata: &state::StateMetadata,
+        registry: &function_registry::FunctionRegistry<T>,
+    ) -> T {
         match self {
-            Self::Function1D(f, x) => f.eval(x.eval(&state)),
-            Self::Function1DSum(f, x) => f.sum(&x.eval(&state, metadata)),
-            Self::Function2D(f, x, y) => f.eval(x.eval(&state), y.eval(&state)),
-            Self::Function2DSum(f, x, y) => {
-                f.sum(&x.eval(&state, metadata), &y.eval(&state, metadata))
+            Self::Function1D(i, x) => registry.functions_1d[*i].eval(x.eval(&state)),
+            Self::Function1DSum(i, x) => registry.functions_1d[*i].sum(&x.eval(&state, metadata)),
+            Self::Function2D(i, x, y) => {
+                registry.functions_2d[*i].eval(x.eval(&state), y.eval(&state))
             }
-            Self::Function2DSumX(f, x, y) => f.sum_x(&x.eval(&state, metadata), y.eval(&state)),
-            Self::Function2DSumY(f, x, y) => f.sum_y(x.eval(&state), &y.eval(&state, metadata)),
-            Self::Function3D(f, x, y, z) => f.eval(x.eval(&state), y.eval(&state), z.eval(&state)),
-            Self::Function3DSum(f, x, y, z) => f.sum(
+            Self::Function2DSum(i, x, y) => {
+                registry.functions_2d[*i].sum(&x.eval(&state, metadata), &y.eval(&state, metadata))
+            }
+            Self::Function2DSumX(i, x, y) => {
+                registry.functions_2d[*i].sum_x(&x.eval(&state, metadata), y.eval(&state))
+            }
+            Self::Function2DSumY(i, x, y) => {
+                registry.functions_2d[*i].sum_y(x.eval(&state), &y.eval(&state, metadata))
+            }
+            Self::Function3D(i, x, y, z) => {
+                registry.functions_3d[*i].eval(x.eval(&state), y.eval(&state), z.eval(&state))
+            }
+            Self::Function3DSum(i, x, y, z) => registry.functions_3d[*i].sum(
                 &x.eval(&state, metadata),
                 &y.eval(&state, metadata),
                 &z.eval(&state, metadata),
             ),
-            Self::Function3DSumX(f, x, y, z) => {
-                f.sum_x(&x.eval(&state, metadata), y.eval(&state), z.eval(&state))
-            }
-            Self::Function3DSumY(f, x, y, z) => {
-                f.sum_y(x.eval(&state), &y.eval(&state, metadata), z.eval(&state))
-            }
-            Self::Function3DSumZ(f, x, y, z) => {
-                f.sum_z(x.eval(&state), y.eval(&state), &z.eval(&state, metadata))
-            }
-            Self::Function3DSumXY(f, x, y, z) => f.sum_xy(
+            Self::Function3DSumX(i, x, y, z) => registry.functions_3d[*i].sum_x(
+                &x.eval(&state, metadata),
+                y.eval(&state),
+                z.eval(&state),
+            ),
+            Self::Function3DSumY(i, x, y, z) => registry.functions_3d[*i].sum_y(
+                x.eval(&state),
+                &y.eval(&state, metadata),
+                z.eval(&state),
+            ),
+            Self::Function3DSumZ(i, x, y, z) => registry.functions_3d[*i].sum_z(
+                x.eval(&state),
+                y.eval(&state),
+                &z.eval(&state, metadata),
+            ),
+            Self::Function3DSumXY(i, x, y, z) => registry.functions_3d[*i].sum_xy(
                 &x.eval(&state, metadata),
                 &y.eval(&state, metadata),
                 z.eval(&state),
             ),
-            Self::Function3DSumXZ(f, x, y, z) => f.sum_xz(
+            Self::Function3DSumXZ(i, x, y, z) => registry.functions_3d[*i].sum_xz(
                 &x.eval(&state, metadata),
                 y.eval(&state),
                 &z.eval(&state, metadata),
             ),
-            Self::Function3DSumYZ(f, x, y, z) => f.sum_yz(
+            Self::Function3DSumYZ(i, x, y, z) => registry.functions_3d[*i].sum_yz(
                 x.eval(&state),
                 &y.eval(&state, metadata),
                 &z.eval(&state, metadata),
             ),
-            Self::Function(f, args) => eval_numeric_function(f, args, &state),
-            Self::FunctionSum(f, args) => sum_numeric_function(f, args, &state, metadata),
+            Self::Function(i, args) => eval_numeric_function(&registry.functions[*i], args, &state),
+            Self::FunctionSum(i, args) => {
+                sum_numeric_function(&registry.functions[*i], args, &state, metadata)
+            }
         }
     }
 }
@@ -278,6 +288,52 @@ mod tests {
         }
     }
 
+    fn generate_registry() -> function_registry::FunctionRegistry<variable::IntegerVariable> {
+        let functions_1d = vec![numeric_function::NumericFunction1D::new(vec![10, 20, 30])];
+        let mut name_to_function_1d = HashMap::new();
+        name_to_function_1d.insert(String::from("f1"), 0);
+
+        let functions_2d = vec![numeric_function::NumericFunction2D::new(vec![
+            vec![10, 20, 30],
+            vec![40, 50, 60],
+            vec![70, 80, 90],
+        ])];
+        let mut name_to_function_2d = HashMap::new();
+        name_to_function_2d.insert(String::from("f2"), 0);
+
+        let functions_3d = vec![numeric_function::NumericFunction3D::new(vec![
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+        ])];
+        let mut name_to_function_3d = HashMap::new();
+        name_to_function_3d.insert(String::from("f3"), 0);
+
+        let mut map = HashMap::new();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, 100);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, 200);
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, 300);
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, 400);
+        let functions = vec![numeric_function::NumericFunction::new(map, 0)];
+        let mut name_to_function = HashMap::new();
+        name_to_function.insert(String::from("f4"), 0);
+
+        function_registry::FunctionRegistry {
+            functions_1d,
+            name_to_function_1d,
+            functions_2d,
+            name_to_function_2d,
+            functions_3d,
+            name_to_function_3d,
+            functions,
+            name_to_function,
+        }
+    }
+
     fn generate_state() -> state::State<variable::IntegerVariable> {
         let mut set1 = variable::SetVariable::with_capacity(3);
         set1.insert(0);
@@ -301,261 +357,203 @@ mod tests {
     #[test]
     fn function_1d_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction1D::new(vec![10, 20, 30]);
         let expression =
-            FunctionExpression::Function1D(&f, set_expression::ElementExpression::Constant(0));
-        assert_eq!(expression.eval(&state, &metadata), 10);
+            FunctionExpression::Function1D(0, set_expression::ElementExpression::Constant(0));
+        assert_eq!(expression.eval(&state, &metadata, &registry), 10);
         let expression =
-            FunctionExpression::Function1D(&f, set_expression::ElementExpression::Constant(1));
-        assert_eq!(expression.eval(&state, &metadata), 20);
+            FunctionExpression::Function1D(0, set_expression::ElementExpression::Constant(1));
+        assert_eq!(expression.eval(&state, &metadata, &registry), 20);
         let expression =
-            FunctionExpression::Function1D(&f, set_expression::ElementExpression::Constant(2));
-        assert_eq!(expression.eval(&state, &metadata), 30);
+            FunctionExpression::Function1D(0, set_expression::ElementExpression::Constant(2));
+        assert_eq!(expression.eval(&state, &metadata, &registry), 30);
     }
 
     #[test]
     fn function_1d_sum_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction1D::new(vec![10, 20, 30]);
         let expression =
-            FunctionExpression::Function1DSum(&f, set_expression::SetExpression::SetVariable(0));
-        assert_eq!(expression.eval(&state, &metadata), 40);
+            FunctionExpression::Function1DSum(0, set_expression::SetExpression::SetVariable(0));
+        assert_eq!(expression.eval(&state, &metadata, &registry), 40);
         let expression =
-            FunctionExpression::Function1DSum(&f, set_expression::SetExpression::SetVariable(1));
-        assert_eq!(expression.eval(&state, &metadata), 30);
+            FunctionExpression::Function1DSum(0, set_expression::SetExpression::SetVariable(1));
+        assert_eq!(expression.eval(&state, &metadata, &registry), 30);
     }
 
     #[test]
     fn function_2d_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction2D::new(vec![
-            vec![10, 20, 30],
-            vec![40, 50, 60],
-            vec![70, 80, 90],
-        ]);
         let expression = FunctionExpression::Function2D(
-            &f,
+            0,
             set_expression::ElementExpression::Constant(0),
             set_expression::ElementExpression::Constant(1),
         );
-        assert_eq!(expression.eval(&state, &metadata), 20);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 20);
     }
 
     #[test]
     fn function_2d_sum_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction2D::new(vec![
-            vec![10, 20, 30],
-            vec![40, 50, 60],
-            vec![70, 80, 90],
-        ]);
         let expression = FunctionExpression::Function2DSum(
-            &f,
+            0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata), 180);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 180);
     }
 
     #[test]
     fn function_2d_sum_x_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction2D::new(vec![
-            vec![10, 20, 30],
-            vec![40, 50, 60],
-            vec![70, 80, 90],
-        ]);
         let expression = FunctionExpression::Function2DSumX(
-            &f,
+            0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &metadata), 80);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 80);
     }
 
     #[test]
     fn function_2d_sum_y_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction2D::new(vec![
-            vec![10, 20, 30],
-            vec![40, 50, 60],
-            vec![70, 80, 90],
-        ]);
         let expression = FunctionExpression::Function2DSumY(
-            &f,
+            0,
             set_expression::ElementExpression::Constant(0),
             set_expression::SetExpression::SetVariable(0),
         );
-        assert_eq!(expression.eval(&state, &metadata), 40);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 40);
     }
 
     #[test]
     fn function_3d_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
         let expression = FunctionExpression::Function3D(
-            &f,
+            0,
             set_expression::ElementExpression::Constant(0),
             set_expression::ElementExpression::Constant(1),
             set_expression::ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata), 60);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 60);
     }
 
     #[test]
     fn function_3d_sum_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
         let expression = FunctionExpression::Function3DSum(
-            &f,
+            0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::SetExpression::SetVariable(1),
             set_expression::SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata), 240);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 240);
     }
 
     #[test]
     fn function_3d_sum_x_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
         let expression = FunctionExpression::Function3DSumX(
-            &f,
+            0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::ElementExpression::Constant(1),
             set_expression::ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata), 120);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 120);
     }
 
     #[test]
     fn function_3d_sum_y_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
         let expression = FunctionExpression::Function3DSumY(
-            &f,
+            0,
             set_expression::ElementExpression::Constant(1),
             set_expression::SetExpression::SetVariable(0),
             set_expression::ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata), 120);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 120);
     }
 
     #[test]
     fn function_3d_sum_z_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
         let expression = FunctionExpression::Function3DSumZ(
-            &f,
+            0,
             set_expression::ElementExpression::Constant(1),
             set_expression::ElementExpression::Constant(2),
             set_expression::SetExpression::SetVariable(0),
         );
-        assert_eq!(expression.eval(&state, &metadata), 160);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 160);
     }
 
     #[test]
     fn function_3d_sum_xy_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
         let expression = FunctionExpression::Function3DSumXY(
-            &f,
+            0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::SetExpression::SetVariable(1),
             set_expression::ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata), 180);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 180);
     }
 
     #[test]
     fn function_3d_sum_xz_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
         let expression = FunctionExpression::Function3DSumXZ(
-            &f,
+            0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::ElementExpression::Constant(2),
             set_expression::SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata), 300);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 300);
     }
 
     #[test]
     fn function_3d_sum_yz_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let f = numeric_function::NumericFunction3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
         let expression = FunctionExpression::Function3DSumYZ(
-            &f,
+            0,
             set_expression::ElementExpression::Constant(2),
             set_expression::SetExpression::SetVariable(0),
             set_expression::SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata), 180);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 180);
     }
 
     #[test]
     fn function_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let mut map = HashMap::<Vec<variable::ElementVariable>, variable::IntegerVariable>::new();
-        let key = vec![0, 1, 0, 0];
-        map.insert(key, 100);
-        let key = vec![0, 1, 0, 1];
-        map.insert(key, 200);
-        let key = vec![0, 1, 2, 0];
-        map.insert(key, 300);
-        let key = vec![0, 1, 2, 1];
-        map.insert(key, 400);
-        let f = numeric_function::NumericFunction::new(map, 0);
         let expression = FunctionExpression::Function(
-            &f,
+            0,
             vec![
                 set_expression::ElementExpression::Constant(0),
                 set_expression::ElementExpression::Constant(1),
@@ -563,9 +561,9 @@ mod tests {
                 set_expression::ElementExpression::Constant(0),
             ],
         );
-        assert_eq!(expression.eval(&state, &metadata), 100);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 100);
         let expression = FunctionExpression::Function(
-            &f,
+            0,
             vec![
                 set_expression::ElementExpression::Constant(0),
                 set_expression::ElementExpression::Constant(1),
@@ -573,9 +571,9 @@ mod tests {
                 set_expression::ElementExpression::Constant(1),
             ],
         );
-        assert_eq!(expression.eval(&state, &metadata), 200);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 200);
         let expression = FunctionExpression::Function(
-            &f,
+            0,
             vec![
                 set_expression::ElementExpression::Constant(0),
                 set_expression::ElementExpression::Constant(1),
@@ -583,9 +581,9 @@ mod tests {
                 set_expression::ElementExpression::Constant(0),
             ],
         );
-        assert_eq!(expression.eval(&state, &metadata), 300);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 300);
         let expression = FunctionExpression::Function(
-            &f,
+            0,
             vec![
                 set_expression::ElementExpression::Constant(0),
                 set_expression::ElementExpression::Constant(1),
@@ -593,25 +591,16 @@ mod tests {
                 set_expression::ElementExpression::Constant(1),
             ],
         );
-        assert_eq!(expression.eval(&state, &metadata), 400);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 400);
     }
 
     #[test]
     fn function_sum_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
-        let mut map = HashMap::<Vec<variable::ElementVariable>, variable::IntegerVariable>::new();
-        let key = vec![0, 1, 0, 0];
-        map.insert(key, 100);
-        let key = vec![0, 1, 0, 1];
-        map.insert(key, 200);
-        let key = vec![0, 1, 2, 0];
-        map.insert(key, 300);
-        let key = vec![0, 1, 2, 1];
-        map.insert(key, 400);
-        let f = numeric_function::NumericFunction::new(map, 0);
         let expression = FunctionExpression::FunctionSum(
-            &f,
+            0,
             vec![
                 set_expression::ArgumentExpression::Element(
                     set_expression::ElementExpression::Constant(0),
@@ -627,6 +616,6 @@ mod tests {
                 ),
             ],
         );
-        assert_eq!(expression.eval(&state, &metadata), 1000);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 1000);
     }
 }

@@ -15,18 +15,18 @@ pub fn parse_expression<'a, 'b, 'c, T: variable::Numeric>(
     metadata: &'b state::StateMetadata,
     registry: &'b function_registry::FunctionRegistry<T>,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(NumericExpression<'b, T>, &'a [String]), ParseErr>
+) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     let (token, rest) = tokens
         .split_first()
-        .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
+        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     match &token[..] {
         "(" => {
             let (name, rest) = rest
                 .split_first()
-                .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
+                .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
             if let Some((expression, rest)) =
                 function_parser::parse_expression(name, rest, metadata, registry, parameters)?
             {
@@ -35,7 +35,7 @@ where
                 parse_operation(name, rest, metadata, registry, parameters)
             }
         }
-        ")" => Err(ParseErr::Reason("unexpected `)`".to_string())),
+        ")" => Err(ParseErr::new("unexpected `)`".to_string())),
         "|" => parse_cardinality(rest, metadata, parameters),
         _ => {
             let expression = parse_atom(token, metadata)?;
@@ -50,7 +50,7 @@ fn parse_operation<'a, 'b, 'c, T: variable::Numeric>(
     metadata: &'b state::StateMetadata,
     registry: &'b function_registry::FunctionRegistry<T>,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(NumericExpression<'b, T>, &'a [String]), ParseErr>
+) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
@@ -90,7 +90,7 @@ where
             NumericExpression::NumericOperation(NumericOperator::Max, Box::new(x), Box::new(y)),
             rest,
         )),
-        _ => Err(ParseErr::Reason(format!("no such operator: `{}`", name))),
+        _ => Err(ParseErr::new(format!("no such operator: `{}`", name))),
     }
 }
 
@@ -98,13 +98,13 @@ fn parse_cardinality<'a, 'b, 'c, T: variable::Numeric>(
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(NumericExpression<'b, T>, &'a [String]), ParseErr> {
+) -> Result<(NumericExpression<T>, &'a [String]), ParseErr> {
     let (expression, rest) = set_parser::parse_set_expression(tokens, metadata, parameters)?;
     let (token, rest) = rest
         .split_first()
-        .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
+        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     if token != "|" {
-        return Err(ParseErr::Reason(format!(
+        return Err(ParseErr::new(format!(
             "unexpected token: `{}`, expected `|`",
             token
         )));
@@ -112,10 +112,10 @@ fn parse_cardinality<'a, 'b, 'c, T: variable::Numeric>(
     Ok((NumericExpression::Cardinality(expression), rest))
 }
 
-fn parse_atom<'a, 'b, T: variable::Numeric>(
-    token: &'a str,
-    metadata: &'b state::StateMetadata,
-) -> Result<NumericExpression<'b, T>, ParseErr>
+fn parse_atom<T: variable::Numeric>(
+    token: &str,
+    metadata: &state::StateMetadata,
+) -> Result<NumericExpression<T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
@@ -127,7 +127,7 @@ where
         Ok(NumericExpression::ResourceVariable(*i))
     } else {
         let n: T = token.parse().map_err(|e| {
-            ParseErr::Reason(format!("could not parse {} as a number: {:?}", token, e))
+            ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
         })?;
         Ok(NumericExpression::Constant(n))
     }
@@ -237,27 +237,31 @@ mod tests {
     }
 
     fn generate_registry() -> function_registry::FunctionRegistry<variable::IntegerVariable> {
-        let mut functions_1d = HashMap::new();
-        let f1 = numeric_function::NumericFunction1D::new(Vec::new());
-        functions_1d.insert("f1".to_string(), f1);
+        let functions_1d = vec![numeric_function::NumericFunction1D::new(Vec::new())];
+        let mut name_to_function_1d = HashMap::new();
+        name_to_function_1d.insert(String::from("f1"), 0);
 
-        let mut functions_2d = HashMap::new();
-        let f2 = numeric_function::NumericFunction2D::new(Vec::new());
-        functions_2d.insert("f2".to_string(), f2);
+        let functions_2d = vec![numeric_function::NumericFunction2D::new(Vec::new())];
+        let mut name_to_function_2d = HashMap::new();
+        name_to_function_2d.insert(String::from("f2"), 0);
 
-        let mut functions_3d = HashMap::new();
-        let f3 = numeric_function::NumericFunction3D::new(Vec::new());
-        functions_3d.insert("f3".to_string(), f3);
+        let functions_3d = vec![numeric_function::NumericFunction3D::new(Vec::new())];
+        let mut name_to_function_3d = HashMap::new();
+        name_to_function_3d.insert(String::from("f3"), 0);
 
-        let mut functions = HashMap::new();
-        let f4 = numeric_function::NumericFunction::new(HashMap::new(), 0);
-        functions.insert("f4".to_string(), f4);
+        let functions = vec![numeric_function::NumericFunction::new(HashMap::new(), 0)];
+        let mut name_to_function = HashMap::new();
+        name_to_function.insert(String::from("f4"), 0);
 
         function_registry::FunctionRegistry {
             functions_1d,
+            name_to_function_1d,
             functions_2d,
+            name_to_function_2d,
             functions_3d,
+            name_to_function_3d,
             functions,
+            name_to_function,
         }
     }
 
@@ -284,7 +288,6 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let f = &registry.functions["f4"];
         let tokens: Vec<String> = ["(", "f4", "0", "e0", "s0", "p0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
@@ -296,8 +299,8 @@ mod tests {
             expression,
             NumericExpression::Function(FunctionExpression::FunctionSum(_, _))
         ));
-        if let NumericExpression::Function(FunctionExpression::FunctionSum(g, args)) = expression {
-            assert_eq!(g as *const _, f as *const _);
+        if let NumericExpression::Function(FunctionExpression::FunctionSum(i, args)) = expression {
+            assert_eq!(i, 0);
             assert_eq!(args.len(), 4);
             assert!(matches!(
                 args[0],

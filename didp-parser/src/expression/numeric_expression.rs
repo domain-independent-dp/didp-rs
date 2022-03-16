@@ -1,24 +1,24 @@
 use super::function_expression;
 use super::set_expression;
+use crate::function_registry;
+use crate::state;
+use crate::variable;
 use std::boxed::Box;
 use std::cmp;
 
-use crate::state;
-use crate::variable;
-
 #[derive(Debug)]
-pub enum NumericExpression<'a, T: variable::Numeric> {
+pub enum NumericExpression<T: variable::Numeric> {
     Constant(T),
     Variable(usize),
     ResourceVariable(usize),
     Cost,
     NumericOperation(
         NumericOperator,
-        Box<NumericExpression<'a, T>>,
-        Box<NumericExpression<'a, T>>,
+        Box<NumericExpression<T>>,
+        Box<NumericExpression<T>>,
     ),
     Cardinality(set_expression::SetExpression),
-    Function(function_expression::FunctionExpression<'a, T>),
+    Function(function_expression::FunctionExpression),
 }
 
 #[derive(Debug)]
@@ -31,16 +31,21 @@ pub enum NumericOperator {
     Min,
 }
 
-impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
-    pub fn eval(&self, state: &state::State<T>, metadata: &state::StateMetadata) -> T {
+impl<T: variable::Numeric> NumericExpression<T> {
+    pub fn eval(
+        &self,
+        state: &state::State<T>,
+        metadata: &state::StateMetadata,
+        registry: &function_registry::FunctionRegistry<T>,
+    ) -> T {
         match self {
             NumericExpression::Constant(x) => *x,
             NumericExpression::Variable(i) => state.signature_variables.numeric_variables[*i],
             NumericExpression::ResourceVariable(i) => state.resource_variables[*i],
             NumericExpression::Cost => state.cost,
             NumericExpression::NumericOperation(op, a, b) => {
-                let a = a.eval(state, metadata);
-                let b = b.eval(state, metadata);
+                let a = a.eval(state, metadata, registry);
+                let b = b.eval(state, metadata, registry);
                 match op {
                     NumericOperator::Add => a + b,
                     NumericOperator::Subtract => a - b,
@@ -53,7 +58,7 @@ impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
             NumericExpression::Cardinality(set) => {
                 T::from(set.eval(state, metadata).count_ones(..)).unwrap()
             }
-            NumericExpression::Function(f) => f.eval(state, &metadata),
+            NumericExpression::Function(f) => f.eval(state, metadata, registry),
         }
     }
 }
@@ -61,6 +66,7 @@ impl<'a, T: variable::Numeric> NumericExpression<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::numeric_function;
     use crate::state;
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -175,49 +181,83 @@ mod tests {
         }
     }
 
+    fn generate_registry() -> function_registry::FunctionRegistry<variable::IntegerVariable> {
+        let functions_1d = vec![numeric_function::NumericFunction1D::new(Vec::new())];
+        let mut name_to_function_1d = HashMap::new();
+        name_to_function_1d.insert(String::from("f1"), 0);
+
+        let functions_2d = vec![numeric_function::NumericFunction2D::new(Vec::new())];
+        let mut name_to_function_2d = HashMap::new();
+        name_to_function_2d.insert(String::from("f2"), 0);
+
+        let functions_3d = vec![numeric_function::NumericFunction3D::new(Vec::new())];
+        let mut name_to_function_3d = HashMap::new();
+        name_to_function_3d.insert(String::from("f3"), 0);
+
+        let functions = vec![numeric_function::NumericFunction::new(HashMap::new(), 0)];
+        let mut name_to_function = HashMap::new();
+        name_to_function.insert(String::from("f4"), 0);
+
+        function_registry::FunctionRegistry {
+            functions_1d,
+            name_to_function_1d,
+            functions_2d,
+            name_to_function_2d,
+            functions_3d,
+            name_to_function_3d,
+            functions,
+            name_to_function,
+        }
+    }
     #[test]
+
     fn number_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
         let expression = NumericExpression::Constant(2);
-        assert_eq!(expression.eval(&state, &metadata), 2);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 2);
     }
 
     #[test]
     fn numeric_variable_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
         let expression = NumericExpression::Variable(0);
-        assert_eq!(expression.eval(&state, &metadata), 1);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 1);
         let expression = NumericExpression::Variable(1);
-        assert_eq!(expression.eval(&state, &metadata), 2);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 2);
         let expression = NumericExpression::Variable(2);
-        assert_eq!(expression.eval(&state, &metadata), 3);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 3);
     }
 
     #[test]
     fn resource_variable_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
         let expression = NumericExpression::ResourceVariable(0);
-        assert_eq!(expression.eval(&state, &metadata), 4);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 4);
         let expression = NumericExpression::ResourceVariable(1);
-        assert_eq!(expression.eval(&state, &metadata), 5);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 5);
         let expression = NumericExpression::ResourceVariable(2);
-        assert_eq!(expression.eval(&state, &metadata), 6);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 6);
     }
 
     #[test]
     fn cost_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> = NumericExpression::Cost {};
-        assert_eq!(expression.eval(&state, &metadata), 0);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 0);
     }
 
     #[test]
     fn add_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -225,12 +265,13 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &metadata), 5);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 5);
     }
 
     #[test]
     fn subtract_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -238,12 +279,13 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &metadata), 1);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 1);
     }
 
     #[test]
     fn multiply_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -251,12 +293,13 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &metadata), 6);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 6);
     }
 
     #[test]
     fn divide_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -264,12 +307,13 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &metadata), 1);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 1);
     }
 
     #[test]
     fn max_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -277,12 +321,13 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &metadata), 3);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 3);
     }
 
     #[test]
     fn min_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<variable::IntegerVariable> =
             NumericExpression::NumericOperation(
@@ -290,18 +335,19 @@ mod tests {
                 Box::new(NumericExpression::Constant(3)),
                 Box::new(NumericExpression::Constant(2)),
             );
-        assert_eq!(expression.eval(&state, &metadata), 2);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 2);
     }
 
     #[test]
     fn cardinality_eval() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
         let expression =
             NumericExpression::Cardinality(set_expression::SetExpression::SetVariable(0));
-        assert_eq!(expression.eval(&state, &metadata), 2);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 2);
         let expression =
             NumericExpression::Cardinality(set_expression::SetExpression::SetVariable(1));
-        assert_eq!(expression.eval(&state, &metadata), 2);
+        assert_eq!(expression.eval(&state, &metadata, &registry), 2);
     }
 }

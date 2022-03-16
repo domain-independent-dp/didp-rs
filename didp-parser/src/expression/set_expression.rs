@@ -33,7 +33,7 @@ impl SetExpression {
             SetExpression::SetVariable(i) => state.signature_variables.set_variables[*i].clone(),
             SetExpression::PermutationVariable(i) => {
                 let mut set = variable::SetVariable::with_capacity(
-                    metadata.get_permutaiton_variable_capacity(*i),
+                    metadata.get_permutation_variable_capacity(*i),
                 );
                 for v in &state.signature_variables.permutation_variables[*i] {
                     set.insert(*v);

@@ -5,7 +5,6 @@ use std::collections;
 use std::fmt;
 use std::rc::Rc;
 use std::str;
-use yaml_rust::Yaml;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct State<T: variable::Numeric> {
@@ -24,33 +23,8 @@ pub struct SignatureVariables<T: variable::Numeric> {
 }
 
 impl<T: variable::Numeric> State<T> {
-    pub fn load_initial_state_from_yaml(
-        problem: &Yaml,
-        metadata: &StateMetadata,
-    ) -> Result<State<T>, yaml_util::YamlContentErr>
-    where
-        <T as str::FromStr>::Err: fmt::Debug,
-    {
-        let map = match problem {
-            Yaml::Hash(map) => map,
-            _ => {
-                return Err(yaml_util::YamlContentErr::new(format!(
-                    "expected Hash, but is `{:?}`",
-                    problem
-                )))
-            }
-        };
-        if let Some(value) = map.get(&Yaml::String("initial_state".to_string())) {
-            Self::load_from_yaml(value, metadata)
-        } else {
-            Err(yaml_util::YamlContentErr::new(
-                "key `initial_state` not found".to_string(),
-            ))
-        }
-    }
-
-    fn load_from_yaml(
-        value: &Yaml,
+    pub fn load_from_yaml(
+        value: &yaml_rust::Yaml,
         metadata: &StateMetadata,
     ) -> Result<State<T>, yaml_util::YamlContentErr>
     where
@@ -61,7 +35,7 @@ impl<T: variable::Numeric> State<T> {
         for name in &metadata.set_variable_names {
             let values = yaml_util::get_usize_array_by_key(value, name)?;
             let mut set = variable::SetVariable::with_capacity(
-                metadata.get_set_variable_capacity_from_name(name),
+                metadata.get_set_variable_capacity_by_name(name),
             );
             for v in values {
                 set.insert(v);
@@ -143,15 +117,15 @@ impl StateMetadata {
         self.object_numbers[self.set_variable_to_object[i]]
     }
 
-    pub fn get_set_variable_capacity_from_name(&self, name: &str) -> usize {
+    pub fn get_set_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers[self.set_variable_to_object[self.name_to_set_variable[name]]]
     }
 
-    pub fn get_permutaiton_variable_capacity(&self, i: usize) -> usize {
+    pub fn get_permutation_variable_capacity(&self, i: usize) -> usize {
         self.object_numbers[self.permutation_variable_to_object[i]]
     }
 
-    pub fn get_permutation_variable_capacity_from_name(&self, name: &str) -> usize {
+    pub fn get_permutation_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers
             [self.permutation_variable_to_object[self.name_to_permutation_variable[name]]]
     }
@@ -160,7 +134,7 @@ impl StateMetadata {
         self.object_numbers[self.element_variable_to_object[i]]
     }
 
-    pub fn get_element_variable_capacity_from_name(&self, name: &str) -> usize {
+    pub fn get_element_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers[self.element_variable_to_object[self.name_to_element_variable[name]]]
     }
 
@@ -210,20 +184,87 @@ impl StateMetadata {
         result
     }
 
+    pub fn get_grounded_parameter_set_from_yaml(
+        &self,
+        value: &yaml_rust::Yaml,
+    ) -> Result<GroundedParameterTrpet, yaml_util::YamlContentErr> {
+        let map = yaml_util::get_map(value)?;
+        let mut parameters_set: Vec<collections::HashMap<String, usize>> =
+            Vec::with_capacity(map.len());
+        let mut elements_in_set_variable_set: Vec<Vec<(usize, usize)>> =
+            Vec::with_capacity(map.len());
+        let mut elements_in_permutation_variable_set: Vec<Vec<(usize, usize)>> =
+            Vec::with_capacity(map.len());
+        for (key, value) in map {
+            let key = yaml_util::get_string(key)?;
+            let value = yaml_util::get_string(value)?;
+            let (n, set_index, permutation_index) = if let Some(i) = self.name_to_object.get(&value)
+            {
+                (self.object_numbers[*i], None, None)
+            } else if let Some(i) = self.name_to_set_variable.get(&value) {
+                (self.get_set_variable_capacity(*i), Some(*i), None)
+            } else if let Some(i) = self.name_to_permutation_variable.get(&value) {
+                (self.get_permutation_variable_capacity(*i), None, Some(*i))
+            } else {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "no such object, set variable, or permutation variable `{}`",
+                    value
+                )));
+            };
+            let mut new_parameteres_set = Vec::with_capacity(parameters_set.len() * n);
+            let mut new_elements_in_set_variable_set =
+                Vec::with_capacity(elements_in_set_variable_set.len() * n);
+            let mut new_elements_in_permutation_variable_set =
+                Vec::with_capacity(elements_in_permutation_variable_set.len() * n);
+            for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in
+                parameters_set
+                    .iter()
+                    .zip(elements_in_set_variable_set.iter())
+                    .zip(elements_in_permutation_variable_set.iter())
+            {
+                for i in 0..n {
+                    let mut parameters = parameters.clone();
+                    parameters.insert(key.clone(), i);
+                    let mut elements_in_set_variable = elements_in_set_variable.clone();
+                    if let Some(j) = set_index {
+                        elements_in_set_variable.push((j, i));
+                    }
+                    let mut elements_in_permutation_variable =
+                        elements_in_permutation_variable.clone();
+                    if let Some(j) = permutation_index {
+                        elements_in_permutation_variable.push((j, i));
+                    }
+                    new_parameteres_set.push(parameters);
+                    new_elements_in_set_variable_set.push(elements_in_set_variable);
+                    new_elements_in_permutation_variable_set.push(elements_in_permutation_variable);
+                }
+            }
+            parameters_set = new_parameteres_set;
+            elements_in_set_variable_set = new_elements_in_set_variable_set;
+            elements_in_permutation_variable_set = new_elements_in_permutation_variable_set;
+        }
+
+        Ok((
+            parameters_set,
+            elements_in_set_variable_set,
+            elements_in_permutation_variable_set,
+        ))
+    }
+
     pub fn load_from_yaml(
-        domain: &Yaml,
-        problem: &Yaml,
+        objects: &yaml_rust::Yaml,
+        variables: &yaml_rust::Yaml,
+        object_numbers_yaml: &yaml_rust::Yaml,
     ) -> Result<StateMetadata, yaml_util::YamlContentErr> {
-        let domain = yaml_util::get_map(domain)?;
-        let problem = yaml_util::get_map(problem)?;
-        let object_names = yaml_util::get_string_array_by_key(domain, "objects")?;
+        let object_names = yaml_util::get_string_array(objects)?;
         let mut name_to_object = collections::HashMap::new();
         for (i, name) in object_names.iter().enumerate() {
             name_to_object.insert(name.clone(), i);
         }
+        let object_numbers_yaml = yaml_util::get_map(object_numbers_yaml)?;
         let mut object_numbers = Vec::with_capacity(object_names.len());
         for (i, name) in object_names.iter().enumerate() {
-            object_numbers[i] = yaml_util::get_usize_by_key(problem, name)?;
+            object_numbers[i] = yaml_util::get_usize_by_key(object_numbers_yaml, name)?;
         }
 
         let mut set_variable_names = Vec::new();
@@ -241,26 +282,26 @@ impl StateMetadata {
         let mut name_to_resource_variable = collections::HashMap::new();
         let mut less_is_better = Vec::new();
 
-        let variables = yaml_util::get_map_by_key(domain, "variables")?;
-        for (key, value) in variables {
-            let name = yaml_util::get_string(key)?;
-            let value = yaml_util::get_map(value)?;
-            let variable_type = yaml_util::get_string_by_key(value, "type")?;
+        let variables = yaml_util::get_array(variables)?;
+        for value in variables {
+            let map = yaml_util::get_map(value)?;
+            let name = yaml_util::get_string_by_key(map, "name")?;
+            let variable_type = yaml_util::get_string_by_key(map, "type")?;
             match &variable_type[..] {
                 "set" => {
-                    let id = Self::get_object_id(value, &name_to_object)?;
+                    let id = Self::get_object_id(map, &name_to_object)?;
                     set_variable_to_object.push(id);
                     name_to_set_variable.insert(name.clone(), set_variable_names.len());
                     set_variable_names.push(name);
                 }
                 "permutation" => {
-                    let id = Self::get_object_id(value, &name_to_object)?;
+                    let id = Self::get_object_id(map, &name_to_object)?;
                     permutation_variable_to_object.push(id);
                     name_to_permutation_variable.insert(name.clone(), set_variable_names.len());
                     permutation_variable_names.push(name);
                 }
                 "element" => {
-                    let id = Self::get_object_id(value, &name_to_object)?;
+                    let id = Self::get_object_id(map, &name_to_object)?;
                     element_variable_to_object.push(id);
                     name_to_element_variable.insert(name.clone(), set_variable_names.len());
                     element_variable_names.push(name);
@@ -272,7 +313,7 @@ impl StateMetadata {
                 "resource" => {
                     name_to_resource_variable.insert(name.clone(), numeric_variable_names.len());
                     resource_variable_names.push(name);
-                    let preference = match yaml_util::get_bool_by_key(value, "less_is_better") {
+                    let preference = match yaml_util::get_bool_by_key(map, "less_is_better") {
                         Ok(value) => value,
                         _ => false,
                     };
@@ -309,10 +350,10 @@ impl StateMetadata {
     }
 
     fn get_object_id(
-        value: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+        map: &linked_hash_map::LinkedHashMap<yaml_rust::Yaml, yaml_rust::Yaml>,
         name_to_object: &collections::HashMap<String, usize>,
     ) -> Result<usize, yaml_util::YamlContentErr> {
-        let name = yaml_util::get_string_by_key(value, "object")?;
+        let name = yaml_util::get_string_by_key(map, "object")?;
         match name_to_object.get(&name) {
             Some(id) => Ok(*id),
             None => Err(yaml_util::YamlContentErr::new(format!(
@@ -322,6 +363,12 @@ impl StateMetadata {
         }
     }
 }
+
+type GroundedParameterTrpet = (
+    Vec<collections::HashMap<String, usize>>,
+    Vec<Vec<(usize, usize)>>,
+    Vec<Vec<(usize, usize)>>,
+);
 
 #[cfg(test)]
 mod tests {

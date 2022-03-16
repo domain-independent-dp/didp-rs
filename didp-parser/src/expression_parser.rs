@@ -14,12 +14,12 @@ mod util;
 
 pub use util::ParseErr;
 
-pub fn parse_numeric<'a, 'b, T: variable::Numeric>(
+pub fn parse_numeric<T: variable::Numeric>(
     text: String,
-    metadata: &'a state::StateMetadata,
-    registry: &'a function_registry::FunctionRegistry<T>,
-    parameters: &'b collections::HashMap<String, usize>,
-) -> Result<expression::NumericExpression<'a, T>, ParseErr>
+    metadata: &state::StateMetadata,
+    registry: &function_registry::FunctionRegistry<T>,
+    parameters: &collections::HashMap<String, usize>,
+) -> Result<expression::NumericExpression<T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
@@ -29,7 +29,7 @@ where
     if rest.is_empty() {
         Ok(expression)
     } else {
-        Err(ParseErr::Reason(format!(
+        Err(ParseErr::new(format!(
             "unexpected tokens: `{}`",
             rest.join(" ")
         )))
@@ -46,7 +46,7 @@ pub fn parse_set(
     if rest.is_empty() {
         Ok(expression)
     } else {
-        Err(ParseErr::Reason(format!(
+        Err(ParseErr::new(format!(
             "unexpected tokens: `{}`",
             rest.join(" ")
         )))
@@ -63,19 +63,19 @@ pub fn parse_element(
     if rest.is_empty() {
         Ok(expression)
     } else {
-        Err(ParseErr::Reason(format!(
+        Err(ParseErr::new(format!(
             "unexpected tokens: `{}`",
             rest.join(" ")
         )))
     }
 }
 
-pub fn parse_condition<'a, 'b, T: variable::Numeric>(
+pub fn parse_condition<T: variable::Numeric>(
     text: String,
-    metadata: &'a state::StateMetadata,
-    registry: &'a function_registry::FunctionRegistry<T>,
-    parameters: &'b collections::HashMap<String, usize>,
-) -> Result<expression::Condition<'a, T>, ParseErr>
+    metadata: &state::StateMetadata,
+    registry: &function_registry::FunctionRegistry<T>,
+    parameters: &collections::HashMap<String, usize>,
+) -> Result<expression::Condition<T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
@@ -85,7 +85,7 @@ where
     if rest.is_empty() {
         Ok(expression)
     } else {
-        Err(ParseErr::Reason(format!(
+        Err(ParseErr::new(format!(
             "unexpected tokens: `{}`",
             rest.join(" ")
         )))
@@ -206,27 +206,31 @@ mod tests {
     }
 
     fn generate_registry() -> function_registry::FunctionRegistry<variable::IntegerVariable> {
-        let mut functions_1d = HashMap::new();
-        let f1 = numeric_function::NumericFunction1D::new(Vec::new());
-        functions_1d.insert("f1".to_string(), f1);
+        let functions_1d = vec![numeric_function::NumericFunction1D::new(Vec::new())];
+        let mut name_to_function_1d = HashMap::new();
+        name_to_function_1d.insert(String::from("f1"), 0);
 
-        let mut functions_2d = HashMap::new();
-        let f2 = numeric_function::NumericFunction2D::new(Vec::new());
-        functions_2d.insert("f2".to_string(), f2);
+        let functions_2d = vec![numeric_function::NumericFunction2D::new(Vec::new())];
+        let mut name_to_function_2d = HashMap::new();
+        name_to_function_2d.insert(String::from("f2"), 0);
 
-        let mut functions_3d = HashMap::new();
-        let f3 = numeric_function::NumericFunction3D::new(Vec::new());
-        functions_3d.insert("f3".to_string(), f3);
+        let functions_3d = vec![numeric_function::NumericFunction3D::new(Vec::new())];
+        let mut name_to_function_3d = HashMap::new();
+        name_to_function_3d.insert(String::from("f3"), 0);
 
-        let mut functions = HashMap::new();
-        let f4 = numeric_function::NumericFunction::new(HashMap::new(), 0);
-        functions.insert("f4".to_string(), f4);
+        let functions = vec![numeric_function::NumericFunction::new(HashMap::new(), 0)];
+        let mut name_to_function = HashMap::new();
+        name_to_function.insert(String::from("f4"), 0);
 
         function_registry::FunctionRegistry {
             functions_1d,
+            name_to_function_1d,
             functions_2d,
+            name_to_function_2d,
             functions_3d,
+            name_to_function_3d,
             functions,
+            name_to_function,
         }
     }
 

@@ -48,12 +48,53 @@ pub fn get_map_by_key<'a, 'b>(
     }
 }
 
+pub fn get_key_names(
+    map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+) -> Result<Vec<String>, YamlContentErr> {
+    let mut keys = Vec::with_capacity(map.len());
+    for (key, _) in map {
+        match key {
+            Yaml::String(value) => keys.push(value.clone()),
+            _ => {
+                return Err(YamlContentErr::new(format!(
+                    "expected String, but is {:?}",
+                    key
+                )))
+            }
+        }
+    }
+    Ok(keys)
+}
+
 pub fn get_yaml_by_key<'a, 'b>(
     map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &'b str,
 ) -> Result<&'a Yaml, YamlContentErr> {
     match map.get(&Yaml::String(key.to_string())) {
         Some(value) => Ok(value),
+        None => Err(YamlContentErr::new(format!(
+            "no such key `{}` in yaml",
+            key
+        ))),
+    }
+}
+
+pub fn get_array(value: &Yaml) -> Result<&Vec<Yaml>, YamlContentErr> {
+    match value {
+        Yaml::Array(array) => Ok(array),
+        _ => Err(YamlContentErr::new(format!(
+            "expected Array, but is `{:?}`",
+            value
+        ))),
+    }
+}
+
+pub fn get_array_by_key<'a, 'b>(
+    map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+    key: &'b str,
+) -> Result<&'a Vec<Yaml>, YamlContentErr> {
+    match map.get(&Yaml::String(key.to_string())) {
+        Some(value) => get_array(value),
         None => Err(YamlContentErr::new(format!(
             "no such key `{}` in yaml",
             key
@@ -191,16 +232,22 @@ pub fn get_string_by_key(
     }
 }
 
+pub fn get_string_array(value: &Yaml) -> Result<Vec<String>, YamlContentErr> {
+    match value {
+        Yaml::Array(value) => parse_string_array(value),
+        _ => Err(YamlContentErr::new(format!(
+            "expected Array, but is `{:?}`",
+            value
+        ))),
+    }
+}
+
 pub fn get_string_array_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
 ) -> Result<Vec<String>, YamlContentErr> {
     match map.get(&Yaml::String(key.to_string())) {
-        Some(Yaml::Array(value)) => parse_string_array(value),
-        Some(value) => Err(YamlContentErr::new(format!(
-            "the value of key `{}` is not Array, but `{:?}`",
-            key, value
-        ))),
+        Some(value) => get_string_array(value),
         None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
     }
 }

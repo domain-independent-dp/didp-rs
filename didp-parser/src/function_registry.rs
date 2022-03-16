@@ -8,28 +8,32 @@ use std::str;
 use yaml_rust::Yaml;
 
 pub struct FunctionRegistry<T: variable::Numeric> {
-    pub functions_1d: collections::HashMap<String, numeric_function::NumericFunction1D<T>>,
-    pub functions_2d: collections::HashMap<String, numeric_function::NumericFunction2D<T>>,
-    pub functions_3d: collections::HashMap<String, numeric_function::NumericFunction3D<T>>,
-    pub functions: collections::HashMap<String, numeric_function::NumericFunction<T>>,
+    pub functions_1d: Vec<numeric_function::NumericFunction1D<T>>,
+    pub name_to_function_1d: collections::HashMap<String, usize>,
+    pub functions_2d: Vec<numeric_function::NumericFunction2D<T>>,
+    pub name_to_function_2d: collections::HashMap<String, usize>,
+    pub functions_3d: Vec<numeric_function::NumericFunction3D<T>>,
+    pub name_to_function_3d: collections::HashMap<String, usize>,
+    pub functions: Vec<numeric_function::NumericFunction<T>>,
+    pub name_to_function: collections::HashMap<String, usize>,
 }
 
 impl<T: variable::Numeric> FunctionRegistry<T> {
     pub fn load_from_yaml(
-        domain: &Yaml,
-        problem: &Yaml,
+        functions: &Yaml,
+        function_values: &Yaml,
         metadata: &state::StateMetadata,
     ) -> Result<FunctionRegistry<T>, yaml_util::YamlContentErr>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
+        let functions = yaml_util::get_array(functions)?;
         let mut name_to_arg_types = collections::HashMap::new();
         let mut name_to_default_value = collections::HashMap::new();
-        let domain = yaml_util::get_map(domain)?;
-        for (key, value) in domain {
-            let name = yaml_util::get_string(key)?;
-            let value = yaml_util::get_map(value)?;
-            let args = yaml_util::get_string_array_by_key(value, "args")?;
+        for value in functions {
+            let map = yaml_util::get_map(value)?;
+            let name = yaml_util::get_string_by_key(map, "name")?;
+            let args = yaml_util::get_string_array_by_key(map, "args")?;
             if args.is_empty() {
                 return Err(yaml_util::YamlContentErr::new(
                     "function has no arguments".to_string(),
@@ -47,49 +51,61 @@ impl<T: variable::Numeric> FunctionRegistry<T> {
                 }
             }
             name_to_arg_types.insert(name.clone(), arg_types);
-            if let Ok(value) = yaml_util::get_numeric_by_key(value, "default") {
+            if let Ok(value) = yaml_util::get_numeric_by_key(map, "default") {
                 name_to_default_value.insert(name.clone(), value);
             } else {
                 name_to_default_value.insert(name.clone(), T::zero());
             }
         }
-        let mut functions_1d = collections::HashMap::new();
-        let mut functions_2d = collections::HashMap::new();
-        let mut functions_3d = collections::HashMap::new();
-        let mut functions = collections::HashMap::new();
-        let problem = yaml_util::get_map(problem)?;
+        let mut functions_1d = Vec::new();
+        let mut name_to_function_1d = collections::HashMap::new();
+        let mut functions_2d = Vec::new();
+        let mut name_to_function_2d = collections::HashMap::new();
+        let mut functions_3d = Vec::new();
+        let mut name_to_function_3d = collections::HashMap::new();
+        let mut functions = Vec::new();
+        let mut name_to_function = collections::HashMap::new();
+        let function_values = yaml_util::get_map(function_values)?;
         for (name, args_types) in name_to_arg_types {
-            let value = yaml_util::get_yaml_by_key(problem, &name)?;
+            let value = yaml_util::get_yaml_by_key(function_values, &name)?;
             let default = *name_to_default_value.get(&name).unwrap();
             if args_types.len() == 1 {
                 let size = metadata.object_numbers[args_types[0]];
                 let f = Self::load_function_1d_from_yaml(value, size, default)?;
-                functions_1d.insert(name, f);
+                name_to_function_1d.insert(name, functions_1d.len());
+                functions_1d.push(f);
             } else if args_types.len() == 2 {
                 let size_x = metadata.object_numbers[args_types[0]];
                 let size_y = metadata.object_numbers[args_types[1]];
                 let f = Self::load_function_2d_from_yaml(value, size_x, size_y, default)?;
-                functions_2d.insert(name, f);
+                name_to_function_2d.insert(name, functions_2d.len());
+                functions_2d.push(f);
             } else if args_types.len() == 3 {
                 let size_x = metadata.object_numbers[args_types[0]];
                 let size_y = metadata.object_numbers[args_types[1]];
                 let size_z = metadata.object_numbers[args_types[2]];
                 let f = Self::load_function_3d_from_yaml(value, size_x, size_y, size_z, default)?;
-                functions_3d.insert(name, f);
+                name_to_function_3d.insert(name, functions_3d.len());
+                functions_3d.push(f);
             } else {
                 let size: Vec<usize> = args_types
                     .iter()
                     .map(|i| metadata.object_numbers[*i])
                     .collect();
                 let f = Self::load_function_from_yaml(value, size, default)?;
-                functions.insert(name, f);
+                name_to_function.insert(name, functions.len());
+                functions.push(f);
             }
         }
         Ok(FunctionRegistry {
             functions_1d,
+            name_to_function_1d,
             functions_2d,
+            name_to_function_2d,
             functions_3d,
+            name_to_function_3d,
             functions,
+            name_to_function,
         })
     }
 

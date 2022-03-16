@@ -15,7 +15,7 @@ pub fn parse_set_expression<'a, 'b, 'c>(
     let (expression, rest) = parse_argument(tokens, metadata, parameters)?;
     match expression {
         ArgumentExpression::Set(expression) => Ok((expression, rest)),
-        _ => Err(ParseErr::Reason(format!(
+        _ => Err(ParseErr::new(format!(
             "not a set expression: {:?}",
             expression
         ))),
@@ -30,7 +30,7 @@ pub fn parse_element_expression<'a, 'b, 'c>(
     let (expression, rest) = parse_argument(tokens, metadata, parameters)?;
     match expression {
         ArgumentExpression::Element(expression) => Ok((expression, rest)),
-        _ => Err(ParseErr::Reason(format!(
+        _ => Err(ParseErr::new(format!(
             "not an element expression: {:?}",
             expression
         ))),
@@ -44,7 +44,7 @@ pub fn parse_argument<'a, 'b, 'c>(
 ) -> Result<(ArgumentExpression, &'a [String]), ParseErr> {
     let (token, rest) = tokens
         .split_first()
-        .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
+        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     match &token[..] {
         "!" => {
             let (expression, rest) = parse_set_expression(rest, metadata, parameters)?;
@@ -57,7 +57,7 @@ pub fn parse_argument<'a, 'b, 'c>(
             let (expression, rest) = parse_operation(rest, metadata, parameters)?;
             Ok((ArgumentExpression::Set(expression), rest))
         }
-        ")" => Err(ParseErr::Reason("unexpected `)`".to_string())),
+        ")" => Err(ParseErr::new("unexpected `)`".to_string())),
         _ => {
             let argument = parse_atom(token, metadata, parameters)?;
             Ok((argument, rest))
@@ -72,7 +72,7 @@ fn parse_operation<'a, 'b, 'c>(
 ) -> Result<(SetExpression, &'a [String]), ParseErr> {
     let (token, rest) = tokens
         .split_first()
-        .ok_or_else(|| ParseErr::Reason("could not get token".to_string()))?;
+        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     let (x, rest) = parse_argument(rest, metadata, parameters)?;
     let (y, rest) = parse_argument(rest, metadata, parameters)?;
     let rest = util::parse_closing(rest)?;
@@ -87,7 +87,7 @@ fn parse_operation<'a, 'b, 'c>(
                 SetExpression::SetElementOperation(SetElementOperator::Add, Box::new(x), y),
                 rest,
             )),
-            args => Err(ParseErr::Reason(format!(
+            args => Err(ParseErr::new(format!(
                 "unexpected arguments for `+`: {:?}",
                 args
             ))),
@@ -101,7 +101,7 @@ fn parse_operation<'a, 'b, 'c>(
                 SetExpression::SetElementOperation(SetElementOperator::Remove, Box::new(x), y),
                 rest,
             )),
-            args => Err(ParseErr::Reason(format!(
+            args => Err(ParseErr::new(format!(
                 "unexpected arguments for `-`: {:?}",
                 args
             ))),
@@ -111,12 +111,12 @@ fn parse_operation<'a, 'b, 'c>(
                 SetExpression::SetOperation(SetOperator::Intersect, Box::new(x), Box::new(y)),
                 rest,
             )),
-            args => Err(ParseErr::Reason(format!(
+            args => Err(ParseErr::new(format!(
                 "unexpected arguments for `*`: {:?}",
                 args
             ))),
         },
-        op => Err(ParseErr::Reason(format!("no such operator: {}", op))),
+        op => Err(ParseErr::new(format!("no such operator: {}", op))),
     }
 }
 
@@ -139,7 +139,7 @@ fn parse_atom(
         Ok(ArgumentExpression::Element(ElementExpression::Constant(*v)))
     } else {
         let v: variable::ElementVariable = token.parse().map_err(|e| {
-            ParseErr::Reason(format!("could not parse {} as a number: {:?}", token, e))
+            ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
         })?;
         Ok(ArgumentExpression::Element(ElementExpression::Constant(v)))
     }

@@ -1,17 +1,18 @@
 use super::numeric_expression::NumericExpression;
 use super::set_condition;
+use crate::function_registry;
 use crate::state;
 use crate::variable;
 
 #[derive(Debug)]
-pub enum Condition<'a, T: variable::Numeric> {
-    Not(Box<Condition<'a, T>>),
-    And(Box<Condition<'a, T>>, Box<Condition<'a, T>>),
-    Or(Box<Condition<'a, T>>, Box<Condition<'a, T>>),
+pub enum Condition<T: variable::Numeric> {
+    Not(Box<Condition<T>>),
+    And(Box<Condition<T>>, Box<Condition<T>>),
+    Or(Box<Condition<T>>, Box<Condition<T>>),
     Comparison(
         ComparisonOperator,
-        NumericExpression<'a, T>,
-        NumericExpression<'a, T>,
+        NumericExpression<T>,
+        NumericExpression<T>,
     ),
     Set(set_condition::SetCondition),
 }
@@ -26,15 +27,26 @@ pub enum ComparisonOperator {
     Lt,
 }
 
-impl<'a, T: variable::Numeric> Condition<'a, T> {
-    pub fn eval(&self, state: &state::State<T>, metadata: &state::StateMetadata) -> bool {
+impl<T: variable::Numeric> Condition<T> {
+    pub fn eval(
+        &self,
+        state: &state::State<T>,
+        metadata: &state::StateMetadata,
+        registry: &function_registry::FunctionRegistry<T>,
+    ) -> bool {
         match self {
-            Condition::Not(c) => !c.eval(state, metadata),
-            Condition::And(x, y) => x.eval(state, metadata) && y.eval(state, metadata),
-            Condition::Or(x, y) => x.eval(state, metadata) || y.eval(state, metadata),
-            Condition::Comparison(op, x, y) => {
-                Self::eval_comparison(op, x.eval(state, metadata), y.eval(state, metadata))
+            Condition::Not(c) => !c.eval(state, metadata, registry),
+            Condition::And(x, y) => {
+                x.eval(state, metadata, registry) && y.eval(state, metadata, registry)
             }
+            Condition::Or(x, y) => {
+                x.eval(state, metadata, registry) || y.eval(state, metadata, registry)
+            }
+            Condition::Comparison(op, x, y) => Self::eval_comparison(
+                op,
+                x.eval(state, metadata, registry),
+                y.eval(state, metadata, registry),
+            ),
             Condition::Set(c) => c.eval(state, metadata),
         }
     }
@@ -54,7 +66,7 @@ impl<'a, T: variable::Numeric> Condition<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state;
+    use crate::numeric_function;
     use std::collections::HashMap;
     use std::rc::Rc;
 
@@ -148,6 +160,34 @@ mod tests {
         }
     }
 
+    fn generate_registry() -> function_registry::FunctionRegistry<variable::IntegerVariable> {
+        let functions_1d = vec![numeric_function::NumericFunction1D::new(Vec::new())];
+        let mut name_to_function_1d = HashMap::new();
+        name_to_function_1d.insert(String::from("f1"), 0);
+
+        let functions_2d = vec![numeric_function::NumericFunction2D::new(Vec::new())];
+        let mut name_to_function_2d = HashMap::new();
+        name_to_function_2d.insert(String::from("f2"), 0);
+
+        let functions_3d = vec![numeric_function::NumericFunction3D::new(Vec::new())];
+        let mut name_to_function_3d = HashMap::new();
+        name_to_function_3d.insert(String::from("f3"), 0);
+
+        let functions = vec![numeric_function::NumericFunction::new(HashMap::new(), 0)];
+        let mut name_to_function = HashMap::new();
+        name_to_function.insert(String::from("f4"), 0);
+
+        function_registry::FunctionRegistry {
+            functions_1d,
+            name_to_function_1d,
+            functions_2d,
+            name_to_function_2d,
+            functions_3d,
+            name_to_function_3d,
+            functions,
+            name_to_function,
+        }
+    }
     fn generate_state() -> state::State<variable::IntegerVariable> {
         let mut set1 = variable::SetVariable::with_capacity(3);
         set1.insert(0);
@@ -171,6 +211,7 @@ mod tests {
     #[test]
     fn eval_eq() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -178,19 +219,20 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Eq,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
     fn eval_neq() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -198,19 +240,20 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Ne,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
     fn eval_ge() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -218,26 +261,27 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Ge,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Ge,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
     fn eval_gt() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -245,26 +289,27 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Gt,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Gt,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
     fn eval_le() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -272,26 +317,27 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Le,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Le,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
     fn eval_lt() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = Condition::Comparison(
@@ -299,26 +345,27 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Lt,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         );
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
 
         let expression = Condition::Comparison(
             ComparisonOperator::Lt,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
         );
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
     fn eval_not() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = Condition::Not(Box::new(Condition::Comparison(
@@ -326,19 +373,20 @@ mod tests {
             NumericExpression::Constant(0),
             NumericExpression::Constant(0),
         )));
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
 
         let expression = Condition::Not(Box::new(Condition::Comparison(
             ComparisonOperator::Eq,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
         )));
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
     fn eval_and() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
 
         let x = Condition::Comparison(
@@ -352,7 +400,7 @@ mod tests {
             NumericExpression::Constant(0),
         );
         let expression = Condition::And(Box::new(x), Box::new(y));
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -365,7 +413,7 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::And(Box::new(x), Box::new(y));
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -378,12 +426,13 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::And(Box::new(x), Box::new(y));
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
     fn eval_or() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let state = generate_state();
 
         let x = Condition::Comparison(
@@ -397,7 +446,7 @@ mod tests {
             NumericExpression::Constant(0),
         );
         let expression = Condition::Or(Box::new(x), Box::new(y));
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -410,7 +459,7 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::Or(Box::new(x), Box::new(y));
-        assert!(expression.eval(&state, &metadata));
+        assert!(expression.eval(&state, &metadata, &registry));
 
         let x = Condition::Comparison(
             ComparisonOperator::Eq,
@@ -423,6 +472,6 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let expression = Condition::Or(Box::new(x), Box::new(y));
-        assert!(!expression.eval(&state, &metadata));
+        assert!(!expression.eval(&state, &metadata, &registry));
     }
 }

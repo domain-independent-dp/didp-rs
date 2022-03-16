@@ -1,22 +1,36 @@
 use crate::expression;
+use crate::expression_parser;
+use crate::function_registry;
 use crate::state;
 use crate::variable;
+use crate::yaml_util;
+use std::error;
+use std::fmt;
 use std::rc::Rc;
+use std::str;
 
-pub struct Operator<'a, T: variable::Numeric> {
-    pub preconditions: Vec<expression::Condition<'a, T>>,
+pub struct Operator<T: variable::Numeric> {
+    pub name: String,
+    pub elements_in_set_variable: Vec<(usize, usize)>,
+    pub elements_in_permutation_variable: Vec<(usize, usize)>,
+    pub preconditions: Vec<expression::Condition<T>>,
     pub set_effects: Vec<(usize, expression::SetExpression)>,
     pub permutation_effects: Vec<(usize, expression::ElementExpression)>,
     pub element_effects: Vec<(usize, expression::ElementExpression)>,
-    pub numeric_effects: Vec<(usize, expression::NumericExpression<'a, T>)>,
-    pub resource_effects: Vec<(usize, expression::NumericExpression<'a, T>)>,
-    pub cost: expression::NumericExpression<'a, T>,
+    pub numeric_effects: Vec<(usize, expression::NumericExpression<T>)>,
+    pub resource_effects: Vec<(usize, expression::NumericExpression<T>)>,
+    pub cost: expression::NumericExpression<T>,
 }
 
-impl<'a, T: variable::Numeric> Operator<'a, T> {
-    pub fn is_applicable(&self, state: &state::State<T>, metadata: &state::StateMetadata) -> bool {
+impl<T: variable::Numeric> Operator<T> {
+    pub fn is_applicable(
+        &self,
+        state: &state::State<T>,
+        metadata: &state::StateMetadata,
+        registry: &function_registry::FunctionRegistry<T>,
+    ) -> bool {
         for c in &self.preconditions {
-            if !c.eval(state, metadata) {
+            if !c.eval(state, metadata, registry) {
                 return false;
             }
         }
@@ -27,6 +41,7 @@ impl<'a, T: variable::Numeric> Operator<'a, T> {
         &self,
         state: &state::State<T>,
         metadata: &state::StateMetadata,
+        registry: &function_registry::FunctionRegistry<T>,
     ) -> state::State<T> {
         let len = state.signature_variables.set_variables.len();
         let mut set_variables = Vec::with_capacity(len);
@@ -57,16 +72,16 @@ impl<'a, T: variable::Numeric> Operator<'a, T> {
 
         let mut numeric_variables = state.signature_variables.numeric_variables.clone();
         for e in &self.numeric_effects {
-            numeric_variables[e.0] = e.1.eval(state, metadata);
+            numeric_variables[e.0] = e.1.eval(state, metadata, registry);
         }
 
         let mut resource_variables = state.resource_variables.clone();
         for e in &self.resource_effects {
-            resource_variables[e.0] = e.1.eval(state, metadata);
+            resource_variables[e.0] = e.1.eval(state, metadata, registry);
         }
 
         let stage = state.stage + 1;
-        let cost = self.cost.eval(state, metadata);
+        let cost = self.cost.eval(state, metadata, registry);
 
         state::State {
             signature_variables: {
@@ -84,29 +99,122 @@ impl<'a, T: variable::Numeric> Operator<'a, T> {
     }
 }
 
+pub fn load_operators_from_yaml<T: variable::Numeric>(
+    value: &yaml_rust::Yaml,
+    metadata: &state::StateMetadata,
+    registry: &function_registry::FunctionRegistry<T>,
+) -> Result<Vec<Operator<T>>, Box<dyn error::Error>>
+where
+    <T as str::FromStr>::Err: fmt::Debug,
+{
+    let map = yaml_util::get_map(value)?;
+    let lifted_name = yaml_util::get_string_by_key(map, "name")?;
+    let parameters = yaml_util::get_yaml_by_key(map, "parameters")?;
+    let (parameters_set, elements_in_set_variable_set, elements_in_permutation_variable_set) =
+        metadata.get_grounded_parameter_set_from_yaml(parameters)?;
+    let parameters = yaml_util::get_map(parameters)?;
+    let parameter_names = yaml_util::get_key_names(parameters)?;
+
+    let lifted_preconditions = yaml_util::get_string_array_by_key(map, "preconditions")?;
+    let lifted_effects = yaml_util::get_map_by_key(map, "effects")?;
+    let lifted_cost = yaml_util::get_string_by_key(map, "cost")?;
+
+    let mut operators = Vec::with_capacity(parameters_set.len());
+    for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in parameters_set
+        .into_iter()
+        .zip(elements_in_set_variable_set.into_iter())
+        .zip(elements_in_permutation_variable_set.into_iter())
+    {
+        let mut name = lifted_name.clone();
+        for parameter_name in &parameter_names {
+            name += format!(" {}:{}", parameter_name, parameters[parameter_name]).as_str();
+        }
+        let mut preconditions = Vec::with_capacity(lifted_preconditions.len());
+        for condition in &lifted_preconditions {
+            let condition = expression_parser::parse_condition(
+                condition.clone(),
+                metadata,
+                registry,
+                &parameters,
+            )?;
+            preconditions.push(condition);
+        }
+        let mut set_effects = Vec::new();
+        let mut permutation_effects = Vec::new();
+        let mut element_effects = Vec::new();
+        let mut numeric_effects = Vec::new();
+        let mut resource_effects = Vec::new();
+        for (variable, effect) in lifted_effects {
+            let effect = yaml_util::get_string(effect)?;
+            let variable = yaml_util::get_string(variable)?;
+            if let Some(i) = metadata.name_to_set_variable.get(&variable) {
+                let effect = expression_parser::parse_set(effect, metadata, &parameters)?;
+                set_effects.push((*i, effect));
+            } else if let Some(i) = metadata.name_to_permutation_variable.get(&variable) {
+                let effect = expression_parser::parse_element(effect, metadata, &parameters)?;
+                permutation_effects.push((*i, effect));
+            } else if let Some(i) = metadata.name_to_element_variable.get(&variable) {
+                let effect = expression_parser::parse_element(effect, metadata, &parameters)?;
+                element_effects.push((*i, effect));
+            } else if let Some(i) = metadata.name_to_numeric_variable.get(&variable) {
+                let effect =
+                    expression_parser::parse_numeric(effect, metadata, registry, &parameters)?;
+                numeric_effects.push((*i, effect));
+            } else if let Some(i) = metadata.name_to_resource_variable.get(&variable) {
+                let effect =
+                    expression_parser::parse_numeric(effect, metadata, registry, &parameters)?;
+                resource_effects.push((*i, effect));
+            } else {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "no such variable `{}`",
+                    variable
+                ))
+                .into());
+            }
+        }
+        let cost =
+            expression_parser::parse_numeric(lifted_cost.clone(), metadata, registry, &parameters)?;
+
+        operators.push(Operator {
+            name,
+            elements_in_set_variable,
+            elements_in_permutation_variable,
+            preconditions,
+            set_effects,
+            permutation_effects,
+            element_effects,
+            numeric_effects,
+            resource_effects,
+            cost,
+        })
+    }
+    Ok(operators)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::numeric_function;
     use expression::*;
     use std::collections::HashMap;
 
     fn generate_metadata() -> state::StateMetadata {
-        let object_names = vec!["object".to_string()];
+        let object_names = vec![String::from("object")];
         let object_numbers = vec![10];
         let mut name_to_object = HashMap::new();
         name_to_object.insert("object".to_string(), 0);
 
         let set_variable_names = vec![
-            "s0".to_string(),
-            "s1".to_string(),
-            "s2".to_string(),
-            "s3".to_string(),
+            String::from("s0"),
+            String::from("s1"),
+            String::from("s2"),
+            String::from("s3"),
         ];
         let mut name_to_set_variable = HashMap::new();
-        name_to_set_variable.insert("s0".to_string(), 0);
-        name_to_set_variable.insert("s1".to_string(), 1);
-        name_to_set_variable.insert("s2".to_string(), 2);
-        name_to_set_variable.insert("s3".to_string(), 3);
+        name_to_set_variable.insert(String::from("s0"), 0);
+        name_to_set_variable.insert(String::from("s1"), 1);
+        name_to_set_variable.insert(String::from("s2"), 2);
+        name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
 
         let permutation_variable_names = vec![
@@ -180,6 +288,35 @@ mod tests {
         }
     }
 
+    fn generate_registry() -> function_registry::FunctionRegistry<variable::IntegerVariable> {
+        let functions_1d = vec![numeric_function::NumericFunction1D::new(Vec::new())];
+        let mut name_to_function_1d = HashMap::new();
+        name_to_function_1d.insert(String::from("f1"), 0);
+
+        let functions_2d = vec![numeric_function::NumericFunction2D::new(Vec::new())];
+        let mut name_to_function_2d = HashMap::new();
+        name_to_function_2d.insert(String::from("f2"), 0);
+
+        let functions_3d = vec![numeric_function::NumericFunction3D::new(Vec::new())];
+        let mut name_to_function_3d = HashMap::new();
+        name_to_function_3d.insert(String::from("f3"), 0);
+
+        let functions = vec![numeric_function::NumericFunction::new(HashMap::new(), 0)];
+        let mut name_to_function = HashMap::new();
+        name_to_function.insert(String::from("f4"), 0);
+
+        function_registry::FunctionRegistry {
+            functions_1d,
+            name_to_function_1d,
+            functions_2d,
+            name_to_function_2d,
+            functions_3d,
+            name_to_function_3d,
+            functions,
+            name_to_function,
+        }
+    }
+
     fn generate_state() -> state::State<variable::IntegerVariable> {
         let mut set1 = variable::SetVariable::with_capacity(3);
         set1.insert(0);
@@ -203,6 +340,7 @@ mod tests {
     #[test]
     fn applicable() {
         let state = generate_state();
+        let registry = generate_registry();
         let metadata = generate_metadata();
         let set_condition = Condition::Set(SetCondition::IsIn(
             ElementExpression::Constant(0),
@@ -214,6 +352,9 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let operator = Operator {
+            name: String::from(""),
+            elements_in_set_variable: Vec::new(),
+            elements_in_permutation_variable: Vec::new(),
             preconditions: vec![set_condition, numeric_condition],
             set_effects: Vec::new(),
             permutation_effects: Vec::new(),
@@ -222,12 +363,13 @@ mod tests {
             resource_effects: Vec::new(),
             cost: NumericExpression::Constant(0),
         };
-        assert!(operator.is_applicable(&state, &metadata));
+        assert!(operator.is_applicable(&state, &metadata, &registry));
     }
 
     #[test]
     fn not_applicable() {
         let state = generate_state();
+        let registry = generate_registry();
         let metadata = generate_metadata();
         let set_condition = Condition::Set(SetCondition::IsIn(
             ElementExpression::Constant(0),
@@ -239,6 +381,9 @@ mod tests {
             NumericExpression::Constant(1),
         );
         let operator = Operator {
+            name: String::from(""),
+            elements_in_set_variable: Vec::new(),
+            elements_in_permutation_variable: Vec::new(),
             preconditions: vec![set_condition, numeric_condition],
             set_effects: Vec::new(),
             permutation_effects: Vec::new(),
@@ -247,12 +392,13 @@ mod tests {
             resource_effects: Vec::new(),
             cost: NumericExpression::Constant(0),
         };
-        assert!(operator.is_applicable(&state, &metadata));
+        assert!(operator.is_applicable(&state, &metadata, &registry));
     }
 
     #[test]
     fn appy_effects() {
         let state = generate_state();
+        let registry = generate_registry();
         let metadata = generate_metadata();
         let set_effect1 = SetExpression::SetElementOperation(
             SetElementOperator::Add,
@@ -289,6 +435,9 @@ mod tests {
             Box::new(NumericExpression::Constant(2)),
         );
         let operator = Operator {
+            name: String::from(""),
+            elements_in_set_variable: Vec::new(),
+            elements_in_permutation_variable: Vec::new(),
             preconditions: Vec::new(),
             set_effects: vec![(0, set_effect1), (1, set_effect2)],
             permutation_effects: vec![(0, permutation_effect1), (1, permutation_effect2)],
@@ -319,7 +468,7 @@ mod tests {
             stage: 1,
             cost: 1,
         };
-        let successor = operator.apply_effects(&state, &metadata);
+        let successor = operator.apply_effects(&state, &metadata, &registry);
         assert_eq!(successor, expected);
     }
 }
