@@ -7,6 +7,8 @@ use crate::variable;
 
 #[derive(Debug)]
 pub enum Condition<T: variable::Numeric> {
+    True,
+    False,
     Not(Box<Condition<T>>),
     And(Box<Condition<T>>, Box<Condition<T>>),
     Or(Box<Condition<T>>, Box<Condition<T>>),
@@ -37,6 +39,8 @@ impl<T: variable::Numeric> Condition<T> {
         registry: &table_registry::TableRegistry<T>,
     ) -> bool {
         match self {
+            Condition::True => true,
+            Condition::False => false,
             Condition::Not(c) => !c.eval(state, metadata, registry),
             Condition::And(x, y) => {
                 x.eval(state, metadata, registry) && y.eval(state, metadata, registry)
@@ -228,6 +232,26 @@ mod tests {
             stage: 0,
             cost: 0,
         }
+    }
+
+    #[test]
+    fn eval_true() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let state = generate_state();
+
+        let expression = Condition::True;
+        assert!(expression.eval(&state, &metadata, &registry));
+    }
+
+    #[test]
+    fn eval_false() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let state = generate_state();
+
+        let expression = Condition::False;
+        assert!(!expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
