@@ -13,6 +13,23 @@ pub mod table_registry;
 pub mod variable;
 pub mod yaml_util;
 
+#[derive(Debug)]
+pub struct ProblemErr(String);
+
+impl ProblemErr {
+    pub fn new(message: String) -> ProblemErr {
+        ProblemErr(format!("Error in problem definiton: {}", message))
+    }
+}
+
+impl fmt::Display for ProblemErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Error for ProblemErr {}
+
 pub struct Problem<T: variable::Numeric> {
     pub minimize: bool,
     pub domain_name: String,
@@ -76,20 +93,24 @@ impl<T: variable::Numeric> Problem<T> {
 
         let mut constraints = Vec::new();
         for constraint in yaml_util::get_array_by_key(&domain, "constraints")? {
-            constraints.extend(grounded_condition::load_grounded_conditions_from_yaml(
+            let conditions = grounded_condition::load_grounded_conditions_from_yaml(
                 &constraint,
                 &state_metadata,
                 &table_registry,
-            )?);
+            )?;
+            let conditions = Self::filiter_grounded_conditions(conditions)?;
+            constraints.extend(conditions);
         }
 
         let mut goals = Vec::new();
         for goal in yaml_util::get_array_by_key(&problem, "goals")? {
-            goals.extend(grounded_condition::load_grounded_conditions_from_yaml(
+            let conditions = grounded_condition::load_grounded_conditions_from_yaml(
                 &goal,
                 &state_metadata,
                 &table_registry,
-            )?);
+            )?;
+            let conditions = Self::filiter_grounded_conditions(conditions)?;
+            goals.extend(conditions);
         }
 
         let mut operators = Vec::new();
@@ -112,5 +133,23 @@ impl<T: variable::Numeric> Problem<T> {
             goals,
             operators,
         })
+    }
+
+    fn filiter_grounded_conditions(
+        conditions: Vec<grounded_condition::GroundedCondition<T>>,
+    ) -> Result<Vec<grounded_condition::GroundedCondition<T>>, ProblemErr> {
+        let mut result = Vec::with_capacity(conditions.len());
+        for condition in conditions {
+            match condition.condition {
+                expression::Condition::Constant(true) => continue,
+                expression::Condition::Constant(false) => {
+                    return Err(ProblemErr::new(String::from(
+                        "problem has a condition never satisfied",
+                    )))
+                }
+                _ => result.push(condition),
+            }
+        }
+        Ok(result)
     }
 }

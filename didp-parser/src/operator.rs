@@ -120,10 +120,11 @@ where
     let lifted_cost = yaml_util::get_string_by_key(map, "cost")?;
 
     let mut operators = Vec::with_capacity(parameters_set.len());
-    for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in parameters_set
-        .into_iter()
-        .zip(elements_in_set_variable_set.into_iter())
-        .zip(elements_in_permutation_variable_set.into_iter())
+    'outer: for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in
+        parameters_set
+            .into_iter()
+            .zip(elements_in_set_variable_set.into_iter())
+            .zip(elements_in_permutation_variable_set.into_iter())
     {
         let mut name = lifted_name.clone();
         for parameter_name in &parameter_names {
@@ -137,7 +138,12 @@ where
                 registry,
                 &parameters,
             )?;
-            preconditions.push(condition);
+            let condition = condition.simplify(registry);
+            match condition {
+                expression::Condition::Constant(true) => continue,
+                expression::Condition::Constant(false) => continue 'outer,
+                _ => preconditions.push(condition),
+            }
         }
         let mut set_effects = Vec::new();
         let mut permutation_effects = Vec::new();
@@ -159,11 +165,11 @@ where
             } else if let Some(i) = metadata.name_to_numeric_variable.get(&variable) {
                 let effect =
                     expression_parser::parse_numeric(effect, metadata, registry, &parameters)?;
-                numeric_effects.push((*i, effect));
+                numeric_effects.push((*i, effect.simplify(registry)));
             } else if let Some(i) = metadata.name_to_resource_variable.get(&variable) {
                 let effect =
                     expression_parser::parse_numeric(effect, metadata, registry, &parameters)?;
-                resource_effects.push((*i, effect));
+                resource_effects.push((*i, effect.simplify(registry)));
             } else {
                 return Err(yaml_util::YamlContentErr::new(format!(
                     "no such variable `{}`",
@@ -174,6 +180,7 @@ where
         }
         let cost =
             expression_parser::parse_numeric(lifted_cost.clone(), metadata, registry, &parameters)?;
+        let cost = cost.simplify(registry);
 
         operators.push(Operator {
             name,

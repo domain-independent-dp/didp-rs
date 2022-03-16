@@ -39,6 +39,7 @@ where
     {
         let condition =
             expression_parser::parse_condition(condition.clone(), metadata, registry, &parameters)?;
+        let condition = condition.simplify(registry);
         conditions.push(GroundedCondition {
             condition,
             elements_in_set_variable,

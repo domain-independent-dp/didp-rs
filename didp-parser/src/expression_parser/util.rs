@@ -10,6 +10,14 @@ impl ParseErr {
     }
 }
 
+impl fmt::Display for ParseErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl error::Error for ParseErr {}
+
 pub fn parse_closing(tokens: &[String]) -> Result<&[String], ParseErr> {
     let (token, rest) = tokens
         .split_first()
@@ -20,14 +28,6 @@ pub fn parse_closing(tokens: &[String]) -> Result<&[String], ParseErr> {
         Ok(rest)
     }
 }
-
-impl fmt::Display for ParseErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl error::Error for ParseErr {}
 
 #[cfg(test)]
 mod tests {
