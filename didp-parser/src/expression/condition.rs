@@ -1,3 +1,4 @@
+use super::bool_table_expression;
 use super::numeric_expression::NumericExpression;
 use super::set_condition;
 use crate::state;
@@ -15,6 +16,7 @@ pub enum Condition<T: variable::Numeric> {
         NumericExpression<T>,
     ),
     Set(set_condition::SetCondition),
+    Table(bool_table_expression::BoolTableExpression),
 }
 
 #[derive(Debug)]
@@ -48,6 +50,7 @@ impl<T: variable::Numeric> Condition<T> {
                 y.eval(state, metadata, registry),
             ),
             Condition::Set(c) => c.eval(state, metadata),
+            Condition::Table(c) => c.eval(state, registry),
         }
     }
 
@@ -65,6 +68,7 @@ impl<T: variable::Numeric> Condition<T> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::set_expression;
     use super::*;
     use crate::table;
     use std::collections::HashMap;
@@ -161,33 +165,51 @@ mod tests {
     }
 
     fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
-        let tables_1d = vec![table::Table1D::new(Vec::new())];
+        let tables_1d = vec![table::Table1D::new(vec![true, false])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
 
-        let tables_2d = vec![table::Table2D::new(Vec::new())];
+        let tables_2d = vec![table::Table2D::new(vec![vec![true, false]])];
         let mut name_to_table_2d = HashMap::new();
         name_to_table_2d.insert(String::from("f2"), 0);
 
-        let tables_3d = vec![table::Table3D::new(Vec::new())];
+        let tables_3d = vec![table::Table3D::new(vec![vec![vec![true, false]]])];
         let mut name_to_table_3d = HashMap::new();
         name_to_table_3d.insert(String::from("f3"), 0);
 
-        let tables = vec![table::Table::new(HashMap::new(), 0)];
+        let mut map = HashMap::new();
+        let key = vec![0, 0, 0, 0];
+        map.insert(key, true);
+        let key = vec![0, 0, 0, 1];
+        map.insert(key, false);
+        let tables = vec![table::Table::new(map, false)];
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
         table_registry::TableRegistry {
-            tables_1d,
-            name_to_table_1d,
-            tables_2d,
-            name_to_table_2d,
-            tables_3d,
-            name_to_table_3d,
-            tables,
-            name_to_table,
+            numeric_tables: table_registry::TableData {
+                tables_1d: Vec::new(),
+                name_to_table_1d: HashMap::new(),
+                tables_2d: Vec::new(),
+                name_to_table_2d: HashMap::new(),
+                tables_3d: Vec::new(),
+                name_to_table_3d: HashMap::new(),
+                tables: Vec::new(),
+                name_to_table: HashMap::new(),
+            },
+            bool_tables: table_registry::TableData {
+                tables_1d,
+                name_to_table_1d,
+                tables_2d,
+                name_to_table_2d,
+                tables_3d,
+                name_to_table_3d,
+                tables,
+                name_to_table,
+            },
         }
     }
+
     fn generate_state() -> state::State<variable::IntegerVariable> {
         let mut set1 = variable::SetVariable::with_capacity(3);
         set1.insert(0);
@@ -473,5 +495,17 @@ mod tests {
         );
         let expression = Condition::Or(Box::new(x), Box::new(y));
         assert!(!expression.eval(&state, &metadata, &registry));
+    }
+
+    #[test]
+    fn eval_table() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let state = generate_state();
+        let expression = Condition::Table(bool_table_expression::BoolTableExpression::Table1D(
+            0,
+            set_expression::ElementExpression::Constant(0),
+        ));
+        assert!(expression.eval(&state, &metadata, &registry));
     }
 }

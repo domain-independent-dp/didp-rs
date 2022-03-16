@@ -1,3 +1,4 @@
+use super::bool_table_parser;
 use super::numeric_parser;
 use super::set_parser;
 use super::util;
@@ -23,12 +24,24 @@ where
         .split_first()
         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     match &token[..] {
-        "(" => parse_operation(rest, metadata, registry, parameters),
+        "(" => {
+            let (name, rest) = rest
+                .split_first()
+                .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+            if let Some((expression, rest)) =
+                bool_table_parser::parse_expression(name, rest, metadata, registry, parameters)?
+            {
+                Ok((Condition::Table(expression), rest))
+            } else {
+                parse_operation(name, rest, metadata, registry, parameters)
+            }
+        }
         _ => Err(ParseErr::new(format!("unexpected token: `{}`", token))),
     }
 }
 
 fn parse_operation<'a, 'b, 'c, T: variable::Numeric>(
+    name: &'a str,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     registry: &'b table_registry::TableRegistry<T>,
@@ -37,77 +50,92 @@ fn parse_operation<'a, 'b, 'c, T: variable::Numeric>(
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let (name, rest) = tokens
-        .split_first()
-        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     match &name[..] {
         "not" => {
-            let (condition, rest) = parse_expression(rest, metadata, registry, parameters)?;
+            let (condition, rest) = parse_expression(tokens, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Not(Box::new(condition)), rest))
         }
         "and" => {
-            let (x, rest) = parse_expression(rest, metadata, registry, parameters)?;
+            let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
             let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::And(Box::new(x), Box::new(y)), rest))
         }
         "or" => {
-            let (x, rest) = parse_expression(rest, metadata, registry, parameters)?;
+            let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
             let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Or(Box::new(x), Box::new(y)), rest))
         }
         "=" => {
-            let (x, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let (x, rest) =
+                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
             let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Comparison(ComparisonOperator::Eq, x, y), rest))
         }
         "!=" => {
-            let (x, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let (x, rest) =
+                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
             let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Comparison(ComparisonOperator::Ne, x, y), rest))
         }
         ">=" => {
-            let (x, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let (x, rest) =
+                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
             let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Comparison(ComparisonOperator::Ge, x, y), rest))
         }
         ">" => {
-            let (x, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let (x, rest) =
+                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
             let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Comparison(ComparisonOperator::Gt, x, y), rest))
         }
         "<=" => {
-            let (x, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let (x, rest) =
+                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
             let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Comparison(ComparisonOperator::Le, x, y), rest))
         }
         "<" => {
-            let (x, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let (x, rest) =
+                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
             let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Comparison(ComparisonOperator::Lt, x, y), rest))
         }
+        "is" => {
+            let (x, rest) = set_parser::parse_element_expression(tokens, metadata, parameters)?;
+            let (y, rest) = set_parser::parse_element_expression(rest, metadata, parameters)?;
+            let rest = util::parse_closing(rest)?;
+            Ok((Condition::Set(SetCondition::Eq(x, y)), rest))
+        }
+        "is_not" => {
+            let (x, rest) = set_parser::parse_element_expression(tokens, metadata, parameters)?;
+            let (y, rest) = set_parser::parse_element_expression(rest, metadata, parameters)?;
+            let rest = util::parse_closing(rest)?;
+            Ok((Condition::Set(SetCondition::Ne(x, y)), rest))
+        }
         "is_in" => {
-            let (e, rest) = set_parser::parse_element_expression(rest, metadata, parameters)?;
+            let (e, rest) = set_parser::parse_element_expression(tokens, metadata, parameters)?;
             let (s, rest) = set_parser::parse_set_expression(rest, metadata, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(SetCondition::IsIn(e, s)), rest))
         }
         "is_subset" => {
-            let (x, rest) = set_parser::parse_set_expression(rest, metadata, parameters)?;
+            let (x, rest) = set_parser::parse_set_expression(tokens, metadata, parameters)?;
             let (y, rest) = set_parser::parse_set_expression(rest, metadata, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(SetCondition::IsSubset(x, y)), rest))
         }
         "is_empty" => {
-            let (s, rest) = set_parser::parse_set_expression(rest, metadata, parameters)?;
+            let (s, rest) = set_parser::parse_set_expression(tokens, metadata, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(SetCondition::IsEmpty(s)), rest))
         }
@@ -219,31 +247,48 @@ mod tests {
     }
 
     fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
-        let tables_1d = vec![table::Table1D::new(Vec::new())];
+        let tables_1d = vec![table::Table1D::new(vec![true, false])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
 
-        let tables_2d = vec![table::Table2D::new(Vec::new())];
+        let tables_2d = vec![table::Table2D::new(vec![vec![true, false]])];
         let mut name_to_table_2d = HashMap::new();
         name_to_table_2d.insert(String::from("f2"), 0);
 
-        let tables_3d = vec![table::Table3D::new(Vec::new())];
+        let tables_3d = vec![table::Table3D::new(vec![vec![vec![true, false]]])];
         let mut name_to_table_3d = HashMap::new();
         name_to_table_3d.insert(String::from("f3"), 0);
 
-        let tables = vec![table::Table::new(HashMap::new(), 0)];
+        let mut map = HashMap::new();
+        let key = vec![0, 0, 0, 0];
+        map.insert(key, true);
+        let key = vec![0, 0, 0, 1];
+        map.insert(key, false);
+        let tables = vec![table::Table::new(map, false)];
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
         table_registry::TableRegistry {
-            tables_1d,
-            name_to_table_1d,
-            tables_2d,
-            name_to_table_2d,
-            tables_3d,
-            name_to_table_3d,
-            tables,
-            name_to_table,
+            numeric_tables: table_registry::TableData {
+                tables_1d: Vec::new(),
+                name_to_table_1d: HashMap::new(),
+                tables_2d: Vec::new(),
+                name_to_table_2d: HashMap::new(),
+                tables_3d: Vec::new(),
+                name_to_table_3d: HashMap::new(),
+                tables: Vec::new(),
+                name_to_table: HashMap::new(),
+            },
+            bool_tables: table_registry::TableData {
+                tables_1d,
+                name_to_table_1d,
+                tables_2d,
+                name_to_table_2d,
+                tables_3d,
+                name_to_table_3d,
+                tables,
+                name_to_table,
+            },
         }
     }
 
@@ -264,6 +309,50 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = [
+            "(", "f4", "0", "e0", "e1", "e2", ")", "(", "is", "0", "e0", ")", ")",
+        ]
+        .iter()
+        .map(|x| String::from(*x))
+        .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(
+            expression,
+            Condition::Table(BoolTableExpression::Table(_, _))
+        ));
+        if let Condition::Table(BoolTableExpression::Table(i, args)) = expression {
+            assert_eq!(i, 0);
+            assert_eq!(args.len(), 4);
+            assert!(matches!(args[0], ElementExpression::Constant(0)));
+            assert!(matches!(args[1], ElementExpression::Variable(0)));
+            assert!(matches!(args[2], ElementExpression::Variable(1)));
+            assert!(matches!(args[3], ElementExpression::Variable(2)));
+        }
+        assert_eq!(rest, &tokens[7..]);
+    }
+
+    #[test]
+    fn parse_table_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = [
+            "(", "f4", "0", "e0", "e1", "e2", "n0", ")", "(", "is", "0", "e0", ")", ")",
+        ]
+        .iter()
+        .map(|x| String::from(*x))
+        .collect();
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
@@ -737,6 +826,120 @@ mod tests {
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "<=", "2", "n0", "n1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_is_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["(", "is", "2", "e0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(
+            expression,
+            Condition::Set(SetCondition::Eq(
+                ElementExpression::Constant(2),
+                ElementExpression::Variable(0)
+            ))
+        ));
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn parse_is_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "is", "e0", "s1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "is", "n0", "e1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "is", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "is", "0", "e1", "e2", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_is_not_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["(", "is_not", "2", "e0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(
+            expression,
+            Condition::Set(SetCondition::Ne(
+                ElementExpression::Constant(2),
+                ElementExpression::Variable(0)
+            ))
+        ));
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn parse_is_not_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "is_not", "e0", "s1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "is_not", "n0", "e1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "is_not", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "is_not", "0", "e1", "e2", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();

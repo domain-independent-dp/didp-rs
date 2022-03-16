@@ -19,16 +19,17 @@ pub fn parse_expression<'a, 'b, 'c, T: variable::Numeric>(
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    if let Some(i) = registry.name_to_table_1d.get(name) {
+    let tables = &registry.numeric_tables;
+    if let Some(i) = tables.name_to_table_1d.get(name) {
         let result = parse_table_1d(*i, tokens, metadata, parameters)?;
         Ok(Some(result))
-    } else if let Some(i) = registry.name_to_table_2d.get(name) {
+    } else if let Some(i) = tables.name_to_table_2d.get(name) {
         let result = parse_table_2d(*i, tokens, metadata, parameters)?;
         Ok(Some(result))
-    } else if let Some(i) = registry.name_to_table_3d.get(name) {
+    } else if let Some(i) = tables.name_to_table_3d.get(name) {
         let result = parse_table_3d(*i, tokens, metadata, parameters)?;
         Ok(Some(result))
-    } else if let Some(i) = registry.name_to_table.get(name) {
+    } else if let Some(i) = tables.name_to_table.get(name) {
         let result = parse_table(*i, tokens, metadata, parameters)?;
         Ok(Some(result))
     } else {
@@ -269,14 +270,26 @@ mod tests {
         name_to_table.insert(String::from("f4"), 0);
 
         table_registry::TableRegistry {
-            tables_1d,
-            name_to_table_1d,
-            tables_2d,
-            name_to_table_2d,
-            tables_3d,
-            name_to_table_3d,
-            tables,
-            name_to_table,
+            numeric_tables: table_registry::TableData {
+                tables_1d,
+                name_to_table_1d,
+                tables_2d,
+                name_to_table_2d,
+                tables_3d,
+                name_to_table_3d,
+                tables,
+                name_to_table,
+            },
+            bool_tables: table_registry::TableData {
+                tables_1d: Vec::new(),
+                name_to_table_1d: HashMap::new(),
+                tables_2d: Vec::new(),
+                name_to_table_2d: HashMap::new(),
+                tables_3d: Vec::new(),
+                name_to_table_3d: HashMap::new(),
+                tables: Vec::new(),
+                name_to_table: HashMap::new(),
+            },
         }
     }
 
@@ -336,6 +349,11 @@ mod tests {
             assert!(matches!(x, SetExpression::SetVariable(0)));
         }
         assert_eq!(rest, &tokens[2..]);
+
+        let result = parse_expression("f0", &tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_none());
     }
 
     #[test]
@@ -448,6 +466,11 @@ mod tests {
             assert!(matches!(y, SetExpression::PermutationVariable(0)));
         }
         assert_eq!(rest, &tokens[3..]);
+
+        let result = parse_expression("f0", &tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_none());
     }
 
     #[test]
@@ -651,6 +674,11 @@ mod tests {
             assert!(matches!(z, SetExpression::PermutationVariable(0)));
         }
         assert_eq!(rest, &tokens[4..]);
+
+        let result = parse_expression("f0", &tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_none());
     }
 
     #[test]
@@ -717,6 +745,11 @@ mod tests {
             ));
         }
         assert_eq!(rest, &tokens[5..]);
+
+        let result = parse_expression("f0", &tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_none());
     }
 
     #[test]

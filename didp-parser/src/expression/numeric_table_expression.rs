@@ -88,70 +88,66 @@ impl NumericTableExpression {
         metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry<T>,
     ) -> T {
+        let tables = &registry.numeric_tables;
         match self {
-            Self::Table1D(i, x) => registry.tables_1d[*i].eval(x.eval(&state)),
-            Self::Table1DSum(i, x) => registry.tables_1d[*i].sum(&x.eval(&state, metadata)),
-            Self::Table2D(i, x, y) => registry.tables_2d[*i].eval(x.eval(&state), y.eval(&state)),
+            Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(&state)),
+            Self::Table1DSum(i, x) => tables.tables_1d[*i].sum(&x.eval(&state, metadata)),
+            Self::Table2D(i, x, y) => tables.tables_2d[*i].eval(x.eval(&state), y.eval(&state)),
             Self::Table2DSum(i, x, y) => {
-                registry.tables_2d[*i].sum(&x.eval(&state, metadata), &y.eval(&state, metadata))
+                tables.tables_2d[*i].sum(&x.eval(&state, metadata), &y.eval(&state, metadata))
             }
             Self::Table2DSumX(i, x, y) => {
-                registry.tables_2d[*i].sum_x(&x.eval(&state, metadata), y.eval(&state))
+                tables.tables_2d[*i].sum_x(&x.eval(&state, metadata), y.eval(&state))
             }
             Self::Table2DSumY(i, x, y) => {
-                registry.tables_2d[*i].sum_y(x.eval(&state), &y.eval(&state, metadata))
+                tables.tables_2d[*i].sum_y(x.eval(&state), &y.eval(&state, metadata))
             }
             Self::Table3D(i, x, y, z) => {
-                registry.tables_3d[*i].eval(x.eval(&state), y.eval(&state), z.eval(&state))
+                tables.tables_3d[*i].eval(x.eval(&state), y.eval(&state), z.eval(&state))
             }
-            Self::Table3DSum(i, x, y, z) => registry.tables_3d[*i].sum(
+            Self::Table3DSum(i, x, y, z) => tables.tables_3d[*i].sum(
                 &x.eval(&state, metadata),
                 &y.eval(&state, metadata),
                 &z.eval(&state, metadata),
             ),
-            Self::Table3DSumX(i, x, y, z) => registry.tables_3d[*i].sum_x(
+            Self::Table3DSumX(i, x, y, z) => tables.tables_3d[*i].sum_x(
                 &x.eval(&state, metadata),
                 y.eval(&state),
                 z.eval(&state),
             ),
-            Self::Table3DSumY(i, x, y, z) => registry.tables_3d[*i].sum_y(
+            Self::Table3DSumY(i, x, y, z) => tables.tables_3d[*i].sum_y(
                 x.eval(&state),
                 &y.eval(&state, metadata),
                 z.eval(&state),
             ),
-            Self::Table3DSumZ(i, x, y, z) => registry.tables_3d[*i].sum_z(
+            Self::Table3DSumZ(i, x, y, z) => tables.tables_3d[*i].sum_z(
                 x.eval(&state),
                 y.eval(&state),
                 &z.eval(&state, metadata),
             ),
-            Self::Table3DSumXY(i, x, y, z) => registry.tables_3d[*i].sum_xy(
+            Self::Table3DSumXY(i, x, y, z) => tables.tables_3d[*i].sum_xy(
                 &x.eval(&state, metadata),
                 &y.eval(&state, metadata),
                 z.eval(&state),
             ),
-            Self::Table3DSumXZ(i, x, y, z) => registry.tables_3d[*i].sum_xz(
+            Self::Table3DSumXZ(i, x, y, z) => tables.tables_3d[*i].sum_xz(
                 &x.eval(&state, metadata),
                 y.eval(&state),
                 &z.eval(&state, metadata),
             ),
-            Self::Table3DSumYZ(i, x, y, z) => registry.tables_3d[*i].sum_yz(
+            Self::Table3DSumYZ(i, x, y, z) => tables.tables_3d[*i].sum_yz(
                 x.eval(&state),
                 &y.eval(&state, metadata),
                 &z.eval(&state, metadata),
             ),
-            Self::Table(i, args) => eval_table(&registry.tables[*i], args, &state),
-            Self::TableSum(i, args) => sum_table(&registry.tables[*i], args, &state, metadata),
+            Self::Table(i, args) => {
+                let args: Vec<variable::ElementVariable> =
+                    args.iter().map(|x| x.eval(state)).collect();
+                tables.tables[*i].eval(&args)
+            }
+            Self::TableSum(i, args) => sum_table(&tables.tables[*i], args, &state, metadata),
         }
     }
-}
-
-fn eval_table<T: variable::Numeric>(
-    f: &table::Table<T>,
-    args: &[set_expression::ElementExpression],
-    state: &state::State<T>,
-) -> T {
-    let args: Vec<variable::ElementVariable> = args.iter().map(|x| x.eval(state)).collect();
-    f.eval(&args)
 }
 
 fn sum_table<T: variable::Numeric>(
@@ -319,14 +315,26 @@ mod tests {
         name_to_table.insert(String::from("f4"), 0);
 
         table_registry::TableRegistry {
-            tables_1d,
-            name_to_table_1d,
-            tables_2d,
-            name_to_table_2d,
-            tables_3d,
-            name_to_table_3d,
-            tables,
-            name_to_table,
+            numeric_tables: table_registry::TableData {
+                tables_1d,
+                name_to_table_1d,
+                tables_2d,
+                name_to_table_2d,
+                tables_3d,
+                name_to_table_3d,
+                tables,
+                name_to_table,
+            },
+            bool_tables: table_registry::TableData {
+                tables_1d: Vec::new(),
+                name_to_table_1d: HashMap::new(),
+                tables_2d: Vec::new(),
+                name_to_table_2d: HashMap::new(),
+                tables_3d: Vec::new(),
+                name_to_table_3d: HashMap::new(),
+                tables: Vec::new(),
+                name_to_table: HashMap::new(),
+            },
         }
     }
 
