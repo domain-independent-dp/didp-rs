@@ -1,156 +1,152 @@
 use super::set_expression;
-use crate::function_registry;
-use crate::numeric_function;
 use crate::state;
+use crate::table;
+use crate::table_registry;
 use crate::variable;
 use std::iter;
 
 #[derive(Debug)]
-pub enum FunctionExpression {
-    Function1D(usize, set_expression::ElementExpression),
-    Function1DSum(usize, set_expression::SetExpression),
-    Function2D(
+pub enum NumericTableExpression {
+    Table1D(usize, set_expression::ElementExpression),
+    Table1DSum(usize, set_expression::SetExpression),
+    Table2D(
         usize,
         set_expression::ElementExpression,
         set_expression::ElementExpression,
     ),
-    Function2DSum(
+    Table2DSum(
         usize,
         set_expression::SetExpression,
         set_expression::SetExpression,
     ),
-    Function2DSumX(
+    Table2DSumX(
         usize,
         set_expression::SetExpression,
         set_expression::ElementExpression,
     ),
-    Function2DSumY(
+    Table2DSumY(
         usize,
         set_expression::ElementExpression,
         set_expression::SetExpression,
     ),
-    Function3D(
+    Table3D(
         usize,
         set_expression::ElementExpression,
         set_expression::ElementExpression,
         set_expression::ElementExpression,
     ),
-    Function3DSum(
+    Table3DSum(
         usize,
         set_expression::SetExpression,
         set_expression::SetExpression,
         set_expression::SetExpression,
     ),
-    Function3DSumX(
+    Table3DSumX(
         usize,
         set_expression::SetExpression,
         set_expression::ElementExpression,
         set_expression::ElementExpression,
     ),
-    Function3DSumY(
+    Table3DSumY(
         usize,
         set_expression::ElementExpression,
         set_expression::SetExpression,
         set_expression::ElementExpression,
     ),
-    Function3DSumZ(
+    Table3DSumZ(
         usize,
         set_expression::ElementExpression,
         set_expression::ElementExpression,
         set_expression::SetExpression,
     ),
-    Function3DSumXY(
+    Table3DSumXY(
         usize,
         set_expression::SetExpression,
         set_expression::SetExpression,
         set_expression::ElementExpression,
     ),
-    Function3DSumXZ(
+    Table3DSumXZ(
         usize,
         set_expression::SetExpression,
         set_expression::ElementExpression,
         set_expression::SetExpression,
     ),
-    Function3DSumYZ(
+    Table3DSumYZ(
         usize,
         set_expression::ElementExpression,
         set_expression::SetExpression,
         set_expression::SetExpression,
     ),
-    Function(usize, Vec<set_expression::ElementExpression>),
-    FunctionSum(usize, Vec<set_expression::ArgumentExpression>),
+    Table(usize, Vec<set_expression::ElementExpression>),
+    TableSum(usize, Vec<set_expression::ArgumentExpression>),
 }
 
-impl FunctionExpression {
+impl NumericTableExpression {
     pub fn eval<T: variable::Numeric>(
         &self,
         state: &state::State<T>,
         metadata: &state::StateMetadata,
-        registry: &function_registry::FunctionRegistry<T>,
+        registry: &table_registry::TableRegistry<T>,
     ) -> T {
         match self {
-            Self::Function1D(i, x) => registry.functions_1d[*i].eval(x.eval(&state)),
-            Self::Function1DSum(i, x) => registry.functions_1d[*i].sum(&x.eval(&state, metadata)),
-            Self::Function2D(i, x, y) => {
-                registry.functions_2d[*i].eval(x.eval(&state), y.eval(&state))
+            Self::Table1D(i, x) => registry.tables_1d[*i].eval(x.eval(&state)),
+            Self::Table1DSum(i, x) => registry.tables_1d[*i].sum(&x.eval(&state, metadata)),
+            Self::Table2D(i, x, y) => registry.tables_2d[*i].eval(x.eval(&state), y.eval(&state)),
+            Self::Table2DSum(i, x, y) => {
+                registry.tables_2d[*i].sum(&x.eval(&state, metadata), &y.eval(&state, metadata))
             }
-            Self::Function2DSum(i, x, y) => {
-                registry.functions_2d[*i].sum(&x.eval(&state, metadata), &y.eval(&state, metadata))
+            Self::Table2DSumX(i, x, y) => {
+                registry.tables_2d[*i].sum_x(&x.eval(&state, metadata), y.eval(&state))
             }
-            Self::Function2DSumX(i, x, y) => {
-                registry.functions_2d[*i].sum_x(&x.eval(&state, metadata), y.eval(&state))
+            Self::Table2DSumY(i, x, y) => {
+                registry.tables_2d[*i].sum_y(x.eval(&state), &y.eval(&state, metadata))
             }
-            Self::Function2DSumY(i, x, y) => {
-                registry.functions_2d[*i].sum_y(x.eval(&state), &y.eval(&state, metadata))
+            Self::Table3D(i, x, y, z) => {
+                registry.tables_3d[*i].eval(x.eval(&state), y.eval(&state), z.eval(&state))
             }
-            Self::Function3D(i, x, y, z) => {
-                registry.functions_3d[*i].eval(x.eval(&state), y.eval(&state), z.eval(&state))
-            }
-            Self::Function3DSum(i, x, y, z) => registry.functions_3d[*i].sum(
+            Self::Table3DSum(i, x, y, z) => registry.tables_3d[*i].sum(
                 &x.eval(&state, metadata),
                 &y.eval(&state, metadata),
                 &z.eval(&state, metadata),
             ),
-            Self::Function3DSumX(i, x, y, z) => registry.functions_3d[*i].sum_x(
+            Self::Table3DSumX(i, x, y, z) => registry.tables_3d[*i].sum_x(
                 &x.eval(&state, metadata),
                 y.eval(&state),
                 z.eval(&state),
             ),
-            Self::Function3DSumY(i, x, y, z) => registry.functions_3d[*i].sum_y(
+            Self::Table3DSumY(i, x, y, z) => registry.tables_3d[*i].sum_y(
                 x.eval(&state),
                 &y.eval(&state, metadata),
                 z.eval(&state),
             ),
-            Self::Function3DSumZ(i, x, y, z) => registry.functions_3d[*i].sum_z(
+            Self::Table3DSumZ(i, x, y, z) => registry.tables_3d[*i].sum_z(
                 x.eval(&state),
                 y.eval(&state),
                 &z.eval(&state, metadata),
             ),
-            Self::Function3DSumXY(i, x, y, z) => registry.functions_3d[*i].sum_xy(
+            Self::Table3DSumXY(i, x, y, z) => registry.tables_3d[*i].sum_xy(
                 &x.eval(&state, metadata),
                 &y.eval(&state, metadata),
                 z.eval(&state),
             ),
-            Self::Function3DSumXZ(i, x, y, z) => registry.functions_3d[*i].sum_xz(
+            Self::Table3DSumXZ(i, x, y, z) => registry.tables_3d[*i].sum_xz(
                 &x.eval(&state, metadata),
                 y.eval(&state),
                 &z.eval(&state, metadata),
             ),
-            Self::Function3DSumYZ(i, x, y, z) => registry.functions_3d[*i].sum_yz(
+            Self::Table3DSumYZ(i, x, y, z) => registry.tables_3d[*i].sum_yz(
                 x.eval(&state),
                 &y.eval(&state, metadata),
                 &z.eval(&state, metadata),
             ),
-            Self::Function(i, args) => eval_numeric_function(&registry.functions[*i], args, &state),
-            Self::FunctionSum(i, args) => {
-                sum_numeric_function(&registry.functions[*i], args, &state, metadata)
-            }
+            Self::Table(i, args) => eval_table(&registry.tables[*i], args, &state),
+            Self::TableSum(i, args) => sum_table(&registry.tables[*i], args, &state, metadata),
         }
     }
 }
 
-fn eval_numeric_function<T: variable::Numeric>(
-    f: &numeric_function::NumericFunction<T>,
+fn eval_table<T: variable::Numeric>(
+    f: &table::Table<T>,
     args: &[set_expression::ElementExpression],
     state: &state::State<T>,
 ) -> T {
@@ -158,8 +154,8 @@ fn eval_numeric_function<T: variable::Numeric>(
     f.eval(&args)
 }
 
-fn sum_numeric_function<T: variable::Numeric>(
-    f: &numeric_function::NumericFunction<T>,
+fn sum_table<T: variable::Numeric>(
+    f: &table::Table<T>,
     args: &[set_expression::ArgumentExpression],
     state: &state::State<T>,
     metadata: &state::StateMetadata,
@@ -288,26 +284,26 @@ mod tests {
         }
     }
 
-    fn generate_registry() -> function_registry::FunctionRegistry<variable::IntegerVariable> {
-        let functions_1d = vec![numeric_function::NumericFunction1D::new(vec![10, 20, 30])];
-        let mut name_to_function_1d = HashMap::new();
-        name_to_function_1d.insert(String::from("f1"), 0);
+    fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
+        let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
+        let mut name_to_table_1d = HashMap::new();
+        name_to_table_1d.insert(String::from("f1"), 0);
 
-        let functions_2d = vec![numeric_function::NumericFunction2D::new(vec![
+        let tables_2d = vec![table::Table2D::new(vec![
             vec![10, 20, 30],
             vec![40, 50, 60],
             vec![70, 80, 90],
         ])];
-        let mut name_to_function_2d = HashMap::new();
-        name_to_function_2d.insert(String::from("f2"), 0);
+        let mut name_to_table_2d = HashMap::new();
+        name_to_table_2d.insert(String::from("f2"), 0);
 
-        let functions_3d = vec![numeric_function::NumericFunction3D::new(vec![
+        let tables_3d = vec![table::Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ])];
-        let mut name_to_function_3d = HashMap::new();
-        name_to_function_3d.insert(String::from("f3"), 0);
+        let mut name_to_table_3d = HashMap::new();
+        name_to_table_3d.insert(String::from("f3"), 0);
 
         let mut map = HashMap::new();
         let key = vec![0, 1, 0, 0];
@@ -318,19 +314,19 @@ mod tests {
         map.insert(key, 300);
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400);
-        let functions = vec![numeric_function::NumericFunction::new(map, 0)];
-        let mut name_to_function = HashMap::new();
-        name_to_function.insert(String::from("f4"), 0);
+        let tables = vec![table::Table::new(map, 0)];
+        let mut name_to_table = HashMap::new();
+        name_to_table.insert(String::from("f4"), 0);
 
-        function_registry::FunctionRegistry {
-            functions_1d,
-            name_to_function_1d,
-            functions_2d,
-            name_to_function_2d,
-            functions_3d,
-            name_to_function_3d,
-            functions,
-            name_to_function,
+        table_registry::TableRegistry {
+            tables_1d,
+            name_to_table_1d,
+            tables_2d,
+            name_to_table_2d,
+            tables_3d,
+            name_to_table_3d,
+            tables,
+            name_to_table,
         }
     }
 
@@ -355,40 +351,40 @@ mod tests {
     }
 
     #[test]
-    fn function_1d_eval() {
+    fn table_1d_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression =
-            FunctionExpression::Function1D(0, set_expression::ElementExpression::Constant(0));
+            NumericTableExpression::Table1D(0, set_expression::ElementExpression::Constant(0));
         assert_eq!(expression.eval(&state, &metadata, &registry), 10);
         let expression =
-            FunctionExpression::Function1D(0, set_expression::ElementExpression::Constant(1));
+            NumericTableExpression::Table1D(0, set_expression::ElementExpression::Constant(1));
         assert_eq!(expression.eval(&state, &metadata, &registry), 20);
         let expression =
-            FunctionExpression::Function1D(0, set_expression::ElementExpression::Constant(2));
+            NumericTableExpression::Table1D(0, set_expression::ElementExpression::Constant(2));
         assert_eq!(expression.eval(&state, &metadata, &registry), 30);
     }
 
     #[test]
-    fn function_1d_sum_eval() {
+    fn table_1d_sum_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression =
-            FunctionExpression::Function1DSum(0, set_expression::SetExpression::SetVariable(0));
+            NumericTableExpression::Table1DSum(0, set_expression::SetExpression::SetVariable(0));
         assert_eq!(expression.eval(&state, &metadata, &registry), 40);
         let expression =
-            FunctionExpression::Function1DSum(0, set_expression::SetExpression::SetVariable(1));
+            NumericTableExpression::Table1DSum(0, set_expression::SetExpression::SetVariable(1));
         assert_eq!(expression.eval(&state, &metadata, &registry), 30);
     }
 
     #[test]
-    fn function_2d_eval() {
+    fn table_2d_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function2D(
+        let expression = NumericTableExpression::Table2D(
             0,
             set_expression::ElementExpression::Constant(0),
             set_expression::ElementExpression::Constant(1),
@@ -397,11 +393,11 @@ mod tests {
     }
 
     #[test]
-    fn function_2d_sum_eval() {
+    fn table_2d_sum_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function2DSum(
+        let expression = NumericTableExpression::Table2DSum(
             0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::SetExpression::SetVariable(1),
@@ -410,11 +406,11 @@ mod tests {
     }
 
     #[test]
-    fn function_2d_sum_x_eval() {
+    fn table_2d_sum_x_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function2DSumX(
+        let expression = NumericTableExpression::Table2DSumX(
             0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::ElementExpression::Constant(0),
@@ -423,11 +419,11 @@ mod tests {
     }
 
     #[test]
-    fn function_2d_sum_y_eval() {
+    fn table_2d_sum_y_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function2DSumY(
+        let expression = NumericTableExpression::Table2DSumY(
             0,
             set_expression::ElementExpression::Constant(0),
             set_expression::SetExpression::SetVariable(0),
@@ -436,11 +432,11 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_eval() {
+    fn table_3d_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function3D(
+        let expression = NumericTableExpression::Table3D(
             0,
             set_expression::ElementExpression::Constant(0),
             set_expression::ElementExpression::Constant(1),
@@ -450,11 +446,11 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_eval() {
+    fn table_3d_sum_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function3DSum(
+        let expression = NumericTableExpression::Table3DSum(
             0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::SetExpression::SetVariable(1),
@@ -464,11 +460,11 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_x_eval() {
+    fn table_3d_sum_x_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function3DSumX(
+        let expression = NumericTableExpression::Table3DSumX(
             0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::ElementExpression::Constant(1),
@@ -478,11 +474,11 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_y_eval() {
+    fn table_3d_sum_y_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function3DSumY(
+        let expression = NumericTableExpression::Table3DSumY(
             0,
             set_expression::ElementExpression::Constant(1),
             set_expression::SetExpression::SetVariable(0),
@@ -492,11 +488,11 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_z_eval() {
+    fn table_3d_sum_z_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function3DSumZ(
+        let expression = NumericTableExpression::Table3DSumZ(
             0,
             set_expression::ElementExpression::Constant(1),
             set_expression::ElementExpression::Constant(2),
@@ -506,11 +502,11 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_xy_eval() {
+    fn table_3d_sum_xy_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function3DSumXY(
+        let expression = NumericTableExpression::Table3DSumXY(
             0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::SetExpression::SetVariable(1),
@@ -520,11 +516,11 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_xz_eval() {
+    fn table_3d_sum_xz_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function3DSumXZ(
+        let expression = NumericTableExpression::Table3DSumXZ(
             0,
             set_expression::SetExpression::SetVariable(0),
             set_expression::ElementExpression::Constant(2),
@@ -534,11 +530,11 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_yz_eval() {
+    fn table_3d_sum_yz_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function3DSumYZ(
+        let expression = NumericTableExpression::Table3DSumYZ(
             0,
             set_expression::ElementExpression::Constant(2),
             set_expression::SetExpression::SetVariable(0),
@@ -548,11 +544,11 @@ mod tests {
     }
 
     #[test]
-    fn function_eval() {
+    fn table_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::Function(
+        let expression = NumericTableExpression::Table(
             0,
             vec![
                 set_expression::ElementExpression::Constant(0),
@@ -562,7 +558,7 @@ mod tests {
             ],
         );
         assert_eq!(expression.eval(&state, &metadata, &registry), 100);
-        let expression = FunctionExpression::Function(
+        let expression = NumericTableExpression::Table(
             0,
             vec![
                 set_expression::ElementExpression::Constant(0),
@@ -572,7 +568,7 @@ mod tests {
             ],
         );
         assert_eq!(expression.eval(&state, &metadata, &registry), 200);
-        let expression = FunctionExpression::Function(
+        let expression = NumericTableExpression::Table(
             0,
             vec![
                 set_expression::ElementExpression::Constant(0),
@@ -582,7 +578,7 @@ mod tests {
             ],
         );
         assert_eq!(expression.eval(&state, &metadata, &registry), 300);
-        let expression = FunctionExpression::Function(
+        let expression = NumericTableExpression::Table(
             0,
             vec![
                 set_expression::ElementExpression::Constant(0),
@@ -595,11 +591,11 @@ mod tests {
     }
 
     #[test]
-    fn function_sum_eval() {
+    fn table_sum_eval() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = FunctionExpression::FunctionSum(
+        let expression = NumericTableExpression::TableSum(
             0,
             vec![
                 set_expression::ArgumentExpression::Element(

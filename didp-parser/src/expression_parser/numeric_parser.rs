@@ -1,10 +1,10 @@
-use super::function_parser;
+use super::numeric_table_parser;
 use super::set_parser;
 use super::util;
 use super::util::ParseErr;
 use crate::expression::{NumericExpression, NumericOperator};
-use crate::function_registry;
 use crate::state;
+use crate::table_registry;
 use crate::variable;
 use std::collections;
 use std::fmt;
@@ -13,7 +13,7 @@ use std::str;
 pub fn parse_expression<'a, 'b, 'c, T: variable::Numeric>(
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
-    registry: &'b function_registry::FunctionRegistry<T>,
+    registry: &'b table_registry::TableRegistry<T>,
     parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
@@ -28,9 +28,9 @@ where
                 .split_first()
                 .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
             if let Some((expression, rest)) =
-                function_parser::parse_expression(name, rest, metadata, registry, parameters)?
+                numeric_table_parser::parse_expression(name, rest, metadata, registry, parameters)?
             {
-                Ok((NumericExpression::Function(expression), rest))
+                Ok((NumericExpression::NumericTable(expression), rest))
             } else {
                 parse_operation(name, rest, metadata, registry, parameters)
             }
@@ -48,7 +48,7 @@ fn parse_operation<'a, 'b, 'c, T: variable::Numeric>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
-    registry: &'b function_registry::FunctionRegistry<T>,
+    registry: &'b table_registry::TableRegistry<T>,
     parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
@@ -137,7 +137,7 @@ where
 mod tests {
     use super::*;
     use crate::expression::*;
-    use crate::numeric_function;
+    use crate::table;
     use std::collections::HashMap;
 
     fn generate_metadata() -> state::StateMetadata {
@@ -236,32 +236,32 @@ mod tests {
         parameters
     }
 
-    fn generate_registry() -> function_registry::FunctionRegistry<variable::IntegerVariable> {
-        let functions_1d = vec![numeric_function::NumericFunction1D::new(Vec::new())];
-        let mut name_to_function_1d = HashMap::new();
-        name_to_function_1d.insert(String::from("f1"), 0);
+    fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
+        let tables_1d = vec![table::Table1D::new(Vec::new())];
+        let mut name_to_table_1d = HashMap::new();
+        name_to_table_1d.insert(String::from("f1"), 0);
 
-        let functions_2d = vec![numeric_function::NumericFunction2D::new(Vec::new())];
-        let mut name_to_function_2d = HashMap::new();
-        name_to_function_2d.insert(String::from("f2"), 0);
+        let tables_2d = vec![table::Table2D::new(Vec::new())];
+        let mut name_to_table_2d = HashMap::new();
+        name_to_table_2d.insert(String::from("f2"), 0);
 
-        let functions_3d = vec![numeric_function::NumericFunction3D::new(Vec::new())];
-        let mut name_to_function_3d = HashMap::new();
-        name_to_function_3d.insert(String::from("f3"), 0);
+        let tables_3d = vec![table::Table3D::new(Vec::new())];
+        let mut name_to_table_3d = HashMap::new();
+        name_to_table_3d.insert(String::from("f3"), 0);
 
-        let functions = vec![numeric_function::NumericFunction::new(HashMap::new(), 0)];
-        let mut name_to_function = HashMap::new();
-        name_to_function.insert(String::from("f4"), 0);
+        let tables = vec![table::Table::new(HashMap::new(), 0)];
+        let mut name_to_table = HashMap::new();
+        name_to_table.insert(String::from("f4"), 0);
 
-        function_registry::FunctionRegistry {
-            functions_1d,
-            name_to_function_1d,
-            functions_2d,
-            name_to_function_2d,
-            functions_3d,
-            name_to_function_3d,
-            functions,
-            name_to_function,
+        table_registry::TableRegistry {
+            tables_1d,
+            name_to_table_1d,
+            tables_2d,
+            name_to_table_2d,
+            tables_3d,
+            name_to_table_3d,
+            tables,
+            name_to_table,
         }
     }
 
@@ -284,7 +284,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_function_ok() {
+    fn parse_table_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
@@ -297,9 +297,11 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
-            NumericExpression::Function(FunctionExpression::FunctionSum(_, _))
+            NumericExpression::NumericTable(NumericTableExpression::TableSum(_, _))
         ));
-        if let NumericExpression::Function(FunctionExpression::FunctionSum(i, args)) = expression {
+        if let NumericExpression::NumericTable(NumericTableExpression::TableSum(i, args)) =
+            expression
+        {
             assert_eq!(i, 0);
             assert_eq!(args.len(), 4);
             assert!(matches!(
@@ -323,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_function_err() {
+    fn parse_table_err() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();

@@ -1,7 +1,7 @@
 use crate::expression;
 use crate::expression_parser;
-use crate::function_registry;
 use crate::state;
+use crate::table_registry;
 use crate::variable;
 use crate::yaml_util;
 use std::error;
@@ -27,7 +27,7 @@ impl<T: variable::Numeric> Operator<T> {
         &self,
         state: &state::State<T>,
         metadata: &state::StateMetadata,
-        registry: &function_registry::FunctionRegistry<T>,
+        registry: &table_registry::TableRegistry<T>,
     ) -> bool {
         for c in &self.preconditions {
             if !c.eval(state, metadata, registry) {
@@ -41,7 +41,7 @@ impl<T: variable::Numeric> Operator<T> {
         &self,
         state: &state::State<T>,
         metadata: &state::StateMetadata,
-        registry: &function_registry::FunctionRegistry<T>,
+        registry: &table_registry::TableRegistry<T>,
     ) -> state::State<T> {
         let len = state.signature_variables.set_variables.len();
         let mut set_variables = Vec::with_capacity(len);
@@ -102,7 +102,7 @@ impl<T: variable::Numeric> Operator<T> {
 pub fn load_operators_from_yaml<T: variable::Numeric>(
     value: &yaml_rust::Yaml,
     metadata: &state::StateMetadata,
-    registry: &function_registry::FunctionRegistry<T>,
+    registry: &table_registry::TableRegistry<T>,
 ) -> Result<Vec<Operator<T>>, Box<dyn error::Error>>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -194,7 +194,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::numeric_function;
+    use crate::table;
     use expression::*;
     use std::collections::HashMap;
 
@@ -288,32 +288,32 @@ mod tests {
         }
     }
 
-    fn generate_registry() -> function_registry::FunctionRegistry<variable::IntegerVariable> {
-        let functions_1d = vec![numeric_function::NumericFunction1D::new(Vec::new())];
-        let mut name_to_function_1d = HashMap::new();
-        name_to_function_1d.insert(String::from("f1"), 0);
+    fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
+        let tables_1d = vec![table::Table1D::new(Vec::new())];
+        let mut name_to_table_1d = HashMap::new();
+        name_to_table_1d.insert(String::from("f1"), 0);
 
-        let functions_2d = vec![numeric_function::NumericFunction2D::new(Vec::new())];
-        let mut name_to_function_2d = HashMap::new();
-        name_to_function_2d.insert(String::from("f2"), 0);
+        let tables_2d = vec![table::Table2D::new(Vec::new())];
+        let mut name_to_table_2d = HashMap::new();
+        name_to_table_2d.insert(String::from("f2"), 0);
 
-        let functions_3d = vec![numeric_function::NumericFunction3D::new(Vec::new())];
-        let mut name_to_function_3d = HashMap::new();
-        name_to_function_3d.insert(String::from("f3"), 0);
+        let tables_3d = vec![table::Table3D::new(Vec::new())];
+        let mut name_to_table_3d = HashMap::new();
+        name_to_table_3d.insert(String::from("f3"), 0);
 
-        let functions = vec![numeric_function::NumericFunction::new(HashMap::new(), 0)];
-        let mut name_to_function = HashMap::new();
-        name_to_function.insert(String::from("f4"), 0);
+        let tables = vec![table::Table::new(HashMap::new(), 0)];
+        let mut name_to_table = HashMap::new();
+        name_to_table.insert(String::from("f4"), 0);
 
-        function_registry::FunctionRegistry {
-            functions_1d,
-            name_to_function_1d,
-            functions_2d,
-            name_to_function_2d,
-            functions_3d,
-            name_to_function_3d,
-            functions,
-            name_to_function,
+        table_registry::TableRegistry {
+            tables_1d,
+            name_to_table_1d,
+            tables_2d,
+            name_to_table_2d,
+            tables_3d,
+            name_to_table_3d,
+            tables,
+            name_to_table,
         }
     }
 

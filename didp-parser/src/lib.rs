@@ -5,11 +5,11 @@ use yaml_rust::Yaml;
 
 pub mod expression;
 pub mod expression_parser;
-pub mod function_registry;
 pub mod grounded_condition;
-pub mod numeric_function;
 pub mod operator;
 pub mod state;
+pub mod table;
+pub mod table_registry;
 pub mod variable;
 pub mod yaml_util;
 
@@ -19,7 +19,7 @@ pub struct Problem<T: variable::Numeric> {
     pub problem_name: String,
     pub state_metadata: state::StateMetadata,
     pub initial_state: state::State<T>,
-    pub function_registry: function_registry::FunctionRegistry<T>,
+    pub table_registry: table_registry::TableRegistry<T>,
     pub constraints: Vec<grounded_condition::GroundedCondition<T>>,
     pub goals: Vec<grounded_condition::GroundedCondition<T>>,
     pub operators: Vec<operator::Operator<T>>,
@@ -66,11 +66,11 @@ impl<T: variable::Numeric> Problem<T> {
         let initial_state = yaml_util::get_yaml_by_key(&problem, "initial_state")?;
         let initial_state = state::State::<T>::load_from_yaml(initial_state, &state_metadata)?;
 
-        let functions = yaml_util::get_yaml_by_key(&domain, "functions")?;
-        let function_values = yaml_util::get_yaml_by_key(&problem, "function_values")?;
-        let function_registry = function_registry::FunctionRegistry::<T>::load_from_yaml(
-            &functions,
-            &function_values,
+        let tables = yaml_util::get_yaml_by_key(&domain, "tables")?;
+        let table_values = yaml_util::get_yaml_by_key(&problem, "table_values")?;
+        let table_registry = table_registry::TableRegistry::<T>::load_from_yaml(
+            &tables,
+            &table_values,
             &state_metadata,
         )?;
 
@@ -79,7 +79,7 @@ impl<T: variable::Numeric> Problem<T> {
             constraints.extend(grounded_condition::load_grounded_conditions_from_yaml(
                 &constraint,
                 &state_metadata,
-                &function_registry,
+                &table_registry,
             )?);
         }
 
@@ -88,7 +88,7 @@ impl<T: variable::Numeric> Problem<T> {
             goals.extend(grounded_condition::load_grounded_conditions_from_yaml(
                 &goal,
                 &state_metadata,
-                &function_registry,
+                &table_registry,
             )?);
         }
 
@@ -97,7 +97,7 @@ impl<T: variable::Numeric> Problem<T> {
             operators.extend(operator::load_operators_from_yaml(
                 &operator,
                 &state_metadata,
-                &function_registry,
+                &table_registry,
             )?);
         }
 
@@ -107,7 +107,7 @@ impl<T: variable::Numeric> Problem<T> {
             problem_name,
             state_metadata,
             initial_state,
-            function_registry,
+            table_registry,
             constraints,
             goals,
             operators,

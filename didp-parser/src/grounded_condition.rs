@@ -1,7 +1,7 @@
 use crate::expression;
 use crate::expression_parser;
-use crate::function_registry;
 use crate::state;
+use crate::table_registry;
 use crate::variable;
 use crate::yaml_util;
 use std::error::Error;
@@ -18,7 +18,7 @@ pub struct GroundedCondition<T: variable::Numeric> {
 pub fn load_grounded_conditions_from_yaml<T: variable::Numeric>(
     value: &Yaml,
     metadata: &state::StateMetadata,
-    registry: &function_registry::FunctionRegistry<T>,
+    registry: &table_registry::TableRegistry<T>,
 ) -> Result<Vec<GroundedCondition<T>>, Box<dyn Error>>
 where
     <T as str::FromStr>::Err: fmt::Debug,

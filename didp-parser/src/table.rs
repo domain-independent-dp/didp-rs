@@ -3,34 +3,38 @@ use std::collections;
 use std::iter;
 
 #[derive(Debug)]
-pub struct NumericFunction1D<T: variable::Numeric>(Vec<T>);
+pub struct Table1D<T: Copy>(Vec<T>);
 
-impl<T: variable::Numeric> NumericFunction1D<T> {
-    pub fn new(vector: Vec<T>) -> NumericFunction1D<T> {
-        NumericFunction1D(vector)
+impl<T: Copy> Table1D<T> {
+    pub fn new(vector: Vec<T>) -> Table1D<T> {
+        Table1D(vector)
     }
 
     pub fn eval(&self, x: variable::ElementVariable) -> T {
         self.0[x]
     }
+}
 
+impl<T: variable::Numeric> Table1D<T> {
     pub fn sum(&self, x: &variable::SetVariable) -> T {
         x.ones().map(|x| self.eval(x)).sum()
     }
 }
 
 #[derive(Debug)]
-pub struct NumericFunction2D<T: variable::Numeric>(Vec<Vec<T>>);
+pub struct Table2D<T: Copy>(Vec<Vec<T>>);
 
-impl<T: variable::Numeric> NumericFunction2D<T> {
-    pub fn new(vector: Vec<Vec<T>>) -> NumericFunction2D<T> {
-        NumericFunction2D(vector)
+impl<T: Copy> Table2D<T> {
+    pub fn new(vector: Vec<Vec<T>>) -> Table2D<T> {
+        Table2D(vector)
     }
 
     pub fn eval(&self, x: variable::ElementVariable, y: variable::ElementVariable) -> T {
         self.0[x][y]
     }
+}
 
+impl<T: variable::Numeric> Table2D<T> {
     pub fn sum(&self, x: &variable::SetVariable, y: &variable::SetVariable) -> T {
         x.ones()
             .map(|x| y.ones().map(|y| self.eval(x, y)).sum())
@@ -53,11 +57,11 @@ impl<T: variable::Numeric> NumericFunction2D<T> {
 }
 
 #[derive(Debug)]
-pub struct NumericFunction3D<T: variable::Numeric>(Vec<Vec<Vec<T>>>);
+pub struct Table3D<T: Copy>(Vec<Vec<Vec<T>>>);
 
-impl<T: variable::Numeric> NumericFunction3D<T> {
-    pub fn new(vector: Vec<Vec<Vec<T>>>) -> NumericFunction3D<T> {
-        NumericFunction3D(vector)
+impl<T: Copy> Table3D<T> {
+    pub fn new(vector: Vec<Vec<Vec<T>>>) -> Table3D<T> {
+        Table3D(vector)
     }
 
     pub fn eval(
@@ -68,7 +72,9 @@ impl<T: variable::Numeric> NumericFunction3D<T> {
     ) -> T {
         self.0[x][y][z]
     }
+}
 
+impl<T: variable::Numeric> Table3D<T> {
     pub fn sum(
         &self,
         x: &variable::SetVariable,
@@ -146,17 +152,17 @@ impl<T: variable::Numeric> NumericFunction3D<T> {
 }
 
 #[derive(Debug)]
-pub struct NumericFunction<T: variable::Numeric> {
+pub struct Table<T: Copy> {
     map: collections::HashMap<Vec<variable::ElementVariable>, T>,
     default: T,
 }
 
-impl<T: variable::Numeric> NumericFunction<T> {
+impl<T: Copy> Table<T> {
     pub fn new(
         map: collections::HashMap<Vec<variable::ElementVariable>, T>,
         default: T,
-    ) -> NumericFunction<T> {
-        NumericFunction { map, default }
+    ) -> Table<T> {
+        Table { map, default }
     }
 
     pub fn eval(&self, args: &[variable::ElementVariable]) -> T {
@@ -173,7 +179,7 @@ mod tests {
 
     #[test]
     fn function_1d_eval() {
-        let f = NumericFunction1D::new(vec![10, 20, 30]);
+        let f = Table1D::new(vec![10, 20, 30]);
         assert_eq!(f.eval(0), 10);
         assert_eq!(f.eval(1), 20);
         assert_eq!(f.eval(2), 30);
@@ -181,7 +187,7 @@ mod tests {
 
     #[test]
     fn function_1d_sum_eval() {
-        let f = NumericFunction1D::new(vec![10, 20, 30]);
+        let f = Table1D::new(vec![10, 20, 30]);
         let mut x = variable::SetVariable::with_capacity(3);
         x.insert(0);
         x.insert(2);
@@ -190,13 +196,13 @@ mod tests {
 
     #[test]
     fn function_2d_eval() {
-        let f = NumericFunction2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
+        let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
         assert_eq!(f.eval(0, 1), 20);
     }
 
     #[test]
     fn function_2d_sum_eval() {
-        let f = NumericFunction2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
+        let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
         let mut x = variable::SetVariable::with_capacity(3);
         x.insert(0);
         x.insert(2);
@@ -208,7 +214,7 @@ mod tests {
 
     #[test]
     fn function_2d_sum_x_eval() {
-        let f = NumericFunction2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
+        let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
         let mut x = variable::SetVariable::with_capacity(3);
         x.insert(0);
         x.insert(2);
@@ -217,7 +223,7 @@ mod tests {
 
     #[test]
     fn function_2d_sum_y_eval() {
-        let f = NumericFunction2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
+        let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
         let mut y = variable::SetVariable::with_capacity(3);
         y.insert(0);
         y.insert(2);
@@ -226,7 +232,7 @@ mod tests {
 
     #[test]
     fn function_3d_eval() {
-        let f = NumericFunction3D::new(vec![
+        let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -236,7 +242,7 @@ mod tests {
 
     #[test]
     fn function_3d_sum_eval() {
-        let f = NumericFunction3D::new(vec![
+        let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -255,7 +261,7 @@ mod tests {
 
     #[test]
     fn function_3d_sum_x_eval() {
-        let f = NumericFunction3D::new(vec![
+        let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -268,7 +274,7 @@ mod tests {
 
     #[test]
     fn function_3d_sum_y_eval() {
-        let f = NumericFunction3D::new(vec![
+        let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -281,7 +287,7 @@ mod tests {
 
     #[test]
     fn function_3d_sum_z_eval() {
-        let f = NumericFunction3D::new(vec![
+        let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -295,7 +301,7 @@ mod tests {
 
     #[test]
     fn function_3d_sum_xy_eval() {
-        let f = NumericFunction3D::new(vec![
+        let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -311,7 +317,7 @@ mod tests {
 
     #[test]
     fn function_3d_sum_xz_eval() {
-        let f = NumericFunction3D::new(vec![
+        let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -327,7 +333,7 @@ mod tests {
 
     #[test]
     fn function_3d_sum_yz_eval() {
-        let f = NumericFunction3D::new(vec![
+        let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -354,7 +360,7 @@ mod tests {
         map.insert(key, 300);
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400);
-        let f = NumericFunction::new(map, 0);
+        let f = Table::new(map, 0);
         assert_eq!(f.eval(&[0, 1, 0, 0]), 100);
         assert_eq!(f.eval(&[0, 1, 0, 1]), 200);
         assert_eq!(f.eval(&[0, 1, 2, 0]), 300);
