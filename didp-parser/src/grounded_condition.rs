@@ -4,6 +4,7 @@ use crate::state;
 use crate::table_registry;
 use crate::variable;
 use crate::yaml_util;
+use std::collections;
 use std::error::Error;
 use std::fmt;
 use std::str;
@@ -24,28 +25,46 @@ where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     let map = yaml_util::get_map(value)?;
-
-    let parameters = yaml_util::get_yaml_by_key(map, "parameters")?;
-    let (parameters_set, elements_in_set_variable_set, elements_in_permutation_variable_set) =
-        metadata.get_grounded_parameter_set_from_yaml(parameters)?;
-
     let condition = yaml_util::get_string_by_key(map, "condition")?;
 
-    let mut conditions = Vec::with_capacity(parameters_set.len());
-    for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in parameters_set
-        .into_iter()
-        .zip(elements_in_set_variable_set.into_iter())
-        .zip(elements_in_permutation_variable_set.into_iter())
-    {
-        let condition =
-            expression_parser::parse_condition(condition.clone(), metadata, registry, &parameters)?;
-        let condition = condition.simplify(registry);
-        conditions.push(GroundedCondition {
-            condition,
-            elements_in_set_variable,
-            elements_in_permutation_variable,
-        });
-    }
+    match map.get(&Yaml::from_str("parameters")) {
+        Some(parameters) => {
+            let (
+                parameters_array,
+                elements_in_set_variable_array,
+                elements_in_permutation_variable_array,
+            ) = metadata.ground_parameters_from_yaml(parameters)?;
 
-    Ok(conditions)
+            let mut conditions = Vec::with_capacity(parameters_array.len());
+            for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in
+                parameters_array
+                    .into_iter()
+                    .zip(elements_in_set_variable_array.into_iter())
+                    .zip(elements_in_permutation_variable_array.into_iter())
+            {
+                let condition = expression_parser::parse_condition(
+                    condition.clone(),
+                    metadata,
+                    registry,
+                    &parameters,
+                )?;
+                conditions.push(GroundedCondition {
+                    condition: condition.simplify(registry),
+                    elements_in_set_variable,
+                    elements_in_permutation_variable,
+                });
+            }
+            Ok(conditions)
+        }
+        None => {
+            let parameters = collections::HashMap::new();
+            let condition =
+                expression_parser::parse_condition(condition, metadata, registry, &parameters)?;
+            Ok(vec![GroundedCondition {
+                condition: condition.simplify(registry),
+                elements_in_set_variable: vec![],
+                elements_in_permutation_variable: vec![],
+            }])
+        }
+    }
 }

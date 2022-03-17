@@ -4,6 +4,7 @@ use crate::state;
 use crate::table_registry;
 use crate::variable;
 use crate::yaml_util;
+use std::collections;
 use std::error;
 use std::fmt;
 use std::rc::Rc;
@@ -109,22 +110,37 @@ where
 {
     let map = yaml_util::get_map(value)?;
     let lifted_name = yaml_util::get_string_by_key(map, "name")?;
-    let parameters = yaml_util::get_yaml_by_key(map, "parameters")?;
-    let (parameters_set, elements_in_set_variable_set, elements_in_permutation_variable_set) =
-        metadata.get_grounded_parameter_set_from_yaml(parameters)?;
-    let parameters = yaml_util::get_map(parameters)?;
-    let parameter_names = yaml_util::get_key_names(parameters)?;
+
+    let (
+        parameters_array,
+        elements_in_set_variable_array,
+        elements_in_permutation_variable_array,
+        parameter_names,
+    ) = match map.get(&yaml_rust::Yaml::from_str("parameters")) {
+        Some(value) => {
+            let result = metadata.ground_parameters_from_yaml(value)?;
+            let parameter_map = yaml_util::get_map(value)?;
+            let parameter_names = yaml_util::get_key_names(parameter_map)?;
+            (result.0, result.1, result.2, parameter_names)
+        }
+        None => (
+            vec![collections::HashMap::new()],
+            vec![vec![]],
+            vec![vec![]],
+            vec![],
+        ),
+    };
 
     let lifted_preconditions = yaml_util::get_string_array_by_key(map, "preconditions")?;
     let lifted_effects = yaml_util::get_map_by_key(map, "effects")?;
     let lifted_cost = yaml_util::get_string_by_key(map, "cost")?;
 
-    let mut operators = Vec::with_capacity(parameters_set.len());
+    let mut operators = Vec::with_capacity(parameters_array.len());
     'outer: for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in
-        parameters_set
+        parameters_array
             .into_iter()
-            .zip(elements_in_set_variable_set.into_iter())
-            .zip(elements_in_permutation_variable_set.into_iter())
+            .zip(elements_in_set_variable_array.into_iter())
+            .zip(elements_in_permutation_variable_array.into_iter())
     {
         let mut name = lifted_name.clone();
         for parameter_name in &parameter_names {

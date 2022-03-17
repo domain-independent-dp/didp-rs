@@ -39,7 +39,7 @@ pub fn get_map_by_key<'a, 'b>(
     map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &'b str,
 ) -> Result<&'a linked_hash_map::LinkedHashMap<Yaml, Yaml>, YamlContentErr> {
-    match map.get(&Yaml::String(key.to_string())) {
+    match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_map(value),
         None => Err(YamlContentErr::new(format!(
             "no such key `{}` in yaml",
@@ -70,7 +70,7 @@ pub fn get_yaml_by_key<'a, 'b>(
     map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &'b str,
 ) -> Result<&'a Yaml, YamlContentErr> {
-    match map.get(&Yaml::String(key.to_string())) {
+    match map.get(&Yaml::String(String::from(key))) {
         Some(value) => Ok(value),
         None => Err(YamlContentErr::new(format!(
             "no such key `{}` in yaml",
@@ -93,7 +93,7 @@ pub fn get_array_by_key<'a, 'b>(
     map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &'b str,
 ) -> Result<&'a Vec<Yaml>, YamlContentErr> {
-    match map.get(&Yaml::String(key.to_string())) {
+    match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_array(value),
         None => Err(YamlContentErr::new(format!(
             "no such key `{}` in yaml",
@@ -116,7 +116,7 @@ pub fn get_bool_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
 ) -> Result<bool, YamlContentErr> {
-    match map.get(&Yaml::String(key.to_string())) {
+    match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_bool(value),
         None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
     }
@@ -158,7 +158,7 @@ pub fn get_usize_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
 ) -> Result<usize, YamlContentErr> {
-    match map.get(&Yaml::String(key.to_string())) {
+    match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_usize(value),
         None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
     }
@@ -168,7 +168,7 @@ pub fn get_usize_array_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
 ) -> Result<Vec<usize>, YamlContentErr> {
-    match map.get(&Yaml::String(key.to_string())) {
+    match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_usize_array(value),
         None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
     }
@@ -206,7 +206,7 @@ pub fn get_numeric_by_key<T: variable::Numeric>(
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    match map.get(&Yaml::String(key.to_string())) {
+    match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_numeric(value),
         None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
     }
@@ -236,7 +236,7 @@ pub fn get_string_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
 ) -> Result<String, YamlContentErr> {
-    match map.get(&Yaml::String(key.to_string())) {
+    match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_string(value),
         None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
     }
@@ -246,7 +246,7 @@ pub fn get_string_array_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
 ) -> Result<Vec<String>, YamlContentErr> {
-    match map.get(&Yaml::String(key.to_string())) {
+    match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_string_array(value),
         None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
     }

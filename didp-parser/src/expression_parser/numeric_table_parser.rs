@@ -159,73 +159,73 @@ mod tests {
     use std::collections::HashMap;
 
     fn generate_metadata() -> state::StateMetadata {
-        let object_names = vec!["object".to_string()];
+        let object_names = vec![String::from("object")];
         let object_numbers = vec![10];
         let mut name_to_object = HashMap::new();
-        name_to_object.insert("object".to_string(), 0);
+        name_to_object.insert(String::from("object"), 0);
 
         let set_variable_names = vec![
-            "s0".to_string(),
-            "s1".to_string(),
-            "s2".to_string(),
-            "s3".to_string(),
+            String::from("s0"),
+            String::from("s1"),
+            String::from("s2"),
+            String::from("s3"),
         ];
         let mut name_to_set_variable = HashMap::new();
-        name_to_set_variable.insert("s0".to_string(), 0);
-        name_to_set_variable.insert("s1".to_string(), 1);
-        name_to_set_variable.insert("s2".to_string(), 2);
-        name_to_set_variable.insert("s3".to_string(), 3);
+        name_to_set_variable.insert(String::from("s0"), 0);
+        name_to_set_variable.insert(String::from("s1"), 1);
+        name_to_set_variable.insert(String::from("s2"), 2);
+        name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
 
         let permutation_variable_names = vec![
-            "p0".to_string(),
-            "p1".to_string(),
-            "p2".to_string(),
-            "p3".to_string(),
+            String::from("p0"),
+            String::from("p1"),
+            String::from("p2"),
+            String::from("p3"),
         ];
         let mut name_to_permutation_variable = HashMap::new();
-        name_to_permutation_variable.insert("p0".to_string(), 0);
-        name_to_permutation_variable.insert("p1".to_string(), 1);
-        name_to_permutation_variable.insert("p2".to_string(), 2);
-        name_to_permutation_variable.insert("p3".to_string(), 3);
+        name_to_permutation_variable.insert(String::from("p0"), 0);
+        name_to_permutation_variable.insert(String::from("p1"), 1);
+        name_to_permutation_variable.insert(String::from("p2"), 2);
+        name_to_permutation_variable.insert(String::from("p3"), 3);
         let permutation_variable_to_object = vec![0, 0, 0, 0];
 
         let element_variable_names = vec![
-            "e0".to_string(),
-            "e1".to_string(),
-            "e2".to_string(),
-            "e3".to_string(),
+            String::from("e0"),
+            String::from("e1"),
+            String::from("e2"),
+            String::from("e3"),
         ];
         let mut name_to_element_variable = HashMap::new();
-        name_to_element_variable.insert("e0".to_string(), 0);
-        name_to_element_variable.insert("e1".to_string(), 1);
-        name_to_element_variable.insert("e2".to_string(), 2);
-        name_to_element_variable.insert("e3".to_string(), 3);
+        name_to_element_variable.insert(String::from("e0"), 0);
+        name_to_element_variable.insert(String::from("e1"), 1);
+        name_to_element_variable.insert(String::from("e2"), 2);
+        name_to_element_variable.insert(String::from("e3"), 3);
         let element_variable_to_object = vec![0, 0, 0, 0];
 
         let numeric_variable_names = vec![
-            "n0".to_string(),
-            "n1".to_string(),
-            "n2".to_string(),
-            "n3".to_string(),
+            String::from("n0"),
+            String::from("n1"),
+            String::from("n2"),
+            String::from("n3"),
         ];
         let mut name_to_numeric_variable = HashMap::new();
-        name_to_numeric_variable.insert("n0".to_string(), 0);
-        name_to_numeric_variable.insert("n1".to_string(), 1);
-        name_to_numeric_variable.insert("n2".to_string(), 2);
-        name_to_numeric_variable.insert("n3".to_string(), 3);
+        name_to_numeric_variable.insert(String::from("n0"), 0);
+        name_to_numeric_variable.insert(String::from("n1"), 1);
+        name_to_numeric_variable.insert(String::from("n2"), 2);
+        name_to_numeric_variable.insert(String::from("n3"), 3);
 
         let resource_variable_names = vec![
-            "r0".to_string(),
-            "r1".to_string(),
-            "r2".to_string(),
-            "r3".to_string(),
+            String::from("r0"),
+            String::from("r1"),
+            String::from("r2"),
+            String::from("r3"),
         ];
         let mut name_to_resource_variable = HashMap::new();
-        name_to_resource_variable.insert("r0".to_string(), 0);
-        name_to_resource_variable.insert("r1".to_string(), 1);
-        name_to_resource_variable.insert("r2".to_string(), 2);
-        name_to_resource_variable.insert("r3".to_string(), 3);
+        name_to_resource_variable.insert(String::from("r0"), 0);
+        name_to_resource_variable.insert(String::from("r1"), 1);
+        name_to_resource_variable.insert(String::from("r2"), 2);
+        name_to_resource_variable.insert(String::from("r3"), 3);
 
         state::StateMetadata {
             object_names,
