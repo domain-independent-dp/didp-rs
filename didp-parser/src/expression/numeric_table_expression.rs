@@ -41,7 +41,7 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
         let tables = &registry.numeric_tables;
         match self {
             Self::Constant(value) => *value,
-            Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(&state)),
+            Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(state)),
             Self::Table1DSum(i, SetExpression::SetVariable(x)) => {
                 tables.tables_1d[*i].sum(&state.signature_variables.set_variables[*x])
             }
@@ -50,7 +50,7 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 x.iter().map(|x| tables.tables_1d[*i].eval(*x)).sum()
             }
             Self::Table1DSum(i, x) => tables.tables_1d[*i].sum(&x.eval(state, metadata)),
-            Self::Table2D(i, x, y) => tables.tables_2d[*i].eval(x.eval(&state), y.eval(&state)),
+            Self::Table2D(i, x, y) => tables.tables_2d[*i].eval(x.eval(state), y.eval(state)),
             Self::Table2DSum(i, SetExpression::SetVariable(x), SetExpression::SetVariable(y)) => {
                 let x = &state.signature_variables.set_variables[*x];
                 let y = &state.signature_variables.set_variables[*y];
@@ -130,10 +130,10 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 y.iter().map(|y| tables.tables_2d[*i].eval(x, *y)).sum()
             }
             Self::Table2DSumY(i, x, y) => {
-                tables.tables_2d[*i].sum_y(x.eval(&state), &y.eval(&state, metadata))
+                tables.tables_2d[*i].sum_y(x.eval(state), &y.eval(state, metadata))
             }
             Self::Table3D(i, x, y, z) => {
-                tables.tables_3d[*i].eval(x.eval(&state), y.eval(&state), z.eval(&state))
+                tables.tables_3d[*i].eval(x.eval(state), y.eval(state), z.eval(state))
             }
             Self::Table3DSum(
                 i,
@@ -245,7 +245,7 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                     args.iter().map(|x| x.eval(state)).collect();
                 tables.tables[*i].eval(&args)
             }
-            Self::TableSum(i, args) => sum_table(&tables.tables[*i], args, &state, metadata),
+            Self::TableSum(i, args) => sum_table(&tables.tables[*i], args, state, metadata),
         }
     }
 

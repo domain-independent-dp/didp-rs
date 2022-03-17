@@ -21,59 +21,36 @@ impl SetCondition {
     ) -> bool {
         match self {
             Self::Constant(value) => *value,
-            Self::Eq(x, y) => {
-                let x = x.eval(state);
-                let y = y.eval(state);
-                x == y
-            }
-            Self::Ne(x, y) => {
-                let x = x.eval(state);
-                let y = y.eval(state);
-                x != y
-            }
+            Self::Eq(x, y) => x.eval(state) == y.eval(state),
+            Self::Ne(x, y) => x.eval(state) != y.eval(state),
             Self::IsIn(e, SetExpression::SetVariable(i)) => {
-                let e = e.eval(state);
-                state.signature_variables.set_variables[*i].contains(e)
+                state.signature_variables.set_variables[*i].contains(e.eval(state))
             }
             Self::IsIn(e, SetExpression::PermutationVariable(i)) => {
-                let e = e.eval(state);
-                state.signature_variables.permutation_variables[*i].contains(&e)
+                state.signature_variables.permutation_variables[*i].contains(&e.eval(state))
             }
-            Self::IsIn(e, s) => {
-                let e = e.eval(state);
-                let s = s.eval(state, metadata);
-                s.contains(e)
-            }
+            Self::IsIn(e, s) => s.eval(state, metadata).contains(e.eval(state)),
             Self::IsSubset(SetExpression::SetVariable(i), SetExpression::SetVariable(j)) => {
                 let x = &state.signature_variables.set_variables[*i];
                 let y = &state.signature_variables.set_variables[*j];
                 x.is_subset(y)
             }
             Self::IsSubset(x, SetExpression::SetVariable(j)) => {
-                let x = x.eval(state, metadata);
                 let y = &state.signature_variables.set_variables[*j];
-                x.is_subset(y)
+                x.eval(state, metadata).is_subset(y)
             }
             Self::IsSubset(SetExpression::SetVariable(i), y) => {
                 let x = &state.signature_variables.set_variables[*i];
-                let y = y.eval(state, metadata);
-                x.is_subset(&y)
+                x.is_subset(&y.eval(state, metadata))
             }
-            Self::IsSubset(x, y) => {
-                let x = x.eval(state, metadata);
-                let y = y.eval(state, metadata);
-                x.is_subset(&y)
-            }
+            Self::IsSubset(x, y) => x.eval(state, metadata).is_subset(&y.eval(state, metadata)),
             Self::IsEmpty(SetExpression::SetVariable(i)) => {
                 state.signature_variables.set_variables[*i].count_ones(..) == 0
             }
             Self::IsEmpty(SetExpression::PermutationVariable(i)) => {
                 state.signature_variables.permutation_variables[*i].is_empty()
             }
-            Self::IsEmpty(s) => {
-                let s = s.eval(state, metadata);
-                s.count_ones(..) == 0
-            }
+            Self::IsEmpty(s) => s.eval(state, metadata).count_ones(..) == 0,
         }
     }
 
