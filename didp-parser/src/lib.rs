@@ -30,6 +30,23 @@ impl fmt::Display for ProblemErr {
 
 impl Error for ProblemErr {}
 
+pub enum NumericType {
+    Integer,
+    Continuous,
+}
+
+impl NumericType {
+    pub fn load_from_yaml(value: &Yaml) -> Result<NumericType, Box<dyn Error>> {
+        let map = yaml_util::get_map(value)?;
+        let numeric_type = yaml_util::get_string_by_key(&map, "numeric_type")?;
+        match &numeric_type[..] {
+            "integer" => Ok(Self::Integer),
+            "continuous" => Ok(Self::Continuous),
+            _ => Err(ProblemErr::new(format!("no such numeric type `{}`", numeric_type)).into()),
+        }
+    }
+}
+
 pub struct Problem<T: variable::Numeric> {
     pub minimize: bool,
     pub domain_name: String,
