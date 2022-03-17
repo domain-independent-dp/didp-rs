@@ -932,59 +932,8 @@ small: 2
 ";
         let variables = r"
 - name: s0
-  type: set
-  object: object
-- name: s1
-  type: set
-  object: object
-- name: s2
-  type: set
-  object: object
-- name: s3
-  type: set
-  object: small
-- name: p0
-  type: permutation
-  object: object
-- name: p1
-  type: permutation 
-  object: object
-- name: p2
-  type: permutation
-  object: object
-- name: p3
-  type: permutation
-  object: small
-- name: e0
-  type: element 
-  object: object
-- name: e1
-  type: element
-  object: object
-- name: e2
-  type: element
-  object: object
-- name: e3
-  type: element
-  object: small
-- name: n0
-  type: numeric
-- name: n1
-  type: numeric
-- name: n2
-  type: numeric
-- name: n3
-  type: numeric
-- name: r0
-  type: resource
-- name: r1
-  type: resource
-- name: r2
   type: null
-  less_is_better: true
-- name: r3
-  type: resource
-  less_is_better: false
+  object: small 
 ";
         let object_numbers = r"
 object: 10
@@ -1008,6 +957,30 @@ small: 2
         assert_eq!(object_numbers.len(), 1);
         let object_numbers = &object_numbers[0];
 
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
+        assert!(metadata.is_err());
+
+        let variables = r"
+- name: s0
+  type: set
+  object: null
+";
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
+        assert!(metadata.is_err());
+
+        let object_numbers = r"
+object: 10
+";
+        let object_numbers = yaml_rust::YamlLoader::load_from_str(object_numbers);
+        assert!(object_numbers.is_ok());
+        let object_numbers = object_numbers.unwrap();
+        assert_eq!(object_numbers.len(), 1);
+        let object_numbers = &object_numbers[0];
         let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
         assert!(metadata.is_err());
     }
