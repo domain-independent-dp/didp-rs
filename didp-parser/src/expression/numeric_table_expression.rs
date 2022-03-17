@@ -86,14 +86,12 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                     .sum()
             }
             Self::Table2DSum(i, x, SetExpression::SetVariable(y)) => {
-                let x = x.eval(state, metadata);
                 let y = &state.signature_variables.set_variables[*y];
-                tables.tables_2d[*i].sum(&x, y)
+                tables.tables_2d[*i].sum(&x.eval(state, metadata), y)
             }
             Self::Table2DSum(i, SetExpression::SetVariable(x), y) => {
                 let x = &state.signature_variables.set_variables[*x];
-                let y = y.eval(state, metadata);
-                tables.tables_2d[*i].sum(x, &y)
+                tables.tables_2d[*i].sum(x, &y.eval(state, metadata))
             }
             Self::Table2DSum(i, x, SetExpression::PermutationVariable(y)) => {
                 let x = x.eval(state, metadata);
