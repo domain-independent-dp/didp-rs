@@ -34,9 +34,8 @@ impl<T: variable::Numeric> State<T> {
         let mut set_variables = Vec::with_capacity(metadata.set_variable_names.len());
         for name in &metadata.set_variable_names {
             let values = yaml_util::get_usize_array_by_key(value, name)?;
-            let mut set = variable::SetVariable::with_capacity(
-                metadata.get_set_variable_capacity_by_name(name),
-            );
+            let mut set =
+                variable::SetVariable::with_capacity(metadata.set_variable_capacity_by_name(name));
             for v in values {
                 set.insert(v);
             }
@@ -113,28 +112,52 @@ pub struct StateMetadata {
 }
 
 impl StateMetadata {
-    pub fn get_set_variable_capacity(&self, i: usize) -> usize {
+    pub fn number_of_objects(&self) -> usize {
+        self.object_names.len()
+    }
+
+    pub fn number_of_set_variables(&self) -> usize {
+        self.set_variable_names.len()
+    }
+
+    pub fn number_of_permutation_variables(&self) -> usize {
+        self.permutation_variable_names.len()
+    }
+
+    pub fn number_of_element_variables(&self) -> usize {
+        self.element_variable_names.len()
+    }
+
+    pub fn number_of_numeric_variables(&self) -> usize {
+        self.numeric_variable_names.len()
+    }
+
+    pub fn number_of_resource_variables(&self) -> usize {
+        self.resource_variable_names.len()
+    }
+
+    pub fn set_variable_capacity(&self, i: usize) -> usize {
         self.object_numbers[self.set_variable_to_object[i]]
     }
 
-    pub fn get_set_variable_capacity_by_name(&self, name: &str) -> usize {
+    pub fn set_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers[self.set_variable_to_object[self.name_to_set_variable[name]]]
     }
 
-    pub fn get_permutation_variable_capacity(&self, i: usize) -> usize {
+    pub fn permutation_variable_capacity(&self, i: usize) -> usize {
         self.object_numbers[self.permutation_variable_to_object[i]]
     }
 
-    pub fn get_permutation_variable_capacity_by_name(&self, name: &str) -> usize {
+    pub fn permutation_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers
             [self.permutation_variable_to_object[self.name_to_permutation_variable[name]]]
     }
 
-    pub fn get_element_variable_capacity(&self, i: usize) -> usize {
+    pub fn element_variable_capacity(&self, i: usize) -> usize {
         self.object_numbers[self.element_variable_to_object[i]]
     }
 
-    pub fn get_element_variable_capacity_by_name(&self, name: &str) -> usize {
+    pub fn element_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers[self.element_variable_to_object[self.name_to_element_variable[name]]]
     }
 
@@ -202,9 +225,9 @@ impl StateMetadata {
             {
                 (self.object_numbers[*i], None, None)
             } else if let Some(i) = self.name_to_set_variable.get(&value) {
-                (self.get_set_variable_capacity(*i), Some(*i), None)
+                (self.set_variable_capacity(*i), Some(*i), None)
             } else if let Some(i) = self.name_to_permutation_variable.get(&value) {
-                (self.get_permutation_variable_capacity(*i), None, Some(*i))
+                (self.permutation_variable_capacity(*i), None, Some(*i))
             } else {
                 return Err(yaml_util::YamlContentErr::new(format!(
                     "no such object, set variable, or permutation variable `{}`",
