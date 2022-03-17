@@ -48,6 +48,14 @@ impl<T: variable::Numeric> NumericExpression<T> {
                 let b = b.eval(state, metadata, registry);
                 Self::eval_operation(op, a, b)
             }
+            Self::Cardinality(set_expression::SetExpression::SetVariable(i)) => {
+                let set = &state.signature_variables.set_variables[*i];
+                T::from(set.count_ones(..)).unwrap()
+            }
+            Self::Cardinality(set_expression::SetExpression::PermutationVariable(i)) => {
+                let set = &state.signature_variables.permutation_variables[*i];
+                T::from(set.len()).unwrap()
+            }
             Self::Cardinality(set) => T::from(set.eval(state, metadata).count_ones(..)).unwrap(),
             Self::Table(t) => t.eval(state, metadata, registry),
         }
@@ -398,8 +406,12 @@ mod tests {
             NumericExpression::Cardinality(set_expression::SetExpression::SetVariable(0));
         assert_eq!(expression.eval(&state, &metadata, &registry), 2);
         let expression =
-            NumericExpression::Cardinality(set_expression::SetExpression::SetVariable(1));
+            NumericExpression::Cardinality(set_expression::SetExpression::PermutationVariable(0));
         assert_eq!(expression.eval(&state, &metadata, &registry), 2);
+        let expression = NumericExpression::Cardinality(set_expression::SetExpression::Complement(
+            Box::new(set_expression::SetExpression::SetVariable(0)),
+        ));
+        assert_eq!(expression.eval(&state, &metadata, &registry), 1);
     }
 
     #[test]

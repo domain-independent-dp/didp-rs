@@ -1,6 +1,5 @@
 use crate::variable;
 use std::collections;
-use std::iter;
 
 #[derive(Debug)]
 pub struct Table1D<T: Copy>(Vec<T>);
@@ -19,6 +18,10 @@ impl<T: variable::Numeric> Table1D<T> {
     pub fn sum(&self, x: &variable::SetVariable) -> T {
         x.ones().map(|x| self.eval(x)).sum()
     }
+
+    pub fn sum_slice(&self, x: &[variable::ElementVariable]) -> T {
+        x.iter().map(|x| self.eval(*x)).sum()
+    }
 }
 
 #[derive(Debug)]
@@ -36,23 +39,15 @@ impl<T: Copy> Table2D<T> {
 
 impl<T: variable::Numeric> Table2D<T> {
     pub fn sum(&self, x: &variable::SetVariable, y: &variable::SetVariable) -> T {
-        x.ones()
-            .map(|x| y.ones().map(|y| self.eval(x, y)).sum())
-            .sum()
+        x.ones().map(|x| self.sum_y(x, y)).sum()
     }
 
     pub fn sum_x(&self, x: &variable::SetVariable, y: variable::ElementVariable) -> T {
-        x.ones()
-            .zip(iter::repeat(y))
-            .map(|(x, y)| self.eval(x, y))
-            .sum()
+        x.ones().map(|x| self.eval(x, y)).sum()
     }
 
     pub fn sum_y(&self, x: variable::ElementVariable, y: &variable::SetVariable) -> T {
-        y.ones()
-            .zip(iter::repeat(x))
-            .map(|(y, x)| self.eval(x, y))
-            .sum()
+        y.ones().map(|y| self.eval(x, y)).sum()
     }
 }
 
@@ -81,13 +76,7 @@ impl<T: variable::Numeric> Table3D<T> {
         y: &variable::SetVariable,
         z: &variable::SetVariable,
     ) -> T {
-        x.ones()
-            .map(|x| {
-                y.ones()
-                    .map(|y| z.ones().map(|z| self.eval(x, y, z)).sum())
-                    .sum()
-            })
-            .sum()
+        x.ones().map(|x| self.sum_yz(x, y, z)).sum()
     }
 
     pub fn sum_x(
@@ -123,9 +112,7 @@ impl<T: variable::Numeric> Table3D<T> {
         y: &variable::SetVariable,
         z: variable::ElementVariable,
     ) -> T {
-        x.ones()
-            .map(|x| y.ones().map(|y| self.eval(x, y, z)).sum())
-            .sum()
+        x.ones().map(|x| self.sum_y(x, y, z)).sum()
     }
 
     pub fn sum_xz(
@@ -134,9 +121,7 @@ impl<T: variable::Numeric> Table3D<T> {
         y: variable::ElementVariable,
         z: &variable::SetVariable,
     ) -> T {
-        x.ones()
-            .map(|x| z.ones().map(|z| self.eval(x, y, z)).sum())
-            .sum()
+        x.ones().map(|x| self.sum_z(x, y, z)).sum()
     }
 
     pub fn sum_yz(
@@ -145,9 +130,7 @@ impl<T: variable::Numeric> Table3D<T> {
         y: &variable::SetVariable,
         z: &variable::SetVariable,
     ) -> T {
-        y.ones()
-            .map(|y| z.ones().map(|z| self.eval(x, y, z)).sum())
-            .sum()
+        y.ones().map(|y| self.sum_z(x, y, z)).sum()
     }
 }
 

@@ -31,15 +31,44 @@ impl SetCondition {
                 let y = y.eval(state);
                 x != y
             }
+            Self::IsIn(e, SetExpression::SetVariable(i)) => {
+                let e = e.eval(state);
+                state.signature_variables.set_variables[*i].contains(e)
+            }
+            Self::IsIn(e, SetExpression::PermutationVariable(i)) => {
+                let e = e.eval(state);
+                state.signature_variables.permutation_variables[*i].contains(&e)
+            }
             Self::IsIn(e, s) => {
                 let e = e.eval(state);
                 let s = s.eval(state, metadata);
                 s.contains(e)
             }
+            Self::IsSubset(SetExpression::SetVariable(i), SetExpression::SetVariable(j)) => {
+                let x = &state.signature_variables.set_variables[*i];
+                let y = &state.signature_variables.set_variables[*j];
+                x.is_subset(y)
+            }
+            Self::IsSubset(x, SetExpression::SetVariable(j)) => {
+                let x = x.eval(state, metadata);
+                let y = &state.signature_variables.set_variables[*j];
+                x.is_subset(y)
+            }
+            Self::IsSubset(SetExpression::SetVariable(i), y) => {
+                let x = &state.signature_variables.set_variables[*i];
+                let y = y.eval(state, metadata);
+                x.is_subset(&y)
+            }
             Self::IsSubset(x, y) => {
                 let x = x.eval(state, metadata);
                 let y = y.eval(state, metadata);
                 x.is_subset(&y)
+            }
+            Self::IsEmpty(SetExpression::SetVariable(i)) => {
+                state.signature_variables.set_variables[*i].count_ones(..) == 0
+            }
+            Self::IsEmpty(SetExpression::PermutationVariable(i)) => {
+                state.signature_variables.permutation_variables[*i].is_empty()
             }
             Self::IsEmpty(s) => {
                 let s = s.eval(state, metadata);
@@ -74,6 +103,7 @@ impl SetCondition {
 
 #[cfg(test)]
 mod tests {
+    use super::super::set_expression::SetOperator;
     use super::*;
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -181,11 +211,11 @@ mod tests {
         state::State {
             signature_variables: Rc::new(state::SignatureVariables {
                 set_variables: vec![set1, set2, set3, set4],
-                permutation_variables: vec![vec![0, 2]],
-                element_variables: vec![1],
-                numeric_variables: vec![1, 2, 3],
+                permutation_variables: vec![vec![0, 2], vec![], vec![], vec![]],
+                element_variables: vec![1, 2, 3, 4],
+                numeric_variables: vec![1, 2, 3, 4],
             }),
-            resource_variables: vec![4, 5, 6],
+            resource_variables: vec![4, 5, 6, 7],
             stage: 0,
             cost: 0,
         }
@@ -285,6 +315,42 @@ mod tests {
             SetExpression::SetVariable(0),
         );
         assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsIn(
+            ElementExpression::Constant(0),
+            SetExpression::PermutationVariable(0),
+        );
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsIn(
+            ElementExpression::Constant(1),
+            SetExpression::PermutationVariable(0),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsIn(
+            ElementExpression::Constant(2),
+            SetExpression::PermutationVariable(0),
+        );
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsIn(
+            ElementExpression::Constant(0),
+            SetExpression::Complement(Box::new(SetExpression::SetVariable(0))),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsIn(
+            ElementExpression::Constant(1),
+            SetExpression::Complement(Box::new(SetExpression::SetVariable(0))),
+        );
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsIn(
+            ElementExpression::Constant(2),
+            SetExpression::Complement(Box::new(SetExpression::SetVariable(0))),
+        );
+        assert!(!expression.eval(&state, &metadata));
     }
 
     #[test]
@@ -319,6 +385,188 @@ mod tests {
         let expression =
             SetCondition::IsSubset(SetExpression::SetVariable(3), SetExpression::SetVariable(1));
         assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+            SetExpression::SetVariable(0),
+        );
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+            SetExpression::SetVariable(1),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+            SetExpression::SetVariable(2),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+            SetExpression::SetVariable(3),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(1),
+            )))),
+            SetExpression::SetVariable(0),
+        );
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(2),
+            )))),
+            SetExpression::SetVariable(0),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(3),
+            )))),
+            SetExpression::SetVariable(1),
+        );
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::SetVariable(0),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+        );
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::SetVariable(0),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(1),
+            )))),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::SetVariable(0),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(2),
+            )))),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::SetVariable(0),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(3),
+            )))),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::SetVariable(1),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+        );
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::SetVariable(2),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::SetVariable(3),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(1),
+            )))),
+        );
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+        );
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(1),
+            )))),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(2),
+            )))),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(3),
+            )))),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(1),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+        );
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(2),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(0),
+            )))),
+        );
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsSubset(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(3),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::SetVariable(1),
+            )))),
+        );
+        assert!(expression.eval(&state, &metadata));
     }
 
     #[test]
@@ -330,6 +578,26 @@ mod tests {
         assert!(!expression.eval(&state, &metadata));
 
         let expression = SetCondition::IsEmpty(SetExpression::SetVariable(3));
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsEmpty(SetExpression::PermutationVariable(0));
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsEmpty(SetExpression::PermutationVariable(1));
+        assert!(expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsEmpty(SetExpression::Complement(Box::new(
+            SetExpression::SetVariable(0),
+        )));
+        assert!(!expression.eval(&state, &metadata));
+
+        let expression = SetCondition::IsEmpty(SetExpression::Complement(Box::new(
+            SetExpression::SetOperation(
+                SetOperator::Union,
+                Box::new(SetExpression::SetVariable(0)),
+                Box::new(SetExpression::SetVariable(2)),
+            ),
+        )));
         assert!(expression.eval(&state, &metadata));
     }
 
