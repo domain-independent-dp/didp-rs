@@ -309,6 +309,7 @@ initial_state:
 goals:
         - condition: (is_empty unvisited)
         - condition: (is location 0)
+        - condition: (= 0 0)
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
         due_date: {0: 10000, 1: 2, 2: 2}
@@ -817,6 +818,57 @@ constraints:
         let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
+        let domain = r"
+domain: TSPTW
+metric: minimize
+objects: [cities]
+variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: resource
+          less_is_better: true
+tables:
+        - name: ready_time
+          type: numeric
+          args: [cities]
+        - name: due_date 
+          type: numeric
+          args: [cities]
+        - name: distance 
+          type: numeric
+          args: [cities, cities]
+          default: 0
+        - name: connected
+          type: bool
+          args: [cities, cities]
+          default: true
+constraints:
+        - condition: (<= time (due_date location))
+        - condition: (= 1 2)
+operators:
+        - name: visit
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effects:
+                unvisited: (- unvisited to)
+                location: to
+                time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+        let domain = yaml_rust::YamlLoader::load_from_str(domain);
+        assert!(domain.is_ok());
+        let domain = domain.unwrap();
+        assert_eq!(domain.len(), 1);
+        let domain = &domain[0];
+
+        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        assert!(problem.is_err());
+
         let problem = r"
 problem: test
 numeric_type: integer
@@ -963,6 +1015,34 @@ goals:
         let problem_yaml = &problem[0];
 
         let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        assert!(problem.is_err());
+
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+initial_state:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+goals:
+        - condition: (is_empty unvisited)
+        - condition: (is location 0)
+        - condition: (!= 0 0)
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let problem = yaml_rust::YamlLoader::load_from_str(problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+        assert_eq!(problem.len(), 1);
+        let problem = &problem[0];
+
+        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem);
         assert!(problem.is_err());
     }
 }
