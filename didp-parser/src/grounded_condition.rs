@@ -17,6 +17,27 @@ pub struct GroundedCondition<T: variable::Numeric> {
     pub condition: expression::Condition<T>,
 }
 
+impl<T: variable::Numeric> GroundedCondition<T> {
+    pub fn is_satisfied(
+        &self,
+        state: &state::State<T>,
+        metadata: &state::StateMetadata,
+        registry: &table_registry::TableRegistry<T>,
+    ) -> Option<bool> {
+        for (i, v) in &self.elements_in_set_variable {
+            if !state.signature_variables.set_variables[*i].contains(*v) {
+                return None;
+            }
+        }
+        for (i, v) in &self.elements_in_permutation_variable {
+            if !state.signature_variables.permutation_variables[*i].contains(v) {
+                return None;
+            }
+        }
+        Some(self.condition.eval(state, metadata, registry))
+    }
+}
+
 pub fn load_grounded_conditions_from_yaml<T: variable::Numeric>(
     value: &Yaml,
     metadata: &state::StateMetadata,
@@ -28,7 +49,7 @@ where
     let map = yaml_util::get_map(value)?;
     let condition = yaml_util::get_string_by_key(map, "condition")?;
 
-    match map.get(&Yaml::from_str("parameters")) {
+    match map.get(&Yaml::from_str("forall")) {
         Some(parameters) => {
             let (
                 parameters_array,
@@ -76,6 +97,7 @@ mod tests {
     use super::super::table;
     use super::*;
     use std::collections::HashMap;
+    use std::rc::Rc;
 
     fn generate_metadata() -> state::StateMetadata {
         let object_names = vec![String::from("object")];
@@ -140,6 +162,97 @@ mod tests {
     }
 
     #[test]
+    fn is_satisfied_test() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let mut s0 = variable::SetVariable::with_capacity(2);
+        s0.insert(0);
+        let state = state::State {
+            signature_variables: Rc::new(state::SignatureVariables {
+                set_variables: vec![s0],
+                permutation_variables: vec![vec![1]],
+                element_variables: vec![0],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let condition = GroundedCondition {
+            condition: Condition::Set(SetCondition::IsIn(
+                ElementExpression::Variable(0),
+                SetExpression::SetVariable(0),
+            )),
+            ..Default::default()
+        };
+        assert_eq!(
+            condition.is_satisfied(&state, &metadata, &registry),
+            Some(true)
+        );
+
+        let condition = GroundedCondition {
+            condition: Condition::Set(SetCondition::IsIn(
+                ElementExpression::Variable(0),
+                SetExpression::PermutationVariable(0),
+            )),
+            ..Default::default()
+        };
+        assert_eq!(
+            condition.is_satisfied(&state, &metadata, &registry),
+            Some(false)
+        );
+
+        let condition = GroundedCondition {
+            condition: Condition::Set(SetCondition::IsIn(
+                ElementExpression::Constant(0),
+                SetExpression::PermutationVariable(0),
+            )),
+            elements_in_set_variable: vec![(0, 0)],
+            elements_in_permutation_variable: vec![],
+        };
+        assert_eq!(
+            condition.is_satisfied(&state, &metadata, &registry),
+            Some(false)
+        );
+
+        let condition = GroundedCondition {
+            condition: Condition::Set(SetCondition::IsIn(
+                ElementExpression::Constant(1),
+                SetExpression::PermutationVariable(0),
+            )),
+            elements_in_set_variable: vec![(0, 1)],
+            elements_in_permutation_variable: vec![],
+        };
+        assert!(condition
+            .is_satisfied(&state, &metadata, &registry)
+            .is_none());
+
+        let condition = GroundedCondition {
+            condition: Condition::Set(SetCondition::IsIn(
+                ElementExpression::Constant(0),
+                SetExpression::SetVariable(0),
+            )),
+            elements_in_set_variable: vec![],
+            elements_in_permutation_variable: vec![(0, 0)],
+        };
+        assert!(condition
+            .is_satisfied(&state, &metadata, &registry)
+            .is_none());
+
+        let condition = GroundedCondition {
+            condition: Condition::Set(SetCondition::IsIn(
+                ElementExpression::Constant(1),
+                SetExpression::SetVariable(0),
+            )),
+            elements_in_set_variable: vec![],
+            elements_in_permutation_variable: vec![(0, 1)],
+        };
+        assert_eq!(
+            condition.is_satisfied(&state, &metadata, &registry),
+            Some(false)
+        );
+    }
+
+    #[test]
     fn load_from_yaml_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
@@ -167,7 +280,7 @@ condition: (is_in e0 s0)
 
         let condition = r"
 condition: (is 0 e)
-parameters:
+forall:
         - name: e
           object: s0
 ";
@@ -195,7 +308,7 @@ parameters:
 
         let condition = r"
 condition: (is_in e s0)
-parameters:
+forall:
         - name: e
           object: p0
 ";
@@ -247,7 +360,7 @@ conddition: (is_in e0 s0)
 
         let condition = r"
 condition: (is 0 d)
-parameters:
+forall:
         - name: e
           object: s0
 ";
@@ -262,7 +375,7 @@ parameters:
 
         let condition = r"
 condition: (is_in e s0)
-parameters:
+forall:
         - object: p0
 ";
         let condition = yaml_rust::YamlLoader::load_from_str(condition);
@@ -276,7 +389,7 @@ parameters:
 
         let condition = r"
 condition: (is_in e s0)
-parameters:
+forall:
         - name: e
           object: null
 ";
@@ -291,7 +404,7 @@ parameters:
 
         let condition = r"
 condition: (is_in e s0)
-parameters:
+forall:
         - name: e
 ";
         let condition = yaml_rust::YamlLoader::load_from_str(condition);
