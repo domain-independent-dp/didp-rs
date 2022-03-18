@@ -97,11 +97,32 @@ impl<T: variable::Numeric> Problem<T> {
         }
         let problem_name = yaml_util::get_string_by_key(&problem, "problem")?;
 
-        let objects = yaml_util::get_yaml_by_key(&domain, "objects")?;
         let variables = yaml_util::get_yaml_by_key(&domain, "variables")?;
-        let object_numbers = yaml_util::get_yaml_by_key(&problem, "object_numbers")?;
-        let state_metadata =
-            state::StateMetadata::load_from_yaml(objects, variables, object_numbers)?;
+        let state_metadata = match (
+            domain.get(&Yaml::from_str("objects")),
+            problem.get(&Yaml::from_str("object_numbers")),
+        ) {
+            (Some(objects), Some(object_numbers)) => {
+                state::StateMetadata::load_from_yaml(objects, variables, object_numbers)?
+            }
+            (None, None) => {
+                let objects = yaml_rust::Yaml::Array(Vec::new());
+                let object_numbers = yaml_rust::Yaml::Hash(linked_hash_map::LinkedHashMap::new());
+                state::StateMetadata::load_from_yaml(&objects, variables, &object_numbers)?
+            }
+            (Some(_), None) => {
+                return Err(ProblemErr::new(String::from(
+                    "key `object_numbers` not found while `objects` found ",
+                ))
+                .into())
+            }
+            (None, Some(_)) => {
+                return Err(ProblemErr::new(String::from(
+                    "key `objects` not found while `object_numbers` found ",
+                ))
+                .into())
+            }
+        };
 
         let initial_state = yaml_util::get_yaml_by_key(&problem, "initial_state")?;
         let initial_state = state::State::<T>::load_from_yaml(initial_state, &state_metadata)?;
@@ -120,13 +141,13 @@ impl<T: variable::Numeric> Problem<T> {
             (None, None) => TableRegistry {
                 ..Default::default()
             },
-            (None, Some(_)) => {
+            (Some(_), None) => {
                 return Err(ProblemErr::new(String::from(
                     "key `table_values` not found while `table` found ",
                 ))
                 .into())
             }
-            (Some(_), None) => {
+            (None, Some(_)) => {
                 return Err(ProblemErr::new(String::from(
                     "key `table` not found while `table_values` found ",
                 ))
@@ -252,7 +273,101 @@ mod tests {
     #[test]
     fn problem_load_from_yaml_ok() {
         let domain = r"
+domain: ADD
+variables: [ {name: v, type: numeric} ]
+operators:
+        - name: add
+          effects:
+                v: (+ v 1)
+          cost: (+ cost 1)
+";
+        let domain = yaml_rust::YamlLoader::load_from_str(domain);
+        assert!(domain.is_ok());
+        let domain = domain.unwrap();
+        assert_eq!(domain.len(), 1);
+        let domain = &domain[0];
+
+        let problem = r"
+domain: ADD
+problem: one
+initial_state:
+        v: 0
+goals:
+        - condition: (>= v 1)
+        - condition: (= 0 0)
+";
+        let problem = yaml_rust::YamlLoader::load_from_str(problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+        assert_eq!(problem.len(), 1);
+        let problem = &problem[0];
+
+        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+
+        let mut name_to_numeric_variable = HashMap::new();
+        name_to_numeric_variable.insert(String::from("v"), 0);
+        let expected = Problem {
+            minimize: true,
+            domain_name: String::from("ADD"),
+            problem_name: String::from("one"),
+            state_metadata: state::StateMetadata {
+                numeric_variable_names: vec![String::from("v")],
+                name_to_numeric_variable,
+                ..Default::default()
+            },
+            initial_state: state::State {
+                signature_variables: Rc::new(SignatureVariables {
+                    numeric_variables: vec![0],
+                    ..Default::default()
+                }),
+                stage: 0,
+                cost: 0,
+                ..Default::default()
+            },
+            goals: vec![GroundedCondition {
+                condition: Condition::Comparison(
+                    ComparisonOperator::Ge,
+                    NumericExpression::Variable(0),
+                    NumericExpression::Constant(1),
+                ),
+                ..Default::default()
+            }],
+            operators: vec![Operator {
+                name: String::from("add"),
+                numeric_effects: vec![(
+                    0,
+                    NumericExpression::NumericOperation(
+                        NumericOperator::Add,
+                        Box::new(NumericExpression::Variable(0)),
+                        Box::new(NumericExpression::Constant(1)),
+                    ),
+                )],
+                cost: NumericExpression::NumericOperation(
+                    NumericOperator::Add,
+                    Box::new(NumericExpression::Cost),
+                    Box::new(NumericExpression::Constant(1)),
+                ),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        assert_eq!(problem.minimize, expected.minimize);
+        assert_eq!(problem.domain_name, expected.domain_name);
+        assert_eq!(problem.problem_name, expected.problem_name);
+        assert_eq!(problem.state_metadata, expected.state_metadata);
+        assert_eq!(problem.initial_state, expected.initial_state);
+        assert_eq!(problem.table_registry, expected.table_registry);
+        assert_eq!(problem.constraints, expected.constraints);
+        assert_eq!(problem.goals, expected.goals);
+        assert_eq!(problem.operators, expected.operators);
+        assert_eq!(problem, expected);
+
+        let domain = r"
 domain: TSPTW
+metric: minimize
 objects: [cities]
 variables:
         - name: unvisited
@@ -281,6 +396,7 @@ tables:
           default: true
 constraints:
         - condition: (<= time (due_date location))
+        - condition: (= 0 0)
 operators:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
@@ -309,7 +425,6 @@ initial_state:
 goals:
         - condition: (is_empty unvisited)
         - condition: (is location 0)
-        - condition: (= 0 0)
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
         due_date: {0: 10000, 1: 2, 2: 2}
@@ -572,9 +687,6 @@ table_values:
         assert_eq!(problem.table_registry, expected.table_registry);
         assert_eq!(problem.constraints, expected.constraints);
         assert_eq!(problem.goals, expected.goals);
-        assert_eq!(problem.operators[0], expected.operators[0]);
-        assert_eq!(problem.operators[1], expected.operators[1]);
-        assert_eq!(problem.operators[2], expected.operators[2]);
         assert_eq!(problem.operators, expected.operators);
         assert_eq!(problem, expected);
     }
