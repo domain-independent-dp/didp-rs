@@ -31,6 +31,16 @@ impl<T: variable::Numeric> Operator<T> {
         metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry<T>,
     ) -> bool {
+        for (i, v) in &self.elements_in_set_variable {
+            if !state.signature_variables.set_variables[*i].contains(*v) {
+                return false;
+            }
+        }
+        for (i, v) in &self.elements_in_permutation_variable {
+            if !state.signature_variables.permutation_variables[*i].contains(v) {
+                return false;
+            }
+        }
         for c in &self.preconditions {
             if !c.eval(state, metadata, registry) {
                 return false;
@@ -379,11 +389,19 @@ mod tests {
             NumericExpression::Variable(0),
             NumericExpression::Constant(1),
         );
+
         let operator = Operator {
             name: String::from(""),
-            elements_in_set_variable: Vec::new(),
-            elements_in_permutation_variable: Vec::new(),
             preconditions: vec![set_condition, numeric_condition],
+            cost: NumericExpression::Constant(0),
+            ..Default::default()
+        };
+        assert!(operator.is_applicable(&state, &metadata, &registry));
+
+        let operator = Operator {
+            name: String::from(""),
+            elements_in_set_variable: vec![(0, 0), (1, 1)],
+            elements_in_permutation_variable: vec![(0, 0), (1, 2)],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
@@ -404,15 +422,32 @@ mod tests {
             NumericExpression::Variable(0),
             NumericExpression::Constant(1),
         );
+
         let operator = Operator {
             name: String::from(""),
-            elements_in_set_variable: Vec::new(),
-            elements_in_permutation_variable: Vec::new(),
             preconditions: vec![set_condition, numeric_condition],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
         assert!(operator.is_applicable(&state, &metadata, &registry));
+
+        let operator = Operator {
+            name: String::from(""),
+            elements_in_set_variable: vec![(0, 1), (1, 1)],
+            elements_in_permutation_variable: vec![(0, 0), (1, 2)],
+            cost: NumericExpression::Constant(0),
+            ..Default::default()
+        };
+        assert!(!operator.is_applicable(&state, &metadata, &registry));
+
+        let operator = Operator {
+            name: String::from(""),
+            elements_in_set_variable: vec![(0, 1), (1, 1)],
+            elements_in_permutation_variable: vec![(0, 1), (1, 2)],
+            cost: NumericExpression::Constant(0),
+            ..Default::default()
+        };
+        assert!(!operator.is_applicable(&state, &metadata, &registry));
     }
 
     #[test]
