@@ -10,6 +10,7 @@ use std::fmt;
 use std::str;
 use yaml_rust::Yaml;
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct GroundedCondition<T: variable::Numeric> {
     pub elements_in_set_variable: Vec<(usize, usize)>,
     pub elements_in_permutation_variable: Vec<(usize, usize)>,

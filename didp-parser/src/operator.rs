@@ -10,6 +10,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::str;
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Operator<T: variable::Numeric> {
     pub name: String,
     pub elements_in_set_variable: Vec<(usize, usize)>,

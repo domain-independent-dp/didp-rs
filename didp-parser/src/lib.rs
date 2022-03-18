@@ -47,6 +47,7 @@ impl NumericType {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Problem<T: variable::Numeric> {
     pub minimize: bool,
     pub domain_name: String,

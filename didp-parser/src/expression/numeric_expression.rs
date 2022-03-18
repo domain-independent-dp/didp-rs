@@ -6,7 +6,7 @@ use crate::variable;
 use std::boxed::Box;
 use std::cmp;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NumericExpression<T: variable::Numeric> {
     Constant(T),
     Variable(usize),
@@ -21,7 +21,7 @@ pub enum NumericExpression<T: variable::Numeric> {
     Table(numeric_table_expression::NumericTableExpression<T>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NumericOperator {
     Add,
     Subtract,
@@ -256,16 +256,7 @@ mod tests {
                 tables,
                 name_to_table,
             },
-            bool_tables: table_registry::TableData {
-                tables_1d: Vec::new(),
-                name_to_table_1d: HashMap::new(),
-                tables_2d: Vec::new(),
-                name_to_table_2d: HashMap::new(),
-                tables_3d: Vec::new(),
-                name_to_table_3d: HashMap::new(),
-                tables: Vec::new(),
-                name_to_table: HashMap::new(),
-            },
+            ..Default::default()
         }
     }
 

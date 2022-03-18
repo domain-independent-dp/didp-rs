@@ -1,7 +1,7 @@
 use crate::variable;
 use std::collections;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Table1D<T: Copy>(Vec<T>);
 
 impl<T: Copy> Table1D<T> {
@@ -24,7 +24,7 @@ impl<T: variable::Numeric> Table1D<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Table2D<T: Copy>(Vec<Vec<T>>);
 
 impl<T: Copy> Table2D<T> {
@@ -51,7 +51,7 @@ impl<T: variable::Numeric> Table2D<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Table3D<T: Copy>(Vec<Vec<Vec<T>>>);
 
 impl<T: Copy> Table3D<T> {
@@ -134,7 +134,7 @@ impl<T: variable::Numeric> Table3D<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Table<T: Copy> {
     map: collections::HashMap<Vec<variable::ElementVariable>, T>,
     default: T,

@@ -1,7 +1,7 @@
 use crate::state;
 use crate::variable;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SetExpression {
     SetVariable(usize),
     PermutationVariable(usize),
@@ -10,14 +10,14 @@ pub enum SetExpression {
     SetElementOperation(SetElementOperator, Box<SetExpression>, ElementExpression),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SetOperator {
     Union,
     Difference,
     Intersect,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SetElementOperator {
     Add,
     Remove,
@@ -81,7 +81,7 @@ impl SetExpression {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ElementExpression {
     Stage,
     Constant(variable::ElementVariable),
@@ -98,7 +98,7 @@ impl ElementExpression {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ArgumentExpression {
     Set(SetExpression),
     Element(ElementExpression),

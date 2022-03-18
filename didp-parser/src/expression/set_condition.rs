@@ -3,7 +3,7 @@ use super::set_expression::SetExpression;
 use crate::state;
 use crate::variable;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SetCondition {
     Constant(bool),
     Eq(ElementExpression, ElementExpression),

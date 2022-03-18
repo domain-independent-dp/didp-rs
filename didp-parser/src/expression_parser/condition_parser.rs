@@ -271,16 +271,6 @@ mod tests {
         name_to_table.insert(String::from("f4"), 0);
 
         table_registry::TableRegistry {
-            numeric_tables: table_registry::TableData {
-                tables_1d: Vec::new(),
-                name_to_table_1d: HashMap::new(),
-                tables_2d: Vec::new(),
-                name_to_table_2d: HashMap::new(),
-                tables_3d: Vec::new(),
-                name_to_table_3d: HashMap::new(),
-                tables: Vec::new(),
-                name_to_table: HashMap::new(),
-            },
             bool_tables: table_registry::TableData {
                 tables_1d,
                 name_to_table_1d,
@@ -291,6 +281,7 @@ mod tests {
                 tables,
                 name_to_table,
             },
+            ..Default::default()
         }
     }
 

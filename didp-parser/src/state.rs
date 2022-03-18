@@ -6,7 +6,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::str;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct State<T: variable::Numeric> {
     pub signature_variables: Rc<SignatureVariables<T>>,
     pub resource_variables: Vec<T>,
@@ -14,7 +14,7 @@ pub struct State<T: variable::Numeric> {
     pub cost: T,
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
 pub struct SignatureVariables<T: variable::Numeric> {
     pub set_variables: Vec<variable::SetVariable>,
     pub permutation_variables: Vec<variable::PermutationVariable>,
@@ -86,7 +86,7 @@ impl<T: variable::Numeric> State<T> {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Eq)]
+#[derive(Debug, PartialEq, Clone, Eq, Default)]
 pub struct StateMetadata {
     pub object_names: Vec<String>,
     pub name_to_object: collections::HashMap<String, usize>,
@@ -972,6 +972,53 @@ small: 2
         let variables = &variables[0];
         let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
         assert!(metadata.is_err());
+
+        let variables = r"
+- object: object
+  type: set
+";
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
+        assert!(metadata.is_err());
+
+        let variables = r"
+- name: s0
+  type: set
+";
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
+        assert!(metadata.is_err());
+
+        let variables = r"
+- name: s0
+  object: object
+";
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
+        assert!(metadata.is_err());
+
+        let variables = r"
+- name: s0
+  type: set
+  object: object
+";
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
 
         let object_numbers = r"
 object: 10

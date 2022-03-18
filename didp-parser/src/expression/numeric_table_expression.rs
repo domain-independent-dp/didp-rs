@@ -5,7 +5,7 @@ use crate::table_registry;
 use crate::variable;
 use std::iter;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NumericTableExpression<T: variable::Numeric> {
     Constant(T),
     Table1D(usize, ElementExpression),
@@ -468,16 +468,7 @@ mod tests {
                 tables,
                 name_to_table,
             },
-            bool_tables: table_registry::TableData {
-                tables_1d: Vec::new(),
-                name_to_table_1d: HashMap::new(),
-                tables_2d: Vec::new(),
-                name_to_table_2d: HashMap::new(),
-                tables_3d: Vec::new(),
-                name_to_table_3d: HashMap::new(),
-                tables: Vec::new(),
-                name_to_table: HashMap::new(),
-            },
+            ..Default::default()
         }
     }
 
