@@ -141,7 +141,7 @@ where
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(SetCondition::IsEmpty(s)), rest))
         }
-        _ => Err(ParseErr::new(format!("no such operator: `{}`", name))),
+        _ => Err(ParseErr::new(format!("no such operator `{}`", name))),
     }
 }
 

@@ -20,6 +20,12 @@ pub enum Condition<T: variable::Numeric> {
     Table(bool_table_expression::BoolTableExpression),
 }
 
+impl<T: variable::Numeric> Default for Condition<T> {
+    fn default() -> Condition<T> {
+        Condition::Constant(true)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ComparisonOperator {
     Eq,

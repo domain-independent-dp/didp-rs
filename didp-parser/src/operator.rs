@@ -10,7 +10,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::str;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct Operator<T: variable::Numeric> {
     pub name: String,
     pub elements_in_set_variable: Vec<(usize, usize)>,
@@ -120,8 +120,13 @@ where
     ) = match map.get(&yaml_rust::Yaml::from_str("parameters")) {
         Some(value) => {
             let result = metadata.ground_parameters_from_yaml(value)?;
-            let parameter_map = yaml_util::get_map(value)?;
-            let parameter_names = yaml_util::get_key_names(parameter_map)?;
+            let array = yaml_util::get_array(value)?;
+            let mut parameter_names = Vec::with_capacity(array.len());
+            for map in array {
+                let map = yaml_util::get_map(map)?;
+                let value = yaml_util::get_string_by_key(&map, "name")?;
+                parameter_names.push(value);
+            }
             (result.0, result.1, result.2, parameter_names)
         }
         None => (
@@ -224,7 +229,7 @@ mod tests {
 
     fn generate_metadata() -> state::StateMetadata {
         let object_names = vec![String::from("object")];
-        let object_numbers = vec![10];
+        let object_numbers = vec![3];
         let mut name_to_object = HashMap::new();
         name_to_object.insert("object".to_string(), 0);
 
@@ -313,21 +318,16 @@ mod tests {
     }
 
     fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
-        let tables_1d = vec![table::Table1D::new(Vec::new())];
+        let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
 
-        let tables_2d = vec![table::Table2D::new(Vec::new())];
+        let tables_2d = vec![table::Table2D::new(vec![
+            vec![10, 20, 30],
+            vec![40, 50, 60],
+        ])];
         let mut name_to_table_2d = HashMap::new();
         name_to_table_2d.insert(String::from("f2"), 0);
-
-        let tables_3d = vec![table::Table3D::new(Vec::new())];
-        let mut name_to_table_3d = HashMap::new();
-        name_to_table_3d.insert(String::from("f3"), 0);
-
-        let tables = vec![table::Table::new(HashMap::new(), 0)];
-        let mut name_to_table = HashMap::new();
-        name_to_table.insert(String::from("f4"), 0);
 
         table_registry::TableRegistry {
             numeric_tables: table_registry::TableData {
@@ -335,21 +335,9 @@ mod tests {
                 name_to_table_1d,
                 tables_2d,
                 name_to_table_2d,
-                tables_3d,
-                name_to_table_3d,
-                tables,
-                name_to_table,
+                ..Default::default()
             },
-            bool_tables: table_registry::TableData {
-                tables_1d: Vec::new(),
-                name_to_table_1d: HashMap::new(),
-                tables_2d: Vec::new(),
-                name_to_table_2d: HashMap::new(),
-                tables_3d: Vec::new(),
-                name_to_table_3d: HashMap::new(),
-                tables: Vec::new(),
-                name_to_table: HashMap::new(),
-            },
+            ..Default::default()
         }
     }
 
@@ -392,12 +380,8 @@ mod tests {
             elements_in_set_variable: Vec::new(),
             elements_in_permutation_variable: Vec::new(),
             preconditions: vec![set_condition, numeric_condition],
-            set_effects: Vec::new(),
-            permutation_effects: Vec::new(),
-            element_effects: Vec::new(),
-            numeric_effects: Vec::new(),
-            resource_effects: Vec::new(),
             cost: NumericExpression::Constant(0),
+            ..Default::default()
         };
         assert!(operator.is_applicable(&state, &metadata, &registry));
     }
@@ -421,12 +405,8 @@ mod tests {
             elements_in_set_variable: Vec::new(),
             elements_in_permutation_variable: Vec::new(),
             preconditions: vec![set_condition, numeric_condition],
-            set_effects: Vec::new(),
-            permutation_effects: Vec::new(),
-            element_effects: Vec::new(),
-            numeric_effects: Vec::new(),
-            resource_effects: Vec::new(),
             cost: NumericExpression::Constant(0),
+            ..Default::default()
         };
         assert!(operator.is_applicable(&state, &metadata, &registry));
     }
@@ -472,9 +452,6 @@ mod tests {
         );
         let operator = Operator {
             name: String::from(""),
-            elements_in_set_variable: Vec::new(),
-            elements_in_permutation_variable: Vec::new(),
-            preconditions: Vec::new(),
             set_effects: vec![(0, set_effect1), (1, set_effect2)],
             permutation_effects: vec![(0, permutation_effect1), (1, permutation_effect2)],
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
@@ -485,6 +462,7 @@ mod tests {
                 Box::new(NumericExpression::Cost),
                 Box::new(NumericExpression::Constant(1)),
             ),
+            ..Default::default()
         };
 
         let mut set1 = variable::SetVariable::with_capacity(3);
@@ -506,5 +484,254 @@ mod tests {
         };
         let successor = operator.apply_effects(&state, &metadata, &registry);
         assert_eq!(successor, expected);
+    }
+
+    #[test]
+    fn load_operators_from_yaml_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+
+        let operator = r"
+name: operator
+preconditions: [(>= (f2 0 1) 10)]
+effects: {e0: '0'}
+cost: '0'
+";
+        let operator = yaml_rust::YamlLoader::load_from_str(operator);
+        assert!(operator.is_ok());
+        let operator = operator.unwrap();
+        assert_eq!(operator.len(), 1);
+        let operator = &operator[0];
+        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        println!("{:?}", operators);
+        assert!(operators.is_ok());
+        let expected = vec![Operator {
+            name: String::from("operator"),
+            preconditions: Vec::new(),
+            element_effects: vec![(0, ElementExpression::Constant(0))],
+            cost: NumericExpression::Constant(0),
+            ..Default::default()
+        }];
+        assert_eq!(operators.unwrap(), expected);
+
+        let operator = r"
+name: operator
+parameters:
+        - name: e
+          object: s0
+preconditions:
+        - (>= (f2 e0 e) 10)
+        - (is_not e 2)
+effects:
+        e0: e
+        s0: (+ s0 e)
+        p0: e
+        n0: '1'
+        r0: '2'
+cost: (+ cost (f1 e))
+";
+        let operator = yaml_rust::YamlLoader::load_from_str(operator);
+        assert!(operator.is_ok());
+        let operator = operator.unwrap();
+        assert_eq!(operator.len(), 1);
+        let operator = &operator[0];
+        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        assert!(operators.is_ok());
+        let expected = vec![
+            Operator {
+                name: String::from("operator e:0"),
+                elements_in_set_variable: vec![(0, 0)],
+                elements_in_permutation_variable: Vec::new(),
+                preconditions: vec![Condition::Comparison(
+                    ComparisonOperator::Ge,
+                    NumericExpression::Table(NumericTableExpression::Table2D(
+                        0,
+                        ElementExpression::Variable(0),
+                        ElementExpression::Constant(0),
+                    )),
+                    NumericExpression::Constant(10),
+                )],
+                set_effects: vec![(
+                    0,
+                    SetExpression::SetElementOperation(
+                        SetElementOperator::Add,
+                        Box::new(SetExpression::SetVariable(0)),
+                        ElementExpression::Constant(0),
+                    ),
+                )],
+                permutation_effects: vec![(0, ElementExpression::Constant(0))],
+                element_effects: vec![(0, ElementExpression::Constant(0))],
+                numeric_effects: vec![(0, NumericExpression::Constant(1))],
+                resource_effects: vec![(0, NumericExpression::Constant(2))],
+                cost: NumericExpression::NumericOperation(
+                    NumericOperator::Add,
+                    Box::new(NumericExpression::Cost),
+                    Box::new(NumericExpression::Constant(10)),
+                ),
+            },
+            Operator {
+                name: String::from("operator e:1"),
+                elements_in_set_variable: vec![(0, 1)],
+                elements_in_permutation_variable: Vec::new(),
+                preconditions: vec![Condition::Comparison(
+                    ComparisonOperator::Ge,
+                    NumericExpression::Table(NumericTableExpression::Table2D(
+                        0,
+                        ElementExpression::Variable(0),
+                        ElementExpression::Constant(1),
+                    )),
+                    NumericExpression::Constant(10),
+                )],
+                set_effects: vec![(
+                    0,
+                    SetExpression::SetElementOperation(
+                        SetElementOperator::Add,
+                        Box::new(SetExpression::SetVariable(0)),
+                        ElementExpression::Constant(1),
+                    ),
+                )],
+                permutation_effects: vec![(0, ElementExpression::Constant(1))],
+                element_effects: vec![(0, ElementExpression::Constant(1))],
+                numeric_effects: vec![(0, NumericExpression::Constant(1))],
+                resource_effects: vec![(0, NumericExpression::Constant(2))],
+                cost: NumericExpression::NumericOperation(
+                    NumericOperator::Add,
+                    Box::new(NumericExpression::Cost),
+                    Box::new(NumericExpression::Constant(20)),
+                ),
+            },
+        ];
+        assert_eq!(operators.unwrap(), expected);
+    }
+
+    #[test]
+    fn load_operators_from_yaml_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+
+        let operator = r"
+parameters:
+        - name: e
+          object: s0
+preconditions:
+        - (>= (f2 e0 e) 10)
+effects:
+        e0: e
+        s0: (+ s0 e)
+        p0: e
+        n0: '1'
+        r0: '2'
+cost: (+ cost (f1 e))
+";
+        let operator = yaml_rust::YamlLoader::load_from_str(operator);
+        assert!(operator.is_ok());
+        let operator = operator.unwrap();
+        assert_eq!(operator.len(), 1);
+        let operator = &operator[0];
+        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        assert!(operators.is_err());
+
+        let operator = r"
+name: operator
+parameters:
+        - name: e
+          object: s0
+effects:
+        e0: e
+        s0: (+ s0 e)
+        p0: e
+        n0: '1'
+        r0: '2'
+cost: (+ cost (f1 e))
+";
+        let operator = yaml_rust::YamlLoader::load_from_str(operator);
+        assert!(operator.is_ok());
+        let operator = operator.unwrap();
+        assert_eq!(operator.len(), 1);
+        let operator = &operator[0];
+        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        assert!(operators.is_err());
+
+        let operator = r"
+name: operator
+parameters:
+        - name: e
+          object: s0
+preconditions:
+        - (>= (f2 e0 e) 10)
+cost: (+ cost (f1 e))
+";
+        let operator = yaml_rust::YamlLoader::load_from_str(operator);
+        assert!(operator.is_ok());
+        let operator = operator.unwrap();
+        assert_eq!(operator.len(), 1);
+        let operator = &operator[0];
+        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        assert!(operators.is_err());
+
+        let operator = r"
+name: operator
+parameters:
+        - name: e
+          object: s0
+preconditions:
+        - (>= (f2 e0 e) 10)
+effects:
+        e0: e
+        s0: (+ s0 e)
+        p0: e
+        n0: '1'
+        r0: '2'
+";
+        let operator = yaml_rust::YamlLoader::load_from_str(operator);
+        assert!(operator.is_ok());
+        let operator = operator.unwrap();
+        assert_eq!(operator.len(), 1);
+        let operator = &operator[0];
+        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        assert!(operators.is_err());
+
+        let operator = r"
+name: operator
+preconditions:
+        - (>= (f2 e0 e) 10)
+effects:
+        e0: e
+        s0: (+ s0 e)
+        p0: e
+        n0: '1'
+        r0: '2'
+cost: (+ cost (f1 e))
+";
+        let operator = yaml_rust::YamlLoader::load_from_str(operator);
+        assert!(operator.is_ok());
+        let operator = operator.unwrap();
+        assert_eq!(operator.len(), 1);
+        let operator = &operator[0];
+        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        assert!(operators.is_err());
+
+        let operator = r"
+parameters:
+        - name: e
+          object: s0
+preconditions:
+        - (>= (f2 e0 e) 10)
+effects:
+        e0: e
+        s0: (+ s0 e)
+        p0: e
+        n0: '1'
+        r0: '2'
+        r5: '5'
+cost: (+ cost (f1 e))
+";
+        let operator = yaml_rust::YamlLoader::load_from_str(operator);
+        assert!(operator.is_ok());
+        let operator = operator.unwrap();
+        assert_eq!(operator.len(), 1);
+        let operator = &operator[0];
+        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        assert!(operators.is_err());
     }
 }

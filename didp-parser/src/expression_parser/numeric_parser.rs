@@ -90,7 +90,7 @@ where
             NumericExpression::NumericOperation(NumericOperator::Max, Box::new(x), Box::new(y)),
             rest,
         )),
-        _ => Err(ParseErr::new(format!("no such operator: `{}`", name))),
+        _ => Err(ParseErr::new(format!("no such operator `{}`", name))),
     }
 }
 

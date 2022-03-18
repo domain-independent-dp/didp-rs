@@ -252,7 +252,7 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let text = "(+ (- 5 (/ (f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(+ (* s0 (- s2 (+ s3 2))) (- s1 1))|)))".to_string();
+        let text = "(+ (- 5 (/ (f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(+ (& s0 (- s2 (+ s3 2))) (- s1 1))|)))".to_string();
         let result = parse_numeric(text, &metadata, &registry, &parameters);
         assert!(result.is_ok());
     }
@@ -271,7 +271,7 @@ mod tests {
     fn parse_set_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let text = "(+ (* s0 (- s2 (+ s3 2))) (- s1 1))".to_string();
+        let text = "(+ (& s0 (- s2 (+ s3 2))) (- s1 1))".to_string();
         let result = parse_set(text, &metadata, &parameters);
         assert!(result.is_ok());
     }
@@ -326,13 +326,13 @@ mod tests {
 
     #[test]
     fn tokenize_text() {
-        let text = "(+ (- 5 (/ (f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(+ (* s0 (- s2 (+ s3 2))) (- s1 1))|)))".to_string();
+        let text = "(+ (- 5 (/ (f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(+ (& s0 (- s2 (+ s3 2))) (- s1 1))|)))".to_string();
         assert_eq!(
             tokenize(text),
             [
                 "(", "+", "(", "-", "5", "(", "/", "(", "f4", "4", "!", "s2", "e0", "3", ")", "(",
                 "max", "(", "f2", "2", "e1", ")", "n0", ")", ")", ")", "(", "*", "r1", "(", "min",
-                "3", "|", "(", "+", "(", "*", "s0", "(", "-", "s2", "(", "+", "s3", "2", ")", ")",
+                "3", "|", "(", "+", "(", "&", "s0", "(", "-", "s2", "(", "+", "s3", "2", ")", ")",
                 ")", "(", "-", "s1", "1", ")", ")", "|", ")", ")", ")",
             ]
         );

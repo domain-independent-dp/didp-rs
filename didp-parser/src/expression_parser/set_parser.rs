@@ -106,7 +106,7 @@ fn parse_operation<'a, 'b, 'c>(
                 args
             ))),
         },
-        "*" => match (x, y) {
+        "&" => match (x, y) {
             (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => Ok((
                 SetExpression::SetOperation(SetOperator::Intersect, Box::new(x), Box::new(y)),
                 rest,
@@ -116,7 +116,7 @@ fn parse_operation<'a, 'b, 'c>(
                 args
             ))),
         },
-        op => Err(ParseErr::new(format!("no such operator: {}", op))),
+        op => Err(ParseErr::new(format!("no such operator `{}`", op))),
     }
 }
 
@@ -357,7 +357,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["(", "*", "s2", "s1", ")", "e0", ")"]
+        let tokens: Vec<String> = ["(", "&", "s2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -428,7 +428,7 @@ mod tests {
         let result = parse_set_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", "*", "s2", "e1", ")", "e0", ")"]
+        let tokens: Vec<String> = ["(", "&", "s2", "e1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();

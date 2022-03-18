@@ -439,7 +439,7 @@ mod tests {
     use super::*;
     use collections::HashMap;
 
-    fn generate_state_metadata() -> state::StateMetadata {
+    fn generate_metadata() -> state::StateMetadata {
         let object_names = vec![String::from("object")];
         let mut name_to_object = HashMap::new();
         name_to_object.insert(String::from("object"), 0);
@@ -570,7 +570,7 @@ mod tests {
 
     #[test]
     fn load_from_yaml_ok() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         let expected = generate_registry();
 
         let tables = r"
@@ -648,7 +648,7 @@ b4: { [0, 1, 0, 0]: true, [0, 1, 0, 1]: false, [0, 1, 2, 0]: false, [0, 1, 2, 1]
 
     #[test]
     fn load_from_yaml_err() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
 
         let tables = r"
 - name: f1

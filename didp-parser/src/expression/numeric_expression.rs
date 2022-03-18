@@ -21,6 +21,12 @@ pub enum NumericExpression<T: variable::Numeric> {
     Table(numeric_table_expression::NumericTableExpression<T>),
 }
 
+impl<T: variable::Numeric> Default for NumericExpression<T> {
+    fn default() -> NumericExpression<T> {
+        NumericExpression::Constant(T::zero())
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NumericOperator {
     Add,

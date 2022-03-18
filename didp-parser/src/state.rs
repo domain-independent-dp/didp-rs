@@ -405,7 +405,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    fn generate_state_metadata() -> StateMetadata {
+    fn generate_metadata() -> StateMetadata {
         let object_names = vec![String::from("object"), String::from("small")];
         let object_numbers = vec![10, 2];
         let mut name_to_object = HashMap::new();
@@ -498,7 +498,7 @@ mod tests {
 
     #[test]
     fn state_load_from_yaml_ok() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
 
         let yaml = yaml_rust::YamlLoader::load_from_str(
             r"
@@ -591,7 +591,7 @@ cost: 1
 
     #[test]
     fn state_load_from_yaml_err() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         let yaml = yaml_rust::YamlLoader::load_from_str(
             r"
 s0: [0, 2]
@@ -625,43 +625,43 @@ r3: 3
 
     #[test]
     fn number_of_objects() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.number_of_objects(), 2);
     }
 
     #[test]
     fn number_of_set_variables() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.number_of_set_variables(), 4);
     }
 
     #[test]
     fn number_of_permutation_variables() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.number_of_permutation_variables(), 4);
     }
 
     #[test]
     fn number_of_element_variables() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.number_of_element_variables(), 4);
     }
 
     #[test]
     fn number_of_numeric_variables() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.number_of_numeric_variables(), 4);
     }
 
     #[test]
     fn number_of_resource_variables() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.number_of_resource_variables(), 4);
     }
 
     #[test]
     fn set_variable_capacity() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.set_variable_capacity(0), 10);
         assert_eq!(metadata.set_variable_capacity(1), 10);
         assert_eq!(metadata.set_variable_capacity(2), 10);
@@ -670,7 +670,7 @@ r3: 3
 
     #[test]
     fn set_variable_capacity_by_name() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.set_variable_capacity_by_name("s0"), 10);
         assert_eq!(metadata.set_variable_capacity_by_name("s1"), 10);
         assert_eq!(metadata.set_variable_capacity_by_name("s2"), 10);
@@ -679,7 +679,7 @@ r3: 3
 
     #[test]
     fn permutation_variable_capacity() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.permutation_variable_capacity(0), 10);
         assert_eq!(metadata.permutation_variable_capacity(1), 10);
         assert_eq!(metadata.permutation_variable_capacity(2), 10);
@@ -688,7 +688,7 @@ r3: 3
 
     #[test]
     fn permutation_variable_capacity_by_name() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.permutation_variable_capacity_by_name("p0"), 10);
         assert_eq!(metadata.permutation_variable_capacity_by_name("p1"), 10);
         assert_eq!(metadata.permutation_variable_capacity_by_name("p2"), 10);
@@ -697,7 +697,7 @@ r3: 3
 
     #[test]
     fn element_variable_capacity() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.element_variable_capacity(0), 10);
         assert_eq!(metadata.element_variable_capacity(1), 10);
         assert_eq!(metadata.element_variable_capacity(2), 10);
@@ -706,7 +706,7 @@ r3: 3
 
     #[test]
     fn element_variable_capacity_by_name() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         assert_eq!(metadata.element_variable_capacity_by_name("e0"), 10);
         assert_eq!(metadata.element_variable_capacity_by_name("e1"), 10);
         assert_eq!(metadata.element_variable_capacity_by_name("e2"), 10);
@@ -715,7 +715,7 @@ r3: 3
 
     #[test]
     fn resource_variables_dominance() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         let a = vec![1, 2, 2, 0];
         let b = vec![1, 2, 2, 0];
         assert!(matches!(metadata.dominance(&a, &b), Some(Ordering::Equal)));
@@ -732,7 +732,7 @@ r3: 3
     #[test]
     #[should_panic]
     fn resource_variables_dominance_length_panic() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         let a = vec![1, 2, 2, 0];
         let b = vec![1, 2, 2];
         metadata.dominance(&b, &a);
@@ -740,7 +740,7 @@ r3: 3
 
     #[test]
     fn ground_parameters_from_yaml_ok() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         let mut map1 = HashMap::new();
         map1.insert(String::from("v0"), 0);
         map1.insert(String::from("v1"), 0);
@@ -817,7 +817,7 @@ r3: 3
 
     #[test]
     fn ground_parameters_from_yaml_err() {
-        let metadata = generate_state_metadata();
+        let metadata = generate_metadata();
         let yaml = yaml_rust::YamlLoader::load_from_str(
             r"
 - name: v0
@@ -836,7 +836,7 @@ r3: 3
 
     #[test]
     fn state_metadata_load_from_yaml_ok() {
-        let expected = generate_state_metadata();
+        let expected = generate_metadata();
         let objects = r"
 - object
 - small
