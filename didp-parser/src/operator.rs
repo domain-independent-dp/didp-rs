@@ -137,7 +137,10 @@ where
         ),
     };
 
-    let lifted_preconditions = yaml_util::get_string_array_by_key(map, "preconditions")?;
+    let lifted_preconditions = match map.get(&yaml_rust::Yaml::from_str("preconditions")) {
+        Some(value) => yaml_util::get_string_array(value)?,
+        None => vec![],
+    };
     let lifted_effects = yaml_util::get_map_by_key(map, "effects")?;
     let lifted_cost = yaml_util::get_string_by_key(map, "cost")?;
 
@@ -503,7 +506,27 @@ cost: '0'
         assert_eq!(operator.len(), 1);
         let operator = &operator[0];
         let operators = load_operators_from_yaml(operator, &metadata, &registry);
-        println!("{:?}", operators);
+        assert!(operators.is_ok());
+        let expected = vec![Operator {
+            name: String::from("operator"),
+            preconditions: Vec::new(),
+            element_effects: vec![(0, ElementExpression::Constant(0))],
+            cost: NumericExpression::Constant(0),
+            ..Default::default()
+        }];
+        assert_eq!(operators.unwrap(), expected);
+
+        let operator = r"
+name: operator
+effects: {e0: '0'}
+cost: '0'
+";
+        let operator = yaml_rust::YamlLoader::load_from_str(operator);
+        assert!(operator.is_ok());
+        let operator = operator.unwrap();
+        assert_eq!(operator.len(), 1);
+        let operator = &operator[0];
+        let operators = load_operators_from_yaml(operator, &metadata, &registry);
         assert!(operators.is_ok());
         let expected = vec![Operator {
             name: String::from("operator"),
@@ -615,27 +638,6 @@ parameters:
           object: s0
 preconditions:
         - (>= (f2 e0 e) 10)
-effects:
-        e0: e
-        s0: (+ s0 e)
-        p0: e
-        n0: '1'
-        r0: '2'
-cost: (+ cost (f1 e))
-";
-        let operator = yaml_rust::YamlLoader::load_from_str(operator);
-        assert!(operator.is_ok());
-        let operator = operator.unwrap();
-        assert_eq!(operator.len(), 1);
-        let operator = &operator[0];
-        let operators = load_operators_from_yaml(operator, &metadata, &registry);
-        assert!(operators.is_err());
-
-        let operator = r"
-name: operator
-parameters:
-        - name: e
-          object: s0
 effects:
         e0: e
         s0: (+ s0 e)

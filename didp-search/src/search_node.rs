@@ -3,11 +3,11 @@ use std::cmp::Ordering;
 use std::collections;
 use std::rc::Rc;
 
-use didp_parser::{state, variable};
+use didp_parser::variable;
 
 #[derive(Debug, Eq)]
 pub struct SearchNode<T: variable::Numeric> {
-    pub state: state::State<T>,
+    pub state: didp_parser::State<T>,
     pub h: RefCell<Option<T>>,
     pub f: RefCell<Option<T>>,
     pub parent: Option<Rc<SearchNode<T>>>,
@@ -34,7 +34,7 @@ impl<T: variable::Numeric> PartialEq for SearchNode<T> {
 
 #[derive(Default)]
 pub struct SearchNodeRegistry<T: variable::Numeric>(
-    collections::HashMap<Rc<state::SignatureVariables<T>>, Vec<Rc<SearchNode<T>>>>,
+    collections::HashMap<Rc<didp_parser::SignatureVariables<T>>, Vec<Rc<SearchNode<T>>>>,
 );
 
 impl<T: variable::Numeric> SearchNodeRegistry<T> {
@@ -44,9 +44,9 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
 
     pub fn get_node(
         &mut self,
-        mut state: state::State<T>,
+        mut state: didp_parser::State<T>,
         parent: Option<Rc<SearchNode<T>>>,
-        metadata: &state::StateMetadata,
+        metadata: &didp_parser::StateMetadata,
     ) -> Option<Rc<SearchNode<T>>> {
         let entry = self.0.entry(state.signature_variables.clone());
         let v = match entry {
@@ -117,7 +117,7 @@ mod tests {
     use super::*;
     use didp_parser::variable;
 
-    fn generate_state_metadata() -> state::StateMetadata {
+    fn generate_state_metadata() -> didp_parser::StateMetadata {
         let mut name_to_numeric_variable = collections::HashMap::new();
         name_to_numeric_variable.insert("n1".to_string(), 0);
         name_to_numeric_variable.insert("n2".to_string(), 1);
@@ -128,7 +128,7 @@ mod tests {
         name_to_resource_variable.insert("r2".to_string(), 1);
         name_to_resource_variable.insert("r3".to_string(), 2);
 
-        state::StateMetadata {
+        didp_parser::StateMetadata {
             object_names: Vec::new(),
             name_to_object: collections::HashMap::new(),
             object_numbers: Vec::new(),
@@ -151,8 +151,8 @@ mod tests {
 
     fn generate_signature_variables(
         numeric_variables: Vec<variable::IntegerVariable>,
-    ) -> Rc<state::SignatureVariables<variable::IntegerVariable>> {
-        Rc::new(state::SignatureVariables {
+    ) -> Rc<didp_parser::SignatureVariables<variable::IntegerVariable>> {
+        Rc::new(didp_parser::SignatureVariables {
             set_variables: Vec::new(),
             permutation_variables: Vec::new(),
             element_variables: Vec::new(),
@@ -161,14 +161,14 @@ mod tests {
     }
 
     fn generate_node(
-        signature_variables: Rc<state::SignatureVariables<variable::IntegerVariable>>,
+        signature_variables: Rc<didp_parser::SignatureVariables<variable::IntegerVariable>>,
         resource_variables: Vec<variable::IntegerVariable>,
         cost: variable::IntegerVariable,
         h: variable::IntegerVariable,
         f: variable::IntegerVariable,
     ) -> SearchNode<variable::IntegerVariable> {
         SearchNode {
-            state: state::State {
+            state: didp_parser::State {
                 signature_variables,
                 resource_variables,
                 stage: 0,
@@ -204,7 +204,7 @@ mod tests {
         let metadata = generate_state_metadata();
         let mut registry = SearchNodeRegistry::default();
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
             stage: 0,
@@ -213,7 +213,7 @@ mod tests {
         let node = registry.get_node(state, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
             stage: 0,
@@ -225,7 +225,7 @@ mod tests {
         assert!(node.parent.is_none());
         assert_eq!(*node.closed.borrow(), false);
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![1, 2, 3],
             stage: 0,
@@ -234,7 +234,7 @@ mod tests {
         let node = registry.get_node(state, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![1, 2, 3],
             stage: 0,
@@ -246,7 +246,7 @@ mod tests {
         assert!(node.parent.is_none());
         assert_eq!(*node.closed.borrow(), false);
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![3, 1, 3],
             stage: 0,
@@ -255,7 +255,7 @@ mod tests {
         let node = registry.get_node(state, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![3, 1, 3],
             stage: 0,
@@ -267,7 +267,7 @@ mod tests {
         assert!(node.parent.is_none());
         assert!(!*node.closed.borrow());
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![0, 1, 3],
             stage: 0,
@@ -276,7 +276,7 @@ mod tests {
         let node = registry.get_node(state, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: vec![0, 1, 3],
             stage: 0,
@@ -294,7 +294,7 @@ mod tests {
         let metadata = generate_state_metadata();
         let mut registry = SearchNodeRegistry::default();
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
             stage: 0,
@@ -302,7 +302,7 @@ mod tests {
         };
         registry.get_node(state, None, &metadata);
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
             stage: 0,
@@ -311,7 +311,7 @@ mod tests {
         let node = registry.get_node(state, None, &metadata);
         assert!(node.is_none());
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![0, 2, 3],
             stage: 0,
@@ -320,7 +320,7 @@ mod tests {
         let node = registry.get_node(state, None, &metadata);
         assert!(node.is_none());
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
             stage: 0,
@@ -335,7 +335,7 @@ mod tests {
         let metadata = generate_state_metadata();
         let mut registry = SearchNodeRegistry::default();
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
             stage: 0,
@@ -346,7 +346,7 @@ mod tests {
         let node = node.unwrap();
         assert!(node.h.borrow().is_none());
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
             stage: 0,
@@ -361,7 +361,7 @@ mod tests {
         let metadata = generate_state_metadata();
         let mut registry = SearchNodeRegistry::default();
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
             stage: 0,
@@ -372,7 +372,7 @@ mod tests {
         let node1 = node1.unwrap();
         *node1.h.borrow_mut() = Some(3);
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![1, 2, 3],
             stage: 1,
@@ -396,7 +396,7 @@ mod tests {
         assert!(!*node2.closed.borrow());
         assert_ne!(node2.parent, node1.parent);
 
-        let state = state::State {
+        let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: vec![2, 3, 3],
             stage: 0,

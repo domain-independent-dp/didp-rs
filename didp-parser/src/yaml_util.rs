@@ -48,24 +48,6 @@ pub fn get_map_by_key<'a, 'b>(
     }
 }
 
-pub fn get_key_names(
-    map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-) -> Result<Vec<String>, YamlContentErr> {
-    let mut keys = Vec::with_capacity(map.len());
-    for (key, _) in map {
-        match key {
-            Yaml::String(value) => keys.push(value.clone()),
-            _ => {
-                return Err(YamlContentErr::new(format!(
-                    "expected String, but is {:?}",
-                    key
-                )))
-            }
-        }
-    }
-    Ok(keys)
-}
-
 pub fn get_yaml_by_key<'a, 'b>(
     map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &'b str,
@@ -307,28 +289,6 @@ mod tests {
         assert!(map.is_err());
         let map = get_map_by_key(&outer_map, "integer");
         assert!(map.is_err());
-    }
-
-    #[test]
-    fn get_key_names_ok() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
-        map.insert(Yaml::String(String::from("0")), Yaml::Integer(0));
-        map.insert(Yaml::String(String::from("1")), Yaml::Integer(1));
-        let key_names = get_key_names(&map);
-        assert!(key_names.is_ok());
-        let key_names = key_names.unwrap();
-        assert_eq!(key_names.len(), 2);
-        assert_eq!(key_names[0], String::from("0"));
-        assert_eq!(key_names[1], String::from("1"));
-    }
-
-    #[test]
-    fn get_key_names_err() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
-        map.insert(Yaml::String(String::from("0")), Yaml::Integer(0));
-        map.insert(Yaml::Integer(1), Yaml::Integer(1));
-        let key_names = get_key_names(&map);
-        assert!(key_names.is_err());
     }
 
     #[test]

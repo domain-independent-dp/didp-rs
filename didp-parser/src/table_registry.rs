@@ -40,6 +40,7 @@ impl<T: variable::Numeric> TableRegistry<T> {
         <T as str::FromStr>::Err: fmt::Debug,
     {
         let tables = yaml_util::get_array(tables)?;
+        let mut table_names = Vec::with_capacity(tables.len());
         let mut name_to_signature = collections::HashMap::new();
         for value in tables {
             let map = yaml_util::get_map(value)?;
@@ -90,6 +91,7 @@ impl<T: variable::Numeric> TableRegistry<T> {
                     )))
                 }
             }
+            table_names.push(name);
         }
         let mut numeric_tables_1d = Vec::new();
         let mut numeric_name_to_table_1d = collections::HashMap::new();
@@ -108,19 +110,19 @@ impl<T: variable::Numeric> TableRegistry<T> {
         let mut bool_tables = Vec::new();
         let mut bool_name_to_table = collections::HashMap::new();
         let table_values = yaml_util::get_map(table_values)?;
-        for (name, signature) in name_to_signature {
-            let arg_types = signature.0;
+        for name in table_names {
+            let (arg_types, return_type) = name_to_signature.get(&name).unwrap();
             let value = yaml_util::get_yaml_by_key(table_values, &name)?;
             if arg_types.len() == 1 {
                 let size = metadata.object_numbers[arg_types[0]];
-                match signature.1 {
+                match return_type {
                     TableReturnType::Numeric(default) => {
-                        let f = Self::load_numeric_table_1d_from_yaml(value, size, default)?;
+                        let f = Self::load_numeric_table_1d_from_yaml(value, size, *default)?;
                         numeric_name_to_table_1d.insert(name, numeric_tables_1d.len());
                         numeric_tables_1d.push(f);
                     }
                     TableReturnType::Bool(default) => {
-                        let f = Self::load_bool_table_1d_from_yaml(value, size, default)?;
+                        let f = Self::load_bool_table_1d_from_yaml(value, size, *default)?;
                         bool_name_to_table_1d.insert(name, bool_tables_1d.len());
                         bool_tables_1d.push(f);
                     }
@@ -128,15 +130,16 @@ impl<T: variable::Numeric> TableRegistry<T> {
             } else if arg_types.len() == 2 {
                 let size_x = metadata.object_numbers[arg_types[0]];
                 let size_y = metadata.object_numbers[arg_types[1]];
-                match signature.1 {
+                match return_type {
                     TableReturnType::Numeric(default) => {
                         let f =
-                            Self::load_numeric_table_2d_from_yaml(value, size_x, size_y, default)?;
+                            Self::load_numeric_table_2d_from_yaml(value, size_x, size_y, *default)?;
                         numeric_name_to_table_2d.insert(name, numeric_tables_2d.len());
                         numeric_tables_2d.push(f);
                     }
                     TableReturnType::Bool(default) => {
-                        let f = Self::load_bool_table_2d_from_yaml(value, size_x, size_y, default)?;
+                        let f =
+                            Self::load_bool_table_2d_from_yaml(value, size_x, size_y, *default)?;
                         bool_name_to_table_2d.insert(name, bool_tables_2d.len());
                         bool_tables_2d.push(f);
                     }
@@ -145,17 +148,17 @@ impl<T: variable::Numeric> TableRegistry<T> {
                 let size_x = metadata.object_numbers[arg_types[0]];
                 let size_y = metadata.object_numbers[arg_types[1]];
                 let size_z = metadata.object_numbers[arg_types[2]];
-                match signature.1 {
+                match return_type {
                     TableReturnType::Numeric(default) => {
                         let f = Self::load_numeric_table_3d_from_yaml(
-                            value, size_x, size_y, size_z, default,
+                            value, size_x, size_y, size_z, *default,
                         )?;
                         numeric_name_to_table_3d.insert(name, numeric_tables_3d.len());
                         numeric_tables_3d.push(f);
                     }
                     TableReturnType::Bool(default) => {
                         let f = Self::load_bool_table_3d_from_yaml(
-                            value, size_x, size_y, size_z, default,
+                            value, size_x, size_y, size_z, *default,
                         )?;
                         bool_name_to_table_3d.insert(name, bool_tables_3d.len());
                         bool_tables_3d.push(f);
@@ -166,14 +169,14 @@ impl<T: variable::Numeric> TableRegistry<T> {
                     .iter()
                     .map(|i| metadata.object_numbers[*i])
                     .collect();
-                match signature.1 {
+                match return_type {
                     TableReturnType::Numeric(default) => {
-                        let f = Self::load_numeric_table_from_yaml(value, size, default)?;
+                        let f = Self::load_numeric_table_from_yaml(value, size, *default)?;
                         numeric_name_to_table.insert(name, numeric_tables.len());
                         numeric_tables.push(f);
                     }
                     TableReturnType::Bool(default) => {
-                        let f = Self::load_bool_table_from_yaml(value, size, default)?;
+                        let f = Self::load_bool_table_from_yaml(value, size, *default)?;
                         bool_name_to_table.insert(name, bool_tables.len());
                         bool_tables.push(f);
                     }
