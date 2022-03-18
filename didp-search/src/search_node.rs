@@ -1,3 +1,4 @@
+use crate::priority_queue;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections;
@@ -16,7 +17,7 @@ pub struct SearchNode<T: variable::Numeric> {
 
 impl<T: variable::Numeric> Ord for SearchNode<T> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.f.cmp(&other.f).reverse()
+        self.f.cmp(&other.f)
     }
 }
 
@@ -31,6 +32,8 @@ impl<T: variable::Numeric> PartialEq for SearchNode<T> {
         self.f == other.f
     }
 }
+
+pub type OpenList<T> = priority_queue::PriorityQueue<Rc<SearchNode<T>>>;
 
 #[derive(Default)]
 pub struct SearchNodeRegistry<T: variable::Numeric>(
@@ -59,13 +62,15 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
                         .dominance(&state.resource_variables, &other.state.resource_variables);
                     match result {
                         Some(Ordering::Equal) | Some(Ordering::Less)
-                            if state.cost >= other.state.cost =>
+                            if (metadata.maximize && state.cost <= other.state.cost)
+                                || (!metadata.maximize && state.cost >= other.state.cost) =>
                         {
                             // dominated
                             return None;
                         }
                         Some(Ordering::Equal) | Some(Ordering::Greater)
-                            if state.cost <= other.state.cost =>
+                            if (metadata.maximize && state.cost >= other.state.cost)
+                                || (!metadata.maximize && state.cost <= other.state.cost) =>
                         {
                             // dominating
                             if !*other.closed.borrow() {
@@ -129,23 +134,13 @@ mod tests {
         name_to_resource_variable.insert("r3".to_string(), 2);
 
         didp_parser::StateMetadata {
-            object_names: Vec::new(),
-            name_to_object: collections::HashMap::new(),
-            object_numbers: Vec::new(),
-            set_variable_names: Vec::new(),
-            name_to_set_variable: collections::HashMap::new(),
-            set_variable_to_object: Vec::new(),
-            permutation_variable_names: Vec::new(),
-            name_to_permutation_variable: collections::HashMap::new(),
-            permutation_variable_to_object: Vec::new(),
-            element_variable_names: Vec::new(),
-            name_to_element_variable: collections::HashMap::new(),
-            element_variable_to_object: Vec::new(),
+            maximize: false,
             numeric_variable_names: vec!["n1".to_string(), "n2".to_string(), "n3".to_string()],
             name_to_numeric_variable,
             resource_variable_names: vec!["r1".to_string(), "r2".to_string(), "r3".to_string()],
             name_to_resource_variable,
             less_is_better: vec![false, false, true],
+            ..Default::default()
         }
     }
 
@@ -153,10 +148,8 @@ mod tests {
         numeric_variables: Vec<variable::IntegerVariable>,
     ) -> Rc<didp_parser::SignatureVariables<variable::IntegerVariable>> {
         Rc::new(didp_parser::SignatureVariables {
-            set_variables: Vec::new(),
-            permutation_variables: Vec::new(),
-            element_variables: Vec::new(),
             numeric_variables,
+            ..Default::default()
         })
     }
 
@@ -196,7 +189,7 @@ mod tests {
         let node1 = generate_node(signature_variables, vec![0, 0, 0], 1, 1, 2);
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
         let node2 = generate_node(signature_variables, vec![0, 0, 0], 1, 2, 3);
-        assert!(node1 > node2);
+        assert!(node1 < node2);
     }
 
     #[test]

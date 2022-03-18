@@ -54,7 +54,6 @@ impl NumericType {
 
 #[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub struct Problem<T: variable::Numeric> {
-    pub minimize: bool,
     pub domain_name: String,
     pub problem_name: String,
     pub state_metadata: state::StateMetadata,
@@ -71,20 +70,6 @@ impl<T: variable::Numeric> Problem<T> {
         <T as str::FromStr>::Err: fmt::Debug,
     {
         let domain = yaml_util::get_map(&domain)?;
-        let minimize = match yaml_util::get_string_by_key(&domain, "metric") {
-            Ok(value) => match &value[..] {
-                "minimize" => true,
-                "maximize" => false,
-                _ => {
-                    return Err(yaml_util::YamlContentErr::new(format!(
-                        "expected `minimize` or `maximize`, but is {}",
-                        value
-                    ))
-                    .into())
-                }
-            },
-            Err(_) => true,
-        };
         let domain_name = yaml_util::get_string_by_key(&domain, "domain")?;
         let problem = yaml_util::get_map(&problem)?;
         let domain_name2 = yaml_util::get_string_by_key(&problem, "domain")?;
@@ -97,18 +82,28 @@ impl<T: variable::Numeric> Problem<T> {
         }
         let problem_name = yaml_util::get_string_by_key(&problem, "problem")?;
 
+        let maximize = Yaml::Boolean(false);
+        let maximize = match domain.get(&Yaml::from_str("maximize")) {
+            Some(value) => value,
+            None => &maximize,
+        };
         let variables = yaml_util::get_yaml_by_key(&domain, "variables")?;
         let state_metadata = match (
             domain.get(&Yaml::from_str("objects")),
             problem.get(&Yaml::from_str("object_numbers")),
         ) {
             (Some(objects), Some(object_numbers)) => {
-                state::StateMetadata::load_from_yaml(objects, variables, object_numbers)?
+                state::StateMetadata::load_from_yaml(&maximize, objects, variables, object_numbers)?
             }
             (None, None) => {
                 let objects = yaml_rust::Yaml::Array(Vec::new());
                 let object_numbers = yaml_rust::Yaml::Hash(linked_hash_map::LinkedHashMap::new());
-                state::StateMetadata::load_from_yaml(&objects, variables, &object_numbers)?
+                state::StateMetadata::load_from_yaml(
+                    &maximize,
+                    &objects,
+                    variables,
+                    &object_numbers,
+                )?
             }
             (Some(_), None) => {
                 return Err(ProblemErr::new(String::from(
@@ -190,7 +185,6 @@ impl<T: variable::Numeric> Problem<T> {
         }
 
         Ok(Problem {
-            minimize,
             domain_name,
             problem_name,
             state_metadata,
@@ -309,10 +303,10 @@ goals:
         let mut name_to_numeric_variable = HashMap::new();
         name_to_numeric_variable.insert(String::from("v"), 0);
         let expected = Problem {
-            minimize: true,
             domain_name: String::from("ADD"),
             problem_name: String::from("one"),
             state_metadata: state::StateMetadata {
+                maximize: false,
                 numeric_variable_names: vec![String::from("v")],
                 name_to_numeric_variable,
                 ..Default::default()
@@ -354,7 +348,6 @@ goals:
             ..Default::default()
         };
 
-        assert_eq!(problem.minimize, expected.minimize);
         assert_eq!(problem.domain_name, expected.domain_name);
         assert_eq!(problem.problem_name, expected.problem_name);
         assert_eq!(problem.state_metadata, expected.state_metadata);
@@ -461,10 +454,10 @@ table_values:
         let mut bool_name_to_table_2d = HashMap::new();
         bool_name_to_table_2d.insert(String::from("connected"), 0);
         let expected = Problem {
-            minimize: true,
             domain_name: String::from("TSPTW"),
             problem_name: String::from("test"),
             state_metadata: state::StateMetadata {
+                maximize: false,
                 object_names: vec![String::from("cities")],
                 name_to_object,
                 object_numbers: vec![3],
@@ -679,7 +672,6 @@ table_values:
                 },
             ],
         };
-        assert_eq!(problem.minimize, expected.minimize);
         assert_eq!(problem.domain_name, expected.domain_name);
         assert_eq!(problem.problem_name, expected.problem_name);
         assert_eq!(problem.state_metadata, expected.state_metadata);

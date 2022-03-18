@@ -228,6 +228,7 @@ mod tests {
         name_to_resource_variable.insert(String::from("r3"), 3);
 
         state::StateMetadata {
+            maximize: false,
             object_names,
             name_to_object,
             object_numbers,
