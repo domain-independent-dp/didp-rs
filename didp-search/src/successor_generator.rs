@@ -87,6 +87,11 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
         mut result: Vec<&'a Operator<T>>,
     ) -> Vec<&'a Operator<T>> {
         result.clear();
+        for op in &self.global_operators {
+            if op.is_applicable(state, self.metadata, self.registry) {
+                result.push(op);
+            }
+        }
         for i in &self.relevant_set_variables {
             for v in state.signature_variables.set_variables[*i].ones() {
                 for op in &self.set_element_to_operators[*i][v] {
@@ -105,11 +110,117 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
                 }
             }
         }
-        for op in &self.global_operators {
-            if op.is_applicable(state, self.metadata, self.registry) {
-                result.push(op);
+        result
+    }
+
+    pub fn applicable_operators<'b>(
+        &'a self,
+        state: &'b didp_parser::State<T>,
+    ) -> ApplicableOperators<'a, 'b, T> {
+        ApplicableOperators {
+            state,
+            generator: self,
+            global_iter: self.global_operators.iter(),
+            relevant_iter: None,
+            variable_index: 0,
+            ones: None,
+            permutation_iter: None,
+            iter: None,
+        }
+    }
+}
+
+pub struct ApplicableOperators<'a, 'b, T: variable::Numeric> {
+    state: &'b didp_parser::State<T>,
+    generator: &'a SuccessorGenerator<'a, T>,
+    global_iter: std::slice::Iter<'a, &'a Operator<T>>,
+    relevant_iter: Option<std::slice::Iter<'a, usize>>,
+    variable_index: usize,
+    ones: Option<fixedbitset::Ones<'b>>,
+    permutation_iter: Option<std::slice::Iter<'b, usize>>,
+    iter: Option<std::slice::Iter<'a, Operator<T>>>,
+}
+
+impl<'a, 'b, T: variable::Numeric> ApplicableOperators<'a, 'b, T> {
+    fn next_permutation(&mut self) -> Option<&'a Operator<T>> {
+        if let Some(permutation_iter) = &mut self.permutation_iter {
+            if let Some(v) = permutation_iter.next() {
+                self.iter = Some(
+                    self.generator.permutation_element_to_operators[self.variable_index][*v].iter(),
+                );
+                return self.next();
             }
         }
-        result
+        match self.relevant_iter.as_mut().unwrap().next() {
+            Some(v) => {
+                self.permutation_iter =
+                    Some(self.state.signature_variables.permutation_variables[*v].iter());
+                self.variable_index = *v;
+                self.next()
+            }
+            None => None,
+        }
+    }
+
+    fn next_set(&mut self) -> Option<&'a Operator<T>> {
+        if self.permutation_iter.is_some() {
+            return self.next_permutation();
+        }
+
+        if let Some(ones) = &mut self.ones {
+            if let Some(v) = ones.next() {
+                self.iter =
+                    Some(self.generator.set_element_to_operators[self.variable_index][v].iter());
+                return self.next();
+            }
+        }
+        match self.relevant_iter.as_mut().unwrap().next() {
+            Some(v) => {
+                self.ones = Some(self.state.signature_variables.set_variables[*v].ones());
+                self.variable_index = *v;
+                self.next()
+            }
+            None => {
+                self.ones = None;
+                self.relevant_iter = Some(self.generator.relevant_permutation_variables.iter());
+                self.next_permutation()
+            }
+        }
+    }
+}
+
+impl<'a, 'b, T: variable::Numeric> Iterator for ApplicableOperators<'a, 'b, T> {
+    type Item = &'a Operator<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.global_iter.next() {
+            Some(op) => {
+                if op.is_applicable(self.state, self.generator.metadata, self.generator.registry) {
+                    Some(op)
+                } else {
+                    self.next()
+                }
+            }
+            None => match &mut self.iter {
+                Some(iter) => match iter.next() {
+                    Some(op) => {
+                        if op.is_applicable(
+                            self.state,
+                            self.generator.metadata,
+                            self.generator.registry,
+                        ) {
+                            Some(op)
+                        } else {
+                            self.next()
+                        }
+                    }
+                    None => self.next_set(),
+                },
+                None => {
+                    self.relevant_iter = Some(self.generator.relevant_set_variables.iter());
+                    self.next_set()
+                }
+            },
+        }
     }
 }
