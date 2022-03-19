@@ -10,15 +10,15 @@ use std::str;
 pub struct State<T: variable::Numeric> {
     pub signature_variables: Rc<SignatureVariables<T>>,
     pub resource_variables: Vec<T>,
-    pub stage: variable::ElementVariable,
+    pub stage: variable::Element,
     pub cost: T,
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
 pub struct SignatureVariables<T: variable::Numeric> {
-    pub set_variables: Vec<variable::SetVariable>,
-    pub permutation_variables: Vec<variable::PermutationVariable>,
-    pub element_variables: Vec<variable::ElementVariable>,
+    pub set_variables: Vec<variable::Set>,
+    pub permutation_variables: Vec<variable::Permutation>,
+    pub element_variables: Vec<variable::Element>,
     pub numeric_variables: Vec<T>,
 }
 
@@ -35,7 +35,7 @@ impl<T: variable::Numeric> State<T> {
         for name in &metadata.set_variable_names {
             let values = yaml_util::get_usize_array_by_key(value, name)?;
             let mut set =
-                variable::SetVariable::with_capacity(metadata.set_variable_capacity_by_name(name));
+                variable::Set::with_capacity(metadata.set_variable_capacity_by_name(name));
             for v in values {
                 set.insert(v);
             }
@@ -536,15 +536,15 @@ r3: 3
         let yaml = &yaml[0];
         let state = State::load_from_yaml(yaml, &metadata);
         assert!(state.is_ok());
-        let mut s0 = variable::SetVariable::with_capacity(10);
+        let mut s0 = variable::Set::with_capacity(10);
         s0.insert(0);
         s0.insert(2);
-        let mut s1 = variable::SetVariable::with_capacity(10);
+        let mut s1 = variable::Set::with_capacity(10);
         s1.insert(0);
         s1.insert(1);
-        let mut s2 = variable::SetVariable::with_capacity(10);
+        let mut s2 = variable::Set::with_capacity(10);
         s2.insert(0);
-        let s3 = variable::SetVariable::with_capacity(2);
+        let s3 = variable::Set::with_capacity(2);
         let mut expected = State {
             signature_variables: Rc::new(SignatureVariables {
                 set_variables: vec![s0, s1, s2, s3],
@@ -625,7 +625,7 @@ r3: 3
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let state = State::<variable::IntegerVariable>::load_from_yaml(yaml, &metadata);
+        let state = State::<variable::Integer>::load_from_yaml(yaml, &metadata);
         assert!(state.is_err());
     }
 

@@ -9,17 +9,17 @@ impl<T: Copy> Table1D<T> {
         Table1D(vector)
     }
 
-    pub fn eval(&self, x: variable::ElementVariable) -> T {
+    pub fn eval(&self, x: variable::Element) -> T {
         self.0[x]
     }
 }
 
 impl<T: variable::Numeric> Table1D<T> {
-    pub fn sum(&self, x: &variable::SetVariable) -> T {
+    pub fn sum(&self, x: &variable::Set) -> T {
         x.ones().map(|x| self.eval(x)).sum()
     }
 
-    pub fn sum_slice(&self, x: &[variable::ElementVariable]) -> T {
+    pub fn sum_slice(&self, x: &[variable::Element]) -> T {
         x.iter().map(|x| self.eval(*x)).sum()
     }
 }
@@ -32,21 +32,21 @@ impl<T: Copy> Table2D<T> {
         Table2D(vector)
     }
 
-    pub fn eval(&self, x: variable::ElementVariable, y: variable::ElementVariable) -> T {
+    pub fn eval(&self, x: variable::Element, y: variable::Element) -> T {
         self.0[x][y]
     }
 }
 
 impl<T: variable::Numeric> Table2D<T> {
-    pub fn sum(&self, x: &variable::SetVariable, y: &variable::SetVariable) -> T {
+    pub fn sum(&self, x: &variable::Set, y: &variable::Set) -> T {
         x.ones().map(|x| self.sum_y(x, y)).sum()
     }
 
-    pub fn sum_x(&self, x: &variable::SetVariable, y: variable::ElementVariable) -> T {
+    pub fn sum_x(&self, x: &variable::Set, y: variable::Element) -> T {
         x.ones().map(|x| self.eval(x, y)).sum()
     }
 
-    pub fn sum_y(&self, x: variable::ElementVariable, y: &variable::SetVariable) -> T {
+    pub fn sum_y(&self, x: variable::Element, y: &variable::Set) -> T {
         y.ones().map(|y| self.eval(x, y)).sum()
     }
 }
@@ -59,96 +59,53 @@ impl<T: Copy> Table3D<T> {
         Table3D(vector)
     }
 
-    pub fn eval(
-        &self,
-        x: variable::ElementVariable,
-        y: variable::ElementVariable,
-        z: variable::ElementVariable,
-    ) -> T {
+    pub fn eval(&self, x: variable::Element, y: variable::Element, z: variable::Element) -> T {
         self.0[x][y][z]
     }
 }
 
 impl<T: variable::Numeric> Table3D<T> {
-    pub fn sum(
-        &self,
-        x: &variable::SetVariable,
-        y: &variable::SetVariable,
-        z: &variable::SetVariable,
-    ) -> T {
+    pub fn sum(&self, x: &variable::Set, y: &variable::Set, z: &variable::Set) -> T {
         x.ones().map(|x| self.sum_yz(x, y, z)).sum()
     }
 
-    pub fn sum_x(
-        &self,
-        x: &variable::SetVariable,
-        y: variable::ElementVariable,
-        z: variable::ElementVariable,
-    ) -> T {
+    pub fn sum_x(&self, x: &variable::Set, y: variable::Element, z: variable::Element) -> T {
         x.ones().map(|x| self.eval(x, y, z)).sum()
     }
 
-    pub fn sum_y(
-        &self,
-        x: variable::ElementVariable,
-        y: &variable::SetVariable,
-        z: variable::ElementVariable,
-    ) -> T {
+    pub fn sum_y(&self, x: variable::Element, y: &variable::Set, z: variable::Element) -> T {
         y.ones().map(|y| self.eval(x, y, z)).sum()
     }
 
-    pub fn sum_z(
-        &self,
-        x: variable::ElementVariable,
-        y: variable::ElementVariable,
-        z: &variable::SetVariable,
-    ) -> T {
+    pub fn sum_z(&self, x: variable::Element, y: variable::Element, z: &variable::Set) -> T {
         z.ones().map(|z| self.eval(x, y, z)).sum()
     }
 
-    pub fn sum_xy(
-        &self,
-        x: &variable::SetVariable,
-        y: &variable::SetVariable,
-        z: variable::ElementVariable,
-    ) -> T {
+    pub fn sum_xy(&self, x: &variable::Set, y: &variable::Set, z: variable::Element) -> T {
         x.ones().map(|x| self.sum_y(x, y, z)).sum()
     }
 
-    pub fn sum_xz(
-        &self,
-        x: &variable::SetVariable,
-        y: variable::ElementVariable,
-        z: &variable::SetVariable,
-    ) -> T {
+    pub fn sum_xz(&self, x: &variable::Set, y: variable::Element, z: &variable::Set) -> T {
         x.ones().map(|x| self.sum_z(x, y, z)).sum()
     }
 
-    pub fn sum_yz(
-        &self,
-        x: variable::ElementVariable,
-        y: &variable::SetVariable,
-        z: &variable::SetVariable,
-    ) -> T {
+    pub fn sum_yz(&self, x: variable::Element, y: &variable::Set, z: &variable::Set) -> T {
         y.ones().map(|y| self.sum_z(x, y, z)).sum()
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Table<T: Copy> {
-    map: collections::HashMap<Vec<variable::ElementVariable>, T>,
+    map: collections::HashMap<Vec<variable::Element>, T>,
     default: T,
 }
 
 impl<T: Copy> Table<T> {
-    pub fn new(
-        map: collections::HashMap<Vec<variable::ElementVariable>, T>,
-        default: T,
-    ) -> Table<T> {
+    pub fn new(map: collections::HashMap<Vec<variable::Element>, T>, default: T) -> Table<T> {
         Table { map, default }
     }
 
-    pub fn eval(&self, args: &[variable::ElementVariable]) -> T {
+    pub fn eval(&self, args: &[variable::Element]) -> T {
         match self.map.get(args) {
             Some(value) => *value,
             None => self.default,
@@ -171,7 +128,7 @@ mod tests {
     #[test]
     fn function_1d_sum_eval() {
         let f = Table1D::new(vec![10, 20, 30]);
-        let mut x = variable::SetVariable::with_capacity(3);
+        let mut x = variable::Set::with_capacity(3);
         x.insert(0);
         x.insert(2);
         assert_eq!(f.sum(&x), 40);
@@ -186,10 +143,10 @@ mod tests {
     #[test]
     fn function_2d_sum_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
-        let mut x = variable::SetVariable::with_capacity(3);
+        let mut x = variable::Set::with_capacity(3);
         x.insert(0);
         x.insert(2);
-        let mut y = variable::SetVariable::with_capacity(3);
+        let mut y = variable::Set::with_capacity(3);
         y.insert(0);
         y.insert(1);
         assert_eq!(f.sum(&x, &y), 180);
@@ -198,7 +155,7 @@ mod tests {
     #[test]
     fn function_2d_sum_x_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
-        let mut x = variable::SetVariable::with_capacity(3);
+        let mut x = variable::Set::with_capacity(3);
         x.insert(0);
         x.insert(2);
         assert_eq!(f.sum_x(&x, 0), 80);
@@ -207,7 +164,7 @@ mod tests {
     #[test]
     fn function_2d_sum_y_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
-        let mut y = variable::SetVariable::with_capacity(3);
+        let mut y = variable::Set::with_capacity(3);
         y.insert(0);
         y.insert(2);
         assert_eq!(f.sum_y(0, &y), 40);
@@ -230,13 +187,13 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut x = variable::SetVariable::with_capacity(3);
+        let mut x = variable::Set::with_capacity(3);
         x.insert(0);
         x.insert(2);
-        let mut y = variable::SetVariable::with_capacity(3);
+        let mut y = variable::Set::with_capacity(3);
         y.insert(0);
         y.insert(1);
-        let mut z = variable::SetVariable::with_capacity(3);
+        let mut z = variable::Set::with_capacity(3);
         z.insert(0);
         z.insert(1);
         assert_eq!(f.sum(&x, &y, &z), 240);
@@ -249,7 +206,7 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut x = variable::SetVariable::with_capacity(3);
+        let mut x = variable::Set::with_capacity(3);
         x.insert(0);
         x.insert(2);
         assert_eq!(f.sum_x(&x, 1, 2), 120);
@@ -262,7 +219,7 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut y = variable::SetVariable::with_capacity(3);
+        let mut y = variable::Set::with_capacity(3);
         y.insert(0);
         y.insert(2);
         assert_eq!(f.sum_y(1, &y, 2), 120);
@@ -276,7 +233,7 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut z = variable::SetVariable::with_capacity(3);
+        let mut z = variable::Set::with_capacity(3);
         z.insert(0);
         z.insert(2);
         assert_eq!(f.sum_z(1, 2, &z), 160);
@@ -289,10 +246,10 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut x = variable::SetVariable::with_capacity(3);
+        let mut x = variable::Set::with_capacity(3);
         x.insert(0);
         x.insert(2);
-        let mut y = variable::SetVariable::with_capacity(3);
+        let mut y = variable::Set::with_capacity(3);
         y.insert(0);
         y.insert(1);
         assert_eq!(f.sum_xy(&x, &y, 2), 180);
@@ -305,10 +262,10 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut x = variable::SetVariable::with_capacity(3);
+        let mut x = variable::Set::with_capacity(3);
         x.insert(0);
         x.insert(2);
-        let mut z = variable::SetVariable::with_capacity(3);
+        let mut z = variable::Set::with_capacity(3);
         z.insert(0);
         z.insert(1);
         assert_eq!(f.sum_xz(&x, 2, &z), 300);
@@ -321,10 +278,10 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut y = variable::SetVariable::with_capacity(3);
+        let mut y = variable::Set::with_capacity(3);
         y.insert(0);
         y.insert(2);
-        let mut z = variable::SetVariable::with_capacity(3);
+        let mut z = variable::Set::with_capacity(3);
         z.insert(0);
         z.insert(1);
         assert_eq!(f.sum_yz(2, &y, &z), 180);
@@ -332,9 +289,7 @@ mod tests {
 
     #[test]
     fn function_eval() {
-        let mut map =
-            collections::HashMap::<Vec<variable::ElementVariable>, variable::IntegerVariable>::new(
-            );
+        let mut map = collections::HashMap::<Vec<variable::Element>, variable::Integer>::new();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 100);
         let key = vec![0, 1, 0, 1];

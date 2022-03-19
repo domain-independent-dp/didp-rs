@@ -207,7 +207,7 @@ mod tests {
         parameters
     }
 
-    fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
+    fn generate_registry() -> table_registry::TableRegistry<variable::Integer> {
         let tables_1d = vec![table::Table1D::new(Vec::new())];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);

@@ -176,16 +176,16 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::IntegerVariable> {
-        let mut set1 = variable::SetVariable::with_capacity(3);
+    fn generate_state() -> state::State<variable::Integer> {
+        let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
-        let mut set2 = variable::SetVariable::with_capacity(3);
+        let mut set2 = variable::Set::with_capacity(3);
         set2.insert(0);
-        let mut set3 = variable::SetVariable::with_capacity(3);
+        let mut set3 = variable::Set::with_capacity(3);
         set3.insert(0);
         set3.insert(1);
-        let set4 = variable::SetVariable::with_capacity(3);
+        let set4 = variable::Set::with_capacity(3);
         state::State {
             signature_variables: Rc::new(state::SignatureVariables {
                 set_variables: vec![set1, set2, set3, set4],

@@ -198,11 +198,11 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::IntegerVariable> {
-        let mut set1 = variable::SetVariable::with_capacity(3);
+    fn generate_state() -> state::State<variable::Integer> {
+        let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
-        let mut set2 = variable::SetVariable::with_capacity(3);
+        let mut set2 = variable::Set::with_capacity(3);
         set2.insert(0);
         set2.insert(1);
         state::State {
@@ -218,7 +218,7 @@ mod tests {
         }
     }
 
-    fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
+    fn generate_registry() -> table_registry::TableRegistry<variable::Integer> {
         let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
@@ -307,7 +307,7 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression: NumericExpression<variable::IntegerVariable> = NumericExpression::Cost {};
+        let expression: NumericExpression<variable::Integer> = NumericExpression::Cost {};
         assert_eq!(expression.eval(&state, &metadata, &registry), 0);
     }
 
@@ -316,12 +316,11 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Add,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert_eq!(expression.eval(&state, &metadata, &registry), 5);
     }
 
@@ -330,12 +329,11 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Subtract,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert_eq!(expression.eval(&state, &metadata, &registry), 1);
     }
 
@@ -344,12 +342,11 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Multiply,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert_eq!(expression.eval(&state, &metadata, &registry), 6);
     }
 
@@ -358,12 +355,11 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Divide,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Divide,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert_eq!(expression.eval(&state, &metadata, &registry), 1);
     }
 
@@ -372,12 +368,11 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Max,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Max,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert_eq!(expression.eval(&state, &metadata, &registry), 3);
     }
 
@@ -386,12 +381,11 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Min,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Min,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert_eq!(expression.eval(&state, &metadata, &registry), 2);
     }
 
@@ -496,7 +490,7 @@ mod tests {
     #[test]
     fn cost_simplify() {
         let registry = generate_registry();
-        let expression: NumericExpression<variable::IntegerVariable> = NumericExpression::Cost {};
+        let expression: NumericExpression<variable::Integer> = NumericExpression::Cost {};
         assert!(matches!(
             expression.simplify(&registry),
             NumericExpression::Cost
@@ -507,23 +501,21 @@ mod tests {
     fn add_simplify() {
         let registry = generate_registry();
 
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Add,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert!(matches!(
             expression.simplify(&registry),
             NumericExpression::Constant(5)
         ));
 
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Add,
-                Box::new(NumericExpression::Variable(0)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(NumericExpression::Variable(0)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         let simplified = expression.simplify(&registry);
         assert!(matches!(
             simplified,
@@ -538,23 +530,21 @@ mod tests {
     #[test]
     fn subtract_simplify() {
         let registry = generate_registry();
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Subtract,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert!(matches!(
             expression.simplify(&registry),
             NumericExpression::Constant(1)
         ));
 
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Subtract,
-                Box::new(NumericExpression::Variable(0)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericExpression::Variable(0)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         let simplified = expression.simplify(&registry);
         assert!(matches!(
             simplified,
@@ -569,23 +559,21 @@ mod tests {
     #[test]
     fn multiply_simplify() {
         let registry = generate_registry();
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Multiply,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert!(matches!(
             expression.simplify(&registry),
             NumericExpression::Constant(6)
         ));
 
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Multiply,
-                Box::new(NumericExpression::Variable(0)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericExpression::Variable(0)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         let simplified = expression.simplify(&registry);
         assert!(matches!(
             simplified,
@@ -600,23 +588,21 @@ mod tests {
     #[test]
     fn divide_simplify() {
         let registry = generate_registry();
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Divide,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Divide,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert!(matches!(
             expression.simplify(&registry),
             NumericExpression::Constant(1)
         ));
 
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Divide,
-                Box::new(NumericExpression::Variable(0)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Divide,
+            Box::new(NumericExpression::Variable(0)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         let simplified = expression.simplify(&registry);
         assert!(matches!(
             simplified,
@@ -631,23 +617,21 @@ mod tests {
     #[test]
     fn max_simplify() {
         let registry = generate_registry();
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Max,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Max,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert!(matches!(
             expression.simplify(&registry),
             NumericExpression::Constant(3)
         ));
 
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Max,
-                Box::new(NumericExpression::Variable(0)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Max,
+            Box::new(NumericExpression::Variable(0)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         let simplified = expression.simplify(&registry);
         assert!(matches!(
             simplified,
@@ -662,23 +646,21 @@ mod tests {
     #[test]
     fn min_simplify() {
         let registry = generate_registry();
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Min,
-                Box::new(NumericExpression::Constant(3)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Min,
+            Box::new(NumericExpression::Constant(3)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         assert!(matches!(
             expression.simplify(&registry),
             NumericExpression::Constant(2)
         ));
 
-        let expression: NumericExpression<variable::IntegerVariable> =
-            NumericExpression::NumericOperation(
-                NumericOperator::Min,
-                Box::new(NumericExpression::Variable(0)),
-                Box::new(NumericExpression::Constant(2)),
-            );
+        let expression: NumericExpression<variable::Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Min,
+            Box::new(NumericExpression::Variable(0)),
+            Box::new(NumericExpression::Constant(2)),
+        );
         let simplified = expression.simplify(&registry);
         assert!(matches!(
             simplified,

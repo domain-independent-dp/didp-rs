@@ -4,11 +4,11 @@ use std::hash::Hash;
 use std::iter::Sum;
 use std::str;
 
-pub type SetVariable = fixedbitset::FixedBitSet;
-pub type PermutationVariable = Vec<usize>;
-pub type ElementVariable = usize;
-pub type IntegerVariable = i32;
-pub type ContinuousVariable = ordered_float::OrderedFloat<f64>;
+pub type Set = fixedbitset::FixedBitSet;
+pub type Permutation = Vec<usize>;
+pub type Element = usize;
+pub type Integer = i32;
+pub type Continuous = ordered_float::OrderedFloat<f64>;
 
 pub trait Numeric:
     num_traits::Num
@@ -23,5 +23,5 @@ pub trait Numeric:
 {
 }
 
-impl Numeric for IntegerVariable {}
-impl Numeric for ContinuousVariable {}
+impl Numeric for Integer {}
+impl Numeric for Continuous {}

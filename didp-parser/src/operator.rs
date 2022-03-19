@@ -331,7 +331,7 @@ mod tests {
         }
     }
 
-    fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
+    fn generate_registry() -> table_registry::TableRegistry<variable::Integer> {
         let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
@@ -355,11 +355,11 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::IntegerVariable> {
-        let mut set1 = variable::SetVariable::with_capacity(3);
+    fn generate_state() -> state::State<variable::Integer> {
+        let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
-        let mut set2 = variable::SetVariable::with_capacity(3);
+        let mut set2 = variable::Set::with_capacity(3);
         set2.insert(0);
         set2.insert(1);
         state::State {
@@ -504,11 +504,11 @@ mod tests {
             ..Default::default()
         };
 
-        let mut set1 = variable::SetVariable::with_capacity(3);
+        let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(1);
         set1.insert(2);
-        let mut set2 = variable::SetVariable::with_capacity(3);
+        let mut set2 = variable::Set::with_capacity(3);
         set2.insert(1);
         let expected = state::State {
             signature_variables: Rc::new(state::SignatureVariables {

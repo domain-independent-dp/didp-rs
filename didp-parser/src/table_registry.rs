@@ -464,7 +464,7 @@ mod tests {
         }
     }
 
-    fn generate_registry() -> TableRegistry<variable::IntegerVariable> {
+    fn generate_registry() -> TableRegistry<variable::Integer> {
         let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
@@ -640,11 +640,8 @@ b4: { [0, 1, 0, 0]: true, [0, 1, 0, 1]: false, [0, 1, 2, 0]: false, [0, 1, 2, 1]
         assert_eq!(table_values.len(), 1);
         let table_values = &table_values[0];
 
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_ok());
         assert_eq!(registry.unwrap(), expected);
     }
@@ -677,11 +674,8 @@ f1:
         assert_eq!(table_values.len(), 1);
         let table_values = &table_values[0];
 
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
 
         let tables = r"
@@ -694,11 +688,8 @@ f1:
         let tables = tables.unwrap();
         assert_eq!(tables.len(), 1);
         let tables = &tables[0];
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
 
         let tables = r"
@@ -710,11 +701,8 @@ f1:
         let tables = tables.unwrap();
         assert_eq!(tables.len(), 1);
         let tables = &tables[0];
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
 
         let tables = r"
@@ -726,11 +714,8 @@ f1:
         let tables = tables.unwrap();
         assert_eq!(tables.len(), 1);
         let tables = &tables[0];
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
 
         let tables = r"
@@ -742,11 +727,8 @@ f1:
         let tables = tables.unwrap();
         assert_eq!(tables.len(), 1);
         let tables = &tables[0];
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
 
         let tables = r"
@@ -772,11 +754,8 @@ f1:
         let table_values = table_values.unwrap();
         assert_eq!(table_values.len(), 1);
         let table_values = &table_values[0];
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
 
         let table_values = r"
@@ -790,11 +769,8 @@ f2:
         let table_values = table_values.unwrap();
         assert_eq!(table_values.len(), 1);
         let table_values = &table_values[0];
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
 
         let table_values = r"
@@ -808,11 +784,8 @@ f1:
         let table_values = table_values.unwrap();
         assert_eq!(table_values.len(), 1);
         let table_values = &table_values[0];
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
 
         let table_values = r"
@@ -826,11 +799,8 @@ f1:
         let table_values = table_values.unwrap();
         assert_eq!(table_values.len(), 1);
         let table_values = &table_values[0];
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
 
         let tables = r"
@@ -855,11 +825,8 @@ b1:
         let table_values = table_values.unwrap();
         assert_eq!(table_values.len(), 1);
         let table_values = &table_values[0];
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
 
         let table_values = r"
@@ -873,11 +840,8 @@ b1:
         let table_values = table_values.unwrap();
         assert_eq!(table_values.len(), 1);
         let table_values = &table_values[0];
-        let registry = TableRegistry::<variable::IntegerVariable>::load_from_yaml(
-            tables,
-            table_values,
-            &metadata,
-        );
+        let registry =
+            TableRegistry::<variable::Integer>::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
     }
 }

@@ -106,7 +106,7 @@ pub fn get_bool_by_key(
 
 pub fn get_usize(value: &Yaml) -> Result<usize, YamlContentErr> {
     if let Yaml::Integer(value) = value {
-        match variable::ElementVariable::try_from(*value) {
+        match variable::Element::try_from(*value) {
             Ok(value) => Ok(value),
             Err(e) => Err(YamlContentErr::new(format!(
                 "cannot convert {} to usize: {:?}",
@@ -487,7 +487,7 @@ mod tests {
     #[test]
     fn get_numeric_ok() {
         let yaml = Yaml::Integer(0);
-        let result = get_numeric::<variable::IntegerVariable>(&yaml);
+        let result = get_numeric::<variable::Integer>(&yaml);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 0);
     }
@@ -495,10 +495,10 @@ mod tests {
     #[test]
     fn get_numeric_err() {
         let yaml = Yaml::Real(String::from("0.5"));
-        let result = get_numeric::<variable::IntegerVariable>(&yaml);
+        let result = get_numeric::<variable::Integer>(&yaml);
         assert!(result.is_err());
         let yaml = Yaml::Boolean(true);
-        let result = get_numeric::<variable::IntegerVariable>(&yaml);
+        let result = get_numeric::<variable::Integer>(&yaml);
         assert!(result.is_err());
     }
 
@@ -506,7 +506,7 @@ mod tests {
     fn get_numeric_by_key_ok() {
         let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
         map.insert(Yaml::String(String::from("numeric")), Yaml::Integer(0));
-        let result = get_numeric_by_key::<variable::IntegerVariable>(&map, "numeric");
+        let result = get_numeric_by_key::<variable::Integer>(&map, "numeric");
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 0);
     }
@@ -519,11 +519,11 @@ mod tests {
             Yaml::Real(String::from("0.5")),
         );
         map.insert(Yaml::String(String::from("bool")), Yaml::Boolean(true));
-        let result = get_numeric_by_key::<variable::IntegerVariable>(&map, "integer");
+        let result = get_numeric_by_key::<variable::Integer>(&map, "integer");
         assert!(result.is_err());
-        let result = get_numeric_by_key::<variable::IntegerVariable>(&map, "bool");
+        let result = get_numeric_by_key::<variable::Integer>(&map, "bool");
         assert!(result.is_err());
-        let result = get_numeric_by_key::<variable::IntegerVariable>(&map, "numeric");
+        let result = get_numeric_by_key::<variable::Integer>(&map, "numeric");
         assert!(result.is_err());
     }
 

@@ -28,13 +28,12 @@ impl SetExpression {
         &self,
         state: &state::State<T>,
         metadata: &state::StateMetadata,
-    ) -> variable::SetVariable {
+    ) -> variable::Set {
         match self {
             SetExpression::SetVariable(i) => state.signature_variables.set_variables[*i].clone(),
             SetExpression::PermutationVariable(i) => {
-                let mut set = variable::SetVariable::with_capacity(
-                    metadata.permutation_variable_capacity(*i),
-                );
+                let mut set =
+                    variable::Set::with_capacity(metadata.permutation_variable_capacity(*i));
                 for v in &state.signature_variables.permutation_variables[*i] {
                     set.insert(*v);
                 }
@@ -84,12 +83,12 @@ impl SetExpression {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ElementExpression {
     Stage,
-    Constant(variable::ElementVariable),
+    Constant(variable::Element),
     Variable(usize),
 }
 
 impl ElementExpression {
-    pub fn eval<T: variable::Numeric>(&self, state: &state::State<T>) -> variable::ElementVariable {
+    pub fn eval<T: variable::Numeric>(&self, state: &state::State<T>) -> variable::Element {
         match self {
             ElementExpression::Stage => state.stage,
             ElementExpression::Constant(x) => *x,
@@ -201,11 +200,11 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::IntegerVariable> {
-        let mut set1 = variable::SetVariable::with_capacity(3);
+    fn generate_state() -> state::State<variable::Integer> {
+        let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
-        let mut set2 = variable::SetVariable::with_capacity(3);
+        let mut set2 = variable::Set::with_capacity(3);
         set2.insert(0);
         set2.insert(1);
         state::State {
@@ -255,7 +254,7 @@ mod tests {
         let metadata = generate_metadata();
         let state = generate_state();
         let expression = SetExpression::PermutationVariable(0);
-        let mut set = variable::SetVariable::with_capacity(10);
+        let mut set = variable::Set::with_capacity(10);
         set.insert(0);
         set.insert(2);
         assert_eq!(expression.eval(&state, &metadata), set);
@@ -266,7 +265,7 @@ mod tests {
         let metadata = generate_metadata();
         let state = generate_state();
         let expression = SetExpression::Complement(Box::new(SetExpression::SetVariable(0)));
-        let mut set = variable::SetVariable::with_capacity(3);
+        let mut set = variable::Set::with_capacity(3);
         set.insert(1);
         assert_eq!(expression.eval(&state, &metadata), set);
     }
@@ -280,7 +279,7 @@ mod tests {
             Box::new(SetExpression::SetVariable(0)),
             Box::new(SetExpression::SetVariable(1)),
         );
-        let mut set = variable::SetVariable::with_capacity(3);
+        let mut set = variable::Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
         set.insert(2);
@@ -305,7 +304,7 @@ mod tests {
             Box::new(SetExpression::SetVariable(0)),
             Box::new(SetExpression::SetVariable(1)),
         );
-        let mut set = variable::SetVariable::with_capacity(3);
+        let mut set = variable::Set::with_capacity(3);
         set.insert(2);
         assert_eq!(expression.eval(&state, &metadata), set);
         let expression = SetExpression::SetOperation(
@@ -315,7 +314,7 @@ mod tests {
         );
         assert_eq!(
             expression.eval(&state, &metadata),
-            variable::SetVariable::with_capacity(3)
+            variable::Set::with_capacity(3)
         );
     }
 
@@ -328,7 +327,7 @@ mod tests {
             Box::new(SetExpression::SetVariable(0)),
             Box::new(SetExpression::SetVariable(1)),
         );
-        let mut set = variable::SetVariable::with_capacity(3);
+        let mut set = variable::Set::with_capacity(3);
         set.insert(0);
         assert_eq!(expression.eval(&state, &metadata), set);
         let expression = SetExpression::SetOperation(
@@ -351,7 +350,7 @@ mod tests {
             Box::new(SetExpression::SetVariable(0)),
             ElementExpression::Constant(1),
         );
-        let mut set = variable::SetVariable::with_capacity(3);
+        let mut set = variable::Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
         set.insert(2);
@@ -376,7 +375,7 @@ mod tests {
             Box::new(SetExpression::SetVariable(0)),
             ElementExpression::Constant(2),
         );
-        let mut set = variable::SetVariable::with_capacity(3);
+        let mut set = variable::Set::with_capacity(3);
         set.insert(0);
         assert_eq!(expression.eval(&state, &metadata), set);
         let expression = SetExpression::SetElementOperation(

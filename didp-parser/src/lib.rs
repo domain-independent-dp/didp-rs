@@ -296,7 +296,7 @@ goals:
         assert_eq!(problem.len(), 1);
         let problem = &problem[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem);
         assert!(problem.is_ok());
         let problem = problem.unwrap();
 
@@ -430,7 +430,7 @@ table_values:
         assert_eq!(problem.len(), 1);
         let problem = &problem[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem);
         assert!(problem.is_ok());
         let problem = problem.unwrap();
 
@@ -442,7 +442,7 @@ table_values:
         name_to_element_variable.insert(String::from("location"), 0);
         let mut name_to_resource_variable = HashMap::new();
         name_to_resource_variable.insert(String::from("time"), 0);
-        let mut unvisited = variable::SetVariable::with_capacity(3);
+        let mut unvisited = variable::Set::with_capacity(3);
         unvisited.insert(0);
         unvisited.insert(1);
         unvisited.insert(2);
@@ -755,7 +755,7 @@ operators:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let domain = r"
@@ -804,7 +804,7 @@ operators:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let domain = r"
@@ -844,7 +844,7 @@ operators:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let domain = r"
@@ -879,7 +879,7 @@ operators:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let domain = r"
@@ -919,7 +919,7 @@ constraints:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let domain = r"
@@ -970,7 +970,7 @@ operators:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let problem = r"
@@ -996,7 +996,7 @@ table_values:
         assert_eq!(problem.len(), 1);
         let problem_yaml = &problem[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let problem = r"
@@ -1023,7 +1023,7 @@ table_values:
         assert_eq!(problem.len(), 1);
         let problem_yaml = &problem[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let problem = r"
@@ -1049,7 +1049,7 @@ table_values:
         assert_eq!(problem.len(), 1);
         let problem_yaml = &problem[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let problem = r"
@@ -1072,7 +1072,7 @@ table_values:
         assert_eq!(problem.len(), 1);
         let problem_yaml = &problem[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let problem = r"
@@ -1096,7 +1096,7 @@ table_values:
         assert_eq!(problem.len(), 1);
         let problem_yaml = &problem[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let problem = r"
@@ -1118,7 +1118,7 @@ goals:
         assert_eq!(problem.len(), 1);
         let problem_yaml = &problem[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem_yaml);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
         assert!(problem.is_err());
 
         let problem = r"
@@ -1146,7 +1146,7 @@ table_values:
         assert_eq!(problem.len(), 1);
         let problem = &problem[0];
 
-        let problem = Problem::<variable::IntegerVariable>::load_from_yaml(domain, problem);
+        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem);
         assert!(problem.is_err());
     }
 }

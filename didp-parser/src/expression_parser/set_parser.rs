@@ -138,7 +138,7 @@ fn parse_atom(
     } else if let Some(v) = parameters.get(token) {
         Ok(ArgumentExpression::Element(ElementExpression::Constant(*v)))
     } else {
-        let v: variable::ElementVariable = token.parse().map_err(|e| {
+        let v: variable::Element = token.parse().map_err(|e| {
             ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
         })?;
         Ok(ArgumentExpression::Element(ElementExpression::Constant(v)))

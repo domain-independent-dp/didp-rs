@@ -36,8 +36,7 @@ impl BoolTableExpression {
                 tables.tables_3d[*i].eval(x.eval(state), y.eval(state), z.eval(state))
             }
             Self::Table(i, args) => {
-                let args: Vec<variable::ElementVariable> =
-                    args.iter().map(|x| x.eval(state)).collect();
+                let args: Vec<variable::Element> = args.iter().map(|x| x.eval(state)).collect();
                 tables.tables[*i].eval(&args)
             }
         }
@@ -87,7 +86,7 @@ mod tests {
     use std::collections::HashMap;
     use std::rc::Rc;
 
-    fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
+    fn generate_registry() -> table_registry::TableRegistry<variable::Integer> {
         let tables_1d = vec![table::Table1D::new(vec![true, false])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
@@ -124,11 +123,11 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::IntegerVariable> {
-        let mut set1 = variable::SetVariable::with_capacity(3);
+    fn generate_state() -> state::State<variable::Integer> {
+        let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
-        let mut set2 = variable::SetVariable::with_capacity(3);
+        let mut set2 = variable::Set::with_capacity(3);
         set2.insert(0);
         set2.insert(1);
         state::State {

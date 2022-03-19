@@ -239,7 +239,7 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 &z.eval(state, metadata),
             ),
             Self::Table(i, args) => {
-                let args: Vec<variable::ElementVariable> =
+                let args: Vec<variable::Element> =
                     args.iter().map(|x| x.eval(state)).collect();
                 tables.tables[*i].eval(&args)
             }
@@ -313,7 +313,7 @@ fn sum_table<T: variable::Numeric>(
                                 r.push(e);
                                 r
                             })
-                            .collect::<Vec<Vec<variable::ElementVariable>>>()
+                            .collect::<Vec<Vec<variable::Element>>>()
                     })
                     .collect();
             }
@@ -424,7 +424,7 @@ mod tests {
         }
     }
 
-    fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
+    fn generate_registry() -> table_registry::TableRegistry<variable::Integer> {
         let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
@@ -473,11 +473,11 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::IntegerVariable> {
-        let mut set1 = variable::SetVariable::with_capacity(3);
+    fn generate_state() -> state::State<variable::Integer> {
+        let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
-        let mut set2 = variable::SetVariable::with_capacity(3);
+        let mut set2 = variable::Set::with_capacity(3);
         set2.insert(0);
         set2.insert(1);
         state::State {
@@ -485,8 +485,8 @@ mod tests {
                 set_variables: vec![
                     set1,
                     set2,
-                    variable::SetVariable::with_capacity(3),
-                    variable::SetVariable::with_capacity(3),
+                    variable::Set::with_capacity(3),
+                    variable::Set::with_capacity(3),
                 ],
                 permutation_variables: vec![vec![0, 2], vec![0, 1], vec![], vec![]],
                 element_variables: vec![1, 2, 3, 4],

@@ -137,7 +137,7 @@ mod tests {
         }
     }
 
-    fn generate_registry() -> table_registry::TableRegistry<variable::IntegerVariable> {
+    fn generate_registry() -> table_registry::TableRegistry<variable::Integer> {
         let tables_1d = vec![table::Table1D::new(vec![true, false])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("b1"), 0);
@@ -165,7 +165,7 @@ mod tests {
     fn is_satisfied_test() {
         let metadata = generate_metadata();
         let registry = generate_registry();
-        let mut s0 = variable::SetVariable::with_capacity(2);
+        let mut s0 = variable::Set::with_capacity(2);
         s0.insert(0);
         let state = state::State {
             signature_variables: Rc::new(state::SignatureVariables {
