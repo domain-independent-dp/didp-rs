@@ -9,9 +9,10 @@ use didp_parser::variable;
 #[derive(Debug, Eq)]
 pub struct SearchNode<T: variable::Numeric> {
     pub state: didp_parser::State<T>,
+    pub operator: Option<usize>,
+    pub parent: Option<Rc<SearchNode<T>>>,
     pub h: RefCell<Option<T>>,
     pub f: RefCell<Option<T>>,
-    pub parent: Option<Rc<SearchNode<T>>>,
     pub closed: RefCell<bool>,
 }
 
@@ -48,6 +49,7 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
     pub fn get_node(
         &mut self,
         mut state: didp_parser::State<T>,
+        operator: Option<usize>,
         parent: Option<Rc<SearchNode<T>>>,
         metadata: &didp_parser::StateMetadata,
     ) -> Option<Rc<SearchNode<T>>> {
@@ -90,9 +92,10 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
                             };
                             let node = Rc::new(SearchNode {
                                 state,
+                                operator,
+                                parent,
                                 h,
                                 f: RefCell::new(None),
-                                parent,
                                 closed: RefCell::new(false),
                             });
                             v[i] = node.clone();
@@ -107,6 +110,7 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
         };
         let node = Rc::new(SearchNode {
             state,
+            operator,
             h: RefCell::new(None),
             f: RefCell::new(None),
             parent,
@@ -167,9 +171,10 @@ mod tests {
                 stage: 0,
                 cost,
             },
+            operator: None,
+            parent: None,
             h: RefCell::new(Some(h)),
             f: RefCell::new(Some(f)),
-            parent: None,
             closed: RefCell::new(false),
         }
     }
@@ -203,7 +208,7 @@ mod tests {
             stage: 0,
             cost: 1,
         };
-        let node = registry.get_node(state, None, &metadata);
+        let node = registry.get_node(state, None, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
@@ -224,7 +229,7 @@ mod tests {
             stage: 0,
             cost: 1,
         };
-        let node = registry.get_node(state, None, &metadata);
+        let node = registry.get_node(state, None, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
@@ -245,7 +250,7 @@ mod tests {
             stage: 0,
             cost: 1,
         };
-        let node = registry.get_node(state, None, &metadata);
+        let node = registry.get_node(state, None, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
@@ -266,7 +271,7 @@ mod tests {
             stage: 0,
             cost: 0,
         };
-        let node = registry.get_node(state, None, &metadata);
+        let node = registry.get_node(state, None, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
@@ -293,7 +298,7 @@ mod tests {
             stage: 0,
             cost: 2,
         };
-        registry.get_node(state, None, &metadata);
+        registry.get_node(state, None, None, &metadata);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -301,7 +306,7 @@ mod tests {
             stage: 0,
             cost: 2,
         };
-        let node = registry.get_node(state, None, &metadata);
+        let node = registry.get_node(state, None, None, &metadata);
         assert!(node.is_none());
 
         let state = didp_parser::State {
@@ -310,7 +315,7 @@ mod tests {
             stage: 0,
             cost: 2,
         };
-        let node = registry.get_node(state, None, &metadata);
+        let node = registry.get_node(state, None, None, &metadata);
         assert!(node.is_none());
 
         let state = didp_parser::State {
@@ -319,7 +324,7 @@ mod tests {
             stage: 0,
             cost: 3,
         };
-        let node = registry.get_node(state, None, &metadata);
+        let node = registry.get_node(state, None, None, &metadata);
         assert!(node.is_none());
     }
 
@@ -334,7 +339,7 @@ mod tests {
             stage: 0,
             cost: 2,
         };
-        let node = registry.get_node(state, None, &metadata);
+        let node = registry.get_node(state, None, None, &metadata);
         assert!(node.is_some());
         let node = node.unwrap();
         assert!(node.h.borrow().is_none());
@@ -345,7 +350,7 @@ mod tests {
             stage: 0,
             cost: 1,
         };
-        let node = registry.get_node(state, None, &metadata);
+        let node = registry.get_node(state, None, None, &metadata);
         assert!(node.is_none());
     }
 
@@ -360,7 +365,7 @@ mod tests {
             stage: 0,
             cost: 2,
         };
-        let node1 = registry.get_node(state, None, &metadata);
+        let node1 = registry.get_node(state, None, None, &metadata);
         assert!(node1.is_some());
         let node1 = node1.unwrap();
         *node1.h.borrow_mut() = Some(3);
@@ -371,7 +376,7 @@ mod tests {
             stage: 1,
             cost: 1,
         };
-        let node2 = registry.get_node(state, Some(node1.clone()), &metadata);
+        let node2 = registry.get_node(state, Some(0), Some(node1.clone()), &metadata);
         assert!(node2.is_some());
         let node2 = node2.unwrap();
         assert_eq!(
@@ -395,7 +400,7 @@ mod tests {
             stage: 0,
             cost: 1,
         };
-        let node3 = registry.get_node(state, None, &metadata);
+        let node3 = registry.get_node(state, None, None, &metadata);
         assert!(node3.is_some());
         let node3 = node3.unwrap();
         assert_eq!(
