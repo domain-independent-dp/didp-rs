@@ -4,6 +4,71 @@ use std::collections;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SuccessorGenerator<'a, T: variable::Numeric> {
+    operators: &'a [Operator<T>],
+    metadata: &'a didp_parser::StateMetadata,
+    registry: &'a didp_parser::TableRegistry<T>,
+}
+
+impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
+    pub fn new(problem: &'a didp_parser::Problem<T>) -> SuccessorGenerator<'a, T> {
+        SuccessorGenerator {
+            operators: &problem.operators,
+            metadata: &problem.state_metadata,
+            registry: &problem.table_registry,
+        }
+    }
+
+    pub fn generate_applicable_operators<'b>(
+        &self,
+        state: &'b didp_parser::State<T>,
+        mut result: Vec<&'a Operator<T>>,
+    ) -> Vec<&'a Operator<T>> {
+        result.clear();
+        for op in self.operators {
+            if op.is_applicable(state, self.metadata, self.registry) {
+                result.push(op);
+            }
+        }
+        result
+    }
+
+    pub fn applicable_operators<'b>(
+        &'a self,
+        state: &'b didp_parser::State<T>,
+    ) -> ApplicableOperators<'a, 'b, T> {
+        ApplicableOperators {
+            state,
+            generator: self,
+            iter: self.operators.iter(),
+        }
+    }
+}
+
+pub struct ApplicableOperators<'a, 'b, T: variable::Numeric> {
+    state: &'b didp_parser::State<T>,
+    generator: &'a SuccessorGenerator<'a, T>,
+    iter: std::slice::Iter<'a, Operator<T>>,
+}
+
+impl<'a, 'b, T: variable::Numeric> Iterator for ApplicableOperators<'a, 'b, T> {
+    type Item = &'a Operator<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(op) => {
+                if op.is_applicable(self.state, self.generator.metadata, self.generator.registry) {
+                    Some(op)
+                } else {
+                    self.next()
+                }
+            }
+            None => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct OneParameterSuccessorGenerator<'a, T: variable::Numeric> {
     relevant_set_variables: Vec<usize>,
     set_element_to_operators: Vec<Vec<Vec<Operator<T>>>>,
     relevant_permutation_variables: Vec<usize>,
@@ -13,8 +78,8 @@ pub struct SuccessorGenerator<'a, T: variable::Numeric> {
     registry: &'a didp_parser::TableRegistry<T>,
 }
 
-impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
-    pub fn new(problem: &'a didp_parser::Problem<T>) -> SuccessorGenerator<'a, T> {
+impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
+    pub fn new(problem: &'a didp_parser::Problem<T>) -> OneParameterSuccessorGenerator<'a, T> {
         let n = problem.state_metadata.number_of_set_variables();
         let mut relevant_set_variables = collections::BTreeSet::new();
         let mut set_element_to_operators: Vec<Vec<Vec<Operator<T>>>> = (0..n)
@@ -70,7 +135,7 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
                 global_operators.push(op);
             }
         }
-        SuccessorGenerator {
+        OneParameterSuccessorGenerator {
             relevant_set_variables: relevant_set_variables.into_iter().collect(),
             set_element_to_operators,
             relevant_permutation_variables: relevant_permutation_variables.into_iter().collect(),
@@ -116,8 +181,8 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
     pub fn applicable_operators<'b>(
         &'a self,
         state: &'b didp_parser::State<T>,
-    ) -> ApplicableOperators<'a, 'b, T> {
-        ApplicableOperators {
+    ) -> OneParameterApplicableOperators<'a, 'b, T> {
+        OneParameterApplicableOperators {
             state,
             generator: self,
             global_iter: self.global_operators.iter(),
@@ -130,9 +195,9 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
     }
 }
 
-pub struct ApplicableOperators<'a, 'b, T: variable::Numeric> {
+pub struct OneParameterApplicableOperators<'a, 'b, T: variable::Numeric> {
     state: &'b didp_parser::State<T>,
-    generator: &'a SuccessorGenerator<'a, T>,
+    generator: &'a OneParameterSuccessorGenerator<'a, T>,
     global_iter: std::slice::Iter<'a, &'a Operator<T>>,
     relevant_iter: Option<std::slice::Iter<'a, usize>>,
     variable_index: usize,
@@ -141,7 +206,7 @@ pub struct ApplicableOperators<'a, 'b, T: variable::Numeric> {
     iter: Option<std::slice::Iter<'a, Operator<T>>>,
 }
 
-impl<'a, 'b, T: variable::Numeric> ApplicableOperators<'a, 'b, T> {
+impl<'a, 'b, T: variable::Numeric> OneParameterApplicableOperators<'a, 'b, T> {
     fn next_permutation(&mut self) -> Option<&'a Operator<T>> {
         if let Some(permutation_iter) = &mut self.permutation_iter {
             if let Some(v) = permutation_iter.next() {
@@ -189,7 +254,7 @@ impl<'a, 'b, T: variable::Numeric> ApplicableOperators<'a, 'b, T> {
     }
 }
 
-impl<'a, 'b, T: variable::Numeric> Iterator for ApplicableOperators<'a, 'b, T> {
+impl<'a, 'b, T: variable::Numeric> Iterator for OneParameterApplicableOperators<'a, 'b, T> {
     type Item = &'a Operator<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
