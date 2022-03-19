@@ -36,14 +36,27 @@ impl<T: variable::Numeric> PartialEq for SearchNode<T> {
 
 pub type OpenList<T> = priority_queue::PriorityQueue<Rc<SearchNode<T>>>;
 
-#[derive(Default)]
-pub struct SearchNodeRegistry<T: variable::Numeric>(
-    collections::HashMap<Rc<didp_parser::SignatureVariables<T>>, Vec<Rc<SearchNode<T>>>>,
-);
+pub struct SearchNodeRegistry<'a, T: variable::Numeric> {
+    registry: collections::HashMap<Rc<didp_parser::SignatureVariables<T>>, Vec<Rc<SearchNode<T>>>>,
+    metadata: &'a didp_parser::StateMetadata,
+}
 
-impl<T: variable::Numeric> SearchNodeRegistry<T> {
-    pub fn with_capcaity(capacity: usize) -> SearchNodeRegistry<T> {
-        SearchNodeRegistry(collections::HashMap::with_capacity(capacity))
+impl<'a, T: variable::Numeric> SearchNodeRegistry<'a, T> {
+    pub fn new(problem: &'a didp_parser::Problem<T>) -> SearchNodeRegistry<T> {
+        SearchNodeRegistry {
+            registry: collections::HashMap::new(),
+            metadata: &problem.state_metadata,
+        }
+    }
+
+    pub fn with_capcaity(
+        capacity: usize,
+        problem: &'a didp_parser::Problem<T>,
+    ) -> SearchNodeRegistry<T> {
+        SearchNodeRegistry {
+            registry: collections::HashMap::with_capacity(capacity),
+            metadata: &problem.state_metadata,
+        }
     }
 
     pub fn get_node(
@@ -51,28 +64,28 @@ impl<T: variable::Numeric> SearchNodeRegistry<T> {
         mut state: didp_parser::State<T>,
         operator: Option<usize>,
         parent: Option<Rc<SearchNode<T>>>,
-        metadata: &didp_parser::StateMetadata,
     ) -> Option<Rc<SearchNode<T>>> {
-        let entry = self.0.entry(state.signature_variables.clone());
+        let entry = self.registry.entry(state.signature_variables.clone());
         let v = match entry {
             collections::hash_map::Entry::Occupied(entry) => {
                 // use signature variables already stored
                 state.signature_variables = entry.key().clone();
                 let v = entry.into_mut();
                 for (i, other) in v.iter().enumerate() {
-                    let result = metadata
+                    let result = self
+                        .metadata
                         .dominance(&state.resource_variables, &other.state.resource_variables);
                     match result {
                         Some(Ordering::Equal) | Some(Ordering::Less)
-                            if (metadata.maximize && state.cost <= other.state.cost)
-                                || (!metadata.maximize && state.cost >= other.state.cost) =>
+                            if (self.metadata.maximize && state.cost <= other.state.cost)
+                                || (!self.metadata.maximize && state.cost >= other.state.cost) =>
                         {
                             // dominated
                             return None;
                         }
                         Some(Ordering::Equal) | Some(Ordering::Greater)
-                            if (metadata.maximize && state.cost >= other.state.cost)
-                                || (!metadata.maximize && state.cost <= other.state.cost) =>
+                            if (self.metadata.maximize && state.cost >= other.state.cost)
+                                || (!self.metadata.maximize && state.cost <= other.state.cost) =>
                         {
                             // dominating
                             if !*other.closed.borrow() {
@@ -126,7 +139,7 @@ mod tests {
     use super::*;
     use didp_parser::variable;
 
-    fn generate_state_metadata() -> didp_parser::StateMetadata {
+    fn generate_problem() -> didp_parser::Problem<variable::IntegerVariable> {
         let mut name_to_numeric_variable = collections::HashMap::new();
         name_to_numeric_variable.insert("n1".to_string(), 0);
         name_to_numeric_variable.insert("n2".to_string(), 1);
@@ -137,13 +150,18 @@ mod tests {
         name_to_resource_variable.insert("r2".to_string(), 1);
         name_to_resource_variable.insert("r3".to_string(), 2);
 
-        didp_parser::StateMetadata {
+        let state_metadata = didp_parser::StateMetadata {
             maximize: false,
             numeric_variable_names: vec!["n1".to_string(), "n2".to_string(), "n3".to_string()],
             name_to_numeric_variable,
             resource_variable_names: vec!["r1".to_string(), "r2".to_string(), "r3".to_string()],
             name_to_resource_variable,
             less_is_better: vec![false, false, true],
+            ..Default::default()
+        };
+
+        didp_parser::Problem {
+            state_metadata,
             ..Default::default()
         }
     }
@@ -199,8 +217,8 @@ mod tests {
 
     #[test]
     fn get_new_node() {
-        let metadata = generate_state_metadata();
-        let mut registry = SearchNodeRegistry::default();
+        let problem = generate_problem();
+        let mut registry = SearchNodeRegistry::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -208,7 +226,7 @@ mod tests {
             stage: 0,
             cost: 1,
         };
-        let node = registry.get_node(state, None, None, &metadata);
+        let node = registry.get_node(state, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
@@ -229,7 +247,7 @@ mod tests {
             stage: 0,
             cost: 1,
         };
-        let node = registry.get_node(state, None, None, &metadata);
+        let node = registry.get_node(state, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
@@ -250,7 +268,7 @@ mod tests {
             stage: 0,
             cost: 1,
         };
-        let node = registry.get_node(state, None, None, &metadata);
+        let node = registry.get_node(state, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
@@ -271,7 +289,7 @@ mod tests {
             stage: 0,
             cost: 0,
         };
-        let node = registry.get_node(state, None, None, &metadata);
+        let node = registry.get_node(state, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
@@ -289,8 +307,8 @@ mod tests {
 
     #[test]
     fn node_dominated() {
-        let metadata = generate_state_metadata();
-        let mut registry = SearchNodeRegistry::default();
+        let problem = generate_problem();
+        let mut registry = SearchNodeRegistry::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -298,7 +316,7 @@ mod tests {
             stage: 0,
             cost: 2,
         };
-        registry.get_node(state, None, None, &metadata);
+        registry.get_node(state, None, None);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -306,7 +324,7 @@ mod tests {
             stage: 0,
             cost: 2,
         };
-        let node = registry.get_node(state, None, None, &metadata);
+        let node = registry.get_node(state, None, None);
         assert!(node.is_none());
 
         let state = didp_parser::State {
@@ -315,7 +333,7 @@ mod tests {
             stage: 0,
             cost: 2,
         };
-        let node = registry.get_node(state, None, None, &metadata);
+        let node = registry.get_node(state, None, None);
         assert!(node.is_none());
 
         let state = didp_parser::State {
@@ -324,14 +342,14 @@ mod tests {
             stage: 0,
             cost: 3,
         };
-        let node = registry.get_node(state, None, None, &metadata);
+        let node = registry.get_node(state, None, None);
         assert!(node.is_none());
     }
 
     #[test]
     fn node_dead_end() {
-        let metadata = generate_state_metadata();
-        let mut registry = SearchNodeRegistry::default();
+        let problem = generate_problem();
+        let mut registry = SearchNodeRegistry::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -339,7 +357,7 @@ mod tests {
             stage: 0,
             cost: 2,
         };
-        let node = registry.get_node(state, None, None, &metadata);
+        let node = registry.get_node(state, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         assert!(node.h.borrow().is_none());
@@ -350,14 +368,14 @@ mod tests {
             stage: 0,
             cost: 1,
         };
-        let node = registry.get_node(state, None, None, &metadata);
+        let node = registry.get_node(state, None, None);
         assert!(node.is_none());
     }
 
     #[test]
     fn get_dominating_node() {
-        let metadata = generate_state_metadata();
-        let mut registry = SearchNodeRegistry::default();
+        let problem = generate_problem();
+        let mut registry = SearchNodeRegistry::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -365,7 +383,7 @@ mod tests {
             stage: 0,
             cost: 2,
         };
-        let node1 = registry.get_node(state, None, None, &metadata);
+        let node1 = registry.get_node(state, None, None);
         assert!(node1.is_some());
         let node1 = node1.unwrap();
         *node1.h.borrow_mut() = Some(3);
@@ -376,7 +394,7 @@ mod tests {
             stage: 1,
             cost: 1,
         };
-        let node2 = registry.get_node(state, Some(0), Some(node1.clone()), &metadata);
+        let node2 = registry.get_node(state, Some(0), Some(node1.clone()));
         assert!(node2.is_some());
         let node2 = node2.unwrap();
         assert_eq!(
@@ -400,7 +418,7 @@ mod tests {
             stage: 0,
             cost: 1,
         };
-        let node3 = registry.get_node(state, None, None, &metadata);
+        let node3 = registry.get_node(state, None, None);
         assert!(node3.is_some());
         let node3 = node3.unwrap();
         assert_eq!(

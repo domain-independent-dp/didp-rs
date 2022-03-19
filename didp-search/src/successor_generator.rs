@@ -8,35 +8,31 @@ pub struct SuccessorGenerator<'a, T: variable::Numeric> {
     set_element_to_operators: Vec<Vec<Vec<Operator<T>>>>,
     relevant_permutation_variables: Vec<usize>,
     permutation_element_to_operators: Vec<Vec<Vec<Operator<T>>>>,
-    global_operators: Vec<Operator<T>>,
+    global_operators: Vec<&'a Operator<T>>,
     metadata: &'a didp_parser::StateMetadata,
     registry: &'a didp_parser::TableRegistry<T>,
 }
 
 impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
-    pub fn new(
-        operators: &[Operator<T>],
-        metadata: &'a didp_parser::StateMetadata,
-        registry: &'a didp_parser::TableRegistry<T>,
-    ) -> SuccessorGenerator<'a, T> {
-        let n = metadata.number_of_set_variables();
+    pub fn new(problem: &'a didp_parser::Problem<T>) -> SuccessorGenerator<'a, T> {
+        let n = problem.state_metadata.number_of_set_variables();
         let mut relevant_set_variables = collections::BTreeSet::new();
         let mut set_element_to_operators: Vec<Vec<Vec<Operator<T>>>> = (0..n)
             .map(|i| {
-                let m = metadata.set_variable_capacity(i);
+                let m = problem.state_metadata.set_variable_capacity(i);
                 (0..m).map(|_| Vec::new()).collect()
             })
             .collect();
-        let n = metadata.number_of_permutation_variables();
+        let n = problem.state_metadata.number_of_permutation_variables();
         let mut relevant_permutation_variables = collections::BTreeSet::new();
         let mut permutation_element_to_operators: Vec<Vec<Vec<Operator<T>>>> = (0..n)
             .map(|i| {
-                let m = metadata.permutation_variable_capacity(i);
+                let m = problem.state_metadata.permutation_variable_capacity(i);
                 (0..m).map(|_| Vec::new()).collect()
             })
             .collect();
         let mut global_operators = Vec::new();
-        for op in operators {
+        for op in &problem.operators {
             if !op.elements_in_set_variable.is_empty() {
                 let op = Operator {
                     name: op.name.clone(),
@@ -71,7 +67,7 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
                 permutation_element_to_operators[i][v].push(op);
                 relevant_permutation_variables.insert(i);
             } else {
-                global_operators.push(op.clone());
+                global_operators.push(op);
             }
         }
         SuccessorGenerator {
@@ -80,8 +76,8 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
             relevant_permutation_variables: relevant_permutation_variables.into_iter().collect(),
             permutation_element_to_operators,
             global_operators,
-            metadata,
-            registry,
+            metadata: &problem.state_metadata,
+            registry: &problem.table_registry,
         }
     }
 
