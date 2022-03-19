@@ -3,23 +3,18 @@ use super::numeric_parser;
 use super::set_parser;
 use super::util;
 use super::util::ParseErr;
-use crate::expression::{ComparisonOperator, Condition, SetCondition};
+use crate::expression::{Comparison, ComparisonOperator, Condition, SetCondition};
 use crate::state;
 use crate::table_registry;
 use crate::variable;
 use std::collections;
-use std::fmt;
-use std::str;
 
-pub fn parse_expression<'a, 'b, 'c, T: variable::Numeric>(
+pub fn parse_expression<'a, 'b, 'c>(
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
-    registry: &'b table_registry::TableRegistry<T>,
+    registry: &'b table_registry::TableRegistry,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(Condition<T>, &'a [String]), ParseErr>
-where
-    <T as str::FromStr>::Err: fmt::Debug,
-{
+) -> Result<(Condition, &'a [String]), ParseErr> {
     let (token, rest) = tokens
         .split_first()
         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
@@ -28,9 +23,13 @@ where
             let (name, rest) = rest
                 .split_first()
                 .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
-            if let Some((expression, rest)) =
-                bool_table_parser::parse_expression(name, rest, metadata, registry, parameters)?
-            {
+            if let Some((expression, rest)) = bool_table_parser::parse_expression(
+                name,
+                rest,
+                metadata,
+                &registry.bool_tables,
+                parameters,
+            )? {
                 Ok((Condition::Table(expression), rest))
             } else {
                 parse_operation(name, rest, metadata, registry, parameters)
@@ -42,16 +41,13 @@ where
     }
 }
 
-fn parse_operation<'a, 'b, 'c, T: variable::Numeric>(
+fn parse_operation<'a, 'b, 'c>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
-    registry: &'b table_registry::TableRegistry<T>,
+    registry: &'b table_registry::TableRegistry,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(Condition<T>, &'a [String]), ParseErr>
-where
-    <T as str::FromStr>::Err: fmt::Debug,
-{
+) -> Result<(Condition, &'a [String]), ParseErr> {
     match &name[..] {
         "not" => {
             let (condition, rest) = parse_expression(tokens, metadata, registry, parameters)?;
@@ -69,48 +65,6 @@ where
             let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Or(Box::new(x), Box::new(y)), rest))
-        }
-        "=" => {
-            let (x, rest) =
-                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok((Condition::Comparison(ComparisonOperator::Eq, x, y), rest))
-        }
-        "!=" => {
-            let (x, rest) =
-                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok((Condition::Comparison(ComparisonOperator::Ne, x, y), rest))
-        }
-        ">=" => {
-            let (x, rest) =
-                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok((Condition::Comparison(ComparisonOperator::Ge, x, y), rest))
-        }
-        ">" => {
-            let (x, rest) =
-                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok((Condition::Comparison(ComparisonOperator::Gt, x, y), rest))
-        }
-        "<=" => {
-            let (x, rest) =
-                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok((Condition::Comparison(ComparisonOperator::Le, x, y), rest))
-        }
-        "<" => {
-            let (x, rest) =
-                numeric_parser::parse_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) = numeric_parser::parse_expression(rest, metadata, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok((Condition::Comparison(ComparisonOperator::Lt, x, y), rest))
         }
         "is" => {
             let (x, rest) = set_parser::parse_element_expression(tokens, metadata, parameters)?;
@@ -141,7 +95,59 @@ where
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(SetCondition::IsEmpty(s)), rest))
         }
-        _ => Err(ParseErr::new(format!("no such operator `{}`", name))),
+        _ => parse_comparison(name, tokens, metadata, registry, parameters)
+            .map(|(condition, rest)| (Condition::Comparison(condition), rest)),
+    }
+}
+
+fn parse_comparison<'a, 'b, 'c>(
+    operator: &'a str,
+    tokens: &'a [String],
+    metadata: &'b state::StateMetadata,
+    registry: &'b table_registry::TableRegistry,
+    parameters: &'c collections::HashMap<String, usize>,
+) -> Result<(Comparison, &'a [String]), ParseErr> {
+    let operator = match operator {
+        "=" => ComparisonOperator::Eq,
+        "!=" => ComparisonOperator::Ne,
+        ">=" => ComparisonOperator::Ge,
+        ">" => ComparisonOperator::Gt,
+        "<=" => ComparisonOperator::Le,
+        "<" => ComparisonOperator::Lt,
+        _ => return Err(ParseErr::new(format!("no such operator `{}`", operator))),
+    };
+
+    if let Ok((x, rest)) = numeric_parser::parse_expression::<variable::Integer>(
+        tokens, metadata, registry, parameters,
+    ) {
+        if let Ok((y, rest)) = numeric_parser::parse_expression::<variable::Integer>(
+            rest, metadata, registry, parameters,
+        ) {
+            let rest = util::parse_closing(rest)?;
+            Ok((Comparison::ComparisonII(operator, x, y), rest))
+        } else {
+            let (y, rest) = numeric_parser::parse_expression::<variable::Continuous>(
+                rest, metadata, registry, parameters,
+            )?;
+            let rest = util::parse_closing(rest)?;
+            Ok((Comparison::ComparisonIC(operator, x, y), rest))
+        }
+    } else {
+        let (x, rest) = numeric_parser::parse_expression::<variable::Continuous>(
+            tokens, metadata, registry, parameters,
+        )?;
+        if let Ok((y, rest)) = numeric_parser::parse_expression::<variable::Integer>(
+            rest, metadata, registry, parameters,
+        ) {
+            let rest = util::parse_closing(rest)?;
+            Ok((Comparison::ComparisonCI(operator, x, y), rest))
+        } else {
+            let (y, rest) = numeric_parser::parse_expression::<variable::Continuous>(
+                rest, metadata, registry, parameters,
+            )?;
+            let rest = util::parse_closing(rest)?;
+            Ok((Comparison::ComparisonCC(operator, x, y), rest))
+        }
     }
 }
 
@@ -197,32 +203,31 @@ mod tests {
         name_to_element_variable.insert("e3".to_string(), 3);
         let element_variable_to_object = vec![0, 0, 0, 0];
 
-        let numeric_variable_names = vec![
+        let integer_variable_names = vec![
             "n0".to_string(),
             "n1".to_string(),
             "n2".to_string(),
             "n3".to_string(),
         ];
-        let mut name_to_numeric_variable = HashMap::new();
-        name_to_numeric_variable.insert("n0".to_string(), 0);
-        name_to_numeric_variable.insert("n1".to_string(), 1);
-        name_to_numeric_variable.insert("n2".to_string(), 2);
-        name_to_numeric_variable.insert("n3".to_string(), 3);
+        let mut name_to_integer_variable = HashMap::new();
+        name_to_integer_variable.insert("n0".to_string(), 0);
+        name_to_integer_variable.insert("n1".to_string(), 1);
+        name_to_integer_variable.insert("n2".to_string(), 2);
+        name_to_integer_variable.insert("n3".to_string(), 3);
 
-        let resource_variable_names = vec![
+        let integer_resource_variable_names = vec![
             "r0".to_string(),
             "r1".to_string(),
             "r2".to_string(),
             "r3".to_string(),
         ];
-        let mut name_to_resource_variable = HashMap::new();
-        name_to_resource_variable.insert("r0".to_string(), 0);
-        name_to_resource_variable.insert("r1".to_string(), 1);
-        name_to_resource_variable.insert("r2".to_string(), 2);
-        name_to_resource_variable.insert("r3".to_string(), 3);
+        let mut name_to_integer_resource_variable = HashMap::new();
+        name_to_integer_resource_variable.insert("r0".to_string(), 0);
+        name_to_integer_resource_variable.insert("r1".to_string(), 1);
+        name_to_integer_resource_variable.insert("r2".to_string(), 2);
+        name_to_integer_resource_variable.insert("r3".to_string(), 3);
 
         state::StateMetadata {
-            maximize: false,
             object_names,
             name_to_object,
             object_numbers,
@@ -235,11 +240,12 @@ mod tests {
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
-            numeric_variable_names,
-            name_to_numeric_variable,
-            resource_variable_names,
-            name_to_resource_variable,
-            less_is_better: vec![false, false, true, false],
+            integer_variable_names,
+            name_to_integer_variable,
+            integer_resource_variable_names,
+            name_to_integer_resource_variable,
+            integer_less_is_better: vec![false, false, true, false],
+            ..Default::default()
         }
     }
 
@@ -249,7 +255,7 @@ mod tests {
         parameters
     }
 
-    fn generate_registry() -> table_registry::TableRegistry<variable::Integer> {
+    fn generate_registry() -> table_registry::TableRegistry {
         let tables_1d = vec![table::Table1D::new(vec![true, false])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
@@ -316,13 +322,13 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, _) = result.unwrap();
-        assert!(matches!(expression, Condition::Constant(true)));
+        assert_eq!(expression, Condition::Constant(true));
 
         let tokens: Vec<String> = ["false", ")"].iter().map(|x| String::from(*x)).collect();
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, _) = result.unwrap();
-        assert!(matches!(expression, Condition::Constant(false)));
+        assert_eq!(expression, Condition::Constant(false));
     }
 
     #[test]
@@ -346,10 +352,10 @@ mod tests {
         if let Condition::Table(BoolTableExpression::Table(i, args)) = expression {
             assert_eq!(i, 0);
             assert_eq!(args.len(), 4);
-            assert!(matches!(args[0], ElementExpression::Constant(0)));
-            assert!(matches!(args[1], ElementExpression::Variable(0)));
-            assert!(matches!(args[2], ElementExpression::Variable(1)));
-            assert!(matches!(args[3], ElementExpression::Variable(2)));
+            assert_eq!(args[0], ElementExpression::Constant(0));
+            assert_eq!(args[1], ElementExpression::Variable(0));
+            assert_eq!(args[2], ElementExpression::Variable(1));
+            assert_eq!(args[3], ElementExpression::Variable(2));
         }
         assert_eq!(rest, &tokens[7..]);
     }
@@ -383,10 +389,10 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, Condition::Not(_)));
         if let Condition::Not(c) = expression {
-            assert!(matches!(
+            assert_eq!(
                 *c,
                 Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(0)))
-            ));
+            );
         };
         assert_eq!(rest, &tokens[7..]);
     }
@@ -437,14 +443,14 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, Condition::And(_, _)));
         if let Condition::And(x, y) = expression {
-            assert!(matches!(
+            assert_eq!(
                 *x,
                 Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(0)))
-            ));
-            assert!(matches!(
+            );
+            assert_eq!(
                 *y,
                 Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(1)))
-            ));
+            );
         };
         assert_eq!(rest, &tokens[11..]);
     }
@@ -496,14 +502,14 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, Condition::Or(_, _)));
         if let Condition::Or(x, y) = expression {
-            assert!(matches!(
+            assert_eq!(
                 *x,
                 Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(0)))
-            ));
-            assert!(matches!(
+            );
+            assert_eq!(
                 *y,
                 Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(1)))
-            ));
+            );
         };
         assert_eq!(rest, &tokens[11..]);
     }
@@ -551,14 +557,14 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            Condition::Comparison(
+            Condition::Comparison(Comparison::ComparisonII(
                 ComparisonOperator::Eq,
                 NumericExpression::Constant(2),
-                NumericExpression::Variable(0)
-            )
-        ));
+                NumericExpression::IntegerVariable(0)
+            ))
+        );
         assert_eq!(rest, &tokens[5..]);
     }
 
@@ -602,14 +608,14 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            Condition::Comparison(
+            Condition::Comparison(Comparison::ComparisonII(
                 ComparisonOperator::Ne,
                 NumericExpression::Constant(2),
-                NumericExpression::Variable(0)
-            )
-        ));
+                NumericExpression::IntegerVariable(0)
+            ))
+        );
         assert_eq!(rest, &tokens[5..]);
     }
 
@@ -653,14 +659,14 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            Condition::Comparison(
+            Condition::Comparison(Comparison::ComparisonII(
                 ComparisonOperator::Gt,
                 NumericExpression::Constant(2),
-                NumericExpression::Variable(0)
-            )
-        ));
+                NumericExpression::IntegerVariable(0)
+            ))
+        );
         assert_eq!(rest, &tokens[5..]);
     }
 
@@ -704,14 +710,14 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            Condition::Comparison(
+            Condition::Comparison(Comparison::ComparisonII(
                 ComparisonOperator::Ge,
                 NumericExpression::Constant(2),
-                NumericExpression::Variable(0)
-            )
-        ));
+                NumericExpression::IntegerVariable(0)
+            ))
+        );
         assert_eq!(rest, &tokens[5..]);
     }
 
@@ -755,14 +761,14 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            Condition::Comparison(
+            Condition::Comparison(Comparison::ComparisonII(
                 ComparisonOperator::Lt,
                 NumericExpression::Constant(2),
-                NumericExpression::Variable(0)
-            )
-        ));
+                NumericExpression::IntegerVariable(0)
+            ))
+        );
         assert_eq!(rest, &tokens[5..]);
     }
 
@@ -806,14 +812,14 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            Condition::Comparison(
+            Condition::Comparison(Comparison::ComparisonII(
                 ComparisonOperator::Le,
                 NumericExpression::Constant(2),
-                NumericExpression::Variable(0)
-            )
-        ));
+                NumericExpression::IntegerVariable(0)
+            ))
+        );
         assert_eq!(rest, &tokens[5..]);
     }
 

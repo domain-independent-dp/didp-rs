@@ -15,13 +15,12 @@ pub fn parse_expression<'a, 'b, 'c, T: variable::Numeric>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
-    registry: &'b table_registry::TableRegistry<T>,
+    tables: &'b table_registry::TableData<T>,
     parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<NumericTableParsingResult<'a, T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let tables = &registry.numeric_tables;
     if let Some(i) = tables.name_to_table_1d.get(name) {
         let result = parse_table_1d(*i, tokens, metadata, parameters)?;
         Ok(Some(result))
@@ -203,32 +202,19 @@ mod tests {
         name_to_element_variable.insert(String::from("e3"), 3);
         let element_variable_to_object = vec![0, 0, 0, 0];
 
-        let numeric_variable_names = vec![
+        let integer_variable_names = vec![
             String::from("n0"),
             String::from("n1"),
             String::from("n2"),
             String::from("n3"),
         ];
-        let mut name_to_numeric_variable = HashMap::new();
-        name_to_numeric_variable.insert(String::from("n0"), 0);
-        name_to_numeric_variable.insert(String::from("n1"), 1);
-        name_to_numeric_variable.insert(String::from("n2"), 2);
-        name_to_numeric_variable.insert(String::from("n3"), 3);
-
-        let resource_variable_names = vec![
-            String::from("r0"),
-            String::from("r1"),
-            String::from("r2"),
-            String::from("r3"),
-        ];
-        let mut name_to_resource_variable = HashMap::new();
-        name_to_resource_variable.insert(String::from("r0"), 0);
-        name_to_resource_variable.insert(String::from("r1"), 1);
-        name_to_resource_variable.insert(String::from("r2"), 2);
-        name_to_resource_variable.insert(String::from("r3"), 3);
+        let mut name_to_integer_variable = HashMap::new();
+        name_to_integer_variable.insert(String::from("n0"), 0);
+        name_to_integer_variable.insert(String::from("n1"), 1);
+        name_to_integer_variable.insert(String::from("n2"), 2);
+        name_to_integer_variable.insert(String::from("n3"), 3);
 
         state::StateMetadata {
-            maximize: false,
             object_names,
             name_to_object,
             object_numbers,
@@ -241,11 +227,9 @@ mod tests {
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
-            numeric_variable_names,
-            name_to_numeric_variable,
-            resource_variable_names,
-            name_to_resource_variable,
-            less_is_better: vec![false, false, true, false],
+            integer_variable_names,
+            name_to_integer_variable,
+            ..Default::default()
         }
     }
 
@@ -255,7 +239,7 @@ mod tests {
         parameters
     }
 
-    fn generate_registry() -> table_registry::TableRegistry<variable::Integer> {
+    fn generate_tables() -> table_registry::TableData<variable::Integer> {
         let tables_1d = vec![table::Table1D::new(Vec::new())];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
@@ -272,18 +256,15 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
-        table_registry::TableRegistry {
-            numeric_tables: table_registry::TableData {
-                tables_1d,
-                name_to_table_1d,
-                tables_2d,
-                name_to_table_2d,
-                tables_3d,
-                name_to_table_3d,
-                tables,
-                name_to_table,
-            },
-            ..Default::default()
+        table_registry::TableData {
+            tables_1d,
+            name_to_table_1d,
+            tables_2d,
+            name_to_table_2d,
+            tables_3d,
+            name_to_table_3d,
+            tables,
+            name_to_table,
         }
     }
 
@@ -291,13 +272,13 @@ mod tests {
     fn parse_expression_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let registry = generate_registry();
+        let tables = generate_tables();
 
         let tokens: Vec<String> = ["n0", "1", ")", "n1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("max", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("max", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -307,13 +288,13 @@ mod tests {
     fn parse_table_1d_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let registry = generate_registry();
+        let tables = generate_tables();
 
         let tokens: Vec<String> = ["e0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f1", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -329,7 +310,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f1", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -344,7 +325,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[2..]);
 
-        let result = parse_expression("f0", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -354,24 +335,24 @@ mod tests {
     fn parse_table_1d_err() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let registry = generate_registry();
+        let tables = generate_tables();
 
         let tokens: Vec<String> = ["n0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f1", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["e0", "0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f1", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [")", "n0", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression("f1", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
     }
 
@@ -379,13 +360,13 @@ mod tests {
     fn parse_table_2d_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let registry = generate_registry();
+        let tables = generate_tables();
 
         let tokens: Vec<String> = ["0", "e0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -405,7 +386,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -425,7 +406,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -445,7 +426,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -461,7 +442,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[3..]);
 
-        let result = parse_expression("f0", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -471,27 +452,27 @@ mod tests {
     fn parse_table_2d_err() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let registry = generate_registry();
+        let tables = generate_tables();
 
         let tokens: Vec<String> = ["0", "n0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "e0", "p0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
     }
 
@@ -499,13 +480,13 @@ mod tests {
     fn parse_table_3d_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let registry = generate_registry();
+        let tables = generate_tables();
 
         let tokens: Vec<String> = ["0", "1", "e0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -526,7 +507,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -547,7 +528,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -568,7 +549,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -589,7 +570,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -610,7 +591,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -631,7 +612,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -652,7 +633,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -669,7 +650,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[4..]);
 
-        let result = parse_expression("f0", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -679,27 +660,27 @@ mod tests {
     fn parse_table_3d_err() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let registry = generate_registry();
+        let tables = generate_tables();
 
         let tokens: Vec<String> = ["0", "1", "n0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "1", "e0", "2", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "1", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
     }
 
@@ -707,12 +688,12 @@ mod tests {
     fn parse_table_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let registry = generate_registry();
+        let tables = generate_tables();
         let tokens: Vec<String> = ["s2", "1", "e0", "p3", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f4", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f4", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
@@ -740,7 +721,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[5..]);
 
-        let result = parse_expression("f0", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -750,20 +731,20 @@ mod tests {
     fn parse_table_err() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let registry = generate_registry();
+        let tables = generate_tables();
 
         let tokens: Vec<String> = ["s2", "1", "e0", "p3", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f4", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f4", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["s2", "1", "e0", "p3", "n0"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f4", &tokens, &metadata, &registry, &parameters);
+        let result = parse_expression("f4", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
     }
 }

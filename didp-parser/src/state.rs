@@ -1,28 +1,37 @@
-use crate::variable;
+use crate::variable::{Continuous, Element, Integer, Numeric, Permutation, Set};
 use crate::yaml_util;
+use lazy_static::lazy_static;
+use ordered_float::OrderedFloat;
 use std::cmp::Ordering;
 use std::collections;
 use std::fmt;
 use std::rc::Rc;
 use std::str;
 
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
-pub struct State<T: variable::Numeric> {
-    pub signature_variables: Rc<SignatureVariables<T>>,
-    pub resource_variables: Vec<T>,
-    pub stage: variable::Element,
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct State<T: Numeric> {
+    pub signature_variables: Rc<SignatureVariables>,
+    pub resource_variables: ResourceVariables,
+    pub stage: Element,
     pub cost: T,
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Default)]
-pub struct SignatureVariables<T: variable::Numeric> {
-    pub set_variables: Vec<variable::Set>,
-    pub permutation_variables: Vec<variable::Permutation>,
-    pub element_variables: Vec<variable::Element>,
-    pub numeric_variables: Vec<T>,
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
+pub struct SignatureVariables {
+    pub set_variables: Vec<Set>,
+    pub permutation_variables: Vec<Permutation>,
+    pub element_variables: Vec<Element>,
+    pub integer_variables: Vec<Integer>,
+    pub continuous_variables: Vec<OrderedFloat<Continuous>>,
 }
 
-impl<T: variable::Numeric> State<T> {
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct ResourceVariables {
+    pub integer_variables: Vec<Integer>,
+    pub continuous_variables: Vec<Continuous>,
+}
+
+impl<T: Numeric> State<T> {
     pub fn load_from_yaml(
         value: &yaml_rust::Yaml,
         metadata: &StateMetadata,
@@ -34,8 +43,7 @@ impl<T: variable::Numeric> State<T> {
         let mut set_variables = Vec::with_capacity(metadata.set_variable_names.len());
         for name in &metadata.set_variable_names {
             let values = yaml_util::get_usize_array_by_key(value, name)?;
-            let mut set =
-                variable::Set::with_capacity(metadata.set_variable_capacity_by_name(name));
+            let mut set = Set::with_capacity(metadata.set_variable_capacity_by_name(name));
             for v in values {
                 set.insert(v);
             }
@@ -52,15 +60,27 @@ impl<T: variable::Numeric> State<T> {
             let element = yaml_util::get_usize_by_key(value, name)?;
             element_variables.push(element);
         }
-        let mut numeric_variables = Vec::with_capacity(metadata.numeric_variable_names.len());
-        for name in &metadata.numeric_variable_names {
-            let value = yaml_util::get_numeric_by_key::<T>(value, name)?;
-            numeric_variables.push(value);
-        }
-        let mut resource_variables = Vec::with_capacity(metadata.resource_variable_names.len());
-        for name in &metadata.resource_variable_names {
+        let mut integer_variables = Vec::with_capacity(metadata.integer_variable_names.len());
+        for name in &metadata.integer_variable_names {
             let value = yaml_util::get_numeric_by_key(value, name)?;
-            resource_variables.push(value);
+            integer_variables.push(value);
+        }
+        let mut continuous_variables = Vec::with_capacity(metadata.continuous_variable_names.len());
+        for name in &metadata.continuous_variable_names {
+            let value = OrderedFloat(yaml_util::get_numeric_by_key(value, name)?);
+            continuous_variables.push(value);
+        }
+        let mut integer_resource_variables =
+            Vec::with_capacity(metadata.integer_resource_variable_names.len());
+        for name in &metadata.integer_resource_variable_names {
+            let value = yaml_util::get_numeric_by_key(value, name)?;
+            integer_resource_variables.push(value);
+        }
+        let mut continuous_resource_variables =
+            Vec::with_capacity(metadata.continuous_resource_variable_names.len());
+        for name in &metadata.continuous_resource_variable_names {
+            let value = yaml_util::get_numeric_by_key(value, name)?;
+            continuous_resource_variables.push(value);
         }
         let stage = if let Ok(value) = yaml_util::get_usize_by_key(value, "stage") {
             value
@@ -77,9 +97,13 @@ impl<T: variable::Numeric> State<T> {
                 set_variables,
                 permutation_variables,
                 element_variables,
-                numeric_variables,
+                integer_variables,
+                continuous_variables,
             }),
-            resource_variables,
+            resource_variables: ResourceVariables {
+                integer_variables: integer_resource_variables,
+                continuous_variables: continuous_resource_variables,
+            },
             stage,
             cost,
         })
@@ -106,12 +130,19 @@ pub struct StateMetadata {
     pub name_to_element_variable: collections::HashMap<String, usize>,
     pub element_variable_to_object: Vec<usize>,
 
-    pub numeric_variable_names: Vec<String>,
-    pub name_to_numeric_variable: collections::HashMap<String, usize>,
+    pub integer_variable_names: Vec<String>,
+    pub name_to_integer_variable: collections::HashMap<String, usize>,
 
-    pub resource_variable_names: Vec<String>,
-    pub name_to_resource_variable: collections::HashMap<String, usize>,
-    pub less_is_better: Vec<bool>,
+    pub continuous_variable_names: Vec<String>,
+    pub name_to_continuous_variable: collections::HashMap<String, usize>,
+
+    pub integer_resource_variable_names: Vec<String>,
+    pub name_to_integer_resource_variable: collections::HashMap<String, usize>,
+    pub integer_less_is_better: Vec<bool>,
+
+    pub continuous_resource_variable_names: Vec<String>,
+    pub name_to_continuous_resource_variable: collections::HashMap<String, usize>,
+    pub continuous_less_is_better: Vec<bool>,
 }
 
 impl StateMetadata {
@@ -131,12 +162,20 @@ impl StateMetadata {
         self.element_variable_names.len()
     }
 
-    pub fn number_of_numeric_variables(&self) -> usize {
-        self.numeric_variable_names.len()
+    pub fn number_of_integer_variables(&self) -> usize {
+        self.integer_variable_names.len()
     }
 
-    pub fn number_of_resource_variables(&self) -> usize {
-        self.resource_variable_names.len()
+    pub fn number_of_continuous_variables(&self) -> usize {
+        self.continuous_variable_names.len()
+    }
+
+    pub fn number_of_integer_resource_variables(&self) -> usize {
+        self.integer_resource_variable_names.len()
+    }
+
+    pub fn number_of_continuous_resource_variables(&self) -> usize {
+        self.continuous_resource_variable_names.len()
     }
 
     pub fn set_variable_capacity(&self, i: usize) -> usize {
@@ -164,50 +203,74 @@ impl StateMetadata {
         self.object_numbers[self.element_variable_to_object[self.name_to_element_variable[name]]]
     }
 
-    pub fn dominance<T: variable::Numeric>(&self, a: &[T], b: &[T]) -> Option<Ordering> {
-        debug_assert!(a.len() == b.len());
+    pub fn dominance<T: Numeric>(&self, a: &State<T>, b: &State<T>) -> Option<Ordering> {
+        let status = match self.maximize {
+            true => a.cost.partial_cmp(&b.cost),
+            false => a.cost.partial_cmp(&b.cost).map(|x| x.reverse()),
+        };
+        status?;
+        let status = Self::compare_resource_variables(
+            &a.resource_variables.integer_variables,
+            &b.resource_variables.integer_variables,
+            &self.integer_less_is_better,
+            status,
+        );
+        status?;
+        Self::compare_resource_variables(
+            &a.resource_variables.continuous_variables,
+            &b.resource_variables.continuous_variables,
+            &self.continuous_less_is_better,
+            status,
+        )
+    }
 
-        let mut result = Some(Ordering::Equal);
+    fn compare_resource_variables<T: Numeric>(
+        a: &[T],
+        b: &[T],
+        less_is_better: &[bool],
+        mut status: Option<Ordering>,
+    ) -> Option<Ordering> {
+        debug_assert!(a.len() == b.len());
         for (i, (v1, v2)) in a.iter().zip(b.iter()).enumerate() {
-            match result {
+            match status {
                 Some(Ordering::Equal) => {
                     if v1 < v2 {
-                        if self.less_is_better[i] {
-                            result = Some(Ordering::Greater);
+                        if less_is_better[i] {
+                            status = Some(Ordering::Greater);
                         } else {
-                            result = Some(Ordering::Less);
+                            status = Some(Ordering::Less);
                         }
                     }
                     if v1 > v2 {
-                        if self.less_is_better[i] {
-                            result = Some(Ordering::Less);
+                        if less_is_better[i] {
+                            status = Some(Ordering::Less);
                         } else {
-                            result = Some(Ordering::Greater);
+                            status = Some(Ordering::Greater);
                         }
                     }
                 }
                 Some(Ordering::Less) => {
                     if v1 < v2 {
-                        if self.less_is_better[i] {
+                        if less_is_better[i] {
                             return None;
                         }
-                    } else if v1 > v2 && !self.less_is_better[i] {
+                    } else if v1 > v2 && !less_is_better[i] {
                         return None;
                     }
                 }
                 Some(Ordering::Greater) => {
                     if v1 > v2 {
-                        if self.less_is_better[i] {
+                        if less_is_better[i] {
                             return None;
                         }
-                    } else if v1 < v2 && !self.less_is_better[i] {
+                    } else if v1 < v2 && !less_is_better[i] {
                         return None;
                     }
                 }
                 None => {}
             }
         }
-        result
+        status
     }
 
     pub fn ground_parameters_from_yaml(
@@ -308,11 +371,16 @@ impl StateMetadata {
         let mut element_variable_names = Vec::new();
         let mut name_to_element_variable = collections::HashMap::new();
         let mut element_variable_to_object = Vec::new();
-        let mut numeric_variable_names = Vec::new();
-        let mut name_to_numeric_variable = collections::HashMap::new();
-        let mut resource_variable_names = Vec::new();
-        let mut name_to_resource_variable = collections::HashMap::new();
-        let mut less_is_better = Vec::new();
+        let mut integer_variable_names = Vec::new();
+        let mut name_to_integer_variable = collections::HashMap::new();
+        let mut continuous_variable_names = Vec::new();
+        let mut name_to_continuous_variable = collections::HashMap::new();
+        let mut integer_resource_variable_names = Vec::new();
+        let mut name_to_integer_resource_variable = collections::HashMap::new();
+        let mut integer_less_is_better = Vec::new();
+        let mut continuous_resource_variable_names = Vec::new();
+        let mut name_to_continuous_resource_variable = collections::HashMap::new();
+        let mut continuous_less_is_better = Vec::new();
 
         let variables = yaml_util::get_array(variables)?;
         for value in variables {
@@ -339,19 +407,31 @@ impl StateMetadata {
                     name_to_element_variable.insert(name.clone(), element_variable_names.len());
                     element_variable_names.push(name);
                 }
-                "numeric" => {
-                    name_to_numeric_variable.insert(name.clone(), numeric_variable_names.len());
-                    numeric_variable_names.push(name);
-                }
-                "resource" => {
-                    name_to_resource_variable.insert(name.clone(), resource_variable_names.len());
-                    resource_variable_names.push(name);
-                    let preference = match yaml_util::get_bool_by_key(map, "less_is_better") {
-                        Ok(value) => value,
-                        _ => false,
-                    };
-                    less_is_better.push(preference);
-                }
+                "integer" => match Self::get_less_is_better(map)? {
+                    Some(value) => {
+                        name_to_integer_resource_variable
+                            .insert(name.clone(), integer_resource_variable_names.len());
+                        integer_resource_variable_names.push(name);
+                        integer_less_is_better.push(value);
+                    }
+                    None => {
+                        name_to_integer_variable.insert(name.clone(), integer_variable_names.len());
+                        integer_variable_names.push(name);
+                    }
+                },
+                "continuous" => match Self::get_less_is_better(map)? {
+                    Some(value) => {
+                        name_to_continuous_resource_variable
+                            .insert(name.clone(), continuous_resource_variable_names.len());
+                        continuous_resource_variable_names.push(name);
+                        continuous_less_is_better.push(value);
+                    }
+                    None => {
+                        name_to_continuous_variable
+                            .insert(name.clone(), continuous_variable_names.len());
+                        continuous_variable_names.push(name);
+                    }
+                },
                 value => {
                     return Err(yaml_util::YamlContentErr::new(format!(
                         "`{:?}` is not a variable type",
@@ -376,11 +456,16 @@ impl StateMetadata {
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
-            numeric_variable_names,
-            name_to_numeric_variable,
-            resource_variable_names,
-            name_to_resource_variable,
-            less_is_better,
+            integer_variable_names,
+            name_to_integer_variable,
+            continuous_variable_names,
+            name_to_continuous_variable,
+            integer_resource_variable_names,
+            name_to_integer_resource_variable,
+            integer_less_is_better,
+            continuous_resource_variable_names,
+            name_to_continuous_resource_variable,
+            continuous_less_is_better,
         })
     }
 
@@ -395,6 +480,23 @@ impl StateMetadata {
                 "object `{}` does not exist",
                 name
             ))),
+        }
+    }
+
+    fn get_less_is_better(
+        map: &linked_hash_map::LinkedHashMap<yaml_rust::Yaml, yaml_rust::Yaml>,
+    ) -> Result<Option<bool>, yaml_util::YamlContentErr> {
+        lazy_static! {
+            static ref KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("preference");
+        }
+        match map.get(&KEY) {
+            Some(yaml_rust::Yaml::String(value)) if &value[..] == "greater" => Ok(Some(false)),
+            Some(yaml_rust::Yaml::String(value)) if &value[..] == "less" => Ok(Some(true)),
+            Some(value) => Err(yaml_util::YamlContentErr::new(format!(
+                "expected `String(\"greater\")` or `String(\"less\")`, found `{:?}`",
+                value
+            ))),
+            None => Ok(None),
         }
     }
 }
@@ -456,29 +558,53 @@ mod tests {
         name_to_element_variable.insert(String::from("e3"), 3);
         let element_variable_to_object = vec![0, 0, 0, 1];
 
-        let numeric_variable_names = vec![
-            String::from("n0"),
-            String::from("n1"),
-            String::from("n2"),
-            String::from("n3"),
+        let integer_variable_names = vec![
+            String::from("i0"),
+            String::from("i1"),
+            String::from("i2"),
+            String::from("i3"),
         ];
-        let mut name_to_numeric_variable = HashMap::new();
-        name_to_numeric_variable.insert(String::from("n0"), 0);
-        name_to_numeric_variable.insert(String::from("n1"), 1);
-        name_to_numeric_variable.insert(String::from("n2"), 2);
-        name_to_numeric_variable.insert(String::from("n3"), 3);
+        let mut name_to_integer_variable = HashMap::new();
+        name_to_integer_variable.insert(String::from("i0"), 0);
+        name_to_integer_variable.insert(String::from("i1"), 1);
+        name_to_integer_variable.insert(String::from("i2"), 2);
+        name_to_integer_variable.insert(String::from("i3"), 3);
 
-        let resource_variable_names = vec![
-            String::from("r0"),
-            String::from("r1"),
-            String::from("r2"),
-            String::from("r3"),
+        let continuous_variable_names = vec![
+            String::from("c0"),
+            String::from("c1"),
+            String::from("c2"),
+            String::from("c3"),
         ];
-        let mut name_to_resource_variable = HashMap::new();
-        name_to_resource_variable.insert(String::from("r0"), 0);
-        name_to_resource_variable.insert(String::from("r1"), 1);
-        name_to_resource_variable.insert(String::from("r2"), 2);
-        name_to_resource_variable.insert(String::from("r3"), 3);
+        let mut name_to_continuous_variable = HashMap::new();
+        name_to_continuous_variable.insert(String::from("c0"), 0);
+        name_to_continuous_variable.insert(String::from("c1"), 1);
+        name_to_continuous_variable.insert(String::from("c2"), 2);
+        name_to_continuous_variable.insert(String::from("c3"), 3);
+
+        let integer_resource_variable_names = vec![
+            String::from("ir0"),
+            String::from("ir1"),
+            String::from("ir2"),
+            String::from("ir3"),
+        ];
+        let mut name_to_integer_resource_variable = HashMap::new();
+        name_to_integer_resource_variable.insert(String::from("ir0"), 0);
+        name_to_integer_resource_variable.insert(String::from("ir1"), 1);
+        name_to_integer_resource_variable.insert(String::from("ir2"), 2);
+        name_to_integer_resource_variable.insert(String::from("ir3"), 3);
+
+        let continuous_resource_variable_names = vec![
+            String::from("cr0"),
+            String::from("cr1"),
+            String::from("cr2"),
+            String::from("cr3"),
+        ];
+        let mut name_to_continuous_resource_variable = HashMap::new();
+        name_to_continuous_resource_variable.insert(String::from("cr0"), 0);
+        name_to_continuous_resource_variable.insert(String::from("cr1"), 1);
+        name_to_continuous_resource_variable.insert(String::from("cr2"), 2);
+        name_to_continuous_resource_variable.insert(String::from("cr3"), 3);
 
         StateMetadata {
             maximize: false,
@@ -494,11 +620,16 @@ mod tests {
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
-            numeric_variable_names,
-            name_to_numeric_variable,
-            resource_variable_names,
-            name_to_resource_variable,
-            less_is_better: vec![false, false, true, false],
+            integer_variable_names,
+            name_to_integer_variable,
+            continuous_variable_names,
+            name_to_continuous_variable,
+            integer_resource_variable_names,
+            name_to_integer_resource_variable,
+            integer_less_is_better: vec![false, false, true, false],
+            continuous_resource_variable_names,
+            name_to_continuous_resource_variable,
+            continuous_less_is_better: vec![false, false, true, false],
         }
     }
 
@@ -520,14 +651,22 @@ e0: 0
 e1: 1
 e2: 2
 e3: 3
-n0: 0
-n1: 1
-n2: 2
-n3: 3
-r0: 0
-r1: 1
-r2: 2
-r3: 3
+i0: 0
+i1: 1
+i2: 2
+i3: 3
+c0: 0
+c1: 1
+c2: 2
+c3: 3
+ir0: 0
+ir1: 1
+ir2: 2
+ir3: 3
+cr0: 0
+cr1: 1
+cr2: 2
+cr3: 3
 ",
         );
         assert!(yaml.is_ok());
@@ -536,23 +675,32 @@ r3: 3
         let yaml = &yaml[0];
         let state = State::load_from_yaml(yaml, &metadata);
         assert!(state.is_ok());
-        let mut s0 = variable::Set::with_capacity(10);
+        let mut s0 = Set::with_capacity(10);
         s0.insert(0);
         s0.insert(2);
-        let mut s1 = variable::Set::with_capacity(10);
+        let mut s1 = Set::with_capacity(10);
         s1.insert(0);
         s1.insert(1);
-        let mut s2 = variable::Set::with_capacity(10);
+        let mut s2 = Set::with_capacity(10);
         s2.insert(0);
-        let s3 = variable::Set::with_capacity(2);
+        let s3 = Set::with_capacity(2);
         let mut expected = State {
             signature_variables: Rc::new(SignatureVariables {
                 set_variables: vec![s0, s1, s2, s3],
                 permutation_variables: vec![vec![0, 2], vec![0, 1], vec![0], vec![]],
                 element_variables: vec![0, 1, 2, 3],
-                numeric_variables: vec![0, 1, 2, 3],
+                integer_variables: vec![0, 1, 2, 3],
+                continuous_variables: vec![
+                    OrderedFloat(0.0),
+                    OrderedFloat(1.0),
+                    OrderedFloat(2.0),
+                    OrderedFloat(3.0),
+                ],
             }),
-            resource_variables: vec![0, 1, 2, 3],
+            resource_variables: ResourceVariables {
+                integer_variables: vec![0, 1, 2, 3],
+                continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
+            },
             stage: 0,
             cost: 0,
         };
@@ -572,14 +720,22 @@ e0: 0
 e1: 1
 e2: 2
 e3: 3
-n0: 0
-n1: 1
-n2: 2
-n3: 3
-r0: 0
-r1: 1
-r2: 2
-r3: 3
+i0: 0
+i1: 1
+i2: 2
+i3: 3
+c0: 0
+c1: 1
+c2: 2
+c3: 3
+ir0: 0
+ir1: 1
+ir2: 2
+ir3: 3
+cr0: 0
+cr1: 1
+cr2: 2
+cr3: 3
 stage: 1
 cost: 1
 ",
@@ -611,21 +767,29 @@ p3: []
 e0: 0
 e1: 1
 e3: 3
-n0: 0
-n1: 1
-n2: 2
-n3: 3
-r0: 0
-r1: 1
-r2: 2
-r3: 3
+i0: 0
+i1: 1
+i2: 2
+i3: 3
+c0: 0
+c1: 1
+c2: 2
+c3: 3
+ir0: 0
+ir1: 1
+ir2: 2
+ir3: 3
+cr0: 0
+cr1: 1
+cr2: 2
+cr3: 3
 ",
         );
         assert!(yaml.is_ok());
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let state = State::<variable::Integer>::load_from_yaml(yaml, &metadata);
+        let state = State::<Integer>::load_from_yaml(yaml, &metadata);
         assert!(state.is_err());
     }
 
@@ -654,15 +818,27 @@ r3: 3
     }
 
     #[test]
-    fn number_of_numeric_variables() {
+    fn number_of_integer_variables() {
         let metadata = generate_metadata();
-        assert_eq!(metadata.number_of_numeric_variables(), 4);
+        assert_eq!(metadata.number_of_integer_variables(), 4);
     }
 
     #[test]
-    fn number_of_resource_variables() {
+    fn number_of_continuous_variables() {
         let metadata = generate_metadata();
-        assert_eq!(metadata.number_of_resource_variables(), 4);
+        assert_eq!(metadata.number_of_continuous_variables(), 4);
+    }
+
+    #[test]
+    fn number_of_integer_resource_variables() {
+        let metadata = generate_metadata();
+        assert_eq!(metadata.number_of_integer_resource_variables(), 4);
+    }
+
+    #[test]
+    fn number_of_continuous_resource_variables() {
+        let metadata = generate_metadata();
+        assert_eq!(metadata.number_of_continuous_resource_variables(), 4);
     }
 
     #[test]
@@ -720,27 +896,142 @@ r3: 3
     }
 
     #[test]
-    fn resource_variables_dominance() {
+    fn dominance() {
         let metadata = generate_metadata();
-        let a = vec![1, 2, 2, 0];
-        let b = vec![1, 2, 2, 0];
-        assert!(matches!(metadata.dominance(&a, &b), Some(Ordering::Equal)));
-        let b = vec![1, 1, 3, 0];
-        assert!(matches!(
-            metadata.dominance(&a, &b),
-            Some(Ordering::Greater)
-        ));
-        assert!(matches!(metadata.dominance(&b, &a), Some(Ordering::Less)));
-        let b = vec![1, 3, 3, 0];
+
+        let a = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 2, 2, 0],
+                continuous_variables: vec![],
+            },
+            cost: 0,
+            ..Default::default()
+        };
+        let b = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 2, 2, 0],
+                continuous_variables: vec![],
+            },
+            cost: 0,
+            ..Default::default()
+        };
+        assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Equal));
+
+        let b = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 1, 3, 0],
+                continuous_variables: vec![],
+            },
+            cost: 0,
+            ..Default::default()
+        };
+        assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Greater));
+        assert_eq!(metadata.dominance(&b, &a), Some(Ordering::Less));
+
+        let b = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 3, 3, 0],
+                continuous_variables: vec![],
+            },
+            cost: 0,
+            ..Default::default()
+        };
         assert!(metadata.dominance(&b, &a).is_none());
+
+        let b = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 2, 2, 0],
+                continuous_variables: vec![],
+            },
+            cost: 1,
+            ..Default::default()
+        };
+        assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Greater));
+        assert_eq!(metadata.dominance(&b, &a), Some(Ordering::Less));
+
+        let b = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 3, 1, 0],
+                continuous_variables: vec![],
+            },
+            cost: 1,
+            ..Default::default()
+        };
+        assert!(metadata.dominance(&a, &b).is_none());
+
+        let a = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 2, 2, 0],
+                continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
+            },
+            cost: 0,
+            ..Default::default()
+        };
+        let b = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 2, 2, 0],
+                continuous_variables: vec![1.0, 1.0, 3.0, 0.0],
+            },
+            cost: 0,
+            ..Default::default()
+        };
+        assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Greater));
+        assert_eq!(metadata.dominance(&b, &a), Some(Ordering::Less));
+
+        let b = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 2, 2, 0],
+                continuous_variables: vec![1.0, 3.0, 1.0, 0.0],
+            },
+            cost: 0,
+            ..Default::default()
+        };
+        assert!(metadata.dominance(&a, &b).is_none());
     }
 
     #[test]
     #[should_panic]
-    fn resource_variables_dominance_length_panic() {
+    fn dominance_integer_length_panic() {
         let metadata = generate_metadata();
-        let a = vec![1, 2, 2, 0];
-        let b = vec![1, 2, 2];
+        let a = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 2, 2],
+                continuous_variables: vec![],
+            },
+            cost: 0,
+            ..Default::default()
+        };
+        let b = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 2, 2, 0],
+                continuous_variables: vec![],
+            },
+            cost: 0,
+            ..Default::default()
+        };
+        metadata.dominance(&b, &a);
+    }
+
+    #[test]
+    #[should_panic]
+    fn dominance_continuous_length_panic() {
+        let metadata = generate_metadata();
+        let a = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 2, 2, 0],
+                continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
+            },
+            cost: 0,
+            ..Default::default()
+        };
+        let b = State {
+            resource_variables: ResourceVariables {
+                integer_variables: vec![1, 2, 2, 0],
+                continuous_variables: vec![1.0, 1.0, 3.0],
+            },
+            cost: 0,
+            ..Default::default()
+        };
         metadata.dominance(&b, &a);
     }
 
@@ -890,24 +1181,46 @@ r3: 3
 - name: e3
   type: element
   object: small
-- name: n0
-  type: numeric
-- name: n1
-  type: numeric
-- name: n2
-  type: numeric
-- name: n3
-  type: numeric
-- name: r0
-  type: resource
-- name: r1
-  type: resource
-- name: r2
-  type: resource
-  less_is_better: true
-- name: r3
-  type: resource
-  less_is_better: false
+- name: i0
+  type: integer
+- name: i1
+  type: integer
+- name: i2
+  type: integer 
+- name: i3
+  type: integer
+- name: c0
+  type: continuous 
+- name: c1
+  type: continuous
+- name: c2
+  type: continuous
+- name: c3
+  type: continuous
+- name: ir0
+  type: integer
+  preference: greater
+- name: ir1
+  type: integer
+  preference: greater
+- name: ir2
+  type: integer 
+  preference: less
+- name: ir3
+  type: integer
+  preference: greater
+- name: cr0
+  type: continuous 
+  preference: greater
+- name: cr1
+  type: continuous
+  preference: greater
+- name: cr2
+  type: continuous
+  preference: less
+- name: cr3
+  type: continuous
+  preference: greater
 ";
         let object_numbers = r"
 object: 10

@@ -15,7 +15,7 @@ mod yaml_util;
 
 pub use grounded_condition::GroundedCondition;
 pub use operator::Operator;
-pub use state::{SignatureVariables, State, StateMetadata};
+pub use state::{ResourceVariables, SignatureVariables, State, StateMetadata};
 pub use table_registry::{TableData, TableRegistry};
 
 #[derive(Debug)]
@@ -35,15 +35,15 @@ impl fmt::Display for ProblemErr {
 
 impl Error for ProblemErr {}
 
-pub enum NumericType {
+pub enum CostType {
     Integer,
     Continuous,
 }
 
-impl NumericType {
-    pub fn load_from_yaml(value: &Yaml) -> Result<NumericType, Box<dyn Error>> {
+impl CostType {
+    pub fn load_from_yaml(value: &Yaml) -> Result<CostType, Box<dyn Error>> {
         let map = yaml_util::get_map(value)?;
-        let numeric_type = yaml_util::get_string_by_key(&map, "numeric_type")?;
+        let numeric_type = yaml_util::get_string_by_key(&map, "cost_type")?;
         match &numeric_type[..] {
             "integer" => Ok(Self::Integer),
             "continuous" => Ok(Self::Continuous),
@@ -52,15 +52,15 @@ impl NumericType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct Problem<T: variable::Numeric> {
     pub domain_name: String,
     pub problem_name: String,
     pub state_metadata: state::StateMetadata,
     pub initial_state: state::State<T>,
-    pub table_registry: table_registry::TableRegistry<T>,
-    pub constraints: Vec<grounded_condition::GroundedCondition<T>>,
-    pub goals: Vec<grounded_condition::GroundedCondition<T>>,
+    pub table_registry: table_registry::TableRegistry,
+    pub constraints: Vec<grounded_condition::GroundedCondition>,
+    pub goals: Vec<grounded_condition::GroundedCondition>,
     pub operators: Vec<operator::Operator<T>>,
 }
 
@@ -126,13 +126,11 @@ impl<T: variable::Numeric> Problem<T> {
             domain.get(&Yaml::from_str("tables")),
             problem.get(&Yaml::from_str("table_values")),
         ) {
-            (Some(tables), Some(table_values)) => {
-                table_registry::TableRegistry::<T>::load_from_yaml(
-                    &tables,
-                    &table_values,
-                    &state_metadata,
-                )?
-            }
+            (Some(tables), Some(table_values)) => table_registry::TableRegistry::load_from_yaml(
+                &tables,
+                &table_values,
+                &state_metadata,
+            )?,
             (None, None) => TableRegistry {
                 ..Default::default()
             },
@@ -197,8 +195,8 @@ impl<T: variable::Numeric> Problem<T> {
     }
 
     fn filiter_grounded_conditions(
-        conditions: Vec<grounded_condition::GroundedCondition<T>>,
-    ) -> Result<Vec<grounded_condition::GroundedCondition<T>>, ProblemErr> {
+        conditions: Vec<grounded_condition::GroundedCondition>,
+    ) -> Result<Vec<grounded_condition::GroundedCondition>, ProblemErr> {
         let mut result = Vec::with_capacity(conditions.len());
         for condition in conditions {
             match condition.condition {
@@ -223,44 +221,44 @@ mod tests {
     use std::rc::Rc;
 
     #[test]
-    fn numeric_type_load_from_yaml_ok() {
-        let yaml = r"numeric_type: integer";
+    fn cost_type_load_from_yaml_ok() {
+        let yaml = r"cost_type: integer";
         let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
         assert!(yaml.is_ok());
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let numeric_type = NumericType::load_from_yaml(yaml);
+        let numeric_type = CostType::load_from_yaml(yaml);
         assert!(numeric_type.is_ok());
-        assert!(matches!(numeric_type.unwrap(), NumericType::Integer));
-        let yaml = r"numeric_type: continuous";
+        assert!(matches!(numeric_type.unwrap(), CostType::Integer));
+        let yaml = r"cost_type: continuous";
         let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
         assert!(yaml.is_ok());
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let numeric_type = NumericType::load_from_yaml(yaml);
+        let numeric_type = CostType::load_from_yaml(yaml);
         assert!(numeric_type.is_ok());
-        assert!(matches!(numeric_type.unwrap(), NumericType::Continuous));
+        assert!(matches!(numeric_type.unwrap(), CostType::Continuous));
     }
 
     #[test]
-    fn numeric_type_load_from_yaml_err() {
+    fn cost_type_load_from_yaml_err() {
         let yaml = r"type: integer";
         let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
         assert!(yaml.is_ok());
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let numeric_type = NumericType::load_from_yaml(yaml);
+        let numeric_type = CostType::load_from_yaml(yaml);
         assert!(numeric_type.is_err());
-        let yaml = r"numeric_type: bool";
+        let yaml = r"cost_type: bool";
         let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
         assert!(yaml.is_ok());
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let numeric_type = NumericType::load_from_yaml(yaml);
+        let numeric_type = CostType::load_from_yaml(yaml);
         assert!(numeric_type.is_err());
     }
 
@@ -268,7 +266,7 @@ mod tests {
     fn problem_load_from_yaml_ok() {
         let domain = r"
 domain: ADD
-variables: [ {name: v, type: numeric} ]
+variables: [ {name: v, type: integer} ]
 operators:
         - name: add
           effects:
@@ -300,20 +298,20 @@ goals:
         assert!(problem.is_ok());
         let problem = problem.unwrap();
 
-        let mut name_to_numeric_variable = HashMap::new();
-        name_to_numeric_variable.insert(String::from("v"), 0);
+        let mut name_to_integer_variable = HashMap::new();
+        name_to_integer_variable.insert(String::from("v"), 0);
         let expected = Problem {
             domain_name: String::from("ADD"),
             problem_name: String::from("one"),
             state_metadata: state::StateMetadata {
                 maximize: false,
-                numeric_variable_names: vec![String::from("v")],
-                name_to_numeric_variable,
+                integer_variable_names: vec![String::from("v")],
+                name_to_integer_variable,
                 ..Default::default()
             },
             initial_state: state::State {
                 signature_variables: Rc::new(SignatureVariables {
-                    numeric_variables: vec![0],
+                    integer_variables: vec![0],
                     ..Default::default()
                 }),
                 stage: 0,
@@ -321,20 +319,20 @@ goals:
                 ..Default::default()
             },
             goals: vec![GroundedCondition {
-                condition: Condition::Comparison(
+                condition: Condition::Comparison(Comparison::ComparisonII(
                     ComparisonOperator::Ge,
-                    NumericExpression::Variable(0),
+                    NumericExpression::IntegerVariable(0),
                     NumericExpression::Constant(1),
-                ),
+                )),
                 ..Default::default()
             }],
             operators: vec![Operator {
                 name: String::from("add"),
-                numeric_effects: vec![(
+                integer_effects: vec![(
                     0,
                     NumericExpression::NumericOperation(
                         NumericOperator::Add,
-                        Box::new(NumericExpression::Variable(0)),
+                        Box::new(NumericExpression::IntegerVariable(0)),
                         Box::new(NumericExpression::Constant(1)),
                     ),
                 )],
@@ -370,17 +368,17 @@ variables:
           type: element
           object: cities
         - name: time
-          type: resource
-          less_is_better: true
+          type: integer
+          preference: less
 tables:
         - name: ready_time
-          type: numeric
+          type: integer
           args: [cities]
         - name: due_date 
-          type: numeric
+          type: integer
           args: [cities]
         - name: distance 
-          type: numeric
+          type: integer
           args: [cities, cities]
           default: 0
         - name: connected
@@ -440,8 +438,8 @@ table_values:
         name_to_set_variable.insert(String::from("unvisited"), 0);
         let mut name_to_element_variable = HashMap::new();
         name_to_element_variable.insert(String::from("location"), 0);
-        let mut name_to_resource_variable = HashMap::new();
-        name_to_resource_variable.insert(String::from("time"), 0);
+        let mut name_to_integer_resource_variable = HashMap::new();
+        name_to_integer_resource_variable.insert(String::from("time"), 0);
         let mut unvisited = variable::Set::with_capacity(3);
         unvisited.insert(0);
         unvisited.insert(1);
@@ -467,9 +465,9 @@ table_values:
                 element_variable_names: vec![String::from("location")],
                 name_to_element_variable,
                 element_variable_to_object: vec![0],
-                resource_variable_names: vec![String::from("time")],
-                name_to_resource_variable,
-                less_is_better: vec![true],
+                integer_resource_variable_names: vec![String::from("time")],
+                name_to_integer_resource_variable,
+                integer_less_is_better: vec![true],
                 ..Default::default()
             },
             initial_state: state::State {
@@ -478,12 +476,15 @@ table_values:
                     element_variables: vec![0],
                     ..Default::default()
                 }),
-                resource_variables: vec![0],
+                resource_variables: state::ResourceVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
                 stage: 0,
                 cost: 0,
             },
             table_registry: table_registry::TableRegistry {
-                numeric_tables: table_registry::TableData {
+                integer_tables: table_registry::TableData {
                     tables_1d: vec![
                         table::Table1D::new(vec![0, 1, 1]),
                         table::Table1D::new(vec![10000, 2, 2]),
@@ -506,16 +507,17 @@ table_values:
                     name_to_table_2d: bool_name_to_table_2d,
                     ..Default::default()
                 },
+                ..Default::default()
             },
             constraints: vec![GroundedCondition {
-                condition: Condition::Comparison(
+                condition: Condition::Comparison(Comparison::ComparisonII(
                     ComparisonOperator::Le,
-                    NumericExpression::ResourceVariable(0),
-                    NumericExpression::Table(NumericTableExpression::Table1D(
+                    NumericExpression::IntegerResourceVariable(0),
+                    NumericExpression::IntegerTable(NumericTableExpression::Table1D(
                         1,
                         ElementExpression::Variable(0),
                     )),
-                ),
+                )),
                 ..Default::default()
             }],
             goals: vec![
@@ -549,14 +551,14 @@ table_values:
                         ),
                     )],
                     element_effects: vec![(0, ElementExpression::Constant(0))],
-                    resource_effects: vec![(
+                    integer_resource_effects: vec![(
                         0,
                         NumericExpression::NumericOperation(
                             NumericOperator::Max,
                             Box::new(NumericExpression::NumericOperation(
                                 NumericOperator::Add,
-                                Box::new(NumericExpression::ResourceVariable(0)),
-                                Box::new(NumericExpression::Table(
+                                Box::new(NumericExpression::IntegerResourceVariable(0)),
+                                Box::new(NumericExpression::IntegerTable(
                                     NumericTableExpression::Table2D(
                                         0,
                                         ElementExpression::Variable(0),
@@ -570,11 +572,13 @@ table_values:
                     cost: NumericExpression::NumericOperation(
                         NumericOperator::Add,
                         Box::new(NumericExpression::Cost),
-                        Box::new(NumericExpression::Table(NumericTableExpression::Table2D(
-                            0,
-                            ElementExpression::Variable(0),
-                            ElementExpression::Constant(0),
-                        ))),
+                        Box::new(NumericExpression::IntegerTable(
+                            NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(0),
+                            ),
+                        )),
                     ),
                     ..Default::default()
                 },
@@ -595,14 +599,14 @@ table_values:
                         ),
                     )],
                     element_effects: vec![(0, ElementExpression::Constant(1))],
-                    resource_effects: vec![(
+                    integer_resource_effects: vec![(
                         0,
                         NumericExpression::NumericOperation(
                             NumericOperator::Max,
                             Box::new(NumericExpression::NumericOperation(
                                 NumericOperator::Add,
-                                Box::new(NumericExpression::ResourceVariable(0)),
-                                Box::new(NumericExpression::Table(
+                                Box::new(NumericExpression::IntegerResourceVariable(0)),
+                                Box::new(NumericExpression::IntegerTable(
                                     NumericTableExpression::Table2D(
                                         0,
                                         ElementExpression::Variable(0),
@@ -616,11 +620,13 @@ table_values:
                     cost: NumericExpression::NumericOperation(
                         NumericOperator::Add,
                         Box::new(NumericExpression::Cost),
-                        Box::new(NumericExpression::Table(NumericTableExpression::Table2D(
-                            0,
-                            ElementExpression::Variable(0),
-                            ElementExpression::Constant(1),
-                        ))),
+                        Box::new(NumericExpression::IntegerTable(
+                            NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(1),
+                            ),
+                        )),
                     ),
                     ..Default::default()
                 },
@@ -641,14 +647,14 @@ table_values:
                         ),
                     )],
                     element_effects: vec![(0, ElementExpression::Constant(2))],
-                    resource_effects: vec![(
+                    integer_resource_effects: vec![(
                         0,
                         NumericExpression::NumericOperation(
                             NumericOperator::Max,
                             Box::new(NumericExpression::NumericOperation(
                                 NumericOperator::Add,
-                                Box::new(NumericExpression::ResourceVariable(0)),
-                                Box::new(NumericExpression::Table(
+                                Box::new(NumericExpression::IntegerResourceVariable(0)),
+                                Box::new(NumericExpression::IntegerTable(
                                     NumericTableExpression::Table2D(
                                         0,
                                         ElementExpression::Variable(0),
@@ -662,11 +668,13 @@ table_values:
                     cost: NumericExpression::NumericOperation(
                         NumericOperator::Add,
                         Box::new(NumericExpression::Cost),
-                        Box::new(NumericExpression::Table(NumericTableExpression::Table2D(
-                            0,
-                            ElementExpression::Variable(0),
-                            ElementExpression::Constant(2),
-                        ))),
+                        Box::new(NumericExpression::IntegerTable(
+                            NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(2),
+                            ),
+                        )),
                     ),
                     ..Default::default()
                 },
@@ -720,17 +728,17 @@ variables:
           type: element
           object: cities
         - name: time
-          type: resource
-          less_is_better: true
+          type: integer
+          preference: less
 tables:
         - name: ready_time
-          type: numeric
+          type: integer
           args: [cities]
         - name: due_date 
-          type: numeric
+          type: integer
           args: [cities]
         - name: distance 
-          type: numeric
+          type: integer
           args: [cities, cities]
           default: 0
         - name: connected
@@ -769,17 +777,17 @@ variables:
           type: element
           object: cities
         - name: time
-          type: resource
-          less_is_better: true
+          type: integer
+          preference: less
 tables:
         - name: ready_time
-          type: numeric
+          type: integer
           args: [cities]
         - name: due_date 
-          type: numeric
+          type: integer
           args: [cities]
         - name: distance 
-          type: numeric
+          type: integer
           args: [cities, cities]
           default: 0
         - name: connected
@@ -813,13 +821,13 @@ metric: minimize
 objects: [null]
 tables:
         - name: ready_time
-          type: numeric
+          type: integer
           args: [cities]
         - name: due_date 
-          type: numeric
+          type: integer
           args: [cities]
         - name: distance 
-          type: numeric
+          type: integer
           args: [cities, cities]
           default: 0
         - name: connected
@@ -859,8 +867,8 @@ variables:
           type: element
           object: cities
         - name: time
-          type: resource
-          less_is_better: true
+          type: integer
+          preference: less
 constraints:
         - condition: (<= time (due_date location))
 operators:
@@ -893,17 +901,17 @@ variables:
           type: element
           object: cities
         - name: time
-          type: resource
-          less_is_better: true
+          type: integer
+          preference: less
 tables:
         - name: ready_time
-          type: numeric
+          type: integer
           args: [cities]
         - name: due_date 
-          type: numeric
+          type: integer
           args: [cities]
         - name: distance 
-          type: numeric
+          type: integer
           args: [cities, cities]
           default: 0
         - name: connected
@@ -934,17 +942,17 @@ variables:
           type: element
           object: cities
         - name: time
-          type: resource
-          less_is_better: true
+          type: integer
+          preference: less
 tables:
         - name: ready_time
-          type: numeric
+          type: integer
           args: [cities]
         - name: due_date 
-          type: numeric
+          type: integer
           args: [cities]
         - name: distance 
-          type: numeric
+          type: integer
           args: [cities, cities]
           default: 0
         - name: connected

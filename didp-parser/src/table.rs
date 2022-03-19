@@ -1,4 +1,5 @@
 use crate::variable;
+use approx::{AbsDiffEq, RelativeEq};
 use std::collections;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -21,6 +22,40 @@ impl<T: variable::Numeric> Table1D<T> {
 
     pub fn sum_slice(&self, x: &[variable::Element]) -> T {
         x.iter().map(|x| self.eval(*x)).sum()
+    }
+}
+
+impl<T: Copy + AbsDiffEq> AbsDiffEq for Table1D<T>
+where
+    T::Epsilon: Copy,
+{
+    type Epsilon = T::Epsilon;
+
+    fn default_epsilon() -> T::Epsilon {
+        T::default_epsilon()
+    }
+
+    fn abs_diff_eq(&self, other: &Self, epsilon: T::Epsilon) -> bool {
+        self.0
+            .iter()
+            .zip(other.0.iter())
+            .all(|(x, y)| x.abs_diff_eq(y, epsilon))
+    }
+}
+
+impl<T: Copy + RelativeEq> RelativeEq for Table1D<T>
+where
+    T::Epsilon: Copy,
+{
+    fn default_max_relative() -> T::Epsilon {
+        T::default_max_relative()
+    }
+
+    fn relative_eq(&self, other: &Self, epsilon: T::Epsilon, max_relative: T::Epsilon) -> bool {
+        self.0
+            .iter()
+            .zip(other.0.iter())
+            .all(|(x, y)| x.relative_eq(y, epsilon, max_relative))
     }
 }
 
@@ -48,6 +83,42 @@ impl<T: variable::Numeric> Table2D<T> {
 
     pub fn sum_y(&self, x: variable::Element, y: &variable::Set) -> T {
         y.ones().map(|y| self.eval(x, y)).sum()
+    }
+}
+
+impl<T: Copy + AbsDiffEq> AbsDiffEq for Table2D<T>
+where
+    T::Epsilon: Copy,
+{
+    type Epsilon = T::Epsilon;
+
+    fn default_epsilon() -> T::Epsilon {
+        T::default_epsilon()
+    }
+
+    fn abs_diff_eq(&self, other: &Self, epsilon: T::Epsilon) -> bool {
+        self.0.iter().zip(other.0.iter()).all(|(x, y)| {
+            x.iter()
+                .zip(y.iter())
+                .all(|(x, y)| x.abs_diff_eq(y, epsilon))
+        })
+    }
+}
+
+impl<T: Copy + RelativeEq> RelativeEq for Table2D<T>
+where
+    T::Epsilon: Copy,
+{
+    fn default_max_relative() -> T::Epsilon {
+        T::default_max_relative()
+    }
+
+    fn relative_eq(&self, other: &Self, epsilon: T::Epsilon, max_relative: T::Epsilon) -> bool {
+        self.0.iter().zip(other.0.iter()).all(|(x, y)| {
+            x.iter()
+                .zip(y.iter())
+                .all(|(x, y)| x.relative_eq(y, epsilon, max_relative))
+        })
     }
 }
 
@@ -94,6 +165,46 @@ impl<T: variable::Numeric> Table3D<T> {
     }
 }
 
+impl<T: Copy + AbsDiffEq> AbsDiffEq for Table3D<T>
+where
+    T::Epsilon: Copy,
+{
+    type Epsilon = T::Epsilon;
+
+    fn default_epsilon() -> T::Epsilon {
+        T::default_epsilon()
+    }
+
+    fn abs_diff_eq(&self, other: &Self, epsilon: T::Epsilon) -> bool {
+        self.0.iter().zip(other.0.iter()).all(|(x, y)| {
+            x.iter().zip(y.iter()).all(|(x, y)| {
+                x.iter()
+                    .zip(y.iter())
+                    .all(|(x, y)| x.abs_diff_eq(y, epsilon))
+            })
+        })
+    }
+}
+
+impl<T: Copy + RelativeEq> RelativeEq for Table3D<T>
+where
+    T::Epsilon: Copy,
+{
+    fn default_max_relative() -> T::Epsilon {
+        T::default_max_relative()
+    }
+
+    fn relative_eq(&self, other: &Self, epsilon: T::Epsilon, max_relative: T::Epsilon) -> bool {
+        self.0.iter().zip(other.0.iter()).all(|(x, y)| {
+            x.iter().zip(y.iter()).all(|(x, y)| {
+                x.iter()
+                    .zip(y.iter())
+                    .all(|(x, y)| x.relative_eq(y, epsilon, max_relative))
+            })
+        })
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Table<T: Copy> {
     map: collections::HashMap<Vec<variable::Element>, T>,
@@ -110,6 +221,56 @@ impl<T: Copy> Table<T> {
             Some(value) => *value,
             None => self.default,
         }
+    }
+}
+
+impl<T: Copy + AbsDiffEq> AbsDiffEq for Table<T>
+where
+    T::Epsilon: Copy,
+{
+    type Epsilon = T::Epsilon;
+
+    fn default_epsilon() -> T::Epsilon {
+        T::default_epsilon()
+    }
+
+    fn abs_diff_eq(&self, other: &Self, epsilon: T::Epsilon) -> bool {
+        if self.map.len() != other.map.len() || self.default.abs_diff_eq(&other.default, epsilon) {
+            return false;
+        }
+        for (key, x) in &self.map {
+            match other.map.get(key) {
+                Some(y) if x.abs_diff_eq(y, epsilon) => {}
+                _ => return false,
+            }
+        }
+        true
+    }
+}
+
+impl<T: Copy + RelativeEq> RelativeEq for Table<T>
+where
+    T::Epsilon: Copy,
+{
+    fn default_max_relative() -> T::Epsilon {
+        T::default_max_relative()
+    }
+
+    fn relative_eq(&self, other: &Self, epsilon: T::Epsilon, max_relative: T::Epsilon) -> bool {
+        if self.map.len() != other.map.len()
+            || self
+                .default
+                .relative_eq(&other.default, epsilon, max_relative)
+        {
+            return false;
+        }
+        for (key, x) in &self.map {
+            match other.map.get(key) {
+                Some(y) if x.relative_eq(y, epsilon, max_relative) => {}
+                _ => return false,
+            }
+        }
+        true
     }
 }
 

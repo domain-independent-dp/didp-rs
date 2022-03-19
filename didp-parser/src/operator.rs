@@ -2,34 +2,37 @@ use crate::expression;
 use crate::expression_parser;
 use crate::state;
 use crate::table_registry;
-use crate::variable;
+use crate::variable::{Continuous, Integer, Numeric};
 use crate::yaml_util;
+use ordered_float::OrderedFloat;
 use std::collections;
 use std::error;
 use std::fmt;
 use std::rc::Rc;
 use std::str;
 
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
-pub struct Operator<T: variable::Numeric> {
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct Operator<T: Numeric> {
     pub name: String,
     pub elements_in_set_variable: Vec<(usize, usize)>,
     pub elements_in_permutation_variable: Vec<(usize, usize)>,
-    pub preconditions: Vec<expression::Condition<T>>,
+    pub preconditions: Vec<expression::Condition>,
     pub set_effects: Vec<(usize, expression::SetExpression)>,
     pub permutation_effects: Vec<(usize, expression::ElementExpression)>,
     pub element_effects: Vec<(usize, expression::ElementExpression)>,
-    pub numeric_effects: Vec<(usize, expression::NumericExpression<T>)>,
-    pub resource_effects: Vec<(usize, expression::NumericExpression<T>)>,
+    pub integer_effects: Vec<(usize, expression::NumericExpression<Integer>)>,
+    pub continuous_effects: Vec<(usize, expression::NumericExpression<Continuous>)>,
+    pub integer_resource_effects: Vec<(usize, expression::NumericExpression<Integer>)>,
+    pub continuous_resource_effects: Vec<(usize, expression::NumericExpression<Continuous>)>,
     pub cost: expression::NumericExpression<T>,
 }
 
-impl<T: variable::Numeric> Operator<T> {
+impl<T: Numeric> Operator<T> {
     pub fn is_applicable(
         &self,
         state: &state::State<T>,
         metadata: &state::StateMetadata,
-        registry: &table_registry::TableRegistry<T>,
+        registry: &table_registry::TableRegistry,
     ) -> bool {
         for (i, v) in &self.elements_in_set_variable {
             if !state.signature_variables.set_variables[*i].contains(*v) {
@@ -53,7 +56,7 @@ impl<T: variable::Numeric> Operator<T> {
         &self,
         state: &state::State<T>,
         metadata: &state::StateMetadata,
-        registry: &table_registry::TableRegistry<T>,
+        registry: &table_registry::TableRegistry,
     ) -> state::State<T> {
         let len = state.signature_variables.set_variables.len();
         let mut set_variables = Vec::with_capacity(len);
@@ -82,14 +85,25 @@ impl<T: variable::Numeric> Operator<T> {
             element_variables[e.0] = e.1.eval(state);
         }
 
-        let mut numeric_variables = state.signature_variables.numeric_variables.clone();
-        for e in &self.numeric_effects {
-            numeric_variables[e.0] = e.1.eval(state, metadata, registry);
+        let mut integer_variables = state.signature_variables.integer_variables.clone();
+        for e in &self.integer_effects {
+            integer_variables[e.0] = e.1.eval(state, metadata, registry);
         }
 
-        let mut resource_variables = state.resource_variables.clone();
-        for e in &self.resource_effects {
-            resource_variables[e.0] = e.1.eval(state, metadata, registry);
+        let mut continuous_variables = state.signature_variables.continuous_variables.clone();
+        for e in &self.continuous_effects {
+            continuous_variables[e.0] = OrderedFloat(e.1.eval(state, metadata, registry));
+        }
+
+        let mut integer_resource_variables = state.resource_variables.integer_variables.clone();
+        for e in &self.integer_resource_effects {
+            integer_resource_variables[e.0] = e.1.eval(state, metadata, registry);
+        }
+
+        let mut continuous_resource_variables =
+            state.resource_variables.continuous_variables.clone();
+        for e in &self.continuous_resource_effects {
+            continuous_resource_variables[e.0] = e.1.eval(state, metadata, registry);
         }
 
         let stage = state.stage + 1;
@@ -101,20 +115,24 @@ impl<T: variable::Numeric> Operator<T> {
                     set_variables,
                     permutation_variables,
                     element_variables,
-                    numeric_variables,
+                    integer_variables,
+                    continuous_variables,
                 })
             },
-            resource_variables,
+            resource_variables: state::ResourceVariables {
+                integer_variables: integer_resource_variables,
+                continuous_variables: continuous_resource_variables,
+            },
             stage,
             cost,
         }
     }
 }
 
-pub fn load_operators_from_yaml<T: variable::Numeric>(
+pub fn load_operators_from_yaml<T: Numeric>(
     value: &yaml_rust::Yaml,
     metadata: &state::StateMetadata,
-    registry: &table_registry::TableRegistry<T>,
+    registry: &table_registry::TableRegistry,
 ) -> Result<Vec<Operator<T>>, Box<dyn error::Error>>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -183,8 +201,10 @@ where
         let mut set_effects = Vec::new();
         let mut permutation_effects = Vec::new();
         let mut element_effects = Vec::new();
-        let mut numeric_effects = Vec::new();
-        let mut resource_effects = Vec::new();
+        let mut integer_effects = Vec::new();
+        let mut continuous_effects = Vec::new();
+        let mut integer_resource_effects = Vec::new();
+        let mut continuous_resource_effects = Vec::new();
         for (variable, effect) in lifted_effects {
             let effect = yaml_util::get_string(effect)?;
             let variable = yaml_util::get_string(variable)?;
@@ -197,14 +217,38 @@ where
             } else if let Some(i) = metadata.name_to_element_variable.get(&variable) {
                 let effect = expression_parser::parse_element(effect, metadata, &parameters)?;
                 element_effects.push((*i, effect));
-            } else if let Some(i) = metadata.name_to_numeric_variable.get(&variable) {
-                let effect =
-                    expression_parser::parse_numeric(effect, metadata, registry, &parameters)?;
-                numeric_effects.push((*i, effect.simplify(registry)));
-            } else if let Some(i) = metadata.name_to_resource_variable.get(&variable) {
-                let effect =
-                    expression_parser::parse_numeric(effect, metadata, registry, &parameters)?;
-                resource_effects.push((*i, effect.simplify(registry)));
+            } else if let Some(i) = metadata.name_to_integer_variable.get(&variable) {
+                let effect = expression_parser::parse_numeric::<Integer>(
+                    effect,
+                    metadata,
+                    registry,
+                    &parameters,
+                )?;
+                integer_effects.push((*i, effect.simplify(registry)));
+            } else if let Some(i) = metadata.name_to_integer_resource_variable.get(&variable) {
+                let effect = expression_parser::parse_numeric::<Integer>(
+                    effect,
+                    metadata,
+                    registry,
+                    &parameters,
+                )?;
+                integer_resource_effects.push((*i, effect.simplify(registry)));
+            } else if let Some(i) = metadata.name_to_continuous_variable.get(&variable) {
+                let effect = expression_parser::parse_numeric::<Continuous>(
+                    effect,
+                    metadata,
+                    registry,
+                    &parameters,
+                )?;
+                continuous_effects.push((*i, effect.simplify(registry)));
+            } else if let Some(i) = metadata.name_to_continuous_resource_variable.get(&variable) {
+                let effect = expression_parser::parse_numeric::<Continuous>(
+                    effect,
+                    metadata,
+                    registry,
+                    &parameters,
+                )?;
+                continuous_resource_effects.push((*i, effect.simplify(registry)));
             } else {
                 return Err(yaml_util::YamlContentErr::new(format!(
                     "no such variable `{}`",
@@ -225,8 +269,10 @@ where
             set_effects,
             permutation_effects,
             element_effects,
-            numeric_effects,
-            resource_effects,
+            integer_effects,
+            continuous_effects,
+            integer_resource_effects,
+            continuous_resource_effects,
             cost,
         })
     }
@@ -237,6 +283,7 @@ where
 mod tests {
     use super::*;
     use crate::table;
+    use crate::variable::Set;
     use expression::*;
     use std::collections::HashMap;
 
@@ -285,32 +332,31 @@ mod tests {
         name_to_element_variable.insert("e3".to_string(), 3);
         let element_variable_to_object = vec![0, 0, 0, 0];
 
-        let numeric_variable_names = vec![
+        let integer_variable_names = vec![
             "n0".to_string(),
             "n1".to_string(),
             "n2".to_string(),
             "n3".to_string(),
         ];
-        let mut name_to_numeric_variable = HashMap::new();
-        name_to_numeric_variable.insert("n0".to_string(), 0);
-        name_to_numeric_variable.insert("n1".to_string(), 1);
-        name_to_numeric_variable.insert("n2".to_string(), 2);
-        name_to_numeric_variable.insert("n3".to_string(), 3);
+        let mut name_to_integer_variable = HashMap::new();
+        name_to_integer_variable.insert("n0".to_string(), 0);
+        name_to_integer_variable.insert("n1".to_string(), 1);
+        name_to_integer_variable.insert("n2".to_string(), 2);
+        name_to_integer_variable.insert("n3".to_string(), 3);
 
-        let resource_variable_names = vec![
+        let integer_resource_variable_names = vec![
             "r0".to_string(),
             "r1".to_string(),
             "r2".to_string(),
             "r3".to_string(),
         ];
-        let mut name_to_resource_variable = HashMap::new();
-        name_to_resource_variable.insert("r0".to_string(), 0);
-        name_to_resource_variable.insert("r1".to_string(), 1);
-        name_to_resource_variable.insert("r2".to_string(), 2);
-        name_to_resource_variable.insert("r3".to_string(), 3);
+        let mut name_to_integer_resource_variable = HashMap::new();
+        name_to_integer_resource_variable.insert("r0".to_string(), 0);
+        name_to_integer_resource_variable.insert("r1".to_string(), 1);
+        name_to_integer_resource_variable.insert("r2".to_string(), 2);
+        name_to_integer_resource_variable.insert("r3".to_string(), 3);
 
         state::StateMetadata {
-            maximize: false,
             object_names,
             name_to_object,
             object_numbers,
@@ -323,15 +369,16 @@ mod tests {
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
-            numeric_variable_names,
-            name_to_numeric_variable,
-            resource_variable_names,
-            name_to_resource_variable,
-            less_is_better: vec![false, false, true, false],
+            integer_variable_names,
+            name_to_integer_variable,
+            integer_resource_variable_names,
+            name_to_integer_resource_variable,
+            integer_less_is_better: vec![false, false, true, false],
+            ..Default::default()
         }
     }
 
-    fn generate_registry() -> table_registry::TableRegistry<variable::Integer> {
+    fn generate_registry() -> table_registry::TableRegistry {
         let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
@@ -344,7 +391,7 @@ mod tests {
         name_to_table_2d.insert(String::from("f2"), 0);
 
         table_registry::TableRegistry {
-            numeric_tables: table_registry::TableData {
+            integer_tables: table_registry::TableData {
                 tables_1d,
                 name_to_table_1d,
                 tables_2d,
@@ -355,11 +402,11 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::Integer> {
-        let mut set1 = variable::Set::with_capacity(3);
+    fn generate_state() -> state::State<Integer> {
+        let mut set1 = Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
-        let mut set2 = variable::Set::with_capacity(3);
+        let mut set2 = Set::with_capacity(3);
         set2.insert(0);
         set2.insert(1);
         state::State {
@@ -367,9 +414,13 @@ mod tests {
                 set_variables: vec![set1, set2],
                 permutation_variables: vec![vec![0, 2], vec![1, 2]],
                 element_variables: vec![1, 2],
-                numeric_variables: vec![1, 2, 3],
+                integer_variables: vec![1, 2, 3],
+                continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
             }),
-            resource_variables: vec![4, 5, 6],
+            resource_variables: state::ResourceVariables {
+                integer_variables: vec![4, 5, 6],
+                continuous_variables: vec![4.0, 5.0, 6.0],
+            },
             stage: 0,
             cost: 0,
         }
@@ -384,11 +435,11 @@ mod tests {
             ElementExpression::Constant(0),
             SetExpression::SetVariable(0),
         ));
-        let numeric_condition = Condition::Comparison(
+        let numeric_condition = Condition::Comparison(Comparison::ComparisonII(
             ComparisonOperator::Ge,
-            NumericExpression::Variable(0),
+            NumericExpression::IntegerVariable(0),
             NumericExpression::Constant(1),
-        );
+        ));
 
         let operator = Operator {
             name: String::from(""),
@@ -417,11 +468,11 @@ mod tests {
             ElementExpression::Constant(0),
             SetExpression::SetVariable(0),
         ));
-        let numeric_condition = Condition::Comparison(
+        let numeric_condition = Condition::Comparison(Comparison::ComparisonII(
             ComparisonOperator::Le,
-            NumericExpression::Variable(0),
+            NumericExpression::IntegerVariable(0),
             NumericExpression::Constant(1),
-        );
+        ));
 
         let operator = Operator {
             name: String::from(""),
@@ -471,22 +522,22 @@ mod tests {
         let element_effect2 = ElementExpression::Constant(1);
         let numeric_effect1 = NumericExpression::NumericOperation(
             NumericOperator::Subtract,
-            Box::new(NumericExpression::Variable(0)),
+            Box::new(NumericExpression::IntegerVariable(0)),
             Box::new(NumericExpression::Constant(1)),
         );
         let numeric_effect2 = NumericExpression::NumericOperation(
             NumericOperator::Multiply,
-            Box::new(NumericExpression::Variable(1)),
+            Box::new(NumericExpression::IntegerVariable(1)),
             Box::new(NumericExpression::Constant(2)),
         );
         let resource_effect1 = NumericExpression::NumericOperation(
             NumericOperator::Add,
-            Box::new(NumericExpression::ResourceVariable(0)),
+            Box::new(NumericExpression::IntegerResourceVariable(0)),
             Box::new(NumericExpression::Constant(1)),
         );
         let resource_effect2 = NumericExpression::NumericOperation(
             NumericOperator::Divide,
-            Box::new(NumericExpression::ResourceVariable(1)),
+            Box::new(NumericExpression::IntegerResourceVariable(1)),
             Box::new(NumericExpression::Constant(2)),
         );
         let operator = Operator {
@@ -494,8 +545,8 @@ mod tests {
             set_effects: vec![(0, set_effect1), (1, set_effect2)],
             permutation_effects: vec![(0, permutation_effect1), (1, permutation_effect2)],
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
-            numeric_effects: vec![(0, numeric_effect1), (1, numeric_effect2)],
-            resource_effects: vec![(0, resource_effect1), (1, resource_effect2)],
+            integer_effects: vec![(0, numeric_effect1), (1, numeric_effect2)],
+            integer_resource_effects: vec![(0, resource_effect1), (1, resource_effect2)],
             cost: NumericExpression::NumericOperation(
                 NumericOperator::Add,
                 Box::new(NumericExpression::Cost),
@@ -504,20 +555,24 @@ mod tests {
             ..Default::default()
         };
 
-        let mut set1 = variable::Set::with_capacity(3);
+        let mut set1 = Set::with_capacity(3);
         set1.insert(0);
         set1.insert(1);
         set1.insert(2);
-        let mut set2 = variable::Set::with_capacity(3);
+        let mut set2 = Set::with_capacity(3);
         set2.insert(1);
         let expected = state::State {
             signature_variables: Rc::new(state::SignatureVariables {
                 set_variables: vec![set1, set2],
                 permutation_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
                 element_variables: vec![2, 1],
-                numeric_variables: vec![0, 4, 3],
+                integer_variables: vec![0, 4, 3],
+                continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
             }),
-            resource_variables: vec![5, 2, 6],
+            resource_variables: state::ResourceVariables {
+                integer_variables: vec![5, 2, 6],
+                continuous_variables: vec![4.0, 5.0, 6.0],
+            },
             stage: 1,
             cost: 1,
         };
@@ -601,15 +656,15 @@ cost: (+ cost (f1 e))
                 name: String::from("operator e:0"),
                 elements_in_set_variable: vec![(0, 0)],
                 elements_in_permutation_variable: Vec::new(),
-                preconditions: vec![Condition::Comparison(
+                preconditions: vec![Condition::Comparison(Comparison::ComparisonII(
                     ComparisonOperator::Ge,
-                    NumericExpression::Table(NumericTableExpression::Table2D(
+                    NumericExpression::IntegerTable(NumericTableExpression::Table2D(
                         0,
                         ElementExpression::Variable(0),
                         ElementExpression::Constant(0),
                     )),
                     NumericExpression::Constant(10),
-                )],
+                ))],
                 set_effects: vec![(
                     0,
                     SetExpression::SetElementOperation(
@@ -620,27 +675,28 @@ cost: (+ cost (f1 e))
                 )],
                 permutation_effects: vec![(0, ElementExpression::Constant(0))],
                 element_effects: vec![(0, ElementExpression::Constant(0))],
-                numeric_effects: vec![(0, NumericExpression::Constant(1))],
-                resource_effects: vec![(0, NumericExpression::Constant(2))],
+                integer_effects: vec![(0, NumericExpression::Constant(1))],
+                integer_resource_effects: vec![(0, NumericExpression::Constant(2))],
                 cost: NumericExpression::NumericOperation(
                     NumericOperator::Add,
                     Box::new(NumericExpression::Cost),
                     Box::new(NumericExpression::Constant(10)),
                 ),
+                ..Default::default()
             },
             Operator {
                 name: String::from("operator e:1"),
                 elements_in_set_variable: vec![(0, 1)],
                 elements_in_permutation_variable: Vec::new(),
-                preconditions: vec![Condition::Comparison(
+                preconditions: vec![Condition::Comparison(Comparison::ComparisonII(
                     ComparisonOperator::Ge,
-                    NumericExpression::Table(NumericTableExpression::Table2D(
+                    NumericExpression::IntegerTable(NumericTableExpression::Table2D(
                         0,
                         ElementExpression::Variable(0),
                         ElementExpression::Constant(1),
                     )),
                     NumericExpression::Constant(10),
-                )],
+                ))],
                 set_effects: vec![(
                     0,
                     SetExpression::SetElementOperation(
@@ -651,13 +707,14 @@ cost: (+ cost (f1 e))
                 )],
                 permutation_effects: vec![(0, ElementExpression::Constant(1))],
                 element_effects: vec![(0, ElementExpression::Constant(1))],
-                numeric_effects: vec![(0, NumericExpression::Constant(1))],
-                resource_effects: vec![(0, NumericExpression::Constant(2))],
+                integer_effects: vec![(0, NumericExpression::Constant(1))],
+                integer_resource_effects: vec![(0, NumericExpression::Constant(2))],
                 cost: NumericExpression::NumericOperation(
                     NumericOperator::Add,
                     Box::new(NumericExpression::Cost),
                     Box::new(NumericExpression::Constant(20)),
                 ),
+                ..Default::default()
             },
         ];
         assert_eq!(operators.unwrap(), expected);
@@ -687,7 +744,7 @@ cost: (+ cost (f1 e))
         let operator = operator.unwrap();
         assert_eq!(operator.len(), 1);
         let operator = &operator[0];
-        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        let operators = load_operators_from_yaml::<Integer>(operator, &metadata, &registry);
         assert!(operators.is_err());
 
         let operator = r"
@@ -704,7 +761,7 @@ cost: (+ cost (f1 e))
         let operator = operator.unwrap();
         assert_eq!(operator.len(), 1);
         let operator = &operator[0];
-        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        let operators = load_operators_from_yaml::<Integer>(operator, &metadata, &registry);
         assert!(operators.is_err());
 
         let operator = r"
@@ -726,7 +783,7 @@ effects:
         let operator = operator.unwrap();
         assert_eq!(operator.len(), 1);
         let operator = &operator[0];
-        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        let operators = load_operators_from_yaml::<Integer>(operator, &metadata, &registry);
         assert!(operators.is_err());
 
         let operator = r"
@@ -746,7 +803,7 @@ cost: (+ cost (f1 e))
         let operator = operator.unwrap();
         assert_eq!(operator.len(), 1);
         let operator = &operator[0];
-        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        let operators = load_operators_from_yaml::<Integer>(operator, &metadata, &registry);
         assert!(operators.is_err());
 
         let operator = r"
@@ -769,7 +826,7 @@ cost: (+ cost (f1 e))
         let operator = operator.unwrap();
         assert_eq!(operator.len(), 1);
         let operator = &operator[0];
-        let operators = load_operators_from_yaml(operator, &metadata, &registry);
+        let operators = load_operators_from_yaml::<Integer>(operator, &metadata, &registry);
         assert!(operators.is_err());
     }
 }

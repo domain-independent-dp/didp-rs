@@ -6,43 +6,45 @@ use std::rc::Rc;
 
 use didp_parser::variable;
 
-#[derive(Debug, Eq)]
-pub struct SearchNode<T: variable::Numeric> {
+#[derive(Debug)]
+pub struct SearchNode<T: variable::Numeric, U: Ord> {
     pub state: didp_parser::State<T>,
     pub operator: Option<usize>,
-    pub parent: Option<Rc<SearchNode<T>>>,
+    pub parent: Option<Rc<SearchNode<T, U>>>,
     pub h: RefCell<Option<T>>,
-    pub f: RefCell<Option<T>>,
+    pub f: RefCell<Option<U>>,
     pub closed: RefCell<bool>,
 }
 
-impl<T: variable::Numeric> Ord for SearchNode<T> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.f.cmp(&other.f)
-    }
-}
-
-impl<T: variable::Numeric> PartialOrd for SearchNode<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<T: variable::Numeric> PartialEq for SearchNode<T> {
+impl<T: variable::Numeric, U: Ord> PartialEq for SearchNode<T, U> {
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f
     }
 }
 
-pub type OpenList<T> = priority_queue::PriorityQueue<Rc<SearchNode<T>>>;
+impl<T: variable::Numeric, U: Ord> Eq for SearchNode<T, U> {}
 
-pub struct SearchNodeRegistry<'a, T: variable::Numeric> {
-    registry: collections::HashMap<Rc<didp_parser::SignatureVariables<T>>, Vec<Rc<SearchNode<T>>>>,
+impl<T: variable::Numeric, U: Ord> Ord for SearchNode<T, U> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.f.cmp(&other.f)
+    }
+}
+
+impl<T: variable::Numeric, U: Ord> PartialOrd for SearchNode<T, U> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+pub type OpenList<T, U> = priority_queue::PriorityQueue<Rc<SearchNode<T, U>>>;
+
+pub struct SearchNodeRegistry<'a, T: variable::Numeric, U: Ord> {
+    registry: collections::HashMap<Rc<didp_parser::SignatureVariables>, Vec<Rc<SearchNode<T, U>>>>,
     metadata: &'a didp_parser::StateMetadata,
 }
 
-impl<'a, T: variable::Numeric> SearchNodeRegistry<'a, T> {
-    pub fn new(problem: &'a didp_parser::Problem<T>) -> SearchNodeRegistry<T> {
+impl<'a, T: variable::Numeric, U: Ord> SearchNodeRegistry<'a, T, U> {
+    pub fn new(problem: &'a didp_parser::Problem<T>) -> SearchNodeRegistry<T, U> {
         SearchNodeRegistry {
             registry: collections::HashMap::new(),
             metadata: &problem.state_metadata,
@@ -52,7 +54,7 @@ impl<'a, T: variable::Numeric> SearchNodeRegistry<'a, T> {
     pub fn with_capcaity(
         capacity: usize,
         problem: &'a didp_parser::Problem<T>,
-    ) -> SearchNodeRegistry<T> {
+    ) -> SearchNodeRegistry<T, U> {
         SearchNodeRegistry {
             registry: collections::HashMap::with_capacity(capacity),
             metadata: &problem.state_metadata,
@@ -63,8 +65,8 @@ impl<'a, T: variable::Numeric> SearchNodeRegistry<'a, T> {
         &mut self,
         mut state: didp_parser::State<T>,
         operator: Option<usize>,
-        parent: Option<Rc<SearchNode<T>>>,
-    ) -> Option<Rc<SearchNode<T>>> {
+        parent: Option<Rc<SearchNode<T, U>>>,
+    ) -> Option<Rc<SearchNode<T, U>>> {
         let entry = self.registry.entry(state.signature_variables.clone());
         let v = match entry {
             collections::hash_map::Entry::Occupied(entry) => {
@@ -72,21 +74,13 @@ impl<'a, T: variable::Numeric> SearchNodeRegistry<'a, T> {
                 state.signature_variables = entry.key().clone();
                 let v = entry.into_mut();
                 for (i, other) in v.iter().enumerate() {
-                    let result = self
-                        .metadata
-                        .dominance(&state.resource_variables, &other.state.resource_variables);
+                    let result = self.metadata.dominance(&state, &other.state);
                     match result {
-                        Some(Ordering::Equal) | Some(Ordering::Less)
-                            if (self.metadata.maximize && state.cost <= other.state.cost)
-                                || (!self.metadata.maximize && state.cost >= other.state.cost) =>
-                        {
+                        Some(Ordering::Equal) | Some(Ordering::Less) => {
                             // dominated
                             return None;
                         }
-                        Some(Ordering::Equal) | Some(Ordering::Greater)
-                            if (self.metadata.maximize && state.cost >= other.state.cost)
-                                || (!self.metadata.maximize && state.cost <= other.state.cost) =>
-                        {
+                        Some(Ordering::Greater) => {
                             // dominating
                             if !*other.closed.borrow() {
                                 *other.closed.borrow_mut() = true;
@@ -139,24 +133,28 @@ mod tests {
     use super::*;
     use didp_parser::variable;
 
-    fn generate_problem() -> didp_parser::Problem<variable::IntegerVariable> {
-        let mut name_to_numeric_variable = collections::HashMap::new();
-        name_to_numeric_variable.insert("n1".to_string(), 0);
-        name_to_numeric_variable.insert("n2".to_string(), 1);
-        name_to_numeric_variable.insert("n3".to_string(), 2);
+    fn generate_problem() -> didp_parser::Problem<variable::Integer> {
+        let mut name_to_integer_variable = collections::HashMap::new();
+        name_to_integer_variable.insert("n1".to_string(), 0);
+        name_to_integer_variable.insert("n2".to_string(), 1);
+        name_to_integer_variable.insert("n3".to_string(), 2);
 
-        let mut name_to_resource_variable = collections::HashMap::new();
-        name_to_resource_variable.insert("r1".to_string(), 0);
-        name_to_resource_variable.insert("r2".to_string(), 1);
-        name_to_resource_variable.insert("r3".to_string(), 2);
+        let mut name_to_integer_resource_variable = collections::HashMap::new();
+        name_to_integer_resource_variable.insert("r1".to_string(), 0);
+        name_to_integer_resource_variable.insert("r2".to_string(), 1);
+        name_to_integer_resource_variable.insert("r3".to_string(), 2);
 
         let state_metadata = didp_parser::StateMetadata {
             maximize: false,
-            numeric_variable_names: vec!["n1".to_string(), "n2".to_string(), "n3".to_string()],
-            name_to_numeric_variable,
-            resource_variable_names: vec!["r1".to_string(), "r2".to_string(), "r3".to_string()],
-            name_to_resource_variable,
-            less_is_better: vec![false, false, true],
+            integer_variable_names: vec!["n1".to_string(), "n2".to_string(), "n3".to_string()],
+            name_to_integer_variable,
+            integer_resource_variable_names: vec![
+                "r1".to_string(),
+                "r2".to_string(),
+                "r3".to_string(),
+            ],
+            name_to_integer_resource_variable,
+            integer_less_is_better: vec![false, false, true],
             ..Default::default()
         };
 
@@ -167,25 +165,37 @@ mod tests {
     }
 
     fn generate_signature_variables(
-        numeric_variables: Vec<variable::IntegerVariable>,
-    ) -> Rc<didp_parser::SignatureVariables<variable::IntegerVariable>> {
+        integer_variables: Vec<variable::Integer>,
+    ) -> Rc<didp_parser::SignatureVariables> {
         Rc::new(didp_parser::SignatureVariables {
-            numeric_variables,
+            integer_variables,
             ..Default::default()
         })
     }
 
+    fn generate_resource_variables(
+        integer_variables: Vec<variable::Integer>,
+    ) -> didp_parser::ResourceVariables {
+        didp_parser::ResourceVariables {
+            integer_variables,
+            ..Default::default()
+        }
+    }
+
     fn generate_node(
-        signature_variables: Rc<didp_parser::SignatureVariables<variable::IntegerVariable>>,
-        resource_variables: Vec<variable::IntegerVariable>,
-        cost: variable::IntegerVariable,
-        h: variable::IntegerVariable,
-        f: variable::IntegerVariable,
-    ) -> SearchNode<variable::IntegerVariable> {
+        signature_variables: Rc<didp_parser::SignatureVariables>,
+        integer_resource_variables: Vec<variable::Integer>,
+        cost: variable::Integer,
+        h: variable::Integer,
+        f: variable::Integer,
+    ) -> SearchNode<variable::Integer, variable::Integer> {
         SearchNode {
             state: didp_parser::State {
                 signature_variables,
-                resource_variables,
+                resource_variables: didp_parser::ResourceVariables {
+                    integer_variables: integer_resource_variables,
+                    ..Default::default()
+                },
                 stage: 0,
                 cost,
             },
@@ -218,11 +228,12 @@ mod tests {
     #[test]
     fn get_new_node() {
         let problem = generate_problem();
-        let mut registry = SearchNodeRegistry::new(&problem);
+        let mut registry =
+            SearchNodeRegistry::<variable::Integer, variable::Integer>::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: vec![1, 2, 3],
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
             cost: 1,
         };
@@ -231,7 +242,7 @@ mod tests {
         let node = node.unwrap();
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: vec![1, 2, 3],
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
             cost: 1,
         };
@@ -243,7 +254,7 @@ mod tests {
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: vec![1, 2, 3],
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
             cost: 1,
         };
@@ -252,7 +263,7 @@ mod tests {
         let node = node.unwrap();
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: vec![1, 2, 3],
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
             cost: 1,
         };
@@ -264,7 +275,7 @@ mod tests {
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: vec![3, 1, 3],
+            resource_variables: generate_resource_variables(vec![3, 1, 3]),
             stage: 0,
             cost: 1,
         };
@@ -273,7 +284,7 @@ mod tests {
         let node = node.unwrap();
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: vec![3, 1, 3],
+            resource_variables: generate_resource_variables(vec![3, 1, 3]),
             stage: 0,
             cost: 1,
         };
@@ -285,7 +296,7 @@ mod tests {
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: vec![0, 1, 3],
+            resource_variables: generate_resource_variables(vec![0, 1, 3]),
             stage: 0,
             cost: 0,
         };
@@ -294,7 +305,7 @@ mod tests {
         let node = node.unwrap();
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
-            resource_variables: vec![0, 1, 3],
+            resource_variables: generate_resource_variables(vec![0, 1, 3]),
             stage: 0,
             cost: 0,
         };
@@ -308,11 +319,12 @@ mod tests {
     #[test]
     fn node_dominated() {
         let problem = generate_problem();
-        let mut registry = SearchNodeRegistry::new(&problem);
+        let mut registry =
+            SearchNodeRegistry::<variable::Integer, variable::Integer>::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: vec![1, 2, 3],
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
             cost: 2,
         };
@@ -320,7 +332,7 @@ mod tests {
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: vec![1, 2, 3],
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
             cost: 2,
         };
@@ -329,7 +341,7 @@ mod tests {
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: vec![0, 2, 3],
+            resource_variables: generate_resource_variables(vec![0, 2, 3]),
             stage: 0,
             cost: 2,
         };
@@ -338,7 +350,7 @@ mod tests {
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: vec![1, 2, 3],
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
             cost: 3,
         };
@@ -349,11 +361,12 @@ mod tests {
     #[test]
     fn node_dead_end() {
         let problem = generate_problem();
-        let mut registry = SearchNodeRegistry::new(&problem);
+        let mut registry =
+            SearchNodeRegistry::<variable::Integer, variable::Integer>::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: vec![1, 2, 3],
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
             cost: 2,
         };
@@ -364,7 +377,7 @@ mod tests {
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: vec![1, 2, 3],
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
             cost: 1,
         };
@@ -375,11 +388,12 @@ mod tests {
     #[test]
     fn get_dominating_node() {
         let problem = generate_problem();
-        let mut registry = SearchNodeRegistry::new(&problem);
+        let mut registry =
+            SearchNodeRegistry::<variable::Integer, variable::Integer>::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: vec![1, 2, 3],
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
             cost: 2,
         };
@@ -390,7 +404,7 @@ mod tests {
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: vec![1, 2, 3],
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 1,
             cost: 1,
         };
@@ -414,7 +428,7 @@ mod tests {
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: vec![2, 3, 3],
+            resource_variables: generate_resource_variables(vec![2, 3, 3]),
             stage: 0,
             cost: 1,
         };

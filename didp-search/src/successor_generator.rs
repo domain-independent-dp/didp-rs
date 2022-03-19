@@ -2,11 +2,11 @@ use didp_parser::variable;
 use didp_parser::Operator;
 use std::collections;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct SuccessorGenerator<'a, T: variable::Numeric> {
     operators: &'a [Operator<T>],
     metadata: &'a didp_parser::StateMetadata,
-    registry: &'a didp_parser::TableRegistry<T>,
+    registry: &'a didp_parser::TableRegistry,
 }
 
 impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
@@ -67,7 +67,7 @@ impl<'a, 'b, T: variable::Numeric> Iterator for ApplicableOperators<'a, 'b, T> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct OneParameterSuccessorGenerator<'a, T: variable::Numeric> {
     relevant_set_variables: Vec<usize>,
     set_element_to_operators: Vec<Vec<Vec<Operator<T>>>>,
@@ -75,7 +75,7 @@ pub struct OneParameterSuccessorGenerator<'a, T: variable::Numeric> {
     permutation_element_to_operators: Vec<Vec<Vec<Operator<T>>>>,
     global_operators: Vec<&'a Operator<T>>,
     metadata: &'a didp_parser::StateMetadata,
-    registry: &'a didp_parser::TableRegistry<T>,
+    registry: &'a didp_parser::TableRegistry,
 }
 
 impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
@@ -107,8 +107,10 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
                     set_effects: op.set_effects.clone(),
                     permutation_effects: op.permutation_effects.clone(),
                     element_effects: op.element_effects.clone(),
-                    numeric_effects: op.numeric_effects.clone(),
-                    resource_effects: op.resource_effects.clone(),
+                    integer_effects: op.integer_effects.clone(),
+                    integer_resource_effects: op.integer_resource_effects.clone(),
+                    continuous_effects: op.continuous_effects.clone(),
+                    continuous_resource_effects: op.continuous_resource_effects.clone(),
                     cost: op.cost.clone(),
                 };
                 let (i, v) = op.elements_in_set_variable[0];
@@ -124,8 +126,10 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
                     set_effects: op.set_effects.clone(),
                     permutation_effects: op.permutation_effects.clone(),
                     element_effects: op.element_effects.clone(),
-                    numeric_effects: op.numeric_effects.clone(),
-                    resource_effects: op.resource_effects.clone(),
+                    integer_effects: op.integer_effects.clone(),
+                    integer_resource_effects: op.integer_resource_effects.clone(),
+                    continuous_effects: op.continuous_effects.clone(),
+                    continuous_resource_effects: op.continuous_resource_effects.clone(),
                     cost: op.cost.clone(),
                 };
                 let (i, v) = op.elements_in_permutation_variable[0];

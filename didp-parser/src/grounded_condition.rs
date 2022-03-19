@@ -6,23 +6,21 @@ use crate::variable;
 use crate::yaml_util;
 use std::collections;
 use std::error::Error;
-use std::fmt;
-use std::str;
 use yaml_rust::Yaml;
 
-#[derive(Debug, PartialEq, Eq, Clone, Default)]
-pub struct GroundedCondition<T: variable::Numeric> {
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct GroundedCondition {
     pub elements_in_set_variable: Vec<(usize, usize)>,
     pub elements_in_permutation_variable: Vec<(usize, usize)>,
-    pub condition: expression::Condition<T>,
+    pub condition: expression::Condition,
 }
 
-impl<T: variable::Numeric> GroundedCondition<T> {
-    pub fn is_satisfied(
+impl GroundedCondition {
+    pub fn is_satisfied<T: variable::Numeric>(
         &self,
         state: &state::State<T>,
         metadata: &state::StateMetadata,
-        registry: &table_registry::TableRegistry<T>,
+        registry: &table_registry::TableRegistry,
     ) -> Option<bool> {
         for (i, v) in &self.elements_in_set_variable {
             if !state.signature_variables.set_variables[*i].contains(*v) {
@@ -38,14 +36,11 @@ impl<T: variable::Numeric> GroundedCondition<T> {
     }
 }
 
-pub fn load_grounded_conditions_from_yaml<T: variable::Numeric>(
+pub fn load_grounded_conditions_from_yaml(
     value: &Yaml,
     metadata: &state::StateMetadata,
-    registry: &table_registry::TableRegistry<T>,
-) -> Result<Vec<GroundedCondition<T>>, Box<dyn Error>>
-where
-    <T as str::FromStr>::Err: fmt::Debug,
-{
+    registry: &table_registry::TableRegistry,
+) -> Result<Vec<GroundedCondition>, Box<dyn Error>> {
     let map = yaml_util::get_map(value)?;
     let condition = yaml_util::get_string_by_key(map, "condition")?;
 
@@ -137,7 +132,7 @@ mod tests {
         }
     }
 
-    fn generate_registry() -> table_registry::TableRegistry<variable::Integer> {
+    fn generate_registry() -> table_registry::TableRegistry {
         let tables_1d = vec![table::Table1D::new(vec![true, false])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("b1"), 0);
@@ -174,6 +169,7 @@ mod tests {
                 element_variables: vec![0],
                 ..Default::default()
             }),
+            cost: 0,
             ..Default::default()
         };
 

@@ -161,13 +161,7 @@ where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     match value {
-        Yaml::Integer(value) => match T::from(*value) {
-            Some(value) => Ok(value),
-            None => Err(yaml_util::YamlContentErr::new(format!(
-                "could not parse {} as a number",
-                value
-            ))),
-        },
+        Yaml::Integer(value) => Ok(T::from_i64(*value)),
         Yaml::Real(value) => value.parse().map_err(|e| {
             yaml_util::YamlContentErr::new(format!(
                 "could not parse {} as a number: {:?}",

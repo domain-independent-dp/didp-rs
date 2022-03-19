@@ -195,32 +195,19 @@ mod tests {
         name_to_element_variable.insert("e3".to_string(), 3);
         let element_variable_to_object = vec![0, 0, 0, 0];
 
-        let numeric_variable_names = vec![
+        let integer_variable_names = vec![
             "n0".to_string(),
             "n1".to_string(),
             "n2".to_string(),
             "n3".to_string(),
         ];
-        let mut name_to_numeric_variable = HashMap::new();
-        name_to_numeric_variable.insert("n0".to_string(), 0);
-        name_to_numeric_variable.insert("n1".to_string(), 1);
-        name_to_numeric_variable.insert("n2".to_string(), 2);
-        name_to_numeric_variable.insert("n3".to_string(), 3);
-
-        let resource_variable_names = vec![
-            "r0".to_string(),
-            "r1".to_string(),
-            "r2".to_string(),
-            "r3".to_string(),
-        ];
-        let mut name_to_resource_variable = HashMap::new();
-        name_to_resource_variable.insert("r0".to_string(), 0);
-        name_to_resource_variable.insert("r1".to_string(), 1);
-        name_to_resource_variable.insert("r2".to_string(), 2);
-        name_to_resource_variable.insert("r3".to_string(), 3);
+        let mut name_to_integer_variable = HashMap::new();
+        name_to_integer_variable.insert("n0".to_string(), 0);
+        name_to_integer_variable.insert("n1".to_string(), 1);
+        name_to_integer_variable.insert("n2".to_string(), 2);
+        name_to_integer_variable.insert("n3".to_string(), 3);
 
         state::StateMetadata {
-            maximize: false,
             object_names,
             name_to_object,
             object_numbers,
@@ -233,11 +220,9 @@ mod tests {
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
-            numeric_variable_names,
-            name_to_numeric_variable,
-            resource_variable_names,
-            name_to_resource_variable,
-            less_is_better: vec![false, false, true, false],
+            integer_variable_names,
+            name_to_integer_variable,
+            ..Default::default()
         }
     }
 

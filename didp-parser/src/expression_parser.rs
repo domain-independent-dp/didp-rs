@@ -18,7 +18,7 @@ pub use util::ParseErr;
 pub fn parse_numeric<T: variable::Numeric>(
     text: String,
     metadata: &state::StateMetadata,
-    registry: &table_registry::TableRegistry<T>,
+    registry: &table_registry::TableRegistry,
     parameters: &collections::HashMap<String, usize>,
 ) -> Result<expression::NumericExpression<T>, ParseErr>
 where
@@ -71,15 +71,12 @@ pub fn parse_element(
     }
 }
 
-pub fn parse_condition<T: variable::Numeric>(
+pub fn parse_condition(
     text: String,
     metadata: &state::StateMetadata,
-    registry: &table_registry::TableRegistry<T>,
+    registry: &table_registry::TableRegistry,
     parameters: &collections::HashMap<String, usize>,
-) -> Result<expression::Condition<T>, ParseErr>
-where
-    <T as str::FromStr>::Err: fmt::Debug,
-{
+) -> Result<expression::Condition, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
         condition_parser::parse_expression(&tokens, metadata, registry, parameters)?;
@@ -155,32 +152,31 @@ mod tests {
         name_to_element_variable.insert("e3".to_string(), 3);
         let element_variable_to_object = vec![0, 0, 0, 0];
 
-        let numeric_variable_names = vec![
+        let integer_variable_names = vec![
             "n0".to_string(),
             "n1".to_string(),
             "n2".to_string(),
             "n3".to_string(),
         ];
-        let mut name_to_numeric_variable = HashMap::new();
-        name_to_numeric_variable.insert("n0".to_string(), 0);
-        name_to_numeric_variable.insert("n1".to_string(), 1);
-        name_to_numeric_variable.insert("n2".to_string(), 2);
-        name_to_numeric_variable.insert("n3".to_string(), 3);
+        let mut name_to_integer_variable = HashMap::new();
+        name_to_integer_variable.insert("n0".to_string(), 0);
+        name_to_integer_variable.insert("n1".to_string(), 1);
+        name_to_integer_variable.insert("n2".to_string(), 2);
+        name_to_integer_variable.insert("n3".to_string(), 3);
 
-        let resource_variable_names = vec![
+        let integer_resource_variable_names = vec![
             "r0".to_string(),
             "r1".to_string(),
             "r2".to_string(),
             "r3".to_string(),
         ];
-        let mut name_to_resource_variable = HashMap::new();
-        name_to_resource_variable.insert("r0".to_string(), 0);
-        name_to_resource_variable.insert("r1".to_string(), 1);
-        name_to_resource_variable.insert("r2".to_string(), 2);
-        name_to_resource_variable.insert("r3".to_string(), 3);
+        let mut name_to_integer_resource_variable = HashMap::new();
+        name_to_integer_resource_variable.insert("r0".to_string(), 0);
+        name_to_integer_resource_variable.insert("r1".to_string(), 1);
+        name_to_integer_resource_variable.insert("r2".to_string(), 2);
+        name_to_integer_resource_variable.insert("r3".to_string(), 3);
 
         state::StateMetadata {
-            maximize: false,
             object_names,
             name_to_object,
             object_numbers,
@@ -193,11 +189,12 @@ mod tests {
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
-            numeric_variable_names,
-            name_to_numeric_variable,
-            resource_variable_names,
-            name_to_resource_variable,
-            less_is_better: vec![false, false, true, false],
+            integer_variable_names,
+            name_to_integer_variable,
+            integer_resource_variable_names,
+            name_to_integer_resource_variable,
+            integer_less_is_better: vec![false, false, true, false],
+            ..Default::default()
         }
     }
 
@@ -207,7 +204,7 @@ mod tests {
         parameters
     }
 
-    fn generate_registry() -> table_registry::TableRegistry<variable::Integer> {
+    fn generate_registry() -> table_registry::TableRegistry {
         let tables_1d = vec![table::Table1D::new(Vec::new())];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
@@ -225,7 +222,7 @@ mod tests {
         name_to_table.insert(String::from("f4"), 0);
 
         table_registry::TableRegistry {
-            numeric_tables: table_registry::TableData {
+            integer_tables: table_registry::TableData {
                 tables_1d,
                 name_to_table_1d,
                 tables_2d,
@@ -235,16 +232,7 @@ mod tests {
                 tables,
                 name_to_table,
             },
-            bool_tables: table_registry::TableData {
-                tables_1d: Vec::new(),
-                name_to_table_1d: HashMap::new(),
-                tables_2d: Vec::new(),
-                name_to_table_2d: HashMap::new(),
-                tables_3d: Vec::new(),
-                name_to_table_3d: HashMap::new(),
-                tables: Vec::new(),
-                name_to_table: HashMap::new(),
-            },
+            ..Default::default()
         }
     }
 
@@ -254,7 +242,7 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "(+ (- 5 (/ (f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(+ (& s0 (- s2 (+ s3 2))) (- s1 1))|)))".to_string();
-        let result = parse_numeric(text, &metadata, &registry, &parameters);
+        let result = parse_numeric::<variable::Integer>(text, &metadata, &registry, &parameters);
         assert!(result.is_ok());
     }
 
@@ -264,7 +252,7 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "(+ cost 1))".to_string();
-        let result = parse_numeric(text, &metadata, &registry, &parameters);
+        let result = parse_numeric::<variable::Integer>(text, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 
