@@ -50,7 +50,7 @@ where
         ")" => Err(ParseErr::new("unexpected `)`".to_string())),
         "|" => parse_cardinality(rest, metadata, parameters),
         _ => {
-            let expression = parse_atom(token, metadata)?;
+            let expression = parse_atom(token, metadata, registry)?;
             Ok((expression, rest))
         }
     }
@@ -127,12 +127,17 @@ fn parse_cardinality<'a, 'b, 'c, T: variable::Numeric>(
 fn parse_atom<T: variable::Numeric>(
     token: &str,
     metadata: &state::StateMetadata,
+    registry: &table_registry::TableRegistry,
 ) -> Result<NumericExpression<T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     if token == "cost" {
         Ok(NumericExpression::Cost)
+    } else if let Some(v) = registry.integer_tables.name_to_constant.get(token) {
+        Ok(NumericExpression::Constant(T::from_integer(*v)))
+    } else if let Some(v) = registry.continuous_tables.name_to_constant.get(token) {
+        Ok(NumericExpression::Constant(T::from_continuous(*v)))
     } else if let Some(i) = metadata.name_to_integer_variable.get(token) {
         Ok(NumericExpression::IntegerVariable(*i))
     } else if let Some(i) = metadata.name_to_integer_resource_variable.get(token) {
@@ -254,6 +259,9 @@ mod tests {
     }
 
     fn generate_registry() -> table_registry::TableRegistry {
+        let mut name_to_constant = HashMap::new();
+        name_to_constant.insert(String::from("f0"), 0);
+
         let tables_1d = vec![table::Table1D::new(Vec::new())];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
@@ -272,6 +280,7 @@ mod tests {
 
         table_registry::TableRegistry {
             integer_tables: table_registry::TableData {
+                name_to_constant,
                 tables_1d,
                 name_to_table_1d,
                 tables_2d,
@@ -560,6 +569,14 @@ mod tests {
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, NumericExpression::Cost));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["f0", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert!(matches!(expression, NumericExpression::Constant(0)));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["n1", "1", ")"].iter().map(|x| x.to_string()).collect();

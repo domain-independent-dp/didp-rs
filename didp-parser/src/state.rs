@@ -204,11 +204,7 @@ impl StateMetadata {
     }
 
     pub fn dominance<T: Numeric>(&self, a: &State<T>, b: &State<T>) -> Option<Ordering> {
-        let status = match self.maximize {
-            true => a.cost.partial_cmp(&b.cost),
-            false => a.cost.partial_cmp(&b.cost).map(|x| x.reverse()),
-        };
-        status?;
+        let status = Some(Ordering::Equal);
         let status = Self::compare_resource_variables(
             &a.resource_variables.integer_variables,
             &b.resource_variables.integer_variables,
@@ -938,27 +934,6 @@ cr3: 3
         };
         assert!(metadata.dominance(&b, &a).is_none());
 
-        let b = State {
-            resource_variables: ResourceVariables {
-                integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![],
-            },
-            cost: 1,
-            ..Default::default()
-        };
-        assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Greater));
-        assert_eq!(metadata.dominance(&b, &a), Some(Ordering::Less));
-
-        let b = State {
-            resource_variables: ResourceVariables {
-                integer_variables: vec![1, 3, 1, 0],
-                continuous_variables: vec![],
-            },
-            cost: 1,
-            ..Default::default()
-        };
-        assert!(metadata.dominance(&a, &b).is_none());
-
         let a = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
@@ -981,7 +956,7 @@ cr3: 3
         let b = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![1.0, 3.0, 1.0, 0.0],
+                continuous_variables: vec![1.0, 3.0, 4.0, 0.0],
             },
             cost: 0,
             ..Default::default()

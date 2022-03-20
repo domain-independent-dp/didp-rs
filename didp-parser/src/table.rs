@@ -2,7 +2,7 @@ use crate::variable;
 use approx::{AbsDiffEq, RelativeEq};
 use std::collections;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Table1D<T: Copy>(Vec<T>);
 
 impl<T: Copy> Table1D<T> {
@@ -59,7 +59,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Table2D<T: Copy>(Vec<Vec<T>>);
 
 impl<T: Copy> Table2D<T> {
@@ -122,7 +122,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Table3D<T: Copy>(Vec<Vec<Vec<T>>>);
 
 impl<T: Copy> Table3D<T> {
@@ -205,7 +205,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Table<T: Copy> {
     map: collections::HashMap<Vec<variable::Element>, T>,
     default: T,
@@ -258,7 +258,7 @@ where
 
     fn relative_eq(&self, other: &Self, epsilon: T::Epsilon, max_relative: T::Epsilon) -> bool {
         if self.map.len() != other.map.len()
-            || self
+            || !self
                 .default
                 .relative_eq(&other.default, epsilon, max_relative)
         {

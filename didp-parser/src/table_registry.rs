@@ -3,6 +3,7 @@ use crate::table;
 use crate::variable;
 use crate::yaml_util;
 use approx::{AbsDiffEq, RelativeEq};
+use lazy_static::lazy_static;
 use std::collections;
 use std::fmt;
 use std::str;
@@ -10,6 +11,7 @@ use yaml_rust::Yaml;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct TableData<T: Copy> {
+    pub name_to_constant: collections::HashMap<String, T>,
     pub tables_1d: Vec<table::Table1D<T>>,
     pub name_to_table_1d: collections::HashMap<String, usize>,
     pub tables_2d: Vec<table::Table2D<T>>,
@@ -31,6 +33,15 @@ where
     }
 
     fn abs_diff_eq(&self, other: &Self, epsilon: T::Epsilon) -> bool {
+        if self.name_to_constant.len() != other.name_to_constant.len() {
+            return false;
+        }
+        for (key, x) in &self.name_to_constant {
+            match other.name_to_constant.get(key) {
+                Some(y) if x.abs_diff_eq(y, epsilon) => {}
+                _ => return false,
+            }
+        }
         self.name_to_table_1d == other.name_to_table_1d
             && self.name_to_table_2d == other.name_to_table_2d
             && self.name_to_table_3d == other.name_to_table_3d
@@ -67,6 +78,15 @@ where
     }
 
     fn relative_eq(&self, other: &Self, epsilon: T::Epsilon, max_relative: T::Epsilon) -> bool {
+        if self.name_to_constant.len() != other.name_to_constant.len() {
+            return false;
+        }
+        for (key, x) in &self.name_to_constant {
+            match other.name_to_constant.get(key) {
+                Some(y) if x.relative_eq(y, epsilon, max_relative) => {}
+                _ => return false,
+            }
+        }
         self.name_to_table_1d == other.name_to_table_1d
             && self.name_to_table_2d == other.name_to_table_2d
             && self.name_to_table_3d == other.name_to_table_3d
@@ -113,18 +133,19 @@ impl TableRegistry {
         table_values: &Yaml,
         metadata: &state::StateMetadata,
     ) -> Result<TableRegistry, yaml_util::YamlContentErr> {
+        lazy_static! {
+            static ref ARGS_KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("args");
+        }
         let tables = yaml_util::get_array(tables)?;
         let mut table_names = Vec::with_capacity(tables.len());
         let mut name_to_signature = collections::HashMap::new();
         for value in tables {
             let map = yaml_util::get_map(value)?;
             let name = yaml_util::get_string_by_key(map, "name")?;
-            let args = yaml_util::get_string_array_by_key(map, "args")?;
-            if args.is_empty() {
-                return Err(yaml_util::YamlContentErr::new(
-                    "table has no arguments".to_string(),
-                ));
-            }
+            let args = match map.get(&ARGS_KEY) {
+                Some(value) => yaml_util::get_string_array(value)?,
+                None => Vec::new(),
+            };
             let mut arg_types = Vec::with_capacity(args.len());
             for object in &args {
                 if let Some(value) = metadata.name_to_object.get(object) {
@@ -176,6 +197,7 @@ impl TableRegistry {
             }
             table_names.push(name);
         }
+        let mut name_to_integer_constant = collections::HashMap::new();
         let mut integer_tables_1d = Vec::new();
         let mut integer_name_to_table_1d = collections::HashMap::new();
         let mut integer_tables_2d = Vec::new();
@@ -184,6 +206,7 @@ impl TableRegistry {
         let mut integer_name_to_table_3d = collections::HashMap::new();
         let mut integer_tables = Vec::new();
         let mut integer_name_to_table = collections::HashMap::new();
+        let mut name_to_continuous_constant = collections::HashMap::new();
         let mut continuous_tables_1d = Vec::new();
         let mut continuous_name_to_table_1d = collections::HashMap::new();
         let mut continuous_tables_2d = Vec::new();
@@ -192,6 +215,7 @@ impl TableRegistry {
         let mut continuous_name_to_table_3d = collections::HashMap::new();
         let mut continuous_tables = Vec::new();
         let mut continuous_name_to_table = collections::HashMap::new();
+        let mut name_to_bool_constant = collections::HashMap::new();
         let mut bool_tables_1d = Vec::new();
         let mut bool_name_to_table_1d = collections::HashMap::new();
         let mut bool_tables_2d = Vec::new();
@@ -204,7 +228,19 @@ impl TableRegistry {
         for name in table_names {
             let (arg_types, return_type) = name_to_signature.get(&name).unwrap();
             let value = yaml_util::get_yaml_by_key(table_values, &name)?;
-            if arg_types.len() == 1 {
+            if arg_types.is_empty() {
+                match return_type {
+                    TableReturnType::Integer(_) => {
+                        name_to_integer_constant.insert(name, yaml_util::get_numeric(value)?);
+                    }
+                    TableReturnType::Continuous(_) => {
+                        name_to_continuous_constant.insert(name, yaml_util::get_numeric(value)?);
+                    }
+                    TableReturnType::Bool(_) => {
+                        name_to_bool_constant.insert(name, yaml_util::get_bool(value)?);
+                    }
+                }
+            } else if arg_types.len() == 1 {
                 let size = metadata.object_numbers[arg_types[0]];
                 match return_type {
                     TableReturnType::Integer(default) => {
@@ -299,6 +335,7 @@ impl TableRegistry {
         }
         Ok(TableRegistry {
             integer_tables: TableData {
+                name_to_constant: name_to_integer_constant,
                 tables_1d: integer_tables_1d,
                 name_to_table_1d: integer_name_to_table_1d,
                 tables_2d: integer_tables_2d,
@@ -309,6 +346,7 @@ impl TableRegistry {
                 name_to_table: integer_name_to_table,
             },
             continuous_tables: TableData {
+                name_to_constant: name_to_continuous_constant,
                 tables_1d: continuous_tables_1d,
                 name_to_table_1d: continuous_name_to_table_1d,
                 tables_2d: continuous_tables_2d,
@@ -319,6 +357,7 @@ impl TableRegistry {
                 name_to_table: continuous_name_to_table,
             },
             bool_tables: TableData {
+                name_to_constant: name_to_bool_constant,
                 tables_1d: bool_tables_1d,
                 name_to_table_1d: bool_name_to_table_1d,
                 tables_2d: bool_tables_2d,
@@ -587,6 +626,9 @@ mod tests {
     }
 
     fn generate_registry() -> TableRegistry {
+        let mut name_to_constant = HashMap::new();
+        name_to_constant.insert(String::from("i0"), 0);
+
         let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("i1"), 0);
@@ -621,6 +663,7 @@ mod tests {
         name_to_table.insert(String::from("i4"), 0);
 
         let integer_tables = TableData {
+            name_to_constant,
             tables_1d,
             name_to_table_1d,
             tables_2d,
@@ -630,6 +673,9 @@ mod tests {
             tables,
             name_to_table,
         };
+
+        let mut name_to_constant = HashMap::new();
+        name_to_constant.insert(String::from("c0"), 0.0);
 
         let tables_1d = vec![table::Table1D::new(vec![10.0, 20.0, 30.0])];
         let mut name_to_table_1d = HashMap::new();
@@ -674,9 +720,10 @@ mod tests {
         map.insert(key, 400.0);
         let tables = vec![table::Table::new(map, 0.0)];
         let mut name_to_table = HashMap::new();
-        name_to_table.insert(String::from("i4"), 0);
+        name_to_table.insert(String::from("c4"), 0);
 
         let continuous_tables = TableData {
+            name_to_constant,
             tables_1d,
             name_to_table_1d,
             tables_2d,
@@ -686,6 +733,9 @@ mod tests {
             tables,
             name_to_table,
         };
+
+        let mut name_to_constant = HashMap::new();
+        name_to_constant.insert(String::from("b0"), true);
 
         let tables_1d = vec![table::Table1D::new(vec![true, false, false])];
         let mut name_to_table_1d = HashMap::new();
@@ -733,6 +783,7 @@ mod tests {
         name_to_table.insert(String::from("b4"), 0);
 
         let bool_tables = TableData {
+            name_to_constant,
             tables_1d,
             name_to_table_1d,
             tables_2d,
@@ -756,6 +807,8 @@ mod tests {
         let expected = generate_registry();
 
         let tables = r"
+- name: i0
+  type: integer
 - name: i1
   type: integer
   args:
@@ -772,6 +825,9 @@ mod tests {
 - name: i4
   type: integer
   args: [object, object, object, object]
+- name: c0
+  type: continuous
+  args: []
 - name: c1
   type: continuous
   args:
@@ -788,6 +844,8 @@ mod tests {
 - name: c4
   type: continuous
   args: [object, object, object, object]
+- name: b0
+  type: bool
 - name: b1
   type: bool
   args: [object]
@@ -810,6 +868,7 @@ mod tests {
         - object
 ";
         let table_values = r"
+i0: 0
 i1:
       0: 10
       1: 20
@@ -817,6 +876,7 @@ i1:
 i2: { [0, 0]: 10, [0, 1]: 20, [0, 2]: 30 }
 i3: { [0, 0, 0]: 10, [0, 0, 1]: 20, [0, 0, 2]: 30 }
 i4: { [0, 1, 0, 0]: 100, [0, 1, 0, 1]: 200, [0, 1, 2, 0]: 300, [0, 1, 2, 1]: 400 }
+c0: 0
 c1:
       0: 10
       1: 20
@@ -824,6 +884,7 @@ c1:
 c2: { [0, 0]: 10, [0, 1]: 20, [0, 2]: 30 }
 c3: { [0, 0, 0]: 10, [0, 0, 1]: 20, [0, 0, 2]: 30 }
 c4: { [0, 1, 0, 0]: 100, [0, 1, 0, 1]: 200, [0, 1, 2, 0]: 300, [0, 1, 2, 1]: 400 }
+b0: true
 b1: { 0: true, 1: false, 2: false }
 b2: { [0, 0]: true }
 b3: { [0, 0, 0]: true, [1, 0, 0]: true, [2, 0, 0]: true }

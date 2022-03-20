@@ -246,6 +246,9 @@ mod tests {
     }
 
     fn generate_registry() -> table_registry::TableRegistry {
+        let mut name_to_constant = HashMap::new();
+        name_to_constant.insert(String::from("f0"), 0);
+
         let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("f1"), 0);
@@ -281,6 +284,7 @@ mod tests {
 
         table_registry::TableRegistry {
             integer_tables: table_registry::TableData {
+                name_to_constant,
                 tables_1d,
                 name_to_table_1d,
                 tables_2d,

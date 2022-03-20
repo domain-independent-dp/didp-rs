@@ -76,11 +76,17 @@ impl<'a, T: variable::Numeric, U: Ord> SearchNodeRegistry<'a, T, U> {
                 for (i, other) in v.iter().enumerate() {
                     let result = self.metadata.dominance(&state, &other.state);
                     match result {
-                        Some(Ordering::Equal) | Some(Ordering::Less) => {
+                        Some(Ordering::Equal) | Some(Ordering::Less)
+                            if (self.metadata.maximize && state.cost <= other.state.cost)
+                                || (!self.metadata.maximize && state.cost >= other.state.cost) =>
+                        {
                             // dominated
                             return None;
                         }
-                        Some(Ordering::Greater) => {
+                        Some(Ordering::Equal) | Some(Ordering::Greater)
+                            if (self.metadata.maximize && state.cost >= other.state.cost)
+                                || (!self.metadata.maximize && state.cost <= other.state.cost) =>
+                        {
                             // dominating
                             if !*other.closed.borrow() {
                                 *other.closed.borrow_mut() = true;
