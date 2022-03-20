@@ -5,12 +5,65 @@ use super::util::ParseErr;
 use crate::expression::{NumericExpression, NumericOperator};
 use crate::state;
 use crate::table_registry;
-use crate::variable;
+use crate::variable::{Integer, Numeric};
 use std::collections;
 use std::fmt;
 use std::str;
 
-pub fn parse_expression<'a, 'b, 'c, T: variable::Numeric>(
+pub fn parse_expression<'a, 'b, 'c, T: Numeric>(
+    tokens: &'a [String],
+    metadata: &'b state::StateMetadata,
+    registry: &'b table_registry::TableRegistry,
+    parameters: &'c collections::HashMap<String, usize>,
+) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
+where
+    <T as str::FromStr>::Err: fmt::Debug,
+{
+    match parse_integer_expression(tokens, metadata, registry, parameters) {
+        Ok(expression) => Ok(expression),
+        Err(_) => parse_continuous_expression(tokens, metadata, registry, parameters),
+    }
+}
+
+pub fn parse_integer_expression<'a, 'b, 'c, T: Numeric>(
+    tokens: &'a [String],
+    metadata: &'b state::StateMetadata,
+    registry: &'b table_registry::TableRegistry,
+    parameters: &'c collections::HashMap<String, usize>,
+) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
+where
+    <T as str::FromStr>::Err: fmt::Debug,
+{
+    let (token, rest) = tokens
+        .split_first()
+        .ok_or_else(|| ParseErr::new(String::from("could not get token")))?;
+    match &token[..] {
+        "(" => {
+            let (name, rest) = rest
+                .split_first()
+                .ok_or_else(|| ParseErr::new(String::from("could not get token")))?;
+            if let Some((expression, rest)) = numeric_table_parser::parse_expression(
+                name,
+                rest,
+                metadata,
+                &registry.integer_tables,
+                parameters,
+            )? {
+                Ok((NumericExpression::IntegerTable(expression), rest))
+            } else {
+                parse_operation(name, rest, metadata, registry, parameters)
+            }
+        }
+        ")" => Err(ParseErr::new("unexpected `)`".to_string())),
+        "|" => parse_cardinality(rest, metadata, parameters),
+        _ => {
+            let expression = parse_integer_atom(token, metadata, registry)?;
+            Ok((expression, rest))
+        }
+    }
+}
+
+pub fn parse_continuous_expression<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     registry: &'b table_registry::TableRegistry,
@@ -56,7 +109,7 @@ where
     }
 }
 
-fn parse_operation<'a, 'b, 'c, T: variable::Numeric>(
+fn parse_operation<'a, 'b, 'c, T: Numeric>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
@@ -106,7 +159,7 @@ where
     }
 }
 
-fn parse_cardinality<'a, 'b, 'c, T: variable::Numeric>(
+fn parse_cardinality<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     parameters: &'c collections::HashMap<String, usize>,
@@ -124,7 +177,28 @@ fn parse_cardinality<'a, 'b, 'c, T: variable::Numeric>(
     Ok((NumericExpression::Cardinality(expression), rest))
 }
 
-fn parse_atom<T: variable::Numeric>(
+fn parse_integer_atom<T: Numeric>(
+    token: &str,
+    metadata: &state::StateMetadata,
+    registry: &table_registry::TableRegistry,
+) -> Result<NumericExpression<T>, ParseErr> {
+    if token == "cost" {
+        Ok(NumericExpression::Cost)
+    } else if let Some(v) = registry.integer_tables.name_to_constant.get(token) {
+        Ok(NumericExpression::Constant(T::from(*v)))
+    } else if let Some(i) = metadata.name_to_integer_variable.get(token) {
+        Ok(NumericExpression::IntegerVariable(*i))
+    } else if let Some(i) = metadata.name_to_integer_resource_variable.get(token) {
+        Ok(NumericExpression::IntegerResourceVariable(*i))
+    } else {
+        let n: Integer = token.parse().map_err(|e| {
+            ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
+        })?;
+        Ok(NumericExpression::Constant(T::from(n)))
+    }
+}
+
+fn parse_atom<T: Numeric>(
     token: &str,
     metadata: &state::StateMetadata,
     registry: &table_registry::TableRegistry,
@@ -301,16 +375,14 @@ mod tests {
         let parameters = generate_parameters();
 
         let tokens = Vec::new();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [")", "(", "+", "cost", "1", ")", "2", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 
@@ -323,8 +395,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -365,8 +436,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 
@@ -486,32 +556,28 @@ mod tests {
         let parameters = generate_parameters();
 
         let tokens = Vec::new();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "+", "0", "n0", "n1", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "+", "0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "^", "0", "n0", ")", "n0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 
@@ -524,8 +590,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -544,16 +609,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["|", "s2", "s0", "|", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 
@@ -564,32 +627,28 @@ mod tests {
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["cost", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, NumericExpression::Cost));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["f0", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, NumericExpression::Constant(0)));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["n1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, NumericExpression::IntegerVariable(1)));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["r1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -599,8 +658,7 @@ mod tests {
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["11", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, NumericExpression::Constant(11)));
@@ -614,13 +672,11 @@ mod tests {
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["h", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["e1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result =
-            parse_expression::<variable::Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 }
