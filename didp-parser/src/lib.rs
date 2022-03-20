@@ -319,11 +319,11 @@ goals:
                 ..Default::default()
             },
             goals: vec![GroundedCondition {
-                condition: Condition::Comparison(Comparison::ComparisonII(
+                condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
                     ComparisonOperator::Ge,
                     NumericExpression::IntegerVariable(0),
                     NumericExpression::Constant(1),
-                )),
+                ))),
                 ..Default::default()
             }],
             operators: vec![Operator {
@@ -510,14 +510,14 @@ table_values:
                 ..Default::default()
             },
             constraints: vec![GroundedCondition {
-                condition: Condition::Comparison(Comparison::ComparisonII(
+                condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
                     ComparisonOperator::Le,
                     NumericExpression::IntegerResourceVariable(0),
                     NumericExpression::IntegerTable(NumericTableExpression::Table1D(
                         1,
                         ElementExpression::Variable(0),
                     )),
-                )),
+                ))),
                 ..Default::default()
             }],
             goals: vec![

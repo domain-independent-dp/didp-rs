@@ -435,11 +435,11 @@ mod tests {
             ElementExpression::Constant(0),
             SetExpression::SetVariable(0),
         ));
-        let numeric_condition = Condition::Comparison(Comparison::ComparisonII(
+        let numeric_condition = Condition::Comparison(Box::new(Comparison::ComparisonII(
             ComparisonOperator::Ge,
             NumericExpression::IntegerVariable(0),
             NumericExpression::Constant(1),
-        ));
+        )));
 
         let operator = Operator {
             name: String::from(""),
@@ -468,11 +468,11 @@ mod tests {
             ElementExpression::Constant(0),
             SetExpression::SetVariable(0),
         ));
-        let numeric_condition = Condition::Comparison(Comparison::ComparisonII(
+        let numeric_condition = Condition::Comparison(Box::new(Comparison::ComparisonII(
             ComparisonOperator::Le,
             NumericExpression::IntegerVariable(0),
             NumericExpression::Constant(1),
-        ));
+        )));
 
         let operator = Operator {
             name: String::from(""),
@@ -656,7 +656,7 @@ cost: (+ cost (f1 e))
                 name: String::from("operator e:0"),
                 elements_in_set_variable: vec![(0, 0)],
                 elements_in_permutation_variable: Vec::new(),
-                preconditions: vec![Condition::Comparison(Comparison::ComparisonII(
+                preconditions: vec![Condition::Comparison(Box::new(Comparison::ComparisonII(
                     ComparisonOperator::Ge,
                     NumericExpression::IntegerTable(NumericTableExpression::Table2D(
                         0,
@@ -664,7 +664,7 @@ cost: (+ cost (f1 e))
                         ElementExpression::Constant(0),
                     )),
                     NumericExpression::Constant(10),
-                ))],
+                )))],
                 set_effects: vec![(
                     0,
                     SetExpression::SetElementOperation(
@@ -688,7 +688,7 @@ cost: (+ cost (f1 e))
                 name: String::from("operator e:1"),
                 elements_in_set_variable: vec![(0, 1)],
                 elements_in_permutation_variable: Vec::new(),
-                preconditions: vec![Condition::Comparison(Comparison::ComparisonII(
+                preconditions: vec![Condition::Comparison(Box::new(Comparison::ComparisonII(
                     ComparisonOperator::Ge,
                     NumericExpression::IntegerTable(NumericTableExpression::Table2D(
                         0,
@@ -696,7 +696,7 @@ cost: (+ cost (f1 e))
                         ElementExpression::Constant(1),
                     )),
                     NumericExpression::Constant(10),
-                ))],
+                )))],
                 set_effects: vec![(
                     0,
                     SetExpression::SetElementOperation(

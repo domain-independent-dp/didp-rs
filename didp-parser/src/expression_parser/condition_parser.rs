@@ -96,7 +96,7 @@ fn parse_operation<'a, 'b, 'c>(
             Ok((Condition::Set(SetCondition::IsEmpty(s)), rest))
         }
         _ => parse_comparison(name, tokens, metadata, registry, parameters)
-            .map(|(condition, rest)| (Condition::Comparison(condition), rest)),
+            .map(|(condition, rest)| (Condition::Comparison(Box::new(condition)), rest)),
     }
 }
 
@@ -559,11 +559,11 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Comparison(Comparison::ComparisonII(
+            Condition::Comparison(Box::new(Comparison::ComparisonII(
                 ComparisonOperator::Eq,
                 NumericExpression::Constant(2),
                 NumericExpression::IntegerVariable(0)
-            ))
+            )))
         );
         assert_eq!(rest, &tokens[5..]);
     }
@@ -610,11 +610,11 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Comparison(Comparison::ComparisonII(
+            Condition::Comparison(Box::new(Comparison::ComparisonII(
                 ComparisonOperator::Ne,
                 NumericExpression::Constant(2),
                 NumericExpression::IntegerVariable(0)
-            ))
+            )))
         );
         assert_eq!(rest, &tokens[5..]);
     }
@@ -661,11 +661,11 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Comparison(Comparison::ComparisonII(
+            Condition::Comparison(Box::new(Comparison::ComparisonII(
                 ComparisonOperator::Gt,
                 NumericExpression::Constant(2),
                 NumericExpression::IntegerVariable(0)
-            ))
+            )))
         );
         assert_eq!(rest, &tokens[5..]);
     }
@@ -712,11 +712,11 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Comparison(Comparison::ComparisonII(
+            Condition::Comparison(Box::new(Comparison::ComparisonII(
                 ComparisonOperator::Ge,
                 NumericExpression::Constant(2),
                 NumericExpression::IntegerVariable(0)
-            ))
+            )))
         );
         assert_eq!(rest, &tokens[5..]);
     }
@@ -763,11 +763,11 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Comparison(Comparison::ComparisonII(
+            Condition::Comparison(Box::new(Comparison::ComparisonII(
                 ComparisonOperator::Lt,
                 NumericExpression::Constant(2),
                 NumericExpression::IntegerVariable(0)
-            ))
+            )))
         );
         assert_eq!(rest, &tokens[5..]);
     }
@@ -814,11 +814,11 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Comparison(Comparison::ComparisonII(
+            Condition::Comparison(Box::new(Comparison::ComparisonII(
                 ComparisonOperator::Le,
                 NumericExpression::Constant(2),
                 NumericExpression::IntegerVariable(0)
-            ))
+            )))
         );
         assert_eq!(rest, &tokens[5..]);
     }
