@@ -13,12 +13,12 @@ use std::fmt;
 use std::str;
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct Terminal<T: Numeric> {
+pub struct BaseCase<T: Numeric> {
     pub conditions: Vec<GroundedCondition>,
     pub cost: expression::NumericExpression<T>,
 }
 
-impl<T: Numeric> Terminal<T> {
+impl<T: Numeric> BaseCase<T> {
     pub fn get_cost(
         &self,
         state: &state::State,
@@ -40,7 +40,7 @@ impl<T: Numeric> Terminal<T> {
         value: &yaml_rust::Yaml,
         metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
-    ) -> Result<Terminal<T>, Box<dyn Error>>
+    ) -> Result<BaseCase<T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
@@ -93,6 +93,6 @@ impl<T: Numeric> Terminal<T> {
                 }
             }
         }
-        Ok(Terminal { conditions, cost })
+        Ok(BaseCase { conditions, cost })
     }
 }

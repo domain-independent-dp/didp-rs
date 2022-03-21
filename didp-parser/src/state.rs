@@ -100,8 +100,6 @@ impl State {
 
 #[derive(Debug, PartialEq, Clone, Eq, Default)]
 pub struct StateMetadata {
-    pub maximize: bool,
-
     pub object_names: Vec<String>,
     pub name_to_object: collections::HashMap<String, usize>,
     pub object_numbers: Vec<usize>,
@@ -330,7 +328,6 @@ impl StateMetadata {
     }
 
     pub fn load_from_yaml(
-        maximize: &yaml_rust::Yaml,
         objects: &yaml_rust::Yaml,
         variables: &yaml_rust::Yaml,
         object_numbers_yaml: &yaml_rust::Yaml,
@@ -424,10 +421,8 @@ impl StateMetadata {
                 }
             }
         }
-        let maximize = yaml_util::get_bool(maximize)?;
 
         Ok(StateMetadata {
-            maximize,
             object_names,
             name_to_object,
             object_numbers,
@@ -591,7 +586,6 @@ mod tests {
         name_to_continuous_resource_variable.insert(String::from("cr3"), 3);
 
         StateMetadata {
-            maximize: false,
             object_names,
             name_to_object,
             object_numbers,
@@ -1083,11 +1077,6 @@ cr3: 3
     #[test]
     fn state_metadata_load_from_yaml_ok() {
         let expected = generate_metadata();
-        let maximize = yaml_rust::YamlLoader::load_from_str("false");
-        assert!(maximize.is_ok());
-        let maximize = maximize.unwrap();
-        assert_eq!(maximize.len(), 1);
-        let maximize = &maximize[0];
 
         let objects = r"
 - object
@@ -1193,19 +1182,13 @@ small: 2
         assert_eq!(object_numbers.len(), 1);
         let object_numbers = &object_numbers[0];
 
-        let metadata = StateMetadata::load_from_yaml(maximize, objects, variables, object_numbers);
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
         assert!(metadata.is_ok());
         assert_eq!(metadata.unwrap(), expected);
     }
 
     #[test]
     fn state_metadata_load_from_yaml_err() {
-        let maximize = yaml_rust::YamlLoader::load_from_str("false");
-        assert!(maximize.is_ok());
-        let maximize = maximize.unwrap();
-        assert_eq!(maximize.len(), 1);
-        let maximize = &maximize[0];
-
         let objects = r"
 - object
 - small
@@ -1237,7 +1220,7 @@ small: 2
         assert_eq!(object_numbers.len(), 1);
         let object_numbers = &object_numbers[0];
 
-        let metadata = StateMetadata::load_from_yaml(maximize, objects, variables, object_numbers);
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
         assert!(metadata.is_err());
 
         let variables = r"
@@ -1250,7 +1233,7 @@ small: 2
         let variables = variables.unwrap();
         assert_eq!(variables.len(), 1);
         let variables = &variables[0];
-        let metadata = StateMetadata::load_from_yaml(maximize, objects, variables, object_numbers);
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
         assert!(metadata.is_err());
 
         let variables = r"
@@ -1262,7 +1245,7 @@ small: 2
         let variables = variables.unwrap();
         assert_eq!(variables.len(), 1);
         let variables = &variables[0];
-        let metadata = StateMetadata::load_from_yaml(maximize, objects, variables, object_numbers);
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
         assert!(metadata.is_err());
 
         let variables = r"
@@ -1274,7 +1257,7 @@ small: 2
         let variables = variables.unwrap();
         assert_eq!(variables.len(), 1);
         let variables = &variables[0];
-        let metadata = StateMetadata::load_from_yaml(maximize, objects, variables, object_numbers);
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
         assert!(metadata.is_err());
 
         let variables = r"
@@ -1286,7 +1269,7 @@ small: 2
         let variables = variables.unwrap();
         assert_eq!(variables.len(), 1);
         let variables = &variables[0];
-        let metadata = StateMetadata::load_from_yaml(maximize, objects, variables, object_numbers);
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
         assert!(metadata.is_err());
 
         let variables = r"
@@ -1308,25 +1291,7 @@ object: 10
         let object_numbers = object_numbers.unwrap();
         assert_eq!(object_numbers.len(), 1);
         let object_numbers = &object_numbers[0];
-        let metadata = StateMetadata::load_from_yaml(maximize, objects, variables, object_numbers);
-        assert!(metadata.is_err());
-
-        let object_numbers = r"
-object: 10
-small: 2
-";
-        let object_numbers = yaml_rust::YamlLoader::load_from_str(object_numbers);
-        assert!(object_numbers.is_ok());
-        let object_numbers = object_numbers.unwrap();
-        assert_eq!(object_numbers.len(), 1);
-        let object_numbers = &object_numbers[0];
-
-        let maximize = yaml_rust::YamlLoader::load_from_str("null");
-        assert!(maximize.is_ok());
-        let maximize = maximize.unwrap();
-        assert_eq!(maximize.len(), 1);
-        let maximize = &maximize[0];
-        let metadata = StateMetadata::load_from_yaml(maximize, objects, variables, object_numbers);
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
         assert!(metadata.is_err());
     }
 }

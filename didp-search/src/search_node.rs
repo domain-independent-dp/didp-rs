@@ -1,5 +1,6 @@
 use crate::priority_queue;
 use didp_parser::variable;
+use didp_parser::ReduceFunction;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections;
@@ -41,23 +42,26 @@ pub type OpenList<T> = priority_queue::PriorityQueue<Rc<SearchNode<T>>>;
 pub struct SearchNodeRegistry<'a, T: PartialOrd> {
     registry: collections::HashMap<Rc<didp_parser::SignatureVariables>, Vec<Rc<SearchNode<T>>>>,
     metadata: &'a didp_parser::StateMetadata,
+    reduce_function: &'a ReduceFunction,
 }
 
 impl<'a, T: variable::Numeric + Ord> SearchNodeRegistry<'a, T> {
-    pub fn new(problem: &'a didp_parser::Problem<T>) -> SearchNodeRegistry<T> {
+    pub fn new(model: &'a didp_parser::Model<T>) -> SearchNodeRegistry<T> {
         SearchNodeRegistry {
             registry: collections::HashMap::new(),
-            metadata: &problem.state_metadata,
+            metadata: &model.state_metadata,
+            reduce_function: &model.reduce_function,
         }
     }
 
     pub fn with_capcaity(
         capacity: usize,
-        problem: &'a didp_parser::Problem<T>,
+        model: &'a didp_parser::Model<T>,
     ) -> SearchNodeRegistry<T> {
         SearchNodeRegistry {
             registry: collections::HashMap::with_capacity(capacity),
-            metadata: &problem.state_metadata,
+            metadata: &model.state_metadata,
+            reduce_function: &model.reduce_function,
         }
     }
 
@@ -78,15 +82,17 @@ impl<'a, T: variable::Numeric + Ord> SearchNodeRegistry<'a, T> {
                     let result = self.metadata.dominance(&state, &other.state);
                     match result {
                         Some(Ordering::Equal) | Some(Ordering::Less)
-                            if (self.metadata.maximize && g <= other.g)
-                                || (!self.metadata.maximize && g >= other.g) =>
+                            if (*self.reduce_function == ReduceFunction::Max && g <= other.g)
+                                || (*self.reduce_function == ReduceFunction::Min
+                                    && g >= other.g) =>
                         {
                             // dominated
                             return None;
                         }
                         Some(Ordering::Equal) | Some(Ordering::Greater)
-                            if (self.metadata.maximize && g >= other.g)
-                                || (!self.metadata.maximize && g <= other.g) =>
+                            if (*self.reduce_function == ReduceFunction::Max && g >= other.g)
+                                || (*self.reduce_function == ReduceFunction::Min
+                                    && g <= other.g) =>
                         {
                             // dominating
                             if !*other.closed.borrow() {
@@ -142,7 +148,7 @@ mod tests {
     use super::*;
     use didp_parser::variable;
 
-    fn generate_problem() -> didp_parser::Problem<variable::Integer> {
+    fn generate_model() -> didp_parser::Model<variable::Integer> {
         let mut name_to_integer_variable = collections::HashMap::new();
         name_to_integer_variable.insert("n1".to_string(), 0);
         name_to_integer_variable.insert("n2".to_string(), 1);
@@ -154,7 +160,6 @@ mod tests {
         name_to_integer_resource_variable.insert("r3".to_string(), 2);
 
         let state_metadata = didp_parser::StateMetadata {
-            maximize: false,
             integer_variable_names: vec!["n1".to_string(), "n2".to_string(), "n3".to_string()],
             name_to_integer_variable,
             integer_resource_variable_names: vec![
@@ -167,7 +172,7 @@ mod tests {
             ..Default::default()
         };
 
-        didp_parser::Problem {
+        didp_parser::Model {
             state_metadata,
             ..Default::default()
         }
@@ -236,8 +241,8 @@ mod tests {
 
     #[test]
     fn get_new_node() {
-        let problem = generate_problem();
-        let mut registry = SearchNodeRegistry::new(&problem);
+        let model = generate_model();
+        let mut registry = SearchNodeRegistry::new(&model);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -318,8 +323,8 @@ mod tests {
 
     #[test]
     fn node_dominated() {
-        let problem = generate_problem();
-        let mut registry = SearchNodeRegistry::new(&problem);
+        let model = generate_model();
+        let mut registry = SearchNodeRegistry::new(&model);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -355,8 +360,8 @@ mod tests {
 
     #[test]
     fn node_dead_end() {
-        let problem = generate_problem();
-        let mut registry = SearchNodeRegistry::new(&problem);
+        let model = generate_model();
+        let mut registry = SearchNodeRegistry::new(&model);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -379,8 +384,8 @@ mod tests {
 
     #[test]
     fn get_dominating_node() {
-        let problem = generate_problem();
-        let mut registry = SearchNodeRegistry::<variable::Integer>::new(&problem);
+        let model = generate_model();
+        let mut registry = SearchNodeRegistry::<variable::Integer>::new(&model);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),

@@ -10,11 +10,11 @@ pub struct SuccessorGenerator<'a, T: variable::Numeric> {
 }
 
 impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
-    pub fn new(problem: &'a didp_parser::Problem<T>) -> SuccessorGenerator<'a, T> {
+    pub fn new(model: &'a didp_parser::Model<T>) -> SuccessorGenerator<'a, T> {
         SuccessorGenerator {
-            transitions: &problem.transitions,
-            metadata: &problem.state_metadata,
-            registry: &problem.table_registry,
+            transitions: &model.transitions,
+            metadata: &model.state_metadata,
+            registry: &model.table_registry,
         }
     }
 
@@ -79,25 +79,25 @@ pub struct OneParameterSuccessorGenerator<'a, T: variable::Numeric> {
 }
 
 impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
-    pub fn new(problem: &'a didp_parser::Problem<T>) -> OneParameterSuccessorGenerator<'a, T> {
-        let n = problem.state_metadata.number_of_set_variables();
+    pub fn new(model: &'a didp_parser::Model<T>) -> OneParameterSuccessorGenerator<'a, T> {
+        let n = model.state_metadata.number_of_set_variables();
         let mut relevant_set_variables = collections::BTreeSet::new();
         let mut set_element_to_transitions: Vec<Vec<Vec<Transition<T>>>> = (0..n)
             .map(|i| {
-                let m = problem.state_metadata.set_variable_capacity(i);
+                let m = model.state_metadata.set_variable_capacity(i);
                 (0..m).map(|_| Vec::new()).collect()
             })
             .collect();
-        let n = problem.state_metadata.number_of_permutation_variables();
+        let n = model.state_metadata.number_of_permutation_variables();
         let mut relevant_permutation_variables = collections::BTreeSet::new();
         let mut permutation_element_to_transitions: Vec<Vec<Vec<Transition<T>>>> = (0..n)
             .map(|i| {
-                let m = problem.state_metadata.permutation_variable_capacity(i);
+                let m = model.state_metadata.permutation_variable_capacity(i);
                 (0..m).map(|_| Vec::new()).collect()
             })
             .collect();
         let mut global_transitions = Vec::new();
-        for op in &problem.transitions {
+        for op in &model.transitions {
             if !op.elements_in_set_variable.is_empty() {
                 let op = Transition {
                     name: op.name.clone(),
@@ -145,8 +145,8 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
             relevant_permutation_variables: relevant_permutation_variables.into_iter().collect(),
             permutation_element_to_transitions,
             global_transitions,
-            metadata: &problem.state_metadata,
-            registry: &problem.table_registry,
+            metadata: &model.state_metadata,
+            registry: &model.table_registry,
         }
     }
 

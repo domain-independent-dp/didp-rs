@@ -4,23 +4,23 @@ use std::fmt;
 use std::str;
 use yaml_rust::Yaml;
 
+mod base_case;
 pub mod expression;
 pub mod expression_parser;
 mod grounded_condition;
 mod state;
 pub mod table;
 mod table_registry;
-mod terminal;
 mod transition;
 mod util;
 pub mod variable;
 mod yaml_util;
 
+pub use base_case::BaseCase;
 pub use expression_parser::ParseErr;
 pub use grounded_condition::GroundedCondition;
 pub use state::{ResourceVariables, SignatureVariables, State, StateMetadata};
 pub use table_registry::{TableData, TableRegistry};
-pub use terminal::Terminal;
 pub use transition::Transition;
 pub use util::ModelErr;
 
@@ -45,19 +45,49 @@ impl CostType {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum ReduceFunction {
+    Min,
+    Max,
+    Sum,
+}
+
+impl Default for ReduceFunction {
+    fn default() -> Self {
+        Self::Min
+    }
+}
+
+impl ReduceFunction {
+    pub fn load_from_yaml(value: &Yaml) -> Result<ReduceFunction, Box<dyn Error>> {
+        let reduce_function = yaml_util::get_string(value)?;
+        match &reduce_function[..] {
+            "min" => Ok(Self::Min),
+            "max" => Ok(Self::Max),
+            "sum" => Ok(Self::Sum),
+            _ => Err(yaml_util::YamlContentErr::new(format!(
+                "no such reduce function `{}`",
+                reduce_function
+            ))
+            .into()),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct Problem<T: variable::Numeric> {
+pub struct Model<T: variable::Numeric> {
     pub domain_name: String,
     pub problem_name: String,
     pub state_metadata: state::StateMetadata,
     pub target: state::State,
     pub table_registry: table_registry::TableRegistry,
     pub constraints: Vec<GroundedCondition>,
-    pub terminals: Vec<Terminal<T>>,
+    pub base_cases: Vec<BaseCase<T>>,
+    pub reduce_function: ReduceFunction,
     pub transitions: Vec<Transition<T>>,
 }
 
-impl<T: variable::Numeric> Problem<T> {
+impl<T: variable::Numeric> Model<T> {
     pub fn check_constraints(&self, state: &state::State) -> bool {
         self.constraints.iter().all(|constraint| {
             constraint
@@ -66,9 +96,9 @@ impl<T: variable::Numeric> Problem<T> {
         })
     }
 
-    pub fn get_terminal_cost(&self, state: &state::State) -> Option<T> {
-        for terminal in &self.terminals {
-            let cost = terminal.get_cost(state, &self.state_metadata, &self.table_registry);
+    pub fn get_base_case_cost(&self, state: &state::State) -> Option<T> {
+        for base_case in &self.base_cases {
+            let cost = base_case.get_cost(state, &self.state_metadata, &self.table_registry);
             if cost.is_some() {
                 return cost;
             }
@@ -76,7 +106,7 @@ impl<T: variable::Numeric> Problem<T> {
         None
     }
 
-    pub fn load_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Problem<T>, Box<dyn Error>>
+    pub fn load_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model<T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
@@ -93,28 +123,18 @@ impl<T: variable::Numeric> Problem<T> {
         }
         let problem_name = yaml_util::get_string_by_key(&problem, "problem")?;
 
-        let maximize = Yaml::Boolean(false);
-        let maximize = match domain.get(&Yaml::from_str("maximize")) {
-            Some(value) => value,
-            None => &maximize,
-        };
         let variables = yaml_util::get_yaml_by_key(&domain, "variables")?;
         let state_metadata = match (
             domain.get(&Yaml::from_str("objects")),
             problem.get(&Yaml::from_str("object_numbers")),
         ) {
             (Some(objects), Some(object_numbers)) => {
-                state::StateMetadata::load_from_yaml(&maximize, objects, variables, object_numbers)?
+                state::StateMetadata::load_from_yaml(&objects, variables, object_numbers)?
             }
             (None, None) => {
                 let objects = yaml_rust::Yaml::Array(Vec::new());
                 let object_numbers = yaml_rust::Yaml::Hash(linked_hash_map::LinkedHashMap::new());
-                state::StateMetadata::load_from_yaml(
-                    &maximize,
-                    &objects,
-                    variables,
-                    &object_numbers,
-                )?
+                state::StateMetadata::load_from_yaml(&objects, variables, &object_numbers)?
             }
             (Some(_), None) => {
                 return Err(ModelErr::new(String::from(
@@ -175,11 +195,14 @@ impl<T: variable::Numeric> Problem<T> {
             }
         }
 
-        let mut terminals = Vec::new();
-        for terminal in yaml_util::get_array_by_key(&problem, "terminals")? {
-            let terminal = Terminal::load_from_yaml(&terminal, &state_metadata, &table_registry)?;
-            terminals.push(terminal);
+        let mut base_cases = Vec::new();
+        for base_case in yaml_util::get_array_by_key(&problem, "base_cases")? {
+            let base_case = BaseCase::load_from_yaml(&base_case, &state_metadata, &table_registry)?;
+            base_cases.push(base_case);
         }
+
+        let reduce_function = yaml_util::get_yaml_by_key(&domain, "reduce")?;
+        let reduce_function = ReduceFunction::load_from_yaml(reduce_function)?;
 
         let mut transitions = Vec::new();
         for transition in yaml_util::get_array_by_key(&domain, "transitions")? {
@@ -190,14 +213,15 @@ impl<T: variable::Numeric> Problem<T> {
             )?);
         }
 
-        Ok(Problem {
+        Ok(Model {
             domain_name,
             problem_name,
             state_metadata,
             target,
             table_registry,
             constraints,
-            terminals,
+            base_cases,
+            reduce_function,
             transitions,
         })
     }
@@ -211,7 +235,7 @@ impl<T: variable::Numeric> Problem<T> {
                 expression::Condition::Constant(true) => continue,
                 expression::Condition::Constant(false) => {
                     return Err(ModelErr::new(String::from(
-                        "problem has a condition never satisfied",
+                        "model has a condition never satisfied",
                     )))
                 }
                 _ => result.push(condition),
@@ -271,10 +295,11 @@ mod tests {
     }
 
     #[test]
-    fn problem_load_from_yaml_ok() {
+    fn model_load_from_yaml_ok() {
         let domain = r"
 domain: ADD
 variables: [ {name: v, type: integer} ]
+reduce: min
 transitions:
         - name: add
           effects:
@@ -292,7 +317,7 @@ domain: ADD
 problem: one
 target:
         v: 0
-terminals:
+base_cases:
         - [(>= v 1), (= 0 0)]
 ";
         let problem = yaml_rust::YamlLoader::load_from_str(problem);
@@ -301,17 +326,16 @@ terminals:
         assert_eq!(problem.len(), 1);
         let problem = &problem[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem);
-        assert!(problem.is_ok());
-        let problem = problem.unwrap();
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_ok());
+        let model = model.unwrap();
 
         let mut name_to_integer_variable = HashMap::new();
         name_to_integer_variable.insert(String::from("v"), 0);
-        let expected = Problem {
+        let expected = Model {
             domain_name: String::from("ADD"),
             problem_name: String::from("one"),
             state_metadata: state::StateMetadata {
-                maximize: false,
                 integer_variable_names: vec![String::from("v")],
                 name_to_integer_variable,
                 ..Default::default()
@@ -324,7 +348,7 @@ terminals:
                 stage: 0,
                 ..Default::default()
             },
-            terminals: vec![Terminal {
+            base_cases: vec![BaseCase {
                 cost: NumericExpression::Constant(0),
                 conditions: vec![GroundedCondition {
                     condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
@@ -355,19 +379,19 @@ terminals:
             ..Default::default()
         };
 
-        assert_eq!(problem.domain_name, expected.domain_name);
-        assert_eq!(problem.problem_name, expected.problem_name);
-        assert_eq!(problem.state_metadata, expected.state_metadata);
-        assert_eq!(problem.target, expected.target);
-        assert_eq!(problem.table_registry, expected.table_registry);
-        assert_eq!(problem.constraints, expected.constraints);
-        assert_eq!(problem.terminals, expected.terminals);
-        assert_eq!(problem.transitions, expected.transitions);
-        assert_eq!(problem, expected);
+        assert_eq!(model.domain_name, expected.domain_name);
+        assert_eq!(model.problem_name, expected.problem_name);
+        assert_eq!(model.state_metadata, expected.state_metadata);
+        assert_eq!(model.target, expected.target);
+        assert_eq!(model.table_registry, expected.table_registry);
+        assert_eq!(model.constraints, expected.constraints);
+        assert_eq!(model.base_cases, expected.base_cases);
+        assert_eq!(model.transitions, expected.transitions);
+        assert_eq!(model, expected);
 
         let domain = r"
 domain: TSPTW
-metric: minimize
+reduce: min
 objects: [cities]
 variables:
         - name: unvisited
@@ -397,6 +421,7 @@ tables:
 constraints:
         - (<= time (due_date location))
         - (= 0 0)
+reduce: min
 transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
@@ -422,7 +447,7 @@ target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-terminals:
+base_cases:
         - [(is_empty unvisited), (is location 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
@@ -436,9 +461,9 @@ table_values:
         assert_eq!(problem.len(), 1);
         let problem = &problem[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem);
-        assert!(problem.is_ok());
-        let problem = problem.unwrap();
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_ok());
+        let model = model.unwrap();
 
         let mut name_to_object = HashMap::new();
         name_to_object.insert(String::from("cities"), 0);
@@ -459,11 +484,10 @@ table_values:
         numeric_name_to_table_2d.insert(String::from("distance"), 0);
         let mut bool_name_to_table_2d = HashMap::new();
         bool_name_to_table_2d.insert(String::from("connected"), 0);
-        let expected = Problem {
+        let expected = Model {
             domain_name: String::from("TSPTW"),
             problem_name: String::from("test"),
             state_metadata: state::StateMetadata {
-                maximize: false,
                 object_names: vec![String::from("cities")],
                 name_to_object,
                 object_numbers: vec![3],
@@ -527,7 +551,7 @@ table_values:
                 ))),
                 ..Default::default()
             }],
-            terminals: vec![Terminal {
+            base_cases: vec![BaseCase {
                 cost: NumericExpression::Constant(0),
                 conditions: vec![
                     GroundedCondition {
@@ -545,6 +569,7 @@ table_values:
                     },
                 ],
             }],
+            reduce_function: ReduceFunction::Min,
             transitions: vec![
                 Transition {
                     name: String::from("visit to:0"),
@@ -701,19 +726,19 @@ table_values:
                 },
             ],
         };
-        assert_eq!(problem.domain_name, expected.domain_name);
-        assert_eq!(problem.problem_name, expected.problem_name);
-        assert_eq!(problem.state_metadata, expected.state_metadata);
-        assert_eq!(problem.target, expected.target);
-        assert_eq!(problem.table_registry, expected.table_registry);
-        assert_eq!(problem.constraints, expected.constraints);
-        assert_eq!(problem.terminals, expected.terminals);
-        assert_eq!(problem.transitions, expected.transitions);
-        assert_eq!(problem, expected);
+        assert_eq!(model.domain_name, expected.domain_name);
+        assert_eq!(model.problem_name, expected.problem_name);
+        assert_eq!(model.state_metadata, expected.state_metadata);
+        assert_eq!(model.target, expected.target);
+        assert_eq!(model.table_registry, expected.table_registry);
+        assert_eq!(model.constraints, expected.constraints);
+        assert_eq!(model.base_cases, expected.base_cases);
+        assert_eq!(model.transitions, expected.transitions);
+        assert_eq!(model, expected);
     }
 
     #[test]
-    fn problem_load_from_yaml_err() {
+    fn model_load_from_yaml_err() {
         let problem = r"
 domain: TSPTW
 problem: test
@@ -723,7 +748,7 @@ target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-terminals:
+base_cases:
         - condition: (is_empty unvisited)
         - condition: (is location 0)
 table_values:
@@ -736,10 +761,10 @@ table_values:
         assert!(problem.is_ok());
         let problem = problem.unwrap();
         assert_eq!(problem.len(), 1);
-        let problem_yaml = &problem[0];
+        let problem = &problem[0];
 
         let domain = r"
-metric: minimize
+reduce: min
 objects: [cities]
 variables:
         - name: unvisited
@@ -768,6 +793,7 @@ tables:
           default: true
 constraints:
         - condition: (<= time (due_date location))
+reduce: min
 transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
@@ -784,12 +810,12 @@ transitions:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let domain = r"
 domain: TSPTW
-metric: minimize
+reduce: min
 variables:
         - name: unvisited
           type: set
@@ -817,6 +843,7 @@ tables:
           default: true
 constraints:
         - condition: (<= time (due_date location))
+reduce: min
 transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
@@ -833,12 +860,12 @@ transitions:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let domain = r"
 domain: TSPTW
-metric: minimize 
+reduce: min
 objects: [null]
 tables:
         - name: ready_time
@@ -857,6 +884,7 @@ tables:
           default: true
 constraints:
         - condition: (<= time (due_date location))
+reduce: min
 transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
@@ -873,12 +901,12 @@ transitions:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let domain = r"
 domain: TSPTW
-metric: minimize
+reduce: min
 objects: [cities]
 variables:
         - name: unvisited
@@ -892,6 +920,7 @@ variables:
           preference: less
 constraints:
         - condition: (<= time (due_date location))
+reduce: min
 transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
@@ -908,11 +937,11 @@ transitions:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let domain = r"
-metric: minimize
+reduce: min
 objects: [cities]
 variables:
         - name: unvisited
@@ -948,12 +977,12 @@ constraints:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let domain = r"
 domain: TSPTW
-metric: minimize
+reduce: min
 objects: [cities]
 variables:
         - name: unvisited
@@ -983,6 +1012,7 @@ tables:
 constraints:
         - condition: (<= time (due_date location))
         - condition: (= 1 2)
+reduce: min
 transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
@@ -999,8 +1029,8 @@ transitions:
         assert_eq!(domain.len(), 1);
         let domain = &domain[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let problem = r"
 problem: test
@@ -1010,7 +1040,7 @@ target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-terminals:
+base_cases:
         - [(is_empty unvisited), (is location 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
@@ -1022,10 +1052,10 @@ table_values:
         assert!(problem.is_ok());
         let problem = problem.unwrap();
         assert_eq!(problem.len(), 1);
-        let problem_yaml = &problem[0];
+        let problem = &problem[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let problem = r"
 domain: TSP
@@ -1036,7 +1066,7 @@ target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-terminals:
+base_cases:
         - [(is_empty unvisited) (is location 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
@@ -1048,10 +1078,10 @@ table_values:
         assert!(problem.is_ok());
         let problem = problem.unwrap();
         assert_eq!(problem.len(), 1);
-        let problem_yaml = &problem[0];
+        let problem = &problem[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let problem = r"
 domain: TSPTW
@@ -1061,7 +1091,7 @@ target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-terminals:
+base_cases:
         - [(is_empty unvisited), (is location 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
@@ -1073,17 +1103,17 @@ table_values:
         assert!(problem.is_ok());
         let problem = problem.unwrap();
         assert_eq!(problem.len(), 1);
-        let problem_yaml = &problem[0];
+        let problem = &problem[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let problem = r"
 domain: TSPTW
 problem: test
 numeric_type: integer
 object_numbers: { cities: 3 }
-terminals:
+base_cases:
         - [(is_empty unvisited), (is location 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
@@ -1095,10 +1125,10 @@ table_values:
         assert!(problem.is_ok());
         let problem = problem.unwrap();
         assert_eq!(problem.len(), 1);
-        let problem_yaml = &problem[0];
+        let problem = &problem[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let problem = r"
 domain: TSPTW
@@ -1119,10 +1149,10 @@ table_values:
         assert!(problem.is_ok());
         let problem = problem.unwrap();
         assert_eq!(problem.len(), 1);
-        let problem_yaml = &problem[0];
+        let problem = &problem[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let problem = r"
 domain: TSPTW
@@ -1133,17 +1163,17 @@ target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-terminals:
+base_cases:
         - [(is_empty unvisited), (is location 0)]
 ";
         let problem = yaml_rust::YamlLoader::load_from_str(problem);
         assert!(problem.is_ok());
         let problem = problem.unwrap();
         assert_eq!(problem.len(), 1);
-        let problem_yaml = &problem[0];
+        let problem = &problem[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem_yaml);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
 
         let problem = r"
 domain: TSPTW
@@ -1154,7 +1184,7 @@ target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-terminals:
+base_cases:
         - [(is_empty unvisited), (is location 0), (!= 0 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
@@ -1168,7 +1198,7 @@ table_values:
         assert_eq!(problem.len(), 1);
         let problem = &problem[0];
 
-        let problem = Problem::<variable::Integer>::load_from_yaml(domain, problem);
-        assert!(problem.is_err());
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_err());
     }
 }

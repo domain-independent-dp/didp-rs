@@ -127,7 +127,6 @@ mod tests {
         let element_variable_to_object = vec![0, 0, 0, 0];
 
         state::StateMetadata {
-            maximize: false,
             object_names,
             name_to_object,
             object_numbers,

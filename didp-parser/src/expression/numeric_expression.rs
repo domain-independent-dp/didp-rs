@@ -213,7 +213,6 @@ mod tests {
         name_to_continuous_resource_variable.insert("cr2".to_string(), 2);
 
         state::StateMetadata {
-            maximize: false,
             object_names,
             name_to_object,
             object_numbers,
