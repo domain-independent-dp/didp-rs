@@ -1,5 +1,6 @@
 use crate::expression;
 use crate::expression_parser;
+use crate::grounded_condition;
 use crate::state;
 use crate::table_registry;
 use crate::variable::{Continuous, Integer, Numeric};
@@ -12,11 +13,11 @@ use std::rc::Rc;
 use std::str;
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct Operator<T: Numeric> {
+pub struct Transition<T: Numeric> {
     pub name: String,
     pub elements_in_set_variable: Vec<(usize, usize)>,
     pub elements_in_permutation_variable: Vec<(usize, usize)>,
-    pub preconditions: Vec<expression::Condition>,
+    pub preconditions: Vec<grounded_condition::GroundedCondition>,
     pub set_effects: Vec<(usize, expression::SetExpression)>,
     pub permutation_effects: Vec<(usize, expression::ElementExpression)>,
     pub element_effects: Vec<(usize, expression::ElementExpression)>,
@@ -27,7 +28,7 @@ pub struct Operator<T: Numeric> {
     pub cost: expression::NumericExpression<T>,
 }
 
-impl<T: Numeric> Operator<T> {
+impl<T: Numeric> Transition<T> {
     pub fn is_applicable(
         &self,
         state: &state::State,
@@ -44,12 +45,9 @@ impl<T: Numeric> Operator<T> {
                 return false;
             }
         }
-        for c in &self.preconditions {
-            if !c.eval(state, metadata, registry) {
-                return false;
-            }
-        }
-        true
+        self.preconditions
+            .iter()
+            .all(|c| c.is_satisfied(state, metadata, registry).unwrap_or(true))
     }
 
     pub fn apply_effects(
@@ -137,11 +135,11 @@ impl<T: Numeric> Operator<T> {
     }
 }
 
-pub fn load_operators_from_yaml<T: Numeric>(
+pub fn load_transitions_from_yaml<T: Numeric>(
     value: &yaml_rust::Yaml,
     metadata: &state::StateMetadata,
     registry: &table_registry::TableRegistry,
-) -> Result<Vec<Operator<T>>, Box<dyn error::Error>>
+) -> Result<Vec<Transition<T>>, Box<dyn error::Error>>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
@@ -173,14 +171,11 @@ where
         ),
     };
 
-    let lifted_preconditions = match map.get(&yaml_rust::Yaml::from_str("preconditions")) {
-        Some(value) => yaml_util::get_string_array(value)?,
-        None => vec![],
-    };
+    let lifted_preconditions = map.get(&yaml_rust::Yaml::from_str("preconditions"));
     let lifted_effects = yaml_util::get_map_by_key(map, "effects")?;
     let lifted_cost = yaml_util::get_string_by_key(map, "cost")?;
 
-    let mut operators = Vec::with_capacity(parameters_array.len());
+    let mut transitions = Vec::with_capacity(parameters_array.len());
     'outer: for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in
         parameters_array
             .into_iter()
@@ -191,21 +186,30 @@ where
         for parameter_name in &parameter_names {
             name += format!(" {}:{}", parameter_name, parameters[parameter_name]).as_str();
         }
-        let mut preconditions = Vec::with_capacity(lifted_preconditions.len());
-        for condition in &lifted_preconditions {
-            let condition = expression_parser::parse_condition(
-                condition.clone(),
-                metadata,
-                registry,
-                &parameters,
-            )?;
-            let condition = condition.simplify(registry);
-            match condition {
-                expression::Condition::Constant(true) => continue,
-                expression::Condition::Constant(false) => continue 'outer,
-                _ => preconditions.push(condition),
+        let preconditions = match lifted_preconditions {
+            Some(lifted_preconditions) => {
+                let lifted_preconditions = yaml_util::get_array(lifted_preconditions)?;
+                let mut preconditions = Vec::with_capacity(lifted_preconditions.len());
+                for condition in lifted_preconditions {
+                    let conditions =
+                        grounded_condition::GroundedCondition::load_grounded_conditions_from_yaml(
+                            condition,
+                            metadata,
+                            registry,
+                            &parameters,
+                        )?;
+                    for condition in conditions {
+                        match condition.condition {
+                            expression::Condition::Constant(true) => continue,
+                            expression::Condition::Constant(false) => continue 'outer,
+                            _ => preconditions.push(condition),
+                        }
+                    }
+                }
+                preconditions
             }
-        }
+            None => Vec::new(),
+        };
         let mut set_effects = Vec::new();
         let mut permutation_effects = Vec::new();
         let mut element_effects = Vec::new();
@@ -269,7 +273,7 @@ where
             expression_parser::parse_numeric(lifted_cost.clone(), metadata, registry, &parameters)?;
         let cost = cost.simplify(registry);
 
-        operators.push(Operator {
+        transitions.push(Transition {
             name,
             elements_in_set_variable,
             elements_in_permutation_variable,
@@ -284,7 +288,7 @@ where
             cost,
         })
     }
-    Ok(operators)
+    Ok(transitions)
 }
 
 #[cfg(test)]
@@ -438,32 +442,38 @@ mod tests {
         let state = generate_state();
         let registry = generate_registry();
         let metadata = generate_metadata();
-        let set_condition = Condition::Set(SetCondition::IsIn(
-            ElementExpression::Constant(0),
-            SetExpression::SetVariable(0),
-        ));
-        let numeric_condition = Condition::Comparison(Box::new(Comparison::ComparisonII(
-            ComparisonOperator::Ge,
-            NumericExpression::IntegerVariable(0),
-            NumericExpression::Constant(1),
-        )));
+        let set_condition = grounded_condition::GroundedCondition {
+            condition: Condition::Set(SetCondition::IsIn(
+                ElementExpression::Constant(0),
+                SetExpression::SetVariable(0),
+            )),
+            ..Default::default()
+        };
+        let numeric_condition = grounded_condition::GroundedCondition {
+            condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                ComparisonOperator::Ge,
+                NumericExpression::IntegerVariable(0),
+                NumericExpression::Constant(1),
+            ))),
+            ..Default::default()
+        };
 
-        let operator = Operator {
+        let transition = Transition {
             name: String::from(""),
             preconditions: vec![set_condition, numeric_condition],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
-        assert!(operator.is_applicable(&state, &metadata, &registry));
+        assert!(transition.is_applicable(&state, &metadata, &registry));
 
-        let operator = Operator {
+        let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 0), (1, 1)],
             elements_in_permutation_variable: vec![(0, 0), (1, 2)],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
-        assert!(operator.is_applicable(&state, &metadata, &registry));
+        assert!(transition.is_applicable(&state, &metadata, &registry));
     }
 
     #[test]
@@ -471,41 +481,47 @@ mod tests {
         let state = generate_state();
         let registry = generate_registry();
         let metadata = generate_metadata();
-        let set_condition = Condition::Set(SetCondition::IsIn(
-            ElementExpression::Constant(0),
-            SetExpression::SetVariable(0),
-        ));
-        let numeric_condition = Condition::Comparison(Box::new(Comparison::ComparisonII(
-            ComparisonOperator::Le,
-            NumericExpression::IntegerVariable(0),
-            NumericExpression::Constant(1),
-        )));
+        let set_condition = grounded_condition::GroundedCondition {
+            condition: Condition::Set(SetCondition::IsIn(
+                ElementExpression::Constant(0),
+                SetExpression::SetVariable(0),
+            )),
+            ..Default::default()
+        };
+        let numeric_condition = grounded_condition::GroundedCondition {
+            condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                ComparisonOperator::Le,
+                NumericExpression::IntegerVariable(0),
+                NumericExpression::Constant(1),
+            ))),
+            ..Default::default()
+        };
 
-        let operator = Operator {
+        let transition = Transition {
             name: String::from(""),
             preconditions: vec![set_condition, numeric_condition],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
-        assert!(operator.is_applicable(&state, &metadata, &registry));
+        assert!(transition.is_applicable(&state, &metadata, &registry));
 
-        let operator = Operator {
+        let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 1), (1, 1)],
             elements_in_permutation_variable: vec![(0, 0), (1, 2)],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
-        assert!(!operator.is_applicable(&state, &metadata, &registry));
+        assert!(!transition.is_applicable(&state, &metadata, &registry));
 
-        let operator = Operator {
+        let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 1), (1, 1)],
             elements_in_permutation_variable: vec![(0, 1), (1, 2)],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
-        assert!(!operator.is_applicable(&state, &metadata, &registry));
+        assert!(!transition.is_applicable(&state, &metadata, &registry));
     }
 
     #[test]
@@ -547,7 +563,7 @@ mod tests {
             Box::new(NumericExpression::IntegerResourceVariable(1)),
             Box::new(NumericExpression::Constant(2)),
         );
-        let operator = Operator {
+        let transition = Transition {
             name: String::from(""),
             set_effects: vec![(0, set_effect1), (1, set_effect2)],
             permutation_effects: vec![(0, permutation_effect1), (1, permutation_effect2)],
@@ -582,7 +598,7 @@ mod tests {
             },
             stage: 1,
         };
-        let successor = operator.apply_effects(&state, &metadata, &registry);
+        let successor = transition.apply_effects(&state, &metadata, &registry);
         assert_eq!(successor, expected);
     }
 
@@ -592,7 +608,7 @@ mod tests {
         let registry = generate_registry();
         let metadata = generate_metadata();
 
-        let operator = Operator {
+        let transition = Transition {
             cost: NumericExpression::NumericOperation(
                 NumericOperator::Add,
                 Box::new(NumericExpression::Cost),
@@ -600,59 +616,59 @@ mod tests {
             ),
             ..Default::default()
         };
-        assert_eq!(operator.eval_cost(0, &state, &metadata, &registry), 1);
+        assert_eq!(transition.eval_cost(0, &state, &metadata, &registry), 1);
     }
 
     #[test]
-    fn load_operators_from_yaml_ok() {
+    fn load_transitions_from_yaml_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
 
-        let operator = r"
-name: operator
+        let transition = r"
+name: transition
 preconditions: [(>= (f2 0 1) 10)]
 effects: {e0: '0'}
 cost: '0'
 ";
-        let operator = yaml_rust::YamlLoader::load_from_str(operator);
-        assert!(operator.is_ok());
-        let operator = operator.unwrap();
-        assert_eq!(operator.len(), 1);
-        let operator = &operator[0];
-        let operators = load_operators_from_yaml(operator, &metadata, &registry);
-        assert!(operators.is_ok());
-        let expected = vec![Operator {
-            name: String::from("operator"),
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml(transition, &metadata, &registry);
+        assert!(transitions.is_ok());
+        let expected = vec![Transition {
+            name: String::from("transition"),
             preconditions: Vec::new(),
             element_effects: vec![(0, ElementExpression::Constant(0))],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         }];
-        assert_eq!(operators.unwrap(), expected);
+        assert_eq!(transitions.unwrap(), expected);
 
-        let operator = r"
-name: operator
+        let transition = r"
+name: transition
 effects: {e0: '0'}
 cost: '0'
 ";
-        let operator = yaml_rust::YamlLoader::load_from_str(operator);
-        assert!(operator.is_ok());
-        let operator = operator.unwrap();
-        assert_eq!(operator.len(), 1);
-        let operator = &operator[0];
-        let operators = load_operators_from_yaml(operator, &metadata, &registry);
-        assert!(operators.is_ok());
-        let expected = vec![Operator {
-            name: String::from("operator"),
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml(transition, &metadata, &registry);
+        assert!(transitions.is_ok());
+        let expected = vec![Transition {
+            name: String::from("transition"),
             preconditions: Vec::new(),
             element_effects: vec![(0, ElementExpression::Constant(0))],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         }];
-        assert_eq!(operators.unwrap(), expected);
+        assert_eq!(transitions.unwrap(), expected);
 
-        let operator = r"
-name: operator
+        let transition = r"
+name: transition
 parameters:
         - name: e
           object: s0
@@ -667,27 +683,30 @@ effects:
         r0: '2'
 cost: (+ cost (f1 e))
 ";
-        let operator = yaml_rust::YamlLoader::load_from_str(operator);
-        assert!(operator.is_ok());
-        let operator = operator.unwrap();
-        assert_eq!(operator.len(), 1);
-        let operator = &operator[0];
-        let operators = load_operators_from_yaml(operator, &metadata, &registry);
-        assert!(operators.is_ok());
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml(transition, &metadata, &registry);
+        assert!(transitions.is_ok());
         let expected = vec![
-            Operator {
-                name: String::from("operator e:0"),
+            Transition {
+                name: String::from("transition e:0"),
                 elements_in_set_variable: vec![(0, 0)],
                 elements_in_permutation_variable: Vec::new(),
-                preconditions: vec![Condition::Comparison(Box::new(Comparison::ComparisonII(
-                    ComparisonOperator::Ge,
-                    NumericExpression::IntegerTable(NumericTableExpression::Table2D(
-                        0,
-                        ElementExpression::Variable(0),
-                        ElementExpression::Constant(0),
-                    )),
-                    NumericExpression::Constant(10),
-                )))],
+                preconditions: vec![grounded_condition::GroundedCondition {
+                    condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                        ComparisonOperator::Ge,
+                        NumericExpression::IntegerTable(NumericTableExpression::Table2D(
+                            0,
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(0),
+                        )),
+                        NumericExpression::Constant(10),
+                    ))),
+                    ..Default::default()
+                }],
                 set_effects: vec![(
                     0,
                     SetExpression::SetElementOperation(
@@ -707,19 +726,22 @@ cost: (+ cost (f1 e))
                 ),
                 ..Default::default()
             },
-            Operator {
-                name: String::from("operator e:1"),
+            Transition {
+                name: String::from("transition e:1"),
                 elements_in_set_variable: vec![(0, 1)],
                 elements_in_permutation_variable: Vec::new(),
-                preconditions: vec![Condition::Comparison(Box::new(Comparison::ComparisonII(
-                    ComparisonOperator::Ge,
-                    NumericExpression::IntegerTable(NumericTableExpression::Table2D(
-                        0,
-                        ElementExpression::Variable(0),
-                        ElementExpression::Constant(1),
-                    )),
-                    NumericExpression::Constant(10),
-                )))],
+                preconditions: vec![grounded_condition::GroundedCondition {
+                    condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                        ComparisonOperator::Ge,
+                        NumericExpression::IntegerTable(NumericTableExpression::Table2D(
+                            0,
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(1),
+                        )),
+                        NumericExpression::Constant(10),
+                    ))),
+                    ..Default::default()
+                }],
                 set_effects: vec![(
                     0,
                     SetExpression::SetElementOperation(
@@ -740,15 +762,15 @@ cost: (+ cost (f1 e))
                 ..Default::default()
             },
         ];
-        assert_eq!(operators.unwrap(), expected);
+        assert_eq!(transitions.unwrap(), expected);
     }
 
     #[test]
-    fn load_operators_from_yaml_err() {
+    fn load_transitions_from_yaml_err() {
         let metadata = generate_metadata();
         let registry = generate_registry();
 
-        let operator = r"
+        let transition = r"
 parameters:
         - name: e
           object: s0
@@ -762,16 +784,16 @@ effects:
         r0: '2'
 cost: (+ cost (f1 e))
 ";
-        let operator = yaml_rust::YamlLoader::load_from_str(operator);
-        assert!(operator.is_ok());
-        let operator = operator.unwrap();
-        assert_eq!(operator.len(), 1);
-        let operator = &operator[0];
-        let operators = load_operators_from_yaml::<Integer>(operator, &metadata, &registry);
-        assert!(operators.is_err());
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml::<Integer>(transition, &metadata, &registry);
+        assert!(transitions.is_err());
 
-        let operator = r"
-name: operator
+        let transition = r"
+name: transition
 parameters:
         - name: e
           object: s0
@@ -779,16 +801,16 @@ preconditions:
         - (>= (f2 e0 e) 10)
 cost: (+ cost (f1 e))
 ";
-        let operator = yaml_rust::YamlLoader::load_from_str(operator);
-        assert!(operator.is_ok());
-        let operator = operator.unwrap();
-        assert_eq!(operator.len(), 1);
-        let operator = &operator[0];
-        let operators = load_operators_from_yaml::<Integer>(operator, &metadata, &registry);
-        assert!(operators.is_err());
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml::<Integer>(transition, &metadata, &registry);
+        assert!(transitions.is_err());
 
-        let operator = r"
-name: operator
+        let transition = r"
+name: transition
 parameters:
         - name: e
           object: s0
@@ -801,16 +823,16 @@ effects:
         n0: '1'
         r0: '2'
 ";
-        let operator = yaml_rust::YamlLoader::load_from_str(operator);
-        assert!(operator.is_ok());
-        let operator = operator.unwrap();
-        assert_eq!(operator.len(), 1);
-        let operator = &operator[0];
-        let operators = load_operators_from_yaml::<Integer>(operator, &metadata, &registry);
-        assert!(operators.is_err());
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml::<Integer>(transition, &metadata, &registry);
+        assert!(transitions.is_err());
 
-        let operator = r"
-name: operator
+        let transition = r"
+name: transition
 preconditions:
         - (>= (f2 e0 e) 10)
 effects:
@@ -821,15 +843,15 @@ effects:
         r0: '2'
 cost: (+ cost (f1 e))
 ";
-        let operator = yaml_rust::YamlLoader::load_from_str(operator);
-        assert!(operator.is_ok());
-        let operator = operator.unwrap();
-        assert_eq!(operator.len(), 1);
-        let operator = &operator[0];
-        let operators = load_operators_from_yaml::<Integer>(operator, &metadata, &registry);
-        assert!(operators.is_err());
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml::<Integer>(transition, &metadata, &registry);
+        assert!(transitions.is_err());
 
-        let operator = r"
+        let transition = r"
 parameters:
         - name: e
           object: s0
@@ -844,12 +866,12 @@ effects:
         r5: '5'
 cost: (+ cost (f1 e))
 ";
-        let operator = yaml_rust::YamlLoader::load_from_str(operator);
-        assert!(operator.is_ok());
-        let operator = operator.unwrap();
-        assert_eq!(operator.len(), 1);
-        let operator = &operator[0];
-        let operators = load_operators_from_yaml::<Integer>(operator, &metadata, &registry);
-        assert!(operators.is_err());
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml::<Integer>(transition, &metadata, &registry);
+        assert!(transitions.is_err());
     }
 }

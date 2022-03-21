@@ -2,7 +2,9 @@ use crate::expression;
 use crate::expression_parser;
 use crate::state;
 use crate::table_registry;
+use crate::variable::Element;
 use crate::yaml_util;
+use lazy_static::lazy_static;
 use std::collections;
 use std::error::Error;
 use yaml_rust::Yaml;
@@ -33,54 +35,85 @@ impl GroundedCondition {
         }
         Some(self.condition.eval(state, metadata, registry))
     }
-}
 
-pub fn load_grounded_conditions_from_yaml(
-    value: &Yaml,
-    metadata: &state::StateMetadata,
-    registry: &table_registry::TableRegistry,
-) -> Result<Vec<GroundedCondition>, Box<dyn Error>> {
-    let map = yaml_util::get_map(value)?;
-    let condition = yaml_util::get_string_by_key(map, "condition")?;
-
-    match map.get(&Yaml::from_str("forall")) {
-        Some(parameters) => {
-            let (
-                parameters_array,
-                elements_in_set_variable_array,
-                elements_in_permutation_variable_array,
-            ) = metadata.ground_parameters_from_yaml(parameters)?;
-
-            let mut conditions = Vec::with_capacity(parameters_array.len());
-            for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in
-                parameters_array
-                    .into_iter()
-                    .zip(elements_in_set_variable_array.into_iter())
-                    .zip(elements_in_permutation_variable_array.into_iter())
-            {
+    pub fn load_grounded_conditions_from_yaml(
+        value: &Yaml,
+        metadata: &state::StateMetadata,
+        registry: &table_registry::TableRegistry,
+        parameters: &collections::HashMap<String, Element>,
+    ) -> Result<Vec<GroundedCondition>, Box<dyn Error>> {
+        lazy_static! {
+            static ref CONDITION_KEY: Yaml = Yaml::from_str("condition");
+            static ref FORALL_KEY: Yaml = Yaml::from_str("forall");
+        }
+        match value {
+            Yaml::String(condition) => {
                 let condition = expression_parser::parse_condition(
                     condition.clone(),
                     metadata,
                     registry,
                     &parameters,
                 )?;
-                conditions.push(GroundedCondition {
+                Ok(vec![GroundedCondition {
                     condition: condition.simplify(registry),
-                    elements_in_set_variable,
-                    elements_in_permutation_variable,
-                });
+                    elements_in_set_variable: vec![],
+                    elements_in_permutation_variable: vec![],
+                }])
             }
-            Ok(conditions)
-        }
-        None => {
-            let parameters = collections::HashMap::new();
-            let condition =
-                expression_parser::parse_condition(condition, metadata, registry, &parameters)?;
-            Ok(vec![GroundedCondition {
-                condition: condition.simplify(registry),
-                elements_in_set_variable: vec![],
-                elements_in_permutation_variable: vec![],
-            }])
+            Yaml::Hash(map) => {
+                let condition = yaml_util::get_string_by_key(map, "condition")?;
+                match map.get(&Yaml::from_str("forall")) {
+                    Some(forall) => {
+                        let (
+                            parameters_array,
+                            elements_in_set_variable_array,
+                            elements_in_permutation_variable_array,
+                        ) = metadata.ground_parameters_from_yaml(forall)?;
+                        let mut conditions = Vec::with_capacity(parameters_array.len());
+                        for (
+                            (forall, elements_in_set_variable),
+                            elements_in_permutation_variable,
+                        ) in parameters_array
+                            .into_iter()
+                            .zip(elements_in_set_variable_array.into_iter())
+                            .zip(elements_in_permutation_variable_array.into_iter())
+                        {
+                            let mut parameters = parameters.clone();
+                            parameters.extend(forall);
+                            let condition = expression_parser::parse_condition(
+                                condition.clone(),
+                                metadata,
+                                registry,
+                                &parameters,
+                            )?;
+                            conditions.push(GroundedCondition {
+                                condition: condition.simplify(registry),
+                                elements_in_set_variable,
+                                elements_in_permutation_variable,
+                            });
+                        }
+                        Ok(conditions)
+                    }
+                    None => {
+                        let condition = expression_parser::parse_condition(
+                            condition,
+                            metadata,
+                            registry,
+                            &parameters,
+                        )?;
+                        Ok(vec![GroundedCondition {
+                            condition: condition.simplify(registry),
+                            elements_in_set_variable: vec![],
+                            elements_in_permutation_variable: vec![],
+                        }])
+                    }
+                }
+            }
+            _ => Err(yaml_util::YamlContentErr::new(format!(
+                "expected String or Hash, found `{:?}`",
+                value
+            ))
+            .into()),
         }
     }
 }
@@ -260,8 +293,14 @@ condition: (is_in e0 s0)
         let condition = condition.unwrap();
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
+        let parameters = collections::HashMap::new();
 
-        let conditions = load_grounded_conditions_from_yaml(condition, &metadata, &registry);
+        let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_ok());
         let expected = vec![GroundedCondition {
             elements_in_set_variable: Vec::new(),
@@ -284,8 +323,14 @@ forall:
         let condition = condition.unwrap();
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
+        let parameters = collections::HashMap::new();
 
-        let conditions = load_grounded_conditions_from_yaml(condition, &metadata, &registry);
+        let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_ok());
         let expected = vec![
             GroundedCondition {
@@ -313,7 +358,12 @@ forall:
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
 
-        let conditions = load_grounded_conditions_from_yaml(condition, &metadata, &registry);
+        let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_ok());
         let expected = vec![
             GroundedCondition {
@@ -349,8 +399,14 @@ conddition: (is_in e0 s0)
         let condition = condition.unwrap();
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
+        let parameters = collections::HashMap::new();
 
-        let conditions = load_grounded_conditions_from_yaml(condition, &metadata, &registry);
+        let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_err());
 
         let condition = r"
@@ -365,7 +421,12 @@ forall:
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
 
-        let conditions = load_grounded_conditions_from_yaml(condition, &metadata, &registry);
+        let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_err());
 
         let condition = r"
@@ -379,7 +440,12 @@ forall:
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
 
-        let conditions = load_grounded_conditions_from_yaml(condition, &metadata, &registry);
+        let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_err());
 
         let condition = r"
@@ -394,7 +460,12 @@ forall:
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
 
-        let conditions = load_grounded_conditions_from_yaml(condition, &metadata, &registry);
+        let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_err());
 
         let condition = r"
@@ -408,7 +479,12 @@ forall:
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
 
-        let conditions = load_grounded_conditions_from_yaml(condition, &metadata, &registry);
+        let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_err());
     }
 }

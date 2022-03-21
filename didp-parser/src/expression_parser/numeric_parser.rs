@@ -25,7 +25,7 @@ where
     }
 }
 
-pub fn parse_integer_expression<'a, 'b, 'c, T: Numeric>(
+fn parse_integer_expression<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     registry: &'b table_registry::TableRegistry,
@@ -67,7 +67,7 @@ where
     }
 }
 
-pub fn parse_continuous_expression<'a, 'b, 'c, T: Numeric>(
+fn parse_continuous_expression<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     registry: &'b table_registry::TableRegistry,

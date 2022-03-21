@@ -1,10 +1,10 @@
 use didp_parser::variable;
-use didp_parser::Operator;
+use didp_parser::Transition;
 use std::collections;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SuccessorGenerator<'a, T: variable::Numeric> {
-    operators: &'a [Operator<T>],
+    transitions: &'a [Transition<T>],
     metadata: &'a didp_parser::StateMetadata,
     registry: &'a didp_parser::TableRegistry,
 }
@@ -12,19 +12,19 @@ pub struct SuccessorGenerator<'a, T: variable::Numeric> {
 impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
     pub fn new(problem: &'a didp_parser::Problem<T>) -> SuccessorGenerator<'a, T> {
         SuccessorGenerator {
-            operators: &problem.operators,
+            transitions: &problem.transitions,
             metadata: &problem.state_metadata,
             registry: &problem.table_registry,
         }
     }
 
-    pub fn generate_applicable_operators<'b>(
+    pub fn generate_applicable_transitions<'b>(
         &self,
         state: &'b didp_parser::State,
-        mut result: Vec<&'a Operator<T>>,
-    ) -> Vec<&'a Operator<T>> {
+        mut result: Vec<&'a Transition<T>>,
+    ) -> Vec<&'a Transition<T>> {
         result.clear();
-        for op in self.operators {
+        for op in self.transitions {
             if op.is_applicable(state, self.metadata, self.registry) {
                 result.push(op);
             }
@@ -32,26 +32,26 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
         result
     }
 
-    pub fn applicable_operators<'b>(
+    pub fn applicable_transitions<'b>(
         &'a self,
         state: &'b didp_parser::State,
-    ) -> ApplicableOperators<'a, 'b, T> {
-        ApplicableOperators {
+    ) -> ApplicableTransitions<'a, 'b, T> {
+        ApplicableTransitions {
             state,
             generator: self,
-            iter: self.operators.iter(),
+            iter: self.transitions.iter(),
         }
     }
 }
 
-pub struct ApplicableOperators<'a, 'b, T: variable::Numeric> {
+pub struct ApplicableTransitions<'a, 'b, T: variable::Numeric> {
     state: &'b didp_parser::State,
     generator: &'a SuccessorGenerator<'a, T>,
-    iter: std::slice::Iter<'a, Operator<T>>,
+    iter: std::slice::Iter<'a, Transition<T>>,
 }
 
-impl<'a, 'b, T: variable::Numeric> Iterator for ApplicableOperators<'a, 'b, T> {
-    type Item = &'a Operator<T>;
+impl<'a, 'b, T: variable::Numeric> Iterator for ApplicableTransitions<'a, 'b, T> {
+    type Item = &'a Transition<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
@@ -70,10 +70,10 @@ impl<'a, 'b, T: variable::Numeric> Iterator for ApplicableOperators<'a, 'b, T> {
 #[derive(Debug, PartialEq, Clone)]
 pub struct OneParameterSuccessorGenerator<'a, T: variable::Numeric> {
     relevant_set_variables: Vec<usize>,
-    set_element_to_operators: Vec<Vec<Vec<Operator<T>>>>,
+    set_element_to_transitions: Vec<Vec<Vec<Transition<T>>>>,
     relevant_permutation_variables: Vec<usize>,
-    permutation_element_to_operators: Vec<Vec<Vec<Operator<T>>>>,
-    global_operators: Vec<&'a Operator<T>>,
+    permutation_element_to_transitions: Vec<Vec<Vec<Transition<T>>>>,
+    global_transitions: Vec<&'a Transition<T>>,
     metadata: &'a didp_parser::StateMetadata,
     registry: &'a didp_parser::TableRegistry,
 }
@@ -82,7 +82,7 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
     pub fn new(problem: &'a didp_parser::Problem<T>) -> OneParameterSuccessorGenerator<'a, T> {
         let n = problem.state_metadata.number_of_set_variables();
         let mut relevant_set_variables = collections::BTreeSet::new();
-        let mut set_element_to_operators: Vec<Vec<Vec<Operator<T>>>> = (0..n)
+        let mut set_element_to_transitions: Vec<Vec<Vec<Transition<T>>>> = (0..n)
             .map(|i| {
                 let m = problem.state_metadata.set_variable_capacity(i);
                 (0..m).map(|_| Vec::new()).collect()
@@ -90,16 +90,16 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
             .collect();
         let n = problem.state_metadata.number_of_permutation_variables();
         let mut relevant_permutation_variables = collections::BTreeSet::new();
-        let mut permutation_element_to_operators: Vec<Vec<Vec<Operator<T>>>> = (0..n)
+        let mut permutation_element_to_transitions: Vec<Vec<Vec<Transition<T>>>> = (0..n)
             .map(|i| {
                 let m = problem.state_metadata.permutation_variable_capacity(i);
                 (0..m).map(|_| Vec::new()).collect()
             })
             .collect();
-        let mut global_operators = Vec::new();
-        for op in &problem.operators {
+        let mut global_transitions = Vec::new();
+        for op in &problem.transitions {
             if !op.elements_in_set_variable.is_empty() {
-                let op = Operator {
+                let op = Transition {
                     name: op.name.clone(),
                     elements_in_set_variable: op.elements_in_set_variable[1..].to_vec(),
                     elements_in_permutation_variable: op.elements_in_permutation_variable.clone(),
@@ -114,10 +114,10 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
                     cost: op.cost.clone(),
                 };
                 let (i, v) = op.elements_in_set_variable[0];
-                set_element_to_operators[i][v].push(op);
+                set_element_to_transitions[i][v].push(op);
                 relevant_set_variables.insert(i);
             } else if !op.elements_in_permutation_variable.is_empty() {
-                let op = Operator {
+                let op = Transition {
                     name: op.name.clone(),
                     elements_in_set_variable: op.elements_in_set_variable.clone(),
                     elements_in_permutation_variable: op.elements_in_permutation_variable[1..]
@@ -133,37 +133,37 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
                     cost: op.cost.clone(),
                 };
                 let (i, v) = op.elements_in_permutation_variable[0];
-                permutation_element_to_operators[i][v].push(op);
+                permutation_element_to_transitions[i][v].push(op);
                 relevant_permutation_variables.insert(i);
             } else {
-                global_operators.push(op);
+                global_transitions.push(op);
             }
         }
         OneParameterSuccessorGenerator {
             relevant_set_variables: relevant_set_variables.into_iter().collect(),
-            set_element_to_operators,
+            set_element_to_transitions,
             relevant_permutation_variables: relevant_permutation_variables.into_iter().collect(),
-            permutation_element_to_operators,
-            global_operators,
+            permutation_element_to_transitions,
+            global_transitions,
             metadata: &problem.state_metadata,
             registry: &problem.table_registry,
         }
     }
 
-    pub fn generate_applicable_operators<'b>(
+    pub fn generate_applicable_transitions<'b>(
         &'a self,
         state: &'b didp_parser::State,
-        mut result: Vec<&'a Operator<T>>,
-    ) -> Vec<&'a Operator<T>> {
+        mut result: Vec<&'a Transition<T>>,
+    ) -> Vec<&'a Transition<T>> {
         result.clear();
-        for op in &self.global_operators {
+        for op in &self.global_transitions {
             if op.is_applicable(state, self.metadata, self.registry) {
                 result.push(op);
             }
         }
         for i in &self.relevant_set_variables {
             for v in state.signature_variables.set_variables[*i].ones() {
-                for op in &self.set_element_to_operators[*i][v] {
+                for op in &self.set_element_to_transitions[*i][v] {
                     if op.is_applicable(state, self.metadata, self.registry) {
                         result.push(op);
                     }
@@ -172,7 +172,7 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
         }
         for i in &self.relevant_permutation_variables {
             for v in &state.signature_variables.permutation_variables[*i] {
-                for op in &self.permutation_element_to_operators[*i][*v] {
+                for op in &self.permutation_element_to_transitions[*i][*v] {
                     if op.is_applicable(state, self.metadata, self.registry) {
                         result.push(op);
                     }
@@ -182,14 +182,14 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
         result
     }
 
-    pub fn applicable_operators<'b>(
+    pub fn applicable_transitions<'b>(
         &'a self,
         state: &'b didp_parser::State,
-    ) -> OneParameterApplicableOperators<'a, 'b, T> {
-        OneParameterApplicableOperators {
+    ) -> OneParameterApplicableTransitions<'a, 'b, T> {
+        OneParameterApplicableTransitions {
             state,
             generator: self,
-            global_iter: self.global_operators.iter(),
+            global_iter: self.global_transitions.iter(),
             relevant_iter: None,
             variable_index: 0,
             ones: None,
@@ -199,23 +199,24 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
     }
 }
 
-pub struct OneParameterApplicableOperators<'a, 'b, T: variable::Numeric> {
+pub struct OneParameterApplicableTransitions<'a, 'b, T: variable::Numeric> {
     state: &'b didp_parser::State,
     generator: &'a OneParameterSuccessorGenerator<'a, T>,
-    global_iter: std::slice::Iter<'a, &'a Operator<T>>,
+    global_iter: std::slice::Iter<'a, &'a Transition<T>>,
     relevant_iter: Option<std::slice::Iter<'a, usize>>,
     variable_index: usize,
     ones: Option<fixedbitset::Ones<'b>>,
     permutation_iter: Option<std::slice::Iter<'b, usize>>,
-    iter: Option<std::slice::Iter<'a, Operator<T>>>,
+    iter: Option<std::slice::Iter<'a, Transition<T>>>,
 }
 
-impl<'a, 'b, T: variable::Numeric> OneParameterApplicableOperators<'a, 'b, T> {
-    fn next_permutation(&mut self) -> Option<&'a Operator<T>> {
+impl<'a, 'b, T: variable::Numeric> OneParameterApplicableTransitions<'a, 'b, T> {
+    fn next_permutation(&mut self) -> Option<&'a Transition<T>> {
         if let Some(permutation_iter) = &mut self.permutation_iter {
             if let Some(v) = permutation_iter.next() {
                 self.iter = Some(
-                    self.generator.permutation_element_to_operators[self.variable_index][*v].iter(),
+                    self.generator.permutation_element_to_transitions[self.variable_index][*v]
+                        .iter(),
                 );
                 return self.next();
             }
@@ -231,7 +232,7 @@ impl<'a, 'b, T: variable::Numeric> OneParameterApplicableOperators<'a, 'b, T> {
         }
     }
 
-    fn next_set(&mut self) -> Option<&'a Operator<T>> {
+    fn next_set(&mut self) -> Option<&'a Transition<T>> {
         if self.permutation_iter.is_some() {
             return self.next_permutation();
         }
@@ -239,7 +240,7 @@ impl<'a, 'b, T: variable::Numeric> OneParameterApplicableOperators<'a, 'b, T> {
         if let Some(ones) = &mut self.ones {
             if let Some(v) = ones.next() {
                 self.iter =
-                    Some(self.generator.set_element_to_operators[self.variable_index][v].iter());
+                    Some(self.generator.set_element_to_transitions[self.variable_index][v].iter());
                 return self.next();
             }
         }
@@ -258,8 +259,8 @@ impl<'a, 'b, T: variable::Numeric> OneParameterApplicableOperators<'a, 'b, T> {
     }
 }
 
-impl<'a, 'b, T: variable::Numeric> Iterator for OneParameterApplicableOperators<'a, 'b, T> {
-    type Item = &'a Operator<T>;
+impl<'a, 'b, T: variable::Numeric> Iterator for OneParameterApplicableTransitions<'a, 'b, T> {
+    type Item = &'a Transition<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.global_iter.next() {

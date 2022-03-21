@@ -1,3 +1,4 @@
+use std::collections;
 use std::error::Error;
 use std::fmt;
 use std::str;
@@ -6,34 +7,22 @@ use yaml_rust::Yaml;
 pub mod expression;
 pub mod expression_parser;
 mod grounded_condition;
-mod operator;
 mod state;
 pub mod table;
 mod table_registry;
+mod terminal;
+mod transition;
+mod util;
 pub mod variable;
 mod yaml_util;
 
+pub use expression_parser::ParseErr;
 pub use grounded_condition::GroundedCondition;
-pub use operator::Operator;
 pub use state::{ResourceVariables, SignatureVariables, State, StateMetadata};
 pub use table_registry::{TableData, TableRegistry};
-
-#[derive(Debug)]
-pub struct ProblemErr(String);
-
-impl ProblemErr {
-    pub fn new(message: String) -> ProblemErr {
-        ProblemErr(format!("Error in problem definiton: {}", message))
-    }
-}
-
-impl fmt::Display for ProblemErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-impl Error for ProblemErr {}
+pub use terminal::Terminal;
+pub use transition::Transition;
+pub use util::ModelErr;
 
 pub enum CostType {
     Integer,
@@ -47,7 +36,11 @@ impl CostType {
         match &numeric_type[..] {
             "integer" => Ok(Self::Integer),
             "continuous" => Ok(Self::Continuous),
-            _ => Err(ProblemErr::new(format!("no such numeric type `{}`", numeric_type)).into()),
+            _ => Err(yaml_util::YamlContentErr::new(format!(
+                "no such numeric type `{}`",
+                numeric_type
+            ))
+            .into()),
         }
     }
 }
@@ -57,14 +50,32 @@ pub struct Problem<T: variable::Numeric> {
     pub domain_name: String,
     pub problem_name: String,
     pub state_metadata: state::StateMetadata,
-    pub initial_state: state::State,
+    pub target: state::State,
     pub table_registry: table_registry::TableRegistry,
-    pub constraints: Vec<grounded_condition::GroundedCondition>,
-    pub goals: Vec<grounded_condition::GroundedCondition>,
-    pub operators: Vec<operator::Operator<T>>,
+    pub constraints: Vec<GroundedCondition>,
+    pub terminals: Vec<Terminal<T>>,
+    pub transitions: Vec<Transition<T>>,
 }
 
 impl<T: variable::Numeric> Problem<T> {
+    pub fn check_constraints(&self, state: &state::State) -> bool {
+        self.constraints.iter().all(|constraint| {
+            constraint
+                .is_satisfied(state, &self.state_metadata, &self.table_registry)
+                .unwrap_or(true)
+        })
+    }
+
+    pub fn get_terminal_cost(&self, state: &state::State) -> Option<T> {
+        for terminal in &self.terminals {
+            let cost = terminal.get_cost(state, &self.state_metadata, &self.table_registry);
+            if cost.is_some() {
+                return cost;
+            }
+        }
+        None
+    }
+
     pub fn load_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Problem<T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,
@@ -106,21 +117,21 @@ impl<T: variable::Numeric> Problem<T> {
                 )?
             }
             (Some(_), None) => {
-                return Err(ProblemErr::new(String::from(
+                return Err(ModelErr::new(String::from(
                     "key `object_numbers` not found while `objects` found ",
                 ))
                 .into())
             }
             (None, Some(_)) => {
-                return Err(ProblemErr::new(String::from(
+                return Err(ModelErr::new(String::from(
                     "key `objects` not found while `object_numbers` found ",
                 ))
                 .into())
             }
         };
 
-        let initial_state = yaml_util::get_yaml_by_key(&problem, "initial_state")?;
-        let initial_state = state::State::load_from_yaml(initial_state, &state_metadata)?;
+        let target = yaml_util::get_yaml_by_key(&problem, "target")?;
+        let target = state::State::load_from_yaml(target, &state_metadata)?;
 
         let table_registry = match (
             domain.get(&Yaml::from_str("tables")),
@@ -135,13 +146,13 @@ impl<T: variable::Numeric> Problem<T> {
                 ..Default::default()
             },
             (Some(_), None) => {
-                return Err(ProblemErr::new(String::from(
+                return Err(ModelErr::new(String::from(
                     "key `table_values` not found while `table` found ",
                 ))
                 .into())
             }
             (None, Some(_)) => {
-                return Err(ProblemErr::new(String::from(
+                return Err(ModelErr::new(String::from(
                     "key `table` not found while `table_values` found ",
                 ))
                 .into())
@@ -151,32 +162,29 @@ impl<T: variable::Numeric> Problem<T> {
         let mut constraints = Vec::new();
         if let Some(value) = domain.get(&Yaml::from_str("constraints")) {
             let array = yaml_util::get_array(value)?;
+            let parameters = collections::HashMap::new();
             for constraint in array {
-                let conditions = grounded_condition::load_grounded_conditions_from_yaml(
+                let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
                     &constraint,
                     &state_metadata,
                     &table_registry,
+                    &parameters,
                 )?;
                 let conditions = Self::filiter_grounded_conditions(conditions)?;
                 constraints.extend(conditions);
             }
         }
 
-        let mut goals = Vec::new();
-        for goal in yaml_util::get_array_by_key(&problem, "goals")? {
-            let conditions = grounded_condition::load_grounded_conditions_from_yaml(
-                &goal,
-                &state_metadata,
-                &table_registry,
-            )?;
-            let conditions = Self::filiter_grounded_conditions(conditions)?;
-            goals.extend(conditions);
+        let mut terminals = Vec::new();
+        for terminal in yaml_util::get_array_by_key(&problem, "terminals")? {
+            let terminal = Terminal::load_from_yaml(&terminal, &state_metadata, &table_registry)?;
+            terminals.push(terminal);
         }
 
-        let mut operators = Vec::new();
-        for operator in yaml_util::get_array_by_key(&domain, "operators")? {
-            operators.extend(operator::load_operators_from_yaml(
-                &operator,
+        let mut transitions = Vec::new();
+        for transition in yaml_util::get_array_by_key(&domain, "transitions")? {
+            transitions.extend(transition::load_transitions_from_yaml(
+                &transition,
                 &state_metadata,
                 &table_registry,
             )?);
@@ -186,23 +194,23 @@ impl<T: variable::Numeric> Problem<T> {
             domain_name,
             problem_name,
             state_metadata,
-            initial_state,
+            target,
             table_registry,
             constraints,
-            goals,
-            operators,
+            terminals,
+            transitions,
         })
     }
 
     fn filiter_grounded_conditions(
         conditions: Vec<grounded_condition::GroundedCondition>,
-    ) -> Result<Vec<grounded_condition::GroundedCondition>, ProblemErr> {
+    ) -> Result<Vec<grounded_condition::GroundedCondition>, ModelErr> {
         let mut result = Vec::with_capacity(conditions.len());
         for condition in conditions {
             match condition.condition {
                 expression::Condition::Constant(true) => continue,
                 expression::Condition::Constant(false) => {
-                    return Err(ProblemErr::new(String::from(
+                    return Err(ModelErr::new(String::from(
                         "problem has a condition never satisfied",
                     )))
                 }
@@ -267,7 +275,7 @@ mod tests {
         let domain = r"
 domain: ADD
 variables: [ {name: v, type: integer} ]
-operators:
+transitions:
         - name: add
           effects:
                 v: (+ v 1)
@@ -282,11 +290,10 @@ operators:
         let problem = r"
 domain: ADD
 problem: one
-initial_state:
+target:
         v: 0
-goals:
-        - condition: (>= v 1)
-        - condition: (= 0 0)
+terminals:
+        - [(>= v 1), (= 0 0)]
 ";
         let problem = yaml_rust::YamlLoader::load_from_str(problem);
         assert!(problem.is_ok());
@@ -309,7 +316,7 @@ goals:
                 name_to_integer_variable,
                 ..Default::default()
             },
-            initial_state: state::State {
+            target: state::State {
                 signature_variables: Rc::new(SignatureVariables {
                     integer_variables: vec![0],
                     ..Default::default()
@@ -317,15 +324,18 @@ goals:
                 stage: 0,
                 ..Default::default()
             },
-            goals: vec![GroundedCondition {
-                condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
-                    ComparisonOperator::Ge,
-                    NumericExpression::IntegerVariable(0),
-                    NumericExpression::Constant(1),
-                ))),
-                ..Default::default()
+            terminals: vec![Terminal {
+                cost: NumericExpression::Constant(0),
+                conditions: vec![GroundedCondition {
+                    condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                        ComparisonOperator::Ge,
+                        NumericExpression::IntegerVariable(0),
+                        NumericExpression::Constant(1),
+                    ))),
+                    ..Default::default()
+                }],
             }],
-            operators: vec![Operator {
+            transitions: vec![Transition {
                 name: String::from("add"),
                 integer_effects: vec![(
                     0,
@@ -348,11 +358,11 @@ goals:
         assert_eq!(problem.domain_name, expected.domain_name);
         assert_eq!(problem.problem_name, expected.problem_name);
         assert_eq!(problem.state_metadata, expected.state_metadata);
-        assert_eq!(problem.initial_state, expected.initial_state);
+        assert_eq!(problem.target, expected.target);
         assert_eq!(problem.table_registry, expected.table_registry);
         assert_eq!(problem.constraints, expected.constraints);
-        assert_eq!(problem.goals, expected.goals);
-        assert_eq!(problem.operators, expected.operators);
+        assert_eq!(problem.terminals, expected.terminals);
+        assert_eq!(problem.transitions, expected.transitions);
         assert_eq!(problem, expected);
 
         let domain = r"
@@ -385,9 +395,9 @@ tables:
           args: [cities, cities]
           default: true
 constraints:
-        - condition: (<= time (due_date location))
-        - condition: (= 0 0)
-operators:
+        - (<= time (due_date location))
+        - (= 0 0)
+transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
@@ -408,13 +418,12 @@ domain: TSPTW
 problem: test
 numeric_type: integer
 object_numbers: { cities: 3 }
-initial_state:
+target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-goals:
-        - condition: (is_empty unvisited)
-        - condition: (is location 0)
+terminals:
+        - [(is_empty unvisited), (is location 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
         due_date: {0: 10000, 1: 2, 2: 2}
@@ -469,7 +478,7 @@ table_values:
                 integer_less_is_better: vec![true],
                 ..Default::default()
             },
-            initial_state: state::State {
+            target: state::State {
                 signature_variables: Rc::new(state::SignatureVariables {
                     set_variables: vec![unvisited],
                     element_variables: vec![0],
@@ -518,28 +527,36 @@ table_values:
                 ))),
                 ..Default::default()
             }],
-            goals: vec![
-                GroundedCondition {
-                    condition: Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(0))),
-                    ..Default::default()
-                },
-                GroundedCondition {
-                    condition: Condition::Set(SetCondition::Eq(
-                        ElementExpression::Variable(0),
-                        ElementExpression::Constant(0),
-                    )),
-                    ..Default::default()
-                },
-            ],
-            operators: vec![
-                Operator {
+            terminals: vec![Terminal {
+                cost: NumericExpression::Constant(0),
+                conditions: vec![
+                    GroundedCondition {
+                        condition: Condition::Set(SetCondition::IsEmpty(
+                            SetExpression::SetVariable(0),
+                        )),
+                        ..Default::default()
+                    },
+                    GroundedCondition {
+                        condition: Condition::Set(SetCondition::Eq(
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(0),
+                        )),
+                        ..Default::default()
+                    },
+                ],
+            }],
+            transitions: vec![
+                Transition {
                     name: String::from("visit to:0"),
                     elements_in_set_variable: vec![(0, 0)],
-                    preconditions: vec![Condition::Table(BoolTableExpression::Table2D(
-                        0,
-                        ElementExpression::Variable(0),
-                        ElementExpression::Constant(0),
-                    ))],
+                    preconditions: vec![GroundedCondition {
+                        condition: Condition::Table(BoolTableExpression::Table2D(
+                            0,
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(0),
+                        )),
+                        ..Default::default()
+                    }],
                     set_effects: vec![(
                         0,
                         SetExpression::SetElementOperation(
@@ -580,14 +597,17 @@ table_values:
                     ),
                     ..Default::default()
                 },
-                Operator {
+                Transition {
                     name: String::from("visit to:1"),
                     elements_in_set_variable: vec![(0, 1)],
-                    preconditions: vec![Condition::Table(BoolTableExpression::Table2D(
-                        0,
-                        ElementExpression::Variable(0),
-                        ElementExpression::Constant(1),
-                    ))],
+                    preconditions: vec![GroundedCondition {
+                        condition: Condition::Table(BoolTableExpression::Table2D(
+                            0,
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(1),
+                        )),
+                        ..Default::default()
+                    }],
                     set_effects: vec![(
                         0,
                         SetExpression::SetElementOperation(
@@ -628,14 +648,17 @@ table_values:
                     ),
                     ..Default::default()
                 },
-                Operator {
+                Transition {
                     name: String::from("visit to:2"),
                     elements_in_set_variable: vec![(0, 2)],
-                    preconditions: vec![Condition::Table(BoolTableExpression::Table2D(
-                        0,
-                        ElementExpression::Variable(0),
-                        ElementExpression::Constant(2),
-                    ))],
+                    preconditions: vec![GroundedCondition {
+                        condition: Condition::Table(BoolTableExpression::Table2D(
+                            0,
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(2),
+                        )),
+                        ..Default::default()
+                    }],
                     set_effects: vec![(
                         0,
                         SetExpression::SetElementOperation(
@@ -681,11 +704,11 @@ table_values:
         assert_eq!(problem.domain_name, expected.domain_name);
         assert_eq!(problem.problem_name, expected.problem_name);
         assert_eq!(problem.state_metadata, expected.state_metadata);
-        assert_eq!(problem.initial_state, expected.initial_state);
+        assert_eq!(problem.target, expected.target);
         assert_eq!(problem.table_registry, expected.table_registry);
         assert_eq!(problem.constraints, expected.constraints);
-        assert_eq!(problem.goals, expected.goals);
-        assert_eq!(problem.operators, expected.operators);
+        assert_eq!(problem.terminals, expected.terminals);
+        assert_eq!(problem.transitions, expected.transitions);
         assert_eq!(problem, expected);
     }
 
@@ -696,11 +719,11 @@ domain: TSPTW
 problem: test
 numeric_type: integer
 object_numbers: { cities: 3 }
-initial_state:
+target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-goals:
+terminals:
         - condition: (is_empty unvisited)
         - condition: (is location 0)
 table_values:
@@ -745,7 +768,7 @@ tables:
           default: true
 constraints:
         - condition: (<= time (due_date location))
-operators:
+transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
@@ -794,7 +817,7 @@ tables:
           default: true
 constraints:
         - condition: (<= time (due_date location))
-operators:
+transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
@@ -834,7 +857,7 @@ tables:
           default: true
 constraints:
         - condition: (<= time (due_date location))
-operators:
+transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
@@ -869,7 +892,7 @@ variables:
           preference: less
 constraints:
         - condition: (<= time (due_date location))
-operators:
+transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
@@ -960,7 +983,7 @@ tables:
 constraints:
         - condition: (<= time (due_date location))
         - condition: (= 1 2)
-operators:
+transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
@@ -983,13 +1006,12 @@ operators:
 problem: test
 numeric_type: integer
 object_numbers: { cities: 3 }
-initial_state:
+target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-goals:
-        - condition: (is_empty unvisited)
-        - condition: (is location 0)
+terminals:
+        - [(is_empty unvisited), (is location 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
         due_date: {0: 10000, 1: 2, 2: 2}
@@ -1010,13 +1032,12 @@ domain: TSP
 problem: test
 numeric_type: integer
 object_numbers: { cities: 3 }
-initial_state:
+target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-goals:
-        - condition: (is_empty unvisited)
-        - condition: (is location 0)
+terminals:
+        - [(is_empty unvisited) (is location 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
         due_date: {0: 10000, 1: 2, 2: 2}
@@ -1036,13 +1057,12 @@ table_values:
 domain: TSPTW
 problem: test
 numeric_type: integer
-initial_state:
+target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-goals:
-        - condition: (is_empty unvisited)
-        - condition: (is location 0)
+terminals:
+        - [(is_empty unvisited), (is location 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
         due_date: {0: 10000, 1: 2, 2: 2}
@@ -1063,9 +1083,8 @@ domain: TSPTW
 problem: test
 numeric_type: integer
 object_numbers: { cities: 3 }
-goals:
-        - condition: (is_empty unvisited)
-        - condition: (is location 0)
+terminals:
+        - [(is_empty unvisited), (is location 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
         due_date: {0: 10000, 1: 2, 2: 2}
@@ -1086,7 +1105,7 @@ domain: TSPTW
 problem: test
 numeric_type: integer
 object_numbers: { cities: 3 }
-initial_state:
+target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
@@ -1110,13 +1129,12 @@ domain: TSPTW
 problem: test
 numeric_type: integer
 object_numbers: { cities: 3 }
-initial_state:
+target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-goals:
-        - condition: (is_empty unvisited)
-        - condition: (is location 0)
+terminals:
+        - [(is_empty unvisited), (is location 0)]
 ";
         let problem = yaml_rust::YamlLoader::load_from_str(problem);
         assert!(problem.is_ok());
@@ -1132,14 +1150,12 @@ domain: TSPTW
 problem: test
 numeric_type: integer
 object_numbers: { cities: 3 }
-initial_state:
+target:
         unvisited: [0, 1, 2]
         location: 0
         time: 0
-goals:
-        - condition: (is_empty unvisited)
-        - condition: (is location 0)
-        - condition: (!= 0 0)
+terminals:
+        - [(is_empty unvisited), (is location 0), (!= 0 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
         due_date: {0: 10000, 1: 2, 2: 2}
