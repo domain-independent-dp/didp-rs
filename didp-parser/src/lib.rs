@@ -57,7 +57,7 @@ pub struct Problem<T: variable::Numeric> {
     pub domain_name: String,
     pub problem_name: String,
     pub state_metadata: state::StateMetadata,
-    pub initial_state: state::State<T>,
+    pub initial_state: state::State,
     pub table_registry: table_registry::TableRegistry,
     pub constraints: Vec<grounded_condition::GroundedCondition>,
     pub goals: Vec<grounded_condition::GroundedCondition>,
@@ -120,7 +120,7 @@ impl<T: variable::Numeric> Problem<T> {
         };
 
         let initial_state = yaml_util::get_yaml_by_key(&problem, "initial_state")?;
-        let initial_state = state::State::<T>::load_from_yaml(initial_state, &state_metadata)?;
+        let initial_state = state::State::load_from_yaml(initial_state, &state_metadata)?;
 
         let table_registry = match (
             domain.get(&Yaml::from_str("tables")),
@@ -315,7 +315,6 @@ goals:
                     ..Default::default()
                 }),
                 stage: 0,
-                cost: 0,
                 ..Default::default()
             },
             goals: vec![GroundedCondition {
@@ -481,7 +480,6 @@ table_values:
                     ..Default::default()
                 },
                 stage: 0,
-                cost: 0,
             },
             table_registry: table_registry::TableRegistry {
                 integer_tables: table_registry::TableData {

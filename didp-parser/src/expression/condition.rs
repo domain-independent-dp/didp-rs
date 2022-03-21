@@ -24,9 +24,9 @@ impl Default for Condition {
 }
 
 impl Condition {
-    pub fn eval<T: variable::Numeric>(
+    pub fn eval(
         &self,
-        state: &state::State<T>,
+        state: &state::State,
         metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
     ) -> bool {
@@ -114,9 +114,9 @@ impl Default for Comparison {
 }
 
 impl Comparison {
-    pub fn eval<T: variable::Numeric>(
+    pub fn eval(
         &self,
-        state: &state::State<T>,
+        state: &state::State,
         metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
     ) -> bool {
@@ -348,7 +348,7 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::Integer> {
+    fn generate_state() -> state::State {
         let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
@@ -368,7 +368,6 @@ mod tests {
                 continuous_variables: vec![4.0, 5.0, 6.0],
             },
             stage: 0,
-            cost: 0,
         }
     }
 

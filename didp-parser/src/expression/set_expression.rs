@@ -24,11 +24,7 @@ pub enum SetElementOperator {
 }
 
 impl SetExpression {
-    pub fn eval<T: variable::Numeric>(
-        &self,
-        state: &state::State<T>,
-        metadata: &state::StateMetadata,
-    ) -> variable::Set {
+    pub fn eval(&self, state: &state::State, metadata: &state::StateMetadata) -> variable::Set {
         match self {
             SetExpression::SetVariable(i) => state.signature_variables.set_variables[*i].clone(),
             SetExpression::PermutationVariable(i) => {
@@ -88,7 +84,7 @@ pub enum ElementExpression {
 }
 
 impl ElementExpression {
-    pub fn eval<T: variable::Numeric>(&self, state: &state::State<T>) -> variable::Element {
+    pub fn eval(&self, state: &state::State) -> variable::Element {
         match self {
             ElementExpression::Stage => state.stage,
             ElementExpression::Constant(x) => *x,
@@ -172,7 +168,7 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::Integer> {
+    fn generate_state() -> state::State {
         let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);

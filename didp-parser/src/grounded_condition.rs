@@ -2,7 +2,6 @@ use crate::expression;
 use crate::expression_parser;
 use crate::state;
 use crate::table_registry;
-use crate::variable;
 use crate::yaml_util;
 use std::collections;
 use std::error::Error;
@@ -16,9 +15,9 @@ pub struct GroundedCondition {
 }
 
 impl GroundedCondition {
-    pub fn is_satisfied<T: variable::Numeric>(
+    pub fn is_satisfied(
         &self,
-        state: &state::State<T>,
+        state: &state::State,
         metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
     ) -> Option<bool> {
@@ -91,6 +90,7 @@ mod tests {
     use super::super::expression::*;
     use super::super::table;
     use super::*;
+    use crate::variable;
     use std::collections::HashMap;
     use std::rc::Rc;
 
@@ -169,7 +169,6 @@ mod tests {
                 element_variables: vec![0],
                 ..Default::default()
             }),
-            cost: 0,
             ..Default::default()
         };
 

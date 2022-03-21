@@ -30,7 +30,7 @@ pub struct Operator<T: Numeric> {
 impl<T: Numeric> Operator<T> {
     pub fn is_applicable(
         &self,
-        state: &state::State<T>,
+        state: &state::State,
         metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
     ) -> bool {
@@ -54,10 +54,10 @@ impl<T: Numeric> Operator<T> {
 
     pub fn apply_effects(
         &self,
-        state: &state::State<T>,
+        state: &state::State,
         metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
-    ) -> state::State<T> {
+    ) -> state::State {
         let len = state.signature_variables.set_variables.len();
         let mut set_variables = Vec::with_capacity(len);
         let mut i = 0;
@@ -107,7 +107,6 @@ impl<T: Numeric> Operator<T> {
         }
 
         let stage = state.stage + 1;
-        let cost = self.cost.eval(state, metadata, registry);
 
         state::State {
             signature_variables: {
@@ -124,8 +123,17 @@ impl<T: Numeric> Operator<T> {
                 continuous_variables: continuous_resource_variables,
             },
             stage,
-            cost,
         }
+    }
+
+    pub fn eval_cost(
+        &self,
+        cost: T,
+        state: &state::State,
+        metadata: &state::StateMetadata,
+        registry: &table_registry::TableRegistry,
+    ) -> T {
+        self.cost.eval_cost(cost, state, metadata, registry)
     }
 }
 
@@ -402,7 +410,7 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<Integer> {
+    fn generate_state() -> state::State {
         let mut set1 = Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
@@ -422,7 +430,6 @@ mod tests {
                 continuous_variables: vec![4.0, 5.0, 6.0],
             },
             stage: 0,
-            cost: 0,
         }
     }
 
@@ -574,10 +581,26 @@ mod tests {
                 continuous_variables: vec![4.0, 5.0, 6.0],
             },
             stage: 1,
-            cost: 1,
         };
         let successor = operator.apply_effects(&state, &metadata, &registry);
         assert_eq!(successor, expected);
+    }
+
+    #[test]
+    fn eval_cost() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let metadata = generate_metadata();
+
+        let operator = Operator {
+            cost: NumericExpression::NumericOperation(
+                NumericOperator::Add,
+                Box::new(NumericExpression::Cost),
+                Box::new(NumericExpression::Constant(1)),
+            ),
+            ..Default::default()
+        };
+        assert_eq!(operator.eval_cost(0, &state, &metadata, &registry), 1);
     }
 
     #[test]

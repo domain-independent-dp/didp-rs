@@ -32,9 +32,9 @@ pub enum NumericTableExpression<T: variable::Numeric> {
 }
 
 impl<T: variable::Numeric> NumericTableExpression<T> {
-    pub fn eval<U: variable::Numeric>(
+    pub fn eval(
         &self,
-        state: &state::State<U>,
+        state: &state::State,
         metadata: &state::StateMetadata,
         tables: &TableData<T>,
     ) -> T {
@@ -287,10 +287,10 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
         }
     }
 
-    fn sum_table<U: variable::Numeric>(
+    fn sum_table(
         f: &table::Table<T>,
         args: &[ArgumentExpression],
-        state: &state::State<U>,
+        state: &state::State,
         metadata: &state::StateMetadata,
     ) -> T {
         let mut result = vec![vec![]];
@@ -440,7 +440,7 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::Integer> {
+    fn generate_state() -> state::State {
         let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);

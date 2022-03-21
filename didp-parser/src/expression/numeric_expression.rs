@@ -40,9 +40,9 @@ impl<T: Numeric> Default for NumericExpression<T> {
 }
 
 impl<T: Numeric> NumericExpression<T> {
-    pub fn eval<U: Numeric>(
+    pub fn eval(
         &self,
-        state: &state::State<U>,
+        state: &state::State,
         metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
     ) -> T {
@@ -60,11 +60,11 @@ impl<T: Numeric> NumericExpression<T> {
             Self::ContinuousResourceVariable(i) => {
                 T::from_continuous(state.resource_variables.continuous_variables[*i])
             }
-            Self::Cost => T::from(state.cost),
+            Self::Cost => panic!(String::from("cost cannot be accessd from eval function")),
             Self::NumericOperation(op, a, b) => {
                 let a = a.eval(state, metadata, registry);
                 let b = b.eval(state, metadata, registry);
-                eval_operation(op, a, b)
+                Self::eval_operation(op, a, b)
             }
             Self::Cardinality(set_expression::SetExpression::SetVariable(i)) => {
                 let set = &state.signature_variables.set_variables[*i];
@@ -84,12 +84,30 @@ impl<T: Numeric> NumericExpression<T> {
         }
     }
 
+    pub fn eval_cost(
+        &self,
+        cost: T,
+        state: &state::State,
+        metadata: &state::StateMetadata,
+        registry: &table_registry::TableRegistry,
+    ) -> T {
+        match self {
+            Self::Cost => cost,
+            Self::NumericOperation(op, a, b) => {
+                let a = a.eval_cost(cost, state, metadata, registry);
+                let b = b.eval_cost(cost, state, metadata, registry);
+                Self::eval_operation(op, a, b)
+            }
+            _ => self.eval(state, metadata, registry),
+        }
+    }
+
     pub fn simplify(&self, registry: &table_registry::TableRegistry) -> NumericExpression<T> {
         match self {
             Self::NumericOperation(op, a, b) => {
                 match (a.simplify(registry), b.simplify(registry)) {
                     (Self::Constant(a), Self::Constant(b)) => {
-                        Self::Constant(eval_operation(op, a, b))
+                        Self::Constant(Self::eval_operation(op, a, b))
                     }
                     (a, b) => Self::NumericOperation(op.clone(), Box::new(a), Box::new(b)),
                 }
@@ -111,26 +129,26 @@ impl<T: Numeric> NumericExpression<T> {
             _ => self.clone(),
         }
     }
-}
 
-fn eval_operation<T: Numeric>(op: &NumericOperator, a: T, b: T) -> T {
-    match op {
-        NumericOperator::Add => a + b,
-        NumericOperator::Subtract => a - b,
-        NumericOperator::Multiply => a * b,
-        NumericOperator::Divide => a / b,
-        NumericOperator::Max => {
-            if a > b {
-                a
-            } else {
-                b
+    fn eval_operation(op: &NumericOperator, a: T, b: T) -> T {
+        match op {
+            NumericOperator::Add => a + b,
+            NumericOperator::Subtract => a - b,
+            NumericOperator::Multiply => a * b,
+            NumericOperator::Divide => a / b,
+            NumericOperator::Max => {
+                if a > b {
+                    a
+                } else {
+                    b
+                }
             }
-        }
-        NumericOperator::Min => {
-            if a < b {
-                a
-            } else {
-                b
+            NumericOperator::Min => {
+                if a < b {
+                    a
+                } else {
+                    b
+                }
             }
         }
     }
@@ -221,7 +239,7 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<Integer> {
+    fn generate_state() -> state::State {
         let mut set1 = Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
@@ -241,7 +259,6 @@ mod tests {
                 continuous_variables: vec![4.0, 5.0, 6.0],
             },
             stage: 0,
-            cost: 0,
         }
     }
 
@@ -339,7 +356,7 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<Integer> = NumericExpression::Cost {};
-        assert_eq!(expression.eval(&state, &metadata, &registry), 0);
+        assert_eq!(expression.eval_cost(0, &state, &metadata, &registry), 0);
     }
 
     #[test]

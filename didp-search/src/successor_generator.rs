@@ -20,7 +20,7 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
 
     pub fn generate_applicable_operators<'b>(
         &self,
-        state: &'b didp_parser::State<T>,
+        state: &'b didp_parser::State,
         mut result: Vec<&'a Operator<T>>,
     ) -> Vec<&'a Operator<T>> {
         result.clear();
@@ -34,7 +34,7 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
 
     pub fn applicable_operators<'b>(
         &'a self,
-        state: &'b didp_parser::State<T>,
+        state: &'b didp_parser::State,
     ) -> ApplicableOperators<'a, 'b, T> {
         ApplicableOperators {
             state,
@@ -45,7 +45,7 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
 }
 
 pub struct ApplicableOperators<'a, 'b, T: variable::Numeric> {
-    state: &'b didp_parser::State<T>,
+    state: &'b didp_parser::State,
     generator: &'a SuccessorGenerator<'a, T>,
     iter: std::slice::Iter<'a, Operator<T>>,
 }
@@ -152,7 +152,7 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
 
     pub fn generate_applicable_operators<'b>(
         &'a self,
-        state: &'b didp_parser::State<T>,
+        state: &'b didp_parser::State,
         mut result: Vec<&'a Operator<T>>,
     ) -> Vec<&'a Operator<T>> {
         result.clear();
@@ -184,7 +184,7 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
 
     pub fn applicable_operators<'b>(
         &'a self,
-        state: &'b didp_parser::State<T>,
+        state: &'b didp_parser::State,
     ) -> OneParameterApplicableOperators<'a, 'b, T> {
         OneParameterApplicableOperators {
             state,
@@ -200,7 +200,7 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
 }
 
 pub struct OneParameterApplicableOperators<'a, 'b, T: variable::Numeric> {
-    state: &'b didp_parser::State<T>,
+    state: &'b didp_parser::State,
     generator: &'a OneParameterSuccessorGenerator<'a, T>,
     global_iter: std::slice::Iter<'a, &'a Operator<T>>,
     relevant_iter: Option<std::slice::Iter<'a, usize>>,

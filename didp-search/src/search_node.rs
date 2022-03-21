@@ -1,50 +1,50 @@
 use crate::priority_queue;
+use didp_parser::variable;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections;
 use std::rc::Rc;
 
-use didp_parser::variable;
-
 #[derive(Debug)]
-pub struct SearchNode<T: variable::Numeric, U: Ord> {
-    pub state: didp_parser::State<T>,
+pub struct SearchNode<T> {
+    pub state: didp_parser::State,
     pub operator: Option<usize>,
-    pub parent: Option<Rc<SearchNode<T, U>>>,
+    pub parent: Option<Rc<SearchNode<T>>>,
+    pub g: T,
     pub h: RefCell<Option<T>>,
-    pub f: RefCell<Option<U>>,
+    pub f: RefCell<Option<T>>,
     pub closed: RefCell<bool>,
 }
 
-impl<T: variable::Numeric, U: Ord> PartialEq for SearchNode<T, U> {
+impl<T: Ord> PartialEq for SearchNode<T> {
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f
     }
 }
 
-impl<T: variable::Numeric, U: Ord> Eq for SearchNode<T, U> {}
+impl<T: Ord> Eq for SearchNode<T> {}
 
-impl<T: variable::Numeric, U: Ord> Ord for SearchNode<T, U> {
+impl<T: Ord> Ord for SearchNode<T> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.f.cmp(&other.f)
     }
 }
 
-impl<T: variable::Numeric, U: Ord> PartialOrd for SearchNode<T, U> {
+impl<T: Ord> PartialOrd for SearchNode<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-pub type OpenList<T, U> = priority_queue::PriorityQueue<Rc<SearchNode<T, U>>>;
+pub type OpenList<T> = priority_queue::PriorityQueue<Rc<SearchNode<T>>>;
 
-pub struct SearchNodeRegistry<'a, T: variable::Numeric, U: Ord> {
-    registry: collections::HashMap<Rc<didp_parser::SignatureVariables>, Vec<Rc<SearchNode<T, U>>>>,
+pub struct SearchNodeRegistry<'a, T: PartialOrd> {
+    registry: collections::HashMap<Rc<didp_parser::SignatureVariables>, Vec<Rc<SearchNode<T>>>>,
     metadata: &'a didp_parser::StateMetadata,
 }
 
-impl<'a, T: variable::Numeric, U: Ord> SearchNodeRegistry<'a, T, U> {
-    pub fn new(problem: &'a didp_parser::Problem<T>) -> SearchNodeRegistry<T, U> {
+impl<'a, T: variable::Numeric + Ord> SearchNodeRegistry<'a, T> {
+    pub fn new(problem: &'a didp_parser::Problem<T>) -> SearchNodeRegistry<T> {
         SearchNodeRegistry {
             registry: collections::HashMap::new(),
             metadata: &problem.state_metadata,
@@ -54,7 +54,7 @@ impl<'a, T: variable::Numeric, U: Ord> SearchNodeRegistry<'a, T, U> {
     pub fn with_capcaity(
         capacity: usize,
         problem: &'a didp_parser::Problem<T>,
-    ) -> SearchNodeRegistry<T, U> {
+    ) -> SearchNodeRegistry<T> {
         SearchNodeRegistry {
             registry: collections::HashMap::with_capacity(capacity),
             metadata: &problem.state_metadata,
@@ -63,10 +63,11 @@ impl<'a, T: variable::Numeric, U: Ord> SearchNodeRegistry<'a, T, U> {
 
     pub fn get_node(
         &mut self,
-        mut state: didp_parser::State<T>,
+        mut state: didp_parser::State,
+        g: T,
         operator: Option<usize>,
-        parent: Option<Rc<SearchNode<T, U>>>,
-    ) -> Option<Rc<SearchNode<T, U>>> {
+        parent: Option<Rc<SearchNode<T>>>,
+    ) -> Option<Rc<SearchNode<T>>> {
         let entry = self.registry.entry(state.signature_variables.clone());
         let v = match entry {
             collections::hash_map::Entry::Occupied(entry) => {
@@ -77,15 +78,15 @@ impl<'a, T: variable::Numeric, U: Ord> SearchNodeRegistry<'a, T, U> {
                     let result = self.metadata.dominance(&state, &other.state);
                     match result {
                         Some(Ordering::Equal) | Some(Ordering::Less)
-                            if (self.metadata.maximize && state.cost <= other.state.cost)
-                                || (!self.metadata.maximize && state.cost >= other.state.cost) =>
+                            if (self.metadata.maximize && g <= other.g)
+                                || (!self.metadata.maximize && g >= other.g) =>
                         {
                             // dominated
                             return None;
                         }
                         Some(Ordering::Equal) | Some(Ordering::Greater)
-                            if (self.metadata.maximize && state.cost >= other.state.cost)
-                                || (!self.metadata.maximize && state.cost <= other.state.cost) =>
+                            if (self.metadata.maximize && g >= other.g)
+                                || (!self.metadata.maximize && g <= other.g) =>
                         {
                             // dominating
                             if !*other.closed.borrow() {
@@ -107,6 +108,7 @@ impl<'a, T: variable::Numeric, U: Ord> SearchNodeRegistry<'a, T, U> {
                                 state,
                                 operator,
                                 parent,
+                                g,
                                 h,
                                 f: RefCell::new(None),
                                 closed: RefCell::new(false),
@@ -124,6 +126,7 @@ impl<'a, T: variable::Numeric, U: Ord> SearchNodeRegistry<'a, T, U> {
         let node = Rc::new(SearchNode {
             state,
             operator,
+            g,
             h: RefCell::new(None),
             f: RefCell::new(None),
             parent,
@@ -191,10 +194,10 @@ mod tests {
     fn generate_node(
         signature_variables: Rc<didp_parser::SignatureVariables>,
         integer_resource_variables: Vec<variable::Integer>,
-        cost: variable::Integer,
+        g: variable::Integer,
         h: variable::Integer,
         f: variable::Integer,
-    ) -> SearchNode<variable::Integer, variable::Integer> {
+    ) -> SearchNode<variable::Integer> {
         SearchNode {
             state: didp_parser::State {
                 signature_variables,
@@ -203,10 +206,10 @@ mod tests {
                     ..Default::default()
                 },
                 stage: 0,
-                cost,
             },
             operator: None,
             parent: None,
+            g,
             h: RefCell::new(Some(h)),
             f: RefCell::new(Some(f)),
             closed: RefCell::new(false),
@@ -234,23 +237,20 @@ mod tests {
     #[test]
     fn get_new_node() {
         let problem = generate_problem();
-        let mut registry =
-            SearchNodeRegistry::<variable::Integer, variable::Integer>::new(&problem);
+        let mut registry = SearchNodeRegistry::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
-            cost: 1,
         };
-        let node = registry.get_node(state, None, None);
+        let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
-            cost: 1,
         };
         assert_eq!(node.state, state);
         assert!(node.h.borrow().is_none());
@@ -262,16 +262,14 @@ mod tests {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
-            cost: 1,
         };
-        let node = registry.get_node(state, None, None);
+        let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
-            cost: 1,
         };
         assert_eq!(node.state, state);
         assert!(node.h.borrow().is_none());
@@ -283,16 +281,14 @@ mod tests {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![3, 1, 3]),
             stage: 0,
-            cost: 1,
         };
-        let node = registry.get_node(state, None, None);
+        let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![3, 1, 3]),
             stage: 0,
-            cost: 1,
         };
         assert_eq!(node.state, state);
         assert!(node.h.borrow().is_none());
@@ -304,16 +300,14 @@ mod tests {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![0, 1, 3]),
             stage: 0,
-            cost: 0,
         };
-        let node = registry.get_node(state, None, None);
+        let node = registry.get_node(state, 0, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![0, 1, 3]),
             stage: 0,
-            cost: 0,
         };
         assert_eq!(node.state, state);
         assert!(node.h.borrow().is_none());
@@ -325,58 +319,51 @@ mod tests {
     #[test]
     fn node_dominated() {
         let problem = generate_problem();
-        let mut registry =
-            SearchNodeRegistry::<variable::Integer, variable::Integer>::new(&problem);
+        let mut registry = SearchNodeRegistry::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
-            cost: 2,
         };
-        registry.get_node(state, None, None);
+        registry.get_node(state, 2, None, None);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
-            cost: 2,
         };
-        let node = registry.get_node(state, None, None);
+        let node = registry.get_node(state, 2, None, None);
         assert!(node.is_none());
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
             stage: 0,
-            cost: 2,
         };
-        let node = registry.get_node(state, None, None);
+        let node = registry.get_node(state, 2, None, None);
         assert!(node.is_none());
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
-            cost: 3,
         };
-        let node = registry.get_node(state, None, None);
+        let node = registry.get_node(state, 3, None, None);
         assert!(node.is_none());
     }
 
     #[test]
     fn node_dead_end() {
         let problem = generate_problem();
-        let mut registry =
-            SearchNodeRegistry::<variable::Integer, variable::Integer>::new(&problem);
+        let mut registry = SearchNodeRegistry::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
-            cost: 2,
         };
-        let node = registry.get_node(state, None, None);
+        let node = registry.get_node(state, 2, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         assert!(node.h.borrow().is_none());
@@ -385,25 +372,22 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
-            cost: 1,
         };
-        let node = registry.get_node(state, None, None);
+        let node = registry.get_node(state, 1, None, None);
         assert!(node.is_none());
     }
 
     #[test]
     fn get_dominating_node() {
         let problem = generate_problem();
-        let mut registry =
-            SearchNodeRegistry::<variable::Integer, variable::Integer>::new(&problem);
+        let mut registry = SearchNodeRegistry::<variable::Integer>::new(&problem);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 0,
-            cost: 2,
         };
-        let node1 = registry.get_node(state, None, None);
+        let node1 = registry.get_node(state, 2, None, None);
         assert!(node1.is_some());
         let node1 = node1.unwrap();
         *node1.h.borrow_mut() = Some(3);
@@ -412,9 +396,8 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 1,
-            cost: 1,
         };
-        let node2 = registry.get_node(state, Some(0), Some(node1.clone()));
+        let node2 = registry.get_node(state, 1, Some(0), Some(node1.clone()));
         assert!(node2.is_some());
         let node2 = node2.unwrap();
         assert_eq!(
@@ -425,7 +408,7 @@ mod tests {
             node2.state.resource_variables,
             node1.state.resource_variables
         );
-        assert!(node2.state.cost < node1.state.cost);
+        assert!(node2.g < node1.g);
         assert_eq!(*node2.h.borrow(), *node1.h.borrow());
         assert!(node2.f.borrow().is_none());
         assert!(*node1.closed.borrow());
@@ -436,9 +419,8 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![2, 3, 3]),
             stage: 0,
-            cost: 1,
         };
-        let node3 = registry.get_node(state, None, None);
+        let node3 = registry.get_node(state, 1, None, None);
         assert!(node3.is_some());
         let node3 = node3.unwrap();
         assert_eq!(
@@ -449,7 +431,7 @@ mod tests {
             node3.state.resource_variables,
             node2.state.resource_variables,
         );
-        assert_eq!(node3.state.cost, node2.state.cost);
+        assert_eq!(node3.g, node2.g);
         assert!(node3.h.borrow().is_none());
         assert!(node3.f.borrow().is_none());
         assert!(*node2.closed.borrow());

@@ -22,11 +22,7 @@ pub enum BoolTableExpression {
 }
 
 impl BoolTableExpression {
-    pub fn eval<T: variable::Numeric>(
-        &self,
-        state: &state::State<T>,
-        tables: &table_registry::TableData<bool>,
-    ) -> bool {
+    pub fn eval(&self, state: &state::State, tables: &table_registry::TableData<bool>) -> bool {
         match self {
             Self::Constant(value) => *value,
             Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(state)),
@@ -120,7 +116,7 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::Integer> {
+    fn generate_state() -> state::State {
         let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);

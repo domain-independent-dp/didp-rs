@@ -1,7 +1,6 @@
 use super::set_expression::ElementExpression;
 use super::set_expression::SetExpression;
 use crate::state;
-use crate::variable;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SetCondition {
@@ -14,11 +13,7 @@ pub enum SetCondition {
 }
 
 impl SetCondition {
-    pub fn eval<T: variable::Numeric>(
-        &self,
-        state: &state::State<T>,
-        metadata: &state::StateMetadata,
-    ) -> bool {
+    pub fn eval(&self, state: &state::State, metadata: &state::StateMetadata) -> bool {
         match self {
             Self::Constant(value) => *value,
             Self::Eq(x, y) => x.eval(state) == y.eval(state),
@@ -82,6 +77,7 @@ impl SetCondition {
 mod tests {
     use super::super::set_expression::SetOperator;
     use super::*;
+    use crate::variable;
     use std::collections::HashMap;
     use std::rc::Rc;
 
@@ -148,7 +144,7 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State<variable::Integer> {
+    fn generate_state() -> state::State {
         let mut set1 = variable::Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);

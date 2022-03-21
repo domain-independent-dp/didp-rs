@@ -4,16 +4,13 @@ use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 use std::cmp::Ordering;
 use std::collections;
-use std::fmt;
 use std::rc::Rc;
-use std::str;
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct State<T: Numeric> {
+pub struct State {
     pub signature_variables: Rc<SignatureVariables>,
     pub resource_variables: ResourceVariables,
     pub stage: Element,
-    pub cost: T,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
@@ -31,14 +28,11 @@ pub struct ResourceVariables {
     pub continuous_variables: Vec<Continuous>,
 }
 
-impl<T: Numeric> State<T> {
+impl State {
     pub fn load_from_yaml(
         value: &yaml_rust::Yaml,
         metadata: &StateMetadata,
-    ) -> Result<State<T>, yaml_util::YamlContentErr>
-    where
-        <T as str::FromStr>::Err: fmt::Debug,
-    {
+    ) -> Result<State, yaml_util::YamlContentErr> {
         let value = yaml_util::get_map(value)?;
         let mut set_variables = Vec::with_capacity(metadata.set_variable_names.len());
         for name in &metadata.set_variable_names {
@@ -87,11 +81,6 @@ impl<T: Numeric> State<T> {
         } else {
             0
         };
-        let cost = if let Ok(value) = yaml_util::get_numeric_by_key(value, "cost") {
-            value
-        } else {
-            T::zero()
-        };
         Ok(State {
             signature_variables: Rc::new(SignatureVariables {
                 set_variables,
@@ -105,7 +94,6 @@ impl<T: Numeric> State<T> {
                 continuous_variables: continuous_resource_variables,
             },
             stage,
-            cost,
         })
     }
 }
@@ -203,7 +191,7 @@ impl StateMetadata {
         self.object_numbers[self.element_variable_to_object[self.name_to_element_variable[name]]]
     }
 
-    pub fn dominance<T: Numeric>(&self, a: &State<T>, b: &State<T>) -> Option<Ordering> {
+    pub fn dominance(&self, a: &State, b: &State) -> Option<Ordering> {
         let status = Some(Ordering::Equal);
         let status = Self::compare_resource_variables(
             &a.resource_variables.integer_variables,
@@ -698,7 +686,6 @@ cr3: 3
                 continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
             },
             stage: 0,
-            cost: 0,
         };
         assert_eq!(state.unwrap(), expected);
 
@@ -733,7 +720,6 @@ cr1: 1
 cr2: 2
 cr3: 3
 stage: 1
-cost: 1
 ",
         );
         assert!(yaml.is_ok());
@@ -742,7 +728,6 @@ cost: 1
         let yaml = &yaml[0];
         let state = State::load_from_yaml(yaml, &metadata);
         assert!(state.is_ok());
-        expected.cost = 1;
         expected.stage = 1;
         assert_eq!(state.unwrap(), expected);
     }
@@ -785,7 +770,7 @@ cr3: 3
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let state = State::<Integer>::load_from_yaml(yaml, &metadata);
+        let state = State::load_from_yaml(yaml, &metadata);
         assert!(state.is_err());
     }
 
@@ -900,7 +885,6 @@ cr3: 3
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![],
             },
-            cost: 0,
             ..Default::default()
         };
         let b = State {
@@ -908,7 +892,6 @@ cr3: 3
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![],
             },
-            cost: 0,
             ..Default::default()
         };
         assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Equal));
@@ -918,7 +901,6 @@ cr3: 3
                 integer_variables: vec![1, 1, 3, 0],
                 continuous_variables: vec![],
             },
-            cost: 0,
             ..Default::default()
         };
         assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Greater));
@@ -929,7 +911,6 @@ cr3: 3
                 integer_variables: vec![1, 3, 3, 0],
                 continuous_variables: vec![],
             },
-            cost: 0,
             ..Default::default()
         };
         assert!(metadata.dominance(&b, &a).is_none());
@@ -939,7 +920,6 @@ cr3: 3
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
             },
-            cost: 0,
             ..Default::default()
         };
         let b = State {
@@ -947,7 +927,6 @@ cr3: 3
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![1.0, 1.0, 3.0, 0.0],
             },
-            cost: 0,
             ..Default::default()
         };
         assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Greater));
@@ -958,7 +937,6 @@ cr3: 3
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![1.0, 3.0, 4.0, 0.0],
             },
-            cost: 0,
             ..Default::default()
         };
         assert!(metadata.dominance(&a, &b).is_none());
@@ -973,7 +951,6 @@ cr3: 3
                 integer_variables: vec![1, 2, 2],
                 continuous_variables: vec![],
             },
-            cost: 0,
             ..Default::default()
         };
         let b = State {
@@ -981,7 +958,6 @@ cr3: 3
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![],
             },
-            cost: 0,
             ..Default::default()
         };
         metadata.dominance(&b, &a);
@@ -996,7 +972,6 @@ cr3: 3
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
             },
-            cost: 0,
             ..Default::default()
         };
         let b = State {
@@ -1004,7 +979,6 @@ cr3: 3
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![1.0, 1.0, 3.0],
             },
-            cost: 0,
             ..Default::default()
         };
         metadata.dominance(&b, &a);
