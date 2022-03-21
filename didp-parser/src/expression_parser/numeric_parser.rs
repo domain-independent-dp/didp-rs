@@ -51,7 +51,11 @@ where
             )? {
                 Ok((NumericExpression::IntegerTable(expression), rest))
             } else {
-                parse_operation(name, rest, metadata, registry, parameters)
+                let (x, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
+                let (y, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                let expression = parse_operation(name, x, y)?;
+                Ok((expression, rest))
             }
         }
         ")" => Err(ParseErr::new("unexpected `)`".to_string())),
@@ -97,7 +101,11 @@ where
             )? {
                 Ok((NumericExpression::ContinuousTable(expression), rest))
             } else {
-                parse_operation(name, rest, metadata, registry, parameters)
+                let (x, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
+                let (y, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                let expression = parse_operation(name, x, y)?;
+                Ok((expression, rest))
             }
         }
         ")" => Err(ParseErr::new("unexpected `)`".to_string())),
@@ -109,51 +117,44 @@ where
     }
 }
 
-fn parse_operation<'a, 'b, 'c, T: Numeric>(
-    name: &'a str,
-    tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    registry: &'b table_registry::TableRegistry,
-    parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
+fn parse_operation<T: Numeric>(
+    name: &str,
+    x: NumericExpression<T>,
+    y: NumericExpression<T>,
+) -> Result<NumericExpression<T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
-    let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
-    let rest = util::parse_closing(rest)?;
     match &name[..] {
-        "+" => Ok((
-            NumericExpression::NumericOperation(NumericOperator::Add, Box::new(x), Box::new(y)),
-            rest,
+        "+" => Ok(NumericExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(x),
+            Box::new(y),
         )),
-        "-" => Ok((
-            NumericExpression::NumericOperation(
-                NumericOperator::Subtract,
-                Box::new(x),
-                Box::new(y),
-            ),
-            rest,
+        "-" => Ok(NumericExpression::NumericOperation(
+            NumericOperator::Subtract,
+            Box::new(x),
+            Box::new(y),
         )),
-        "*" => Ok((
-            NumericExpression::NumericOperation(
-                NumericOperator::Multiply,
-                Box::new(x),
-                Box::new(y),
-            ),
-            rest,
+        "*" => Ok(NumericExpression::NumericOperation(
+            NumericOperator::Multiply,
+            Box::new(x),
+            Box::new(y),
         )),
-        "/" => Ok((
-            NumericExpression::NumericOperation(NumericOperator::Divide, Box::new(x), Box::new(y)),
-            rest,
+        "/" => Ok(NumericExpression::NumericOperation(
+            NumericOperator::Divide,
+            Box::new(x),
+            Box::new(y),
         )),
-        "min" => Ok((
-            NumericExpression::NumericOperation(NumericOperator::Min, Box::new(x), Box::new(y)),
-            rest,
+        "min" => Ok(NumericExpression::NumericOperation(
+            NumericOperator::Min,
+            Box::new(x),
+            Box::new(y),
         )),
-        "max" => Ok((
-            NumericExpression::NumericOperation(NumericOperator::Max, Box::new(x), Box::new(y)),
-            rest,
+        "max" => Ok(NumericExpression::NumericOperation(
+            NumericOperator::Max,
+            Box::new(x),
+            Box::new(y),
         )),
         _ => Err(ParseErr::new(format!("no such operator `{}`", name))),
     }
