@@ -123,32 +123,32 @@ fn parse_comparison<'a, 'b, 'c>(
         _ => return Err(ParseErr::new(format!("no such operator `{}`", operator))),
     };
 
-    if let Ok((x, rest)) = numeric_parser::parse_expression::<variable::Integer>(
+    if let Ok((x, rest)) = numeric_parser::parse_integer_expression::<variable::Integer>(
         tokens, metadata, registry, parameters,
     ) {
-        if let Ok((y, rest)) = numeric_parser::parse_expression::<variable::Integer>(
+        if let Ok((y, rest)) = numeric_parser::parse_integer_expression::<variable::Integer>(
             rest, metadata, registry, parameters,
         ) {
             let rest = util::parse_closing(rest)?;
             Ok((Comparison::ComparisonII(operator, x, y), rest))
         } else {
-            let (y, rest) = numeric_parser::parse_expression::<variable::Continuous>(
+            let (y, rest) = numeric_parser::parse_continuous_expression::<variable::Continuous>(
                 rest, metadata, registry, parameters,
             )?;
             let rest = util::parse_closing(rest)?;
             Ok((Comparison::ComparisonIC(operator, x, y), rest))
         }
     } else {
-        let (x, rest) = numeric_parser::parse_expression::<variable::Continuous>(
+        let (x, rest) = numeric_parser::parse_continuous_expression::<variable::Continuous>(
             tokens, metadata, registry, parameters,
         )?;
-        if let Ok((y, rest)) = numeric_parser::parse_expression::<variable::Integer>(
+        if let Ok((y, rest)) = numeric_parser::parse_integer_expression::<variable::Integer>(
             rest, metadata, registry, parameters,
         ) {
             let rest = util::parse_closing(rest)?;
             Ok((Comparison::ComparisonCI(operator, x, y), rest))
         } else {
-            let (y, rest) = numeric_parser::parse_expression::<variable::Continuous>(
+            let (y, rest) = numeric_parser::parse_continuous_expression::<variable::Continuous>(
                 rest, metadata, registry, parameters,
             )?;
             let rest = util::parse_closing(rest)?;

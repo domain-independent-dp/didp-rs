@@ -600,7 +600,7 @@ impl TableRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use approx::assert_relative_eq;
+    use approx::{assert_relative_eq, assert_relative_ne};
     use collections::HashMap;
 
     fn generate_metadata() -> state::StateMetadata {
@@ -802,6 +802,47 @@ mod tests {
     }
 
     #[test]
+    fn table_data_relative_eq() {
+        let mut name_to_table_1d = collections::HashMap::new();
+        name_to_table_1d.insert(String::from("t0"), 0);
+        name_to_table_1d.insert(String::from("t1"), 1);
+        let t1 = TableData {
+            tables_1d: vec![
+                table::Table1D::new(vec![1.0, 2.0]),
+                table::Table1D::new(vec![2.0, 3.0]),
+            ],
+            name_to_table_1d: name_to_table_1d.clone(),
+            ..Default::default()
+        };
+        let t2 = TableData {
+            tables_1d: vec![
+                table::Table1D::new(vec![1.0, 2.0]),
+                table::Table1D::new(vec![2.0, 3.0]),
+            ],
+            name_to_table_1d: name_to_table_1d.clone(),
+            ..Default::default()
+        };
+        assert_relative_eq!(t1, t2);
+        let t2 = TableData {
+            tables_1d: vec![
+                table::Table1D::new(vec![1.0, 2.0]),
+                table::Table1D::new(vec![3.0, 3.0]),
+            ],
+            name_to_table_1d,
+            ..Default::default()
+        };
+        assert_relative_ne!(t1, t2);
+        let mut name_to_table_1d = collections::HashMap::new();
+        name_to_table_1d.insert(String::from("t0"), 0);
+        let t2 = TableData {
+            tables_1d: vec![table::Table1D::new(vec![1.0, 2.0])],
+            name_to_table_1d,
+            ..Default::default()
+        };
+        assert_relative_ne!(t1, t2);
+    }
+
+    #[test]
     fn load_from_yaml_ok() {
         let metadata = generate_metadata();
         let expected = generate_registry();
@@ -918,7 +959,7 @@ b4: { [0, 1, 0, 0]: true, [0, 1, 0, 1]: false, [0, 1, 2, 0]: false, [0, 1, 2, 1]
         let tables = r"
 - name: f1
   type: integer
-  object: null
+  args: [null]
 ";
 
         let tables = yaml_rust::YamlLoader::load_from_str(tables);
@@ -1108,6 +1149,30 @@ b1:
         let table_values = &table_values[0];
         let registry = TableRegistry::load_from_yaml(tables, table_values, &metadata);
         assert!(registry.is_err());
+
+        let table_values = r"
+b1:
+      [0, 0]: true
+      [0, 1]: 0
+      [0, 2]: false
+";
+        let table_values = yaml_rust::YamlLoader::load_from_str(table_values);
+        assert!(table_values.is_ok());
+        let table_values = table_values.unwrap();
+        assert_eq!(table_values.len(), 1);
+        let table_values = &table_values[0];
+        let registry = TableRegistry::load_from_yaml(tables, table_values, &metadata);
+        assert!(registry.is_err());
+
+        let tables = r"
+- name: b1
+  type: bool
+";
+        let tables = yaml_rust::YamlLoader::load_from_str(tables);
+        assert!(tables.is_ok());
+        let tables = tables.unwrap();
+        assert_eq!(tables.len(), 1);
+        let tables = &tables[0];
 
         let table_values = r"
 b1:

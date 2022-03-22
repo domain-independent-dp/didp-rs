@@ -1076,6 +1076,30 @@ cr3: 3
 
     #[test]
     fn state_metadata_load_from_yaml_ok() {
+        let mut name_to_integer_variable = HashMap::new();
+        name_to_integer_variable.insert(String::from("n0"), 0);
+        let expected = StateMetadata {
+            integer_variable_names: vec![String::from("n0")],
+            name_to_integer_variable,
+            ..Default::default()
+        };
+        let objects = yaml_rust::Yaml::Array(Vec::new());
+        let object_numbers = yaml_rust::Yaml::Hash(linked_hash_map::LinkedHashMap::new());
+        let variables = r"
+- name: n0
+  type: integer
+";
+
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
+
+        let metadata = StateMetadata::load_from_yaml(&objects, variables, &object_numbers);
+        assert!(metadata.is_ok());
+        assert_eq!(metadata.unwrap(), expected);
+
         let expected = generate_metadata();
 
         let objects = r"
@@ -1291,6 +1315,33 @@ object: 10
         let object_numbers = object_numbers.unwrap();
         assert_eq!(object_numbers.len(), 1);
         let object_numbers = &object_numbers[0];
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
+        assert!(metadata.is_err());
+
+        let object_numbers = r"
+object: 10
+small: 2
+";
+        let object_numbers = yaml_rust::YamlLoader::load_from_str(object_numbers);
+        assert!(object_numbers.is_ok());
+        let object_numbers = object_numbers.unwrap();
+        assert_eq!(object_numbers.len(), 1);
+        let object_numbers = &object_numbers[0];
+
+        let variables = r"
+- name: s0
+  type: set
+  object: object
+- name: n0
+  type: integer
+  preference: null
+";
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
+
         let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
         assert!(metadata.is_err());
     }

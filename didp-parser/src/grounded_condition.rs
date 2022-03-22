@@ -255,6 +255,31 @@ mod tests {
             .is_none());
 
         let condition = GroundedCondition {
+            condition: Condition::Set(SetCondition::Ne(
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(0),
+            )),
+            elements_in_set_variable: vec![(0, 0), (0, 0)],
+            elements_in_permutation_variable: vec![],
+        };
+        assert_eq!(
+            condition.is_satisfied(&state, &metadata, &registry),
+            Some(false)
+        );
+
+        let condition = GroundedCondition {
+            condition: Condition::Set(SetCondition::Ne(
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(1),
+            )),
+            elements_in_set_variable: vec![(0, 1), (0, 0)],
+            elements_in_permutation_variable: vec![],
+        };
+        assert!(condition
+            .is_satisfied(&state, &metadata, &registry)
+            .is_none());
+
+        let condition = GroundedCondition {
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Constant(0),
                 SetExpression::SetVariable(0),
@@ -286,7 +311,7 @@ mod tests {
         let registry = generate_registry();
 
         let condition = r"
-condition: (is_in e0 s0)
+condition: (and (is_in e0 s0) true)
 ";
         let condition = yaml_rust::YamlLoader::load_from_str(condition);
         assert!(condition.is_ok());
@@ -307,6 +332,47 @@ condition: (is_in e0 s0)
             elements_in_permutation_variable: Vec::new(),
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Variable(0),
+                SetExpression::SetVariable(0),
+            )),
+        }];
+        assert_eq!(conditions.unwrap(), expected);
+
+        let condition = r"(is_in e0 s0)";
+        let condition = yaml_rust::YamlLoader::load_from_str(condition);
+        assert!(condition.is_ok());
+        let condition = condition.unwrap();
+        assert_eq!(condition.len(), 1);
+        let condition = &condition[0];
+        let parameters = collections::HashMap::new();
+        let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(conditions.is_ok());
+        assert_eq!(conditions.unwrap(), expected);
+
+        let condition = r"(is_in a s0)";
+        let condition = yaml_rust::YamlLoader::load_from_str(condition);
+        assert!(condition.is_ok());
+        let condition = condition.unwrap();
+        assert_eq!(condition.len(), 1);
+        let condition = &condition[0];
+        let mut parameters = collections::HashMap::new();
+        parameters.insert(String::from("a"), 0);
+        let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(conditions.is_ok());
+        let expected = vec![GroundedCondition {
+            elements_in_set_variable: Vec::new(),
+            elements_in_permutation_variable: Vec::new(),
+            condition: Condition::Set(SetCondition::IsIn(
+                ElementExpression::Constant(0),
                 SetExpression::SetVariable(0),
             )),
         }];

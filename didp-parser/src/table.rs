@@ -277,9 +277,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use approx::{assert_relative_eq, assert_relative_ne};
 
     #[test]
-    fn function_1d_eval() {
+    fn table_1d_eval() {
         let f = Table1D::new(vec![10, 20, 30]);
         assert_eq!(f.eval(0), 10);
         assert_eq!(f.eval(1), 20);
@@ -287,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn function_1d_sum_eval() {
+    fn table_1d_sum_eval() {
         let f = Table1D::new(vec![10, 20, 30]);
         let mut x = variable::Set::with_capacity(3);
         x.insert(0);
@@ -296,13 +297,22 @@ mod tests {
     }
 
     #[test]
-    fn function_2d_eval() {
+    fn table_1d_relative_eq() {
+        let t1 = Table1D::new(vec![10.0, 20.0, 30.0]);
+        let t2 = Table1D::new(vec![10.0, 20.0, 30.0]);
+        assert_relative_eq!(t1, t2);
+        let t2 = Table1D::new(vec![10.0, 20.0, 31.0]);
+        assert_relative_ne!(t1, t2);
+    }
+
+    #[test]
+    fn table_2d_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
         assert_eq!(f.eval(0, 1), 20);
     }
 
     #[test]
-    fn function_2d_sum_eval() {
+    fn table_2d_sum_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
         let mut x = variable::Set::with_capacity(3);
         x.insert(0);
@@ -314,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn function_2d_sum_x_eval() {
+    fn table_2d_sum_x_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
         let mut x = variable::Set::with_capacity(3);
         x.insert(0);
@@ -323,7 +333,7 @@ mod tests {
     }
 
     #[test]
-    fn function_2d_sum_y_eval() {
+    fn table_2d_sum_y_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
         let mut y = variable::Set::with_capacity(3);
         y.insert(0);
@@ -332,7 +342,16 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_eval() {
+    fn table_2d_relative_eq() {
+        let t1 = Table2D::new(vec![vec![10.0], vec![20.0]]);
+        let t2 = Table2D::new(vec![vec![10.0], vec![20.0]]);
+        assert_relative_eq!(t1, t2);
+        let t2 = Table2D::new(vec![vec![10.0], vec![21.0]]);
+        assert_relative_ne!(t1, t2);
+    }
+
+    #[test]
+    fn table_3d_eval() {
         let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -342,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_eval() {
+    fn table_3d_sum_eval() {
         let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -361,7 +380,7 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_x_eval() {
+    fn table_3d_sum_x_eval() {
         let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -374,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_y_eval() {
+    fn table_3d_sum_y_eval() {
         let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -387,7 +406,7 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_z_eval() {
+    fn table_3d_sum_z_eval() {
         let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -401,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_xy_eval() {
+    fn table_3d_sum_xy_eval() {
         let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -417,7 +436,7 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_xz_eval() {
+    fn table_3d_sum_xz_eval() {
         let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -433,7 +452,7 @@ mod tests {
     }
 
     #[test]
-    fn function_3d_sum_yz_eval() {
+    fn table_3d_sum_yz_eval() {
         let f = Table3D::new(vec![
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
@@ -449,7 +468,16 @@ mod tests {
     }
 
     #[test]
-    fn function_eval() {
+    fn table_3d_relative_eq() {
+        let t1 = Table3D::new(vec![vec![vec![10.0]], vec![vec![20.0]]]);
+        let t2 = Table3D::new(vec![vec![vec![10.0]], vec![vec![20.0]]]);
+        assert_relative_eq!(t1, t2);
+        let t2 = Table3D::new(vec![vec![vec![10.0]], vec![vec![21.0]]]);
+        assert_relative_ne!(t1, t2);
+    }
+
+    #[test]
+    fn table_eval() {
         let mut map = collections::HashMap::<Vec<variable::Element>, variable::Integer>::new();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 100);
@@ -465,5 +493,28 @@ mod tests {
         assert_eq!(f.eval(&[0, 1, 2, 0]), 300);
         assert_eq!(f.eval(&[0, 1, 2, 1]), 400);
         assert_eq!(f.eval(&[0, 1, 2, 2]), 0);
+    }
+
+    #[test]
+    fn table_relative_eq() {
+        let mut map = collections::HashMap::<Vec<variable::Element>, variable::Continuous>::new();
+        map.insert(vec![0, 1, 0, 0], 10.0);
+        let t1 = Table::new(map, 0.0);
+        let mut map = collections::HashMap::<Vec<variable::Element>, variable::Continuous>::new();
+        map.insert(vec![0, 1, 0, 0], 10.0);
+        let t2 = Table::new(map, 0.0);
+        assert_relative_eq!(t1, t2);
+        let mut map = collections::HashMap::<Vec<variable::Element>, variable::Continuous>::new();
+        map.insert(vec![0, 1, 0, 0], 11.0);
+        let t2 = Table::new(map, 0.0);
+        assert_relative_ne!(t1, t2);
+        let mut map = collections::HashMap::<Vec<variable::Element>, variable::Continuous>::new();
+        map.insert(vec![0, 0, 0, 0], 10.0);
+        let t2 = Table::new(map, 0.0);
+        assert_relative_ne!(t1, t2);
+        let mut map = collections::HashMap::<Vec<variable::Element>, variable::Continuous>::new();
+        map.insert(vec![0, 1, 0, 0], 10.0);
+        let t2 = Table::new(map, 1.0);
+        assert_relative_ne!(t1, t2);
     }
 }

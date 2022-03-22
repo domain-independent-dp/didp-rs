@@ -218,16 +218,6 @@ pub fn get_string_by_key(
     }
 }
 
-pub fn get_string_array_by_key(
-    map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-    key: &str,
-) -> Result<Vec<String>, YamlContentErr> {
-    match map.get(&Yaml::String(String::from(key))) {
-        Some(value) => get_string_array(value),
-        None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
-    }
-}
-
 fn parse_string_array(array: &[Yaml]) -> Result<Vec<String>, YamlContentErr> {
     let mut result = Vec::with_capacity(array.len());
     for v in array {
@@ -578,33 +568,5 @@ mod tests {
         assert!(result.is_err());
         let result = get_string_by_key(&map, "bool");
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn get_string_array_by_key_ok() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
-        map.insert(
-            Yaml::String(String::from("array")),
-            Yaml::Array(vec![
-                Yaml::String(String::from("0")),
-                Yaml::String(String::from("1")),
-            ]),
-        );
-        let array = get_string_array_by_key(&map, "array");
-        assert!(array.is_ok());
-        assert_eq!(array.unwrap(), vec![String::from("0"), String::from("1")]);
-    }
-
-    #[test]
-    fn get_string_array_by_key_err() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
-        map.insert(
-            Yaml::String(String::from("array")),
-            Yaml::Array(vec![Yaml::String(String::from("0")), Yaml::Boolean(true)]),
-        );
-        let array = get_string_array_by_key(&map, "map");
-        assert!(array.is_err());
-        let array = get_string_array_by_key(&map, "array");
-        assert!(array.is_err());
     }
 }

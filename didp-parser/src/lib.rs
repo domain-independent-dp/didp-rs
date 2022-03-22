@@ -26,6 +26,7 @@ pub use table_registry::{TableData, TableRegistry};
 pub use transition::Transition;
 pub use util::ModelErr;
 
+#[derive(Debug, PartialEq)]
 pub enum CostType {
     Integer,
     Continuous,
@@ -52,6 +53,7 @@ pub enum ReduceFunction {
     Min,
     Max,
     Sum,
+    Product,
 }
 
 impl Default for ReduceFunction {
@@ -67,6 +69,7 @@ impl ReduceFunction {
             "min" => Ok(Self::Min),
             "max" => Ok(Self::Max),
             "sum" => Ok(Self::Sum),
+            "product" => Ok(Self::Product),
             _ => Err(yaml_util::YamlContentErr::new(format!(
                 "no such reduce function `{}`",
                 reduce_function
@@ -260,11 +263,14 @@ impl<T: variable::Numeric> Model<T> {
     fn filter_constraints(
         conditions: Vec<grounded_condition::GroundedCondition>,
     ) -> Result<Vec<grounded_condition::GroundedCondition>, ModelErr> {
-        let mut result = Vec::with_capacity(conditions.len());
+        let mut result = Vec::new();
         for condition in conditions {
             match condition.condition {
                 expression::Condition::Constant(true) => continue,
-                expression::Condition::Constant(false) => {
+                expression::Condition::Constant(false)
+                    if condition.elements_in_set_variable.is_empty()
+                        && condition.elements_in_permutation_variable.is_empty() =>
+                {
                     return Err(ModelErr::new(String::from(
                         "model has a constraint never satisfied",
                     )))
@@ -293,7 +299,7 @@ mod tests {
         let yaml = &yaml[0];
         let numeric_type = CostType::load_from_yaml(yaml);
         assert!(numeric_type.is_ok());
-        assert!(matches!(numeric_type.unwrap(), CostType::Integer));
+        assert_eq!(numeric_type.unwrap(), CostType::Integer);
         let yaml = r"cost_type: continuous";
         let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
         assert!(yaml.is_ok());
@@ -302,7 +308,7 @@ mod tests {
         let yaml = &yaml[0];
         let numeric_type = CostType::load_from_yaml(yaml);
         assert!(numeric_type.is_ok());
-        assert!(matches!(numeric_type.unwrap(), CostType::Continuous));
+        assert_eq!(numeric_type.unwrap(), CostType::Continuous);
     }
 
     #[test]
@@ -323,6 +329,127 @@ mod tests {
         let yaml = &yaml[0];
         let numeric_type = CostType::load_from_yaml(yaml);
         assert!(numeric_type.is_err());
+    }
+
+    #[test]
+    fn reduce_function_load_from_yaml_ok() {
+        let yaml = r"min";
+        let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let reduce = ReduceFunction::load_from_yaml(yaml);
+        assert!(reduce.is_ok());
+        assert_eq!(reduce.unwrap(), ReduceFunction::Min);
+        let yaml = r"max";
+        let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let reduce = ReduceFunction::load_from_yaml(yaml);
+        assert!(reduce.is_ok());
+        assert_eq!(reduce.unwrap(), ReduceFunction::Max);
+        let yaml = r"sum";
+        let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let reduce = ReduceFunction::load_from_yaml(yaml);
+        assert!(reduce.is_ok());
+        assert_eq!(reduce.unwrap(), ReduceFunction::Sum);
+        let yaml = r"product";
+        let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let reduce = ReduceFunction::load_from_yaml(yaml);
+        assert!(reduce.is_ok());
+        assert_eq!(reduce.unwrap(), ReduceFunction::Product);
+    }
+
+    #[test]
+    fn reduce_function_load_from_yaml_err() {
+        let yaml = r"or";
+        let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let reduce = CostType::load_from_yaml(yaml);
+        assert!(reduce.is_err());
+    }
+
+    #[test]
+    fn check_constraints() {
+        let state = state::State::default();
+        let model = Model::<variable::Integer> {
+            constraints: vec![GroundedCondition {
+                condition: Condition::Constant(true),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(model.check_constraints(&state));
+        let model = Model::<variable::Integer> {
+            constraints: vec![
+                GroundedCondition {
+                    condition: Condition::Constant(true),
+                    ..Default::default()
+                },
+                GroundedCondition {
+                    condition: Condition::Constant(false),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert!(!model.check_constraints(&state));
+    }
+
+    #[test]
+    fn get_base_cost() {
+        let state = state::State::default();
+        let model = Model {
+            base_cases: vec![BaseCase {
+                conditions: vec![GroundedCondition {
+                    condition: Condition::Constant(true),
+                    ..Default::default()
+                }],
+                cost: NumericExpression::Constant(0),
+            }],
+            ..Default::default()
+        };
+        assert_eq!(model.get_base_cost(&state), Some(0));
+        let model = Model {
+            base_cases: vec![BaseCase {
+                conditions: vec![GroundedCondition {
+                    condition: Condition::Constant(false),
+                    ..Default::default()
+                }],
+                cost: NumericExpression::Constant(0),
+            }],
+            ..Default::default()
+        };
+        assert_eq!(model.get_base_cost(&state), None);
+        let model = Model {
+            base_cases: vec![BaseCase {
+                conditions: vec![GroundedCondition {
+                    condition: Condition::Constant(false),
+                    ..Default::default()
+                }],
+                cost: NumericExpression::Constant(0),
+            }],
+            base_states: vec![BaseState {
+                state: state::State::default(),
+                cost: 1,
+            }],
+            ..Default::default()
+        };
+        assert_eq!(model.get_base_cost(&state), Some(1));
     }
 
     #[test]
@@ -422,6 +549,133 @@ base_cases:
         assert_eq!(model, expected);
 
         let domain = r"
+domain: Fibonacci 
+variables: [ {name: v, type: integer} ]
+reduce: sum
+transitions:
+        - name: one
+          direction: backward
+          effects:
+                v: (+ v 1)
+          cost: cost
+        - name: two
+          direction: backward
+          effects:
+                v: (+ v 2)
+          cost: cost
+";
+        let domain = yaml_rust::YamlLoader::load_from_str(domain);
+        assert!(domain.is_ok());
+        let domain = domain.unwrap();
+        assert_eq!(domain.len(), 1);
+        let domain = &domain[0];
+
+        let problem = r"
+domain: Fibonacci
+problem: Fibonacci10
+target:
+        v: 10
+base_states:
+        - state: { v: 0 }
+        - state: { v: 1 }
+";
+        let problem = yaml_rust::YamlLoader::load_from_str(problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+        assert_eq!(problem.len(), 1);
+        let problem = &problem[0];
+
+        let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
+        assert!(model.is_ok());
+        let model = model.unwrap();
+
+        let mut name_to_integer_variable = HashMap::new();
+        name_to_integer_variable.insert(String::from("v"), 0);
+        let expected = Model {
+            domain_name: String::from("Fibonacci"),
+            problem_name: String::from("Fibonacci10"),
+            state_metadata: state::StateMetadata {
+                integer_variable_names: vec![String::from("v")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: state::State {
+                signature_variables: Rc::new(SignatureVariables {
+                    integer_variables: vec![10],
+                    ..Default::default()
+                }),
+                stage: 0,
+                ..Default::default()
+            },
+            base_states: vec![
+                BaseState {
+                    state: state::State {
+                        signature_variables: Rc::new(SignatureVariables {
+                            integer_variables: vec![0],
+                            ..Default::default()
+                        }),
+                        stage: 0,
+                        ..Default::default()
+                    },
+                    cost: 0,
+                },
+                BaseState {
+                    state: state::State {
+                        signature_variables: Rc::new(SignatureVariables {
+                            integer_variables: vec![1],
+                            ..Default::default()
+                        }),
+                        stage: 0,
+                        ..Default::default()
+                    },
+                    cost: 0,
+                },
+            ],
+            reduce_function: ReduceFunction::Sum,
+            backward_transitions: vec![
+                Transition {
+                    name: String::from("one"),
+                    integer_effects: vec![(
+                        0,
+                        NumericExpression::NumericOperation(
+                            NumericOperator::Add,
+                            Box::new(NumericExpression::IntegerVariable(0)),
+                            Box::new(NumericExpression::Constant(1)),
+                        ),
+                    )],
+                    cost: NumericExpression::Cost,
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("two"),
+                    integer_effects: vec![(
+                        0,
+                        NumericExpression::NumericOperation(
+                            NumericOperator::Add,
+                            Box::new(NumericExpression::IntegerVariable(0)),
+                            Box::new(NumericExpression::Constant(2)),
+                        ),
+                    )],
+                    cost: NumericExpression::Cost,
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(model.domain_name, expected.domain_name);
+        assert_eq!(model.problem_name, expected.problem_name);
+        assert_eq!(model.state_metadata, expected.state_metadata);
+        assert_eq!(model.target, expected.target);
+        assert_eq!(model.table_registry, expected.table_registry);
+        assert_eq!(model.constraints, expected.constraints);
+        assert_eq!(model.base_cases, expected.base_cases);
+        assert_eq!(model.base_states, expected.base_states);
+        assert_eq!(model.reduce_function, expected.reduce_function);
+        assert_eq!(model.forward_transitions, expected.forward_transitions);
+        assert_eq!(model.backward_transitions, expected.backward_transitions);
+        assert_eq!(model, expected);
+
+        let domain = r"
 domain: TSPTW
 reduce: min
 objects: [cities]
@@ -456,6 +710,7 @@ constraints:
 reduce: min
 transitions:
         - name: visit
+          direction: forward
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
           effects:

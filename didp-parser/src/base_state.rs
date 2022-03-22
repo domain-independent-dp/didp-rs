@@ -46,3 +46,117 @@ impl<T: Numeric> BaseState<T> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::variable;
+    use std::collections;
+    use std::rc::Rc;
+
+    fn generate_metadata() -> state::StateMetadata {
+        let mut name_to_integer_variable = collections::HashMap::new();
+        name_to_integer_variable.insert(String::from("i0"), 0);
+        state::StateMetadata {
+            integer_variable_names: vec![String::from("i0")],
+            name_to_integer_variable,
+            ..Default::default()
+        }
+    }
+
+    fn generate_state() -> state::State {
+        state::State {
+            signature_variables: Rc::new(state::SignatureVariables {
+                integer_variables: vec![1],
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn get_cost() {
+        let state = generate_state();
+
+        let base_state = BaseState {
+            state: state::State {
+                signature_variables: Rc::new(state::SignatureVariables {
+                    integer_variables: vec![1],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            cost: 1,
+        };
+        assert_eq!(base_state.get_cost(&state), Some(1));
+
+        let base_state = BaseState {
+            state: state::State {
+                signature_variables: Rc::new(state::SignatureVariables {
+                    integer_variables: vec![2],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            cost: 1,
+        };
+        assert_eq!(base_state.get_cost(&state), None);
+    }
+
+    #[test]
+    fn load_from_yaml_ok() {
+        let metadata = generate_metadata();
+
+        let expected = BaseState {
+            state: state::State {
+                signature_variables: Rc::new(state::SignatureVariables {
+                    integer_variables: vec![1],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            cost: 0,
+        };
+
+        let base_state = yaml_rust::YamlLoader::load_from_str(
+            r"
+state: { i0: 1 }        
+",
+        );
+        assert!(base_state.is_ok());
+        let base_state = base_state.unwrap();
+        assert_eq!(base_state.len(), 1);
+        let base_state = BaseState::load_from_yaml(&base_state[0], &metadata);
+        assert!(base_state.is_ok());
+        assert_eq!(base_state.unwrap(), expected);
+
+        let base_state = yaml_rust::YamlLoader::load_from_str(
+            r"
+state: { i0: 1 }        
+cost: 0
+",
+        );
+        assert!(base_state.is_ok());
+        let base_state = base_state.unwrap();
+        assert_eq!(base_state.len(), 1);
+        let base_state = BaseState::load_from_yaml(&base_state[0], &metadata);
+        assert!(base_state.is_ok());
+        assert_eq!(base_state.unwrap(), expected);
+    }
+
+    #[test]
+    fn load_from_yaml_err() {
+        let metadata = generate_metadata();
+
+        let base_state = yaml_rust::YamlLoader::load_from_str(
+            r"
+{ i0: 1 }        
+",
+        );
+        assert!(base_state.is_ok());
+        let base_state = base_state.unwrap();
+        assert_eq!(base_state.len(), 1);
+        let base_state = BaseState::<variable::Integer>::load_from_yaml(&base_state[0], &metadata);
+        assert!(base_state.is_err());
+    }
+}

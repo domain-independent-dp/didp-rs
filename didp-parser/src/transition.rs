@@ -210,7 +210,12 @@ where
                     for condition in conditions {
                         match condition.condition {
                             expression::Condition::Constant(true) => continue,
-                            expression::Condition::Constant(false) => continue 'outer,
+                            expression::Condition::Constant(false)
+                                if condition.elements_in_set_variable.is_empty()
+                                    && condition.elements_in_permutation_variable.is_empty() =>
+                            {
+                                continue 'outer
+                            }
                             _ => preconditions.push(condition),
                         }
                     }
@@ -372,28 +377,52 @@ mod tests {
         let element_variable_to_object = vec![0, 0, 0, 0];
 
         let integer_variable_names = vec![
-            "n0".to_string(),
-            "n1".to_string(),
-            "n2".to_string(),
-            "n3".to_string(),
+            "i0".to_string(),
+            "i1".to_string(),
+            "i2".to_string(),
+            "i3".to_string(),
         ];
         let mut name_to_integer_variable = HashMap::new();
-        name_to_integer_variable.insert("n0".to_string(), 0);
-        name_to_integer_variable.insert("n1".to_string(), 1);
-        name_to_integer_variable.insert("n2".to_string(), 2);
-        name_to_integer_variable.insert("n3".to_string(), 3);
+        name_to_integer_variable.insert("i0".to_string(), 0);
+        name_to_integer_variable.insert("i1".to_string(), 1);
+        name_to_integer_variable.insert("i2".to_string(), 2);
+        name_to_integer_variable.insert("i3".to_string(), 3);
 
         let integer_resource_variable_names = vec![
-            "r0".to_string(),
-            "r1".to_string(),
-            "r2".to_string(),
-            "r3".to_string(),
+            "ir0".to_string(),
+            "ir1".to_string(),
+            "ir2".to_string(),
+            "ir3".to_string(),
         ];
         let mut name_to_integer_resource_variable = HashMap::new();
-        name_to_integer_resource_variable.insert("r0".to_string(), 0);
-        name_to_integer_resource_variable.insert("r1".to_string(), 1);
-        name_to_integer_resource_variable.insert("r2".to_string(), 2);
-        name_to_integer_resource_variable.insert("r3".to_string(), 3);
+        name_to_integer_resource_variable.insert("ir0".to_string(), 0);
+        name_to_integer_resource_variable.insert("ir1".to_string(), 1);
+        name_to_integer_resource_variable.insert("ir2".to_string(), 2);
+        name_to_integer_resource_variable.insert("ir3".to_string(), 3);
+
+        let continuous_variable_names = vec![
+            "c0".to_string(),
+            "c1".to_string(),
+            "c2".to_string(),
+            "c3".to_string(),
+        ];
+        let mut name_to_continuous_variable = HashMap::new();
+        name_to_continuous_variable.insert("c0".to_string(), 0);
+        name_to_continuous_variable.insert("c1".to_string(), 1);
+        name_to_continuous_variable.insert("c2".to_string(), 2);
+        name_to_continuous_variable.insert("c3".to_string(), 3);
+
+        let continuous_resource_variable_names = vec![
+            "cr0".to_string(),
+            "cr1".to_string(),
+            "cr2".to_string(),
+            "cr3".to_string(),
+        ];
+        let mut name_to_continuous_resource_variable = HashMap::new();
+        name_to_continuous_resource_variable.insert("cr0".to_string(), 0);
+        name_to_continuous_resource_variable.insert("cr1".to_string(), 1);
+        name_to_continuous_resource_variable.insert("cr2".to_string(), 2);
+        name_to_continuous_resource_variable.insert("cr3".to_string(), 3);
 
         state::StateMetadata {
             object_names,
@@ -410,10 +439,14 @@ mod tests {
             element_variable_to_object,
             integer_variable_names,
             name_to_integer_variable,
+            continuous_variable_names,
+            name_to_continuous_variable,
             integer_resource_variable_names,
             name_to_integer_resource_variable,
             integer_less_is_better: vec![false, false, true, false],
-            ..Default::default()
+            continuous_resource_variable_names,
+            name_to_continuous_resource_variable,
+            continuous_less_is_better: vec![false, false, true, false],
         }
     }
 
@@ -570,33 +603,61 @@ mod tests {
         let permutation_effect2 = ElementExpression::Constant(0);
         let element_effect1 = ElementExpression::Constant(2);
         let element_effect2 = ElementExpression::Constant(1);
-        let numeric_effect1 = NumericExpression::NumericOperation(
+        let integer_effect1 = NumericExpression::NumericOperation(
             NumericOperator::Subtract,
             Box::new(NumericExpression::IntegerVariable(0)),
             Box::new(NumericExpression::Constant(1)),
         );
-        let numeric_effect2 = NumericExpression::NumericOperation(
+        let integer_effect2 = NumericExpression::NumericOperation(
             NumericOperator::Multiply,
             Box::new(NumericExpression::IntegerVariable(1)),
             Box::new(NumericExpression::Constant(2)),
         );
-        let resource_effect1 = NumericExpression::NumericOperation(
+        let continuous_effect1 = NumericExpression::NumericOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericExpression::ContinuousVariable(0)),
+            Box::new(NumericExpression::Constant(1.0)),
+        );
+        let continuous_effect2 = NumericExpression::NumericOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericExpression::ContinuousVariable(1)),
+            Box::new(NumericExpression::Constant(2.0)),
+        );
+        let integer_resource_effect1 = NumericExpression::NumericOperation(
             NumericOperator::Add,
             Box::new(NumericExpression::IntegerResourceVariable(0)),
             Box::new(NumericExpression::Constant(1)),
         );
-        let resource_effect2 = NumericExpression::NumericOperation(
+        let integer_resource_effect2 = NumericExpression::NumericOperation(
             NumericOperator::Divide,
             Box::new(NumericExpression::IntegerResourceVariable(1)),
             Box::new(NumericExpression::Constant(2)),
+        );
+        let continuous_resource_effect1 = NumericExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(NumericExpression::ContinuousResourceVariable(0)),
+            Box::new(NumericExpression::Constant(1.0)),
+        );
+        let continuous_resource_effect2 = NumericExpression::NumericOperation(
+            NumericOperator::Divide,
+            Box::new(NumericExpression::ContinuousResourceVariable(1)),
+            Box::new(NumericExpression::Constant(2.0)),
         );
         let transition = Transition {
             name: String::from(""),
             set_effects: vec![(0, set_effect1), (1, set_effect2)],
             permutation_effects: vec![(0, permutation_effect1), (1, permutation_effect2)],
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
-            integer_effects: vec![(0, numeric_effect1), (1, numeric_effect2)],
-            integer_resource_effects: vec![(0, resource_effect1), (1, resource_effect2)],
+            integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
+            continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+            integer_resource_effects: vec![
+                (0, integer_resource_effect1),
+                (1, integer_resource_effect2),
+            ],
+            continuous_resource_effects: vec![
+                (0, continuous_resource_effect1),
+                (1, continuous_resource_effect2),
+            ],
             cost: NumericExpression::NumericOperation(
                 NumericOperator::Add,
                 Box::new(NumericExpression::Cost),
@@ -617,11 +678,11 @@ mod tests {
                 permutation_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
                 element_variables: vec![2, 1],
                 integer_variables: vec![0, 4, 3],
-                continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
+                continuous_variables: vec![OrderedFloat(0.0), OrderedFloat(4.0), OrderedFloat(3.0)],
             }),
             resource_variables: state::ResourceVariables {
                 integer_variables: vec![5, 2, 6],
-                continuous_variables: vec![4.0, 5.0, 6.0],
+                continuous_variables: vec![5.0, 2.5, 6.0],
             },
             stage: 1,
         };
@@ -663,7 +724,6 @@ cost: '0'
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
         let transitions = load_transitions_from_yaml(transition, &metadata, &registry);
-        assert!(transitions.is_ok());
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
@@ -706,8 +766,8 @@ effects:
         e0: e
         s0: (+ s0 e)
         p0: e
-        n0: '1'
-        r0: '2'
+        i0: '1'
+        ir0: '2'
 cost: (+ cost (f1 e))
 ";
         let transition = yaml_rust::YamlLoader::load_from_str(transition);
@@ -807,8 +867,8 @@ effects:
         e0: e
         s0: (+ s0 e)
         p0: e
-        n0: '1'
-        r0: '2'
+        i0: '1'
+        ir0: '2'
 cost: (+ cost (f1 e))
 ";
         let transition = yaml_rust::YamlLoader::load_from_str(transition);
@@ -847,8 +907,8 @@ effects:
         e0: e
         s0: (+ s0 e)
         p0: e
-        n0: '1'
-        r0: '2'
+        i0: '1'
+        ir0: '2'
 ";
         let transition = yaml_rust::YamlLoader::load_from_str(transition);
         assert!(transition.is_ok());
@@ -866,8 +926,8 @@ effects:
         e0: e
         s0: (+ s0 e)
         p0: e
-        n0: '1'
-        r0: '2'
+        i0: '1'
+        ir0: '2'
 cost: (+ cost (f1 e))
 ";
         let transition = yaml_rust::YamlLoader::load_from_str(transition);
@@ -888,9 +948,9 @@ effects:
         e0: e
         s0: (+ s0 e)
         p0: e
-        n0: '1'
-        r0: '2'
-        r5: '5'
+        i0: '1'
+        ir0: '2'
+        ir5: '5'
 cost: (+ cost (f1 e))
 ";
         let transition = yaml_rust::YamlLoader::load_from_str(transition);
