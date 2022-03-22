@@ -401,6 +401,48 @@ mod tests {
             NumericExpression::Constant(1),
         );
         assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
@@ -420,6 +462,48 @@ mod tests {
             ComparisonOperator::Ne,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
         );
         assert!(expression.eval(&state, &metadata, &registry));
     }
@@ -450,6 +534,69 @@ mod tests {
             NumericExpression::Constant(0),
         );
         assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(1),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(1.0),
+            NumericExpression::Constant(0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(1.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
@@ -476,6 +623,69 @@ mod tests {
             ComparisonOperator::Gt,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(1),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(1.0),
+            NumericExpression::Constant(0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(1.0),
+            NumericExpression::Constant(0.0),
         );
         assert!(expression.eval(&state, &metadata, &registry));
     }
@@ -506,6 +716,69 @@ mod tests {
             NumericExpression::Constant(0),
         );
         assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(1),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(1.0),
+            NumericExpression::Constant(0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(1.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
     }
 
     #[test]
@@ -532,6 +805,69 @@ mod tests {
             ComparisonOperator::Lt,
             NumericExpression::Constant(1),
             NumericExpression::Constant(0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(1),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(1.0),
+            NumericExpression::Constant(0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert!(!expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
+        );
+        assert!(expression.eval(&state, &metadata, &registry));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(1.0),
+            NumericExpression::Constant(0.0),
         );
         assert!(!expression.eval(&state, &metadata, &registry));
     }
@@ -657,10 +993,38 @@ mod tests {
         );
         assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
 
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Eq,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
         );
         assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
 
@@ -673,31 +1037,52 @@ mod tests {
 
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Eq,
+            NumericExpression::IntegerResourceVariable(0),
+            NumericExpression::IntegerResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Eq,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Eq,
+            NumericExpression::ContinuousResourceVariable(0),
+            NumericExpression::ContinuousResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Eq,
             NumericExpression::Constant(0),
             NumericExpression::IntegerVariable(0),
         );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Eq,
-                NumericExpression::Constant(0),
-                NumericExpression::IntegerVariable(0)
-            )
-        );
+        assert_eq!(expression.simplify(&registry), expression);
 
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Eq,
             NumericExpression::IntegerVariable(0),
             NumericExpression::IntegerVariable(1),
         );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Eq,
-                NumericExpression::IntegerVariable(0),
-                NumericExpression::IntegerVariable(1)
-            )
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Eq,
+            NumericExpression::Constant(0.0),
+            NumericExpression::ContinuousVariable(0),
         );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Eq,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(1),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
     }
 
     #[test]
@@ -711,10 +1096,38 @@ mod tests {
         );
         assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
 
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Ne,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
         );
         assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
 
@@ -727,31 +1140,155 @@ mod tests {
 
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Ne,
+            NumericExpression::IntegerResourceVariable(0),
+            NumericExpression::IntegerResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ne,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ne,
+            NumericExpression::ContinuousResourceVariable(0),
+            NumericExpression::ContinuousResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Ne,
             NumericExpression::Constant(0),
             NumericExpression::IntegerVariable(0),
         );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Ne,
-                NumericExpression::Constant(0),
-                NumericExpression::IntegerVariable(0)
-            )
-        );
+        assert_eq!(expression.simplify(&registry), expression);
 
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Ne,
             NumericExpression::IntegerVariable(0),
             NumericExpression::IntegerVariable(1),
         );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Ne,
-                NumericExpression::IntegerVariable(0),
-                NumericExpression::IntegerVariable(1)
-            )
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ne,
+            NumericExpression::Constant(0.0),
+            NumericExpression::ContinuousVariable(0),
         );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ne,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(1),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn gt_simplify() {
+        let registry = generate_registry();
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Gt,
+            NumericExpression::IntegerVariable(0),
+            NumericExpression::IntegerVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Gt,
+            NumericExpression::IntegerResourceVariable(0),
+            NumericExpression::IntegerResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Gt,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Gt,
+            NumericExpression::ContinuousResourceVariable(0),
+            NumericExpression::ContinuousResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0),
+            NumericExpression::IntegerVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Gt,
+            NumericExpression::IntegerVariable(0),
+            NumericExpression::IntegerVariable(1),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Gt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::ContinuousVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Gt,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(1),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
     }
 
     #[test]
@@ -765,10 +1302,24 @@ mod tests {
         );
         assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
 
-        let expression = Comparison::ComparisonII(
+        let expression = Comparison::ComparisonIC(
             ComparisonOperator::Ge,
-            NumericExpression::Constant(1),
             NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
         );
         assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
 
@@ -776,6 +1327,13 @@ mod tests {
             ComparisonOperator::Ge,
             NumericExpression::Constant(0),
             NumericExpression::Constant(1),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
         );
         assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
 
@@ -788,92 +1346,155 @@ mod tests {
 
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Ge,
+            NumericExpression::IntegerResourceVariable(0),
+            NumericExpression::IntegerResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ge,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ge,
+            NumericExpression::ContinuousResourceVariable(0),
+            NumericExpression::ContinuousResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Ge,
             NumericExpression::Constant(0),
             NumericExpression::IntegerVariable(0),
         );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Ge,
-                NumericExpression::Constant(0),
-                NumericExpression::IntegerVariable(0)
-            )
-        );
+        assert_eq!(expression.simplify(&registry), expression);
 
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Ge,
             NumericExpression::IntegerVariable(0),
             NumericExpression::IntegerVariable(1),
         );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Ge,
-                NumericExpression::IntegerVariable(0),
-                NumericExpression::IntegerVariable(1)
-            )
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ge,
+            NumericExpression::Constant(0.0),
+            NumericExpression::ContinuousVariable(0),
         );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Ge,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(1),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
     }
 
     #[test]
-    fn gt_simplify() {
+    fn lt_simplify() {
         let registry = generate_registry();
 
         let expression = Comparison::ComparisonII(
-            ComparisonOperator::Gt,
-            NumericExpression::Constant(1),
+            ComparisonOperator::Lt,
             NumericExpression::Constant(0),
+            NumericExpression::Constant(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(1),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
         );
         assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
 
         let expression = Comparison::ComparisonII(
-            ComparisonOperator::Gt,
-            NumericExpression::Constant(0),
-            NumericExpression::Constant(0),
-        );
-        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
-
-        let expression = Comparison::ComparisonII(
-            ComparisonOperator::Gt,
-            NumericExpression::Constant(0),
-            NumericExpression::Constant(1),
-        );
-        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
-
-        let expression = Comparison::ComparisonII(
-            ComparisonOperator::Gt,
+            ComparisonOperator::Lt,
             NumericExpression::IntegerVariable(0),
             NumericExpression::IntegerVariable(0),
         );
         assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
 
         let expression = Comparison::ComparisonII(
-            ComparisonOperator::Gt,
+            ComparisonOperator::Lt,
+            NumericExpression::IntegerResourceVariable(0),
+            NumericExpression::IntegerResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Lt,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Lt,
+            NumericExpression::ContinuousResourceVariable(0),
+            NumericExpression::ContinuousResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Lt,
             NumericExpression::Constant(0),
             NumericExpression::IntegerVariable(0),
         );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Gt,
-                NumericExpression::Constant(0),
-                NumericExpression::IntegerVariable(0)
-            )
-        );
+        assert_eq!(expression.simplify(&registry), expression);
 
         let expression = Comparison::ComparisonII(
-            ComparisonOperator::Gt,
+            ComparisonOperator::Lt,
             NumericExpression::IntegerVariable(0),
             NumericExpression::IntegerVariable(1),
         );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Gt,
-                NumericExpression::IntegerVariable(0),
-                NumericExpression::IntegerVariable(1)
-            )
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Lt,
+            NumericExpression::Constant(0.0),
+            NumericExpression::ContinuousVariable(0),
         );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Lt,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(1),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
     }
 
     #[test]
@@ -887,6 +1508,27 @@ mod tests {
         );
         assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
 
+        let expression = Comparison::ComparisonIC(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCI(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(0.0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Le,
             NumericExpression::Constant(0),
@@ -894,12 +1536,12 @@ mod tests {
         );
         assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
 
-        let expression = Comparison::ComparisonII(
+        let expression = Comparison::ComparisonCC(
             ComparisonOperator::Le,
-            NumericExpression::Constant(1),
-            NumericExpression::Constant(0),
+            NumericExpression::Constant(0.0),
+            NumericExpression::Constant(1.0),
         );
-        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
 
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Le,
@@ -910,92 +1552,52 @@ mod tests {
 
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Le,
+            NumericExpression::IntegerResourceVariable(0),
+            NumericExpression::IntegerResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Le,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Le,
+            NumericExpression::ContinuousResourceVariable(0),
+            NumericExpression::ContinuousResourceVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
+
+        let expression = Comparison::ComparisonII(
+            ComparisonOperator::Le,
             NumericExpression::Constant(0),
             NumericExpression::IntegerVariable(0),
         );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Le,
-                NumericExpression::Constant(0),
-                NumericExpression::IntegerVariable(0)
-            )
-        );
+        assert_eq!(expression.simplify(&registry), expression);
 
         let expression = Comparison::ComparisonII(
             ComparisonOperator::Le,
             NumericExpression::IntegerVariable(0),
             NumericExpression::IntegerVariable(1),
         );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Le,
-                NumericExpression::IntegerVariable(0),
-                NumericExpression::IntegerVariable(1)
-            )
-        );
-    }
+        assert_eq!(expression.simplify(&registry), expression);
 
-    #[test]
-    fn lt_simplify() {
-        let registry = generate_registry();
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Le,
+            NumericExpression::Constant(0.0),
+            NumericExpression::ContinuousVariable(0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
 
-        let expression = Comparison::ComparisonII(
-            ComparisonOperator::Lt,
-            NumericExpression::Constant(0),
-            NumericExpression::Constant(1),
+        let expression = Comparison::ComparisonCC(
+            ComparisonOperator::Le,
+            NumericExpression::ContinuousVariable(0),
+            NumericExpression::ContinuousVariable(1),
         );
-        assert_eq!(expression.simplify(&registry), Comparison::Constant(true));
-
-        let expression = Comparison::ComparisonII(
-            ComparisonOperator::Lt,
-            NumericExpression::Constant(0),
-            NumericExpression::Constant(0),
-        );
-        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
-
-        let expression = Comparison::ComparisonII(
-            ComparisonOperator::Lt,
-            NumericExpression::Constant(1),
-            NumericExpression::Constant(0),
-        );
-        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
-
-        let expression = Comparison::ComparisonII(
-            ComparisonOperator::Lt,
-            NumericExpression::IntegerVariable(0),
-            NumericExpression::IntegerVariable(0),
-        );
-        assert_eq!(expression.simplify(&registry), Comparison::Constant(false));
-
-        let expression = Comparison::ComparisonII(
-            ComparisonOperator::Lt,
-            NumericExpression::Constant(0),
-            NumericExpression::IntegerVariable(0),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Lt,
-                NumericExpression::Constant(0),
-                NumericExpression::IntegerVariable(0)
-            )
-        );
-
-        let expression = Comparison::ComparisonII(
-            ComparisonOperator::Lt,
-            NumericExpression::IntegerVariable(0),
-            NumericExpression::IntegerVariable(1),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            Comparison::ComparisonII(
-                ComparisonOperator::Lt,
-                NumericExpression::IntegerVariable(0),
-                NumericExpression::IntegerVariable(1)
-            )
-        );
+        assert_eq!(expression.simplify(&registry), expression);
     }
 
     #[test]

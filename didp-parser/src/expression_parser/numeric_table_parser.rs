@@ -203,16 +203,16 @@ mod tests {
         let element_variable_to_object = vec![0, 0, 0, 0];
 
         let integer_variable_names = vec![
-            String::from("n0"),
-            String::from("n1"),
-            String::from("n2"),
-            String::from("n3"),
+            String::from("i0"),
+            String::from("i1"),
+            String::from("i2"),
+            String::from("i3"),
         ];
         let mut name_to_integer_variable = HashMap::new();
-        name_to_integer_variable.insert(String::from("n0"), 0);
-        name_to_integer_variable.insert(String::from("n1"), 1);
-        name_to_integer_variable.insert(String::from("n2"), 2);
-        name_to_integer_variable.insert(String::from("n3"), 3);
+        name_to_integer_variable.insert(String::from("i0"), 0);
+        name_to_integer_variable.insert(String::from("i1"), 1);
+        name_to_integer_variable.insert(String::from("i2"), 2);
+        name_to_integer_variable.insert(String::from("i3"), 3);
 
         state::StateMetadata {
             object_names,
@@ -278,7 +278,7 @@ mod tests {
         let parameters = generate_parameters();
         let tables = generate_tables();
 
-        let tokens: Vec<String> = ["n0", "1", ")", "n1", ")"]
+        let tokens: Vec<String> = ["i0", "1", ")", "i1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -294,7 +294,7 @@ mod tests {
         let parameters = generate_parameters();
         let tables = generate_tables();
 
-        let tokens: Vec<String> = ["e0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -310,7 +310,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[2..]);
 
-        let tokens: Vec<String> = ["s0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["s0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -341,21 +341,21 @@ mod tests {
         let parameters = generate_parameters();
         let tables = generate_tables();
 
-        let tokens: Vec<String> = ["n0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["e0", "0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["e0", "0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = [")", "n0", ")"].iter().map(|x| x.to_string()).collect();
+        let tokens: Vec<String> = [")", "i0", ")"].iter().map(|x| x.to_string()).collect();
         let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
     }
@@ -366,7 +366,7 @@ mod tests {
         let parameters = generate_parameters();
         let tables = generate_tables();
 
-        let tokens: Vec<String> = ["0", "e0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -386,7 +386,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[3..]);
 
-        let tokens: Vec<String> = ["s0", "p0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["s0", "p0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -406,7 +406,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[3..]);
 
-        let tokens: Vec<String> = ["s0", "e0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["s0", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -426,7 +426,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[3..]);
 
-        let tokens: Vec<String> = ["0", "p0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", "p0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -458,21 +458,21 @@ mod tests {
         let parameters = generate_parameters();
         let tables = generate_tables();
 
-        let tokens: Vec<String> = ["0", "n0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["0", "e0", "p0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", "e0", "p0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -486,7 +486,7 @@ mod tests {
         let parameters = generate_parameters();
         let tables = generate_tables();
 
-        let tokens: Vec<String> = ["0", "1", "e0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", "1", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -507,7 +507,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[4..]);
 
-        let tokens: Vec<String> = ["s0", "s1", "p0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["s0", "s1", "p0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -528,7 +528,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[4..]);
 
-        let tokens: Vec<String> = ["s0", "1", "e0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["s0", "1", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -549,7 +549,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[4..]);
 
-        let tokens: Vec<String> = ["0", "s1", "e0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", "s1", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -570,7 +570,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[4..]);
 
-        let tokens: Vec<String> = ["0", "1", "p0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", "1", "p0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -591,7 +591,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[4..]);
 
-        let tokens: Vec<String> = ["s0", "s1", "e0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["s0", "s1", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -612,7 +612,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[4..]);
 
-        let tokens: Vec<String> = ["s0", "1", "p0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["s0", "1", "p0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -633,7 +633,7 @@ mod tests {
         }
         assert_eq!(rest, &tokens[4..]);
 
-        let tokens: Vec<String> = ["0", "s1", "p0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", "s1", "p0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -666,21 +666,21 @@ mod tests {
         let parameters = generate_parameters();
         let tables = generate_tables();
 
-        let tokens: Vec<String> = ["0", "1", "n0", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", "1", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["0", "1", "e0", "2", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", "1", "e0", "2", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["0", "1", ")", "n0", ")"]
+        let tokens: Vec<String> = ["0", "1", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -693,7 +693,7 @@ mod tests {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
         let tables = generate_tables();
-        let tokens: Vec<String> = ["s2", "1", "e0", "p3", ")", "n0", ")"]
+        let tokens: Vec<String> = ["s2", "1", "e0", "p3", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -737,14 +737,14 @@ mod tests {
         let parameters = generate_parameters();
         let tables = generate_tables();
 
-        let tokens: Vec<String> = ["s2", "1", "e0", "p3", "n0", ")"]
+        let tokens: Vec<String> = ["s2", "1", "e0", "p3", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression("f4", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["s2", "1", "e0", "p3", "n0"]
+        let tokens: Vec<String> = ["s2", "1", "e0", "p3", "i0"]
             .iter()
             .map(|x| x.to_string())
             .collect();

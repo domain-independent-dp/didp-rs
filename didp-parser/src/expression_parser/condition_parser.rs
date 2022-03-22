@@ -210,28 +210,52 @@ mod tests {
         let element_variable_to_object = vec![0, 0, 0, 0];
 
         let integer_variable_names = vec![
-            "n0".to_string(),
-            "n1".to_string(),
-            "n2".to_string(),
-            "n3".to_string(),
+            "i0".to_string(),
+            "i1".to_string(),
+            "i2".to_string(),
+            "i3".to_string(),
         ];
         let mut name_to_integer_variable = HashMap::new();
-        name_to_integer_variable.insert("n0".to_string(), 0);
-        name_to_integer_variable.insert("n1".to_string(), 1);
-        name_to_integer_variable.insert("n2".to_string(), 2);
-        name_to_integer_variable.insert("n3".to_string(), 3);
+        name_to_integer_variable.insert("i0".to_string(), 0);
+        name_to_integer_variable.insert("i1".to_string(), 1);
+        name_to_integer_variable.insert("i2".to_string(), 2);
+        name_to_integer_variable.insert("i3".to_string(), 3);
 
         let integer_resource_variable_names = vec![
-            "r0".to_string(),
-            "r1".to_string(),
-            "r2".to_string(),
-            "r3".to_string(),
+            "ir0".to_string(),
+            "ir1".to_string(),
+            "ir2".to_string(),
+            "ir3".to_string(),
         ];
         let mut name_to_integer_resource_variable = HashMap::new();
-        name_to_integer_resource_variable.insert("r0".to_string(), 0);
-        name_to_integer_resource_variable.insert("r1".to_string(), 1);
-        name_to_integer_resource_variable.insert("r2".to_string(), 2);
-        name_to_integer_resource_variable.insert("r3".to_string(), 3);
+        name_to_integer_resource_variable.insert("ir0".to_string(), 0);
+        name_to_integer_resource_variable.insert("ir1".to_string(), 1);
+        name_to_integer_resource_variable.insert("ir2".to_string(), 2);
+        name_to_integer_resource_variable.insert("ir3".to_string(), 3);
+
+        let continuous_variable_names = vec![
+            "c0".to_string(),
+            "c1".to_string(),
+            "c2".to_string(),
+            "c3".to_string(),
+        ];
+        let mut name_to_continuous_variable = HashMap::new();
+        name_to_continuous_variable.insert("c0".to_string(), 0);
+        name_to_continuous_variable.insert("c1".to_string(), 1);
+        name_to_continuous_variable.insert("c2".to_string(), 2);
+        name_to_continuous_variable.insert("c3".to_string(), 3);
+
+        let continuous_resource_variable_names = vec![
+            "cr0".to_string(),
+            "cr1".to_string(),
+            "cr2".to_string(),
+            "cr3".to_string(),
+        ];
+        let mut name_to_continuous_resource_variable = HashMap::new();
+        name_to_continuous_resource_variable.insert("cr0".to_string(), 0);
+        name_to_continuous_resource_variable.insert("cr1".to_string(), 1);
+        name_to_continuous_resource_variable.insert("cr2".to_string(), 2);
+        name_to_continuous_resource_variable.insert("cr3".to_string(), 3);
 
         state::StateMetadata {
             object_names,
@@ -248,10 +272,14 @@ mod tests {
             element_variable_to_object,
             integer_variable_names,
             name_to_integer_variable,
+            continuous_variable_names,
+            name_to_continuous_variable,
             integer_resource_variable_names,
             name_to_integer_resource_variable,
             integer_less_is_better: vec![false, false, true, false],
-            ..Default::default()
+            continuous_resource_variable_names,
+            name_to_continuous_resource_variable,
+            continuous_less_is_better: vec![false, false, true, false],
         }
     }
 
@@ -383,7 +411,7 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = [
-            "(", "f4", "0", "e0", "e1", "e2", "n0", ")", "(", "is", "0", "e0", ")", ")",
+            "(", "f4", "0", "e0", "e1", "e2", "i0", ")", "(", "is", "0", "e0", ")", ")",
         ]
         .iter()
         .map(|x| String::from(*x))
@@ -567,7 +595,59 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "=", "2", "n0", ")", ")"]
+
+        let tokens: Vec<String> = ["(", "=", "2", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonIC(
+                ComparisonOperator::Eq,
+                NumericExpression::Constant(2),
+                NumericExpression::ContinuousVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "=", "2.0", "i0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCI(
+                ComparisonOperator::Eq,
+                NumericExpression::Constant(2.0),
+                NumericExpression::IntegerVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "=", "2.0", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCC(
+                ComparisonOperator::Eq,
+                NumericExpression::Constant(2.0),
+                NumericExpression::ContinuousVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "=", "2", "i0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -605,7 +685,7 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", "=", "2", "n0", "n1", ")", ")"]
+        let tokens: Vec<String> = ["(", "=", "2", "i0", "i1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -618,7 +698,8 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "!=", "2", "n0", ")", ")"]
+
+        let tokens: Vec<String> = ["(", "!=", "2", "i0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -631,6 +712,57 @@ mod tests {
                 ComparisonOperator::Ne,
                 NumericExpression::Constant(2),
                 NumericExpression::IntegerVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "!=", "2", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonIC(
+                ComparisonOperator::Ne,
+                NumericExpression::Constant(2),
+                NumericExpression::ContinuousVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "!=", "2.0", "i0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCI(
+                ComparisonOperator::Ne,
+                NumericExpression::Constant(2.0),
+                NumericExpression::IntegerVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "!=", "2.0", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCC(
+                ComparisonOperator::Ne,
+                NumericExpression::Constant(2.0),
+                NumericExpression::ContinuousVariable(0)
             )))
         );
         assert_eq!(rest, &tokens[5..]);
@@ -656,7 +788,7 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", "!=", "2", "n0", "n1", ")", ")"]
+        let tokens: Vec<String> = ["(", "!=", "2", "i0", "i1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -669,7 +801,8 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", ">", "2", "n0", ")", ")"]
+
+        let tokens: Vec<String> = ["(", ">", "2", "i0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -682,6 +815,57 @@ mod tests {
                 ComparisonOperator::Gt,
                 NumericExpression::Constant(2),
                 NumericExpression::IntegerVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", ">", "2", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonIC(
+                ComparisonOperator::Gt,
+                NumericExpression::Constant(2),
+                NumericExpression::ContinuousVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", ">", "2.0", "i0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCI(
+                ComparisonOperator::Gt,
+                NumericExpression::Constant(2.0),
+                NumericExpression::IntegerVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", ">", "2.0", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCC(
+                ComparisonOperator::Gt,
+                NumericExpression::Constant(2.0),
+                NumericExpression::ContinuousVariable(0)
             )))
         );
         assert_eq!(rest, &tokens[5..]);
@@ -707,7 +891,7 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", ">", "2", "n0", "n1", ")", ")"]
+        let tokens: Vec<String> = ["(", ">", "2", "i0", "i1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -720,7 +904,8 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", ">=", "2", "n0", ")", ")"]
+
+        let tokens: Vec<String> = ["(", ">=", "2", "i0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -733,6 +918,57 @@ mod tests {
                 ComparisonOperator::Ge,
                 NumericExpression::Constant(2),
                 NumericExpression::IntegerVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", ">=", "2", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonIC(
+                ComparisonOperator::Ge,
+                NumericExpression::Constant(2),
+                NumericExpression::ContinuousVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", ">=", "2.0", "i0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCI(
+                ComparisonOperator::Ge,
+                NumericExpression::Constant(2.0),
+                NumericExpression::IntegerVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", ">=", "2.0", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCC(
+                ComparisonOperator::Ge,
+                NumericExpression::Constant(2.0),
+                NumericExpression::ContinuousVariable(0)
             )))
         );
         assert_eq!(rest, &tokens[5..]);
@@ -758,7 +994,7 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", ">=", "2", "n0", "n1", ")", ")"]
+        let tokens: Vec<String> = ["(", ">=", "2", "i0", "i1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -771,7 +1007,8 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "<", "2", "n0", ")", ")"]
+
+        let tokens: Vec<String> = ["(", "<", "2", "i0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -784,6 +1021,57 @@ mod tests {
                 ComparisonOperator::Lt,
                 NumericExpression::Constant(2),
                 NumericExpression::IntegerVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "<", "2", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonIC(
+                ComparisonOperator::Lt,
+                NumericExpression::Constant(2),
+                NumericExpression::ContinuousVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "<", "2.0", "i0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCI(
+                ComparisonOperator::Lt,
+                NumericExpression::Constant(2.0),
+                NumericExpression::IntegerVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "<", "2.0", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCC(
+                ComparisonOperator::Lt,
+                NumericExpression::Constant(2.0),
+                NumericExpression::ContinuousVariable(0)
             )))
         );
         assert_eq!(rest, &tokens[5..]);
@@ -809,7 +1097,7 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", "<", "2", "n0", "n1", ")", ")"]
+        let tokens: Vec<String> = ["(", "<", "2", "i0", "i1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -822,7 +1110,7 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "<=", "2", "n0", ")", ")"]
+        let tokens: Vec<String> = ["(", "<=", "2", "i0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -835,6 +1123,57 @@ mod tests {
                 ComparisonOperator::Le,
                 NumericExpression::Constant(2),
                 NumericExpression::IntegerVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "<=", "2", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonIC(
+                ComparisonOperator::Le,
+                NumericExpression::Constant(2),
+                NumericExpression::ContinuousVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "<=", "2.0", "i0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCI(
+                ComparisonOperator::Le,
+                NumericExpression::Constant(2.0),
+                NumericExpression::IntegerVariable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "<=", "2.0", "c0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonCC(
+                ComparisonOperator::Le,
+                NumericExpression::Constant(2.0),
+                NumericExpression::ContinuousVariable(0)
             )))
         );
         assert_eq!(rest, &tokens[5..]);
@@ -860,7 +1199,7 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", "<=", "2", "n0", "n1", ")", ")"]
+        let tokens: Vec<String> = ["(", "<=", "2", "i0", "i1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -903,7 +1242,7 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", "is", "n0", "e1", ")", ")"]
+        let tokens: Vec<String> = ["(", "is", "i0", "e1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -960,7 +1299,7 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", "is_not", "n0", "e1", ")", ")"]
+        let tokens: Vec<String> = ["(", "is_not", "i0", "e1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
