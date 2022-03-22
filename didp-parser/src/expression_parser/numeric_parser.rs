@@ -625,7 +625,7 @@ mod tests {
         );
         assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["(", "/", "0", "i0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["(", "/", "0.0", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -636,7 +636,7 @@ mod tests {
             expression,
             NumericExpression::NumericOperation(
                 NumericOperator::Divide,
-                Box::new(NumericExpression::Constant(0)),
+                Box::new(NumericExpression::Constant(0.0)),
                 Box::new(NumericExpression::IntegerVariable(0))
             )
         );
@@ -659,7 +659,7 @@ mod tests {
         );
         assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["(", "max", "0", "i0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["(", "max", "0", "c0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -671,7 +671,7 @@ mod tests {
             NumericExpression::NumericOperation(
                 NumericOperator::Max,
                 Box::new(NumericExpression::Constant(0)),
-                Box::new(NumericExpression::IntegerVariable(0))
+                Box::new(NumericExpression::ContinuousVariable(0))
             )
         );
         assert_eq!(rest, &tokens[5..]);
