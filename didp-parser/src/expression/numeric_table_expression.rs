@@ -44,8 +44,8 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
             Self::Table1DSum(i, SetExpression::SetVariable(x)) => {
                 tables.tables_1d[*i].sum(&state.signature_variables.set_variables[*x])
             }
-            Self::Table1DSum(i, SetExpression::PermutationVariable(x)) => {
-                let x = &state.signature_variables.permutation_variables[*x];
+            Self::Table1DSum(i, SetExpression::VectorVariable(x)) => {
+                let x = &state.signature_variables.vector_variables[*x];
                 x.iter().map(|x| tables.tables_1d[*i].eval(*x)).sum()
             }
             Self::Table1DSum(i, x) => tables.tables_1d[*i].sum(&x.eval(state, metadata)),
@@ -57,29 +57,29 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
             }
             Self::Table2DSum(
                 i,
-                SetExpression::PermutationVariable(x),
+                SetExpression::VectorVariable(x),
                 SetExpression::SetVariable(y),
             ) => {
-                let x = &state.signature_variables.permutation_variables[*x];
+                let x = &state.signature_variables.vector_variables[*x];
                 let y = &state.signature_variables.set_variables[*y];
                 x.iter().map(|x| tables.tables_2d[*i].sum_y(*x, y)).sum()
             }
             Self::Table2DSum(
                 i,
                 SetExpression::SetVariable(x),
-                SetExpression::PermutationVariable(y),
+                SetExpression::VectorVariable(y),
             ) => {
                 let x = &state.signature_variables.set_variables[*x];
-                let y = &state.signature_variables.permutation_variables[*y];
+                let y = &state.signature_variables.vector_variables[*y];
                 y.iter().map(|y| tables.tables_2d[*i].sum_x(x, *y)).sum()
             }
             Self::Table2DSum(
                 i,
-                SetExpression::PermutationVariable(x),
-                SetExpression::PermutationVariable(y),
+                SetExpression::VectorVariable(x),
+                SetExpression::VectorVariable(y),
             ) => {
-                let x = &state.signature_variables.permutation_variables[*x];
-                let y = &state.signature_variables.permutation_variables[*y];
+                let x = &state.signature_variables.vector_variables[*x];
+                let y = &state.signature_variables.vector_variables[*y];
                 y.iter()
                     .map(|y| x.iter().map(|x| tables.tables_2d[*i].eval(*x, *y)).sum())
                     .sum()
@@ -92,13 +92,13 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 let x = &state.signature_variables.set_variables[*x];
                 tables.tables_2d[*i].sum(x, &y.eval(state, metadata))
             }
-            Self::Table2DSum(i, x, SetExpression::PermutationVariable(y)) => {
+            Self::Table2DSum(i, x, SetExpression::VectorVariable(y)) => {
                 let x = x.eval(state, metadata);
-                let y = &state.signature_variables.permutation_variables[*y];
+                let y = &state.signature_variables.vector_variables[*y];
                 y.iter().map(|y| tables.tables_2d[*i].sum_x(&x, *y)).sum()
             }
-            Self::Table2DSum(i, SetExpression::PermutationVariable(x), y) => {
-                let x = &state.signature_variables.permutation_variables[*x];
+            Self::Table2DSum(i, SetExpression::VectorVariable(x), y) => {
+                let x = &state.signature_variables.vector_variables[*x];
                 let y = y.eval(state, metadata);
                 x.iter().map(|x| tables.tables_2d[*i].sum_y(*x, &y)).sum()
             }
@@ -109,8 +109,8 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 let x = &state.signature_variables.set_variables[*x];
                 tables.tables_2d[*i].sum_x(x, y.eval(state))
             }
-            Self::Table2DSumX(i, SetExpression::PermutationVariable(x), y) => {
-                let x = &state.signature_variables.permutation_variables[*x];
+            Self::Table2DSumX(i, SetExpression::VectorVariable(x), y) => {
+                let x = &state.signature_variables.vector_variables[*x];
                 let y = y.eval(state);
                 x.iter().map(|x| tables.tables_2d[*i].eval(*x, y)).sum()
             }
@@ -121,8 +121,8 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 let y = &state.signature_variables.set_variables[*y];
                 tables.tables_2d[*i].sum_y(x.eval(&state), y)
             }
-            Self::Table2DSumY(i, x, SetExpression::PermutationVariable(y)) => {
-                let y = &state.signature_variables.permutation_variables[*y];
+            Self::Table2DSumY(i, x, SetExpression::VectorVariable(y)) => {
+                let y = &state.signature_variables.vector_variables[*y];
                 let x = x.eval(state);
                 y.iter().map(|y| tables.tables_2d[*i].eval(x, *y)).sum()
             }
@@ -153,8 +153,8 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                     y.eval(state),
                     z.eval(state),
                 ),
-            Self::Table3DSumX(i, SetExpression::PermutationVariable(x), y, z) => {
-                let x = &state.signature_variables.permutation_variables[*x];
+            Self::Table3DSumX(i, SetExpression::VectorVariable(x), y, z) => {
+                let x = &state.signature_variables.vector_variables[*x];
                 let y = y.eval(state);
                 let z = z.eval(state);
                 x.iter().map(|x| tables.tables_3d[*i].eval(*x, y, z)).sum()
@@ -168,9 +168,9 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                     &state.signature_variables.set_variables[*y],
                     z.eval(state),
                 ),
-            Self::Table3DSumY(i, x, SetExpression::PermutationVariable(y), z) => {
+            Self::Table3DSumY(i, x, SetExpression::VectorVariable(y), z) => {
                 let x = x.eval(state);
-                let y = &state.signature_variables.permutation_variables[*y];
+                let y = &state.signature_variables.vector_variables[*y];
                 let z = z.eval(state);
                 y.iter().map(|y| tables.tables_3d[*i].eval(x, *y, z)).sum()
             }
@@ -183,10 +183,10 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                     y.eval(state),
                     &state.signature_variables.set_variables[*z],
                 ),
-            Self::Table3DSumZ(i, x, y, SetExpression::PermutationVariable(z)) => {
+            Self::Table3DSumZ(i, x, y, SetExpression::VectorVariable(z)) => {
                 let x = x.eval(state);
                 let y = y.eval(state);
-                let z = &state.signature_variables.permutation_variables[*z];
+                let z = &state.signature_variables.vector_variables[*z];
                 z.iter().map(|z| tables.tables_3d[*i].eval(x, y, *z)).sum()
             }
             Self::Table3DSumZ(i, x, y, z) => {
@@ -347,18 +347,18 @@ mod tests {
         name_to_set_variable.insert("s3".to_string(), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
 
-        let permutation_variable_names = vec![
+        let vector_variable_names = vec![
             "p0".to_string(),
             "p1".to_string(),
             "p2".to_string(),
             "p3".to_string(),
         ];
-        let mut name_to_permutation_variable = HashMap::new();
-        name_to_permutation_variable.insert("p0".to_string(), 0);
-        name_to_permutation_variable.insert("p1".to_string(), 1);
-        name_to_permutation_variable.insert("p2".to_string(), 2);
-        name_to_permutation_variable.insert("p3".to_string(), 3);
-        let permutation_variable_to_object = vec![0, 0, 0, 0];
+        let mut name_to_vector_variable = HashMap::new();
+        name_to_vector_variable.insert("p0".to_string(), 0);
+        name_to_vector_variable.insert("p1".to_string(), 1);
+        name_to_vector_variable.insert("p2".to_string(), 2);
+        name_to_vector_variable.insert("p3".to_string(), 3);
+        let vector_variable_to_object = vec![0, 0, 0, 0];
 
         let element_variable_names = vec![
             "e0".to_string(),
@@ -380,9 +380,9 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            permutation_variable_names,
-            name_to_permutation_variable,
-            permutation_variable_to_object,
+            vector_variable_names,
+            name_to_vector_variable,
+            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -455,7 +455,7 @@ mod tests {
                     variable::Set::with_capacity(3),
                     variable::Set::with_capacity(3),
                 ],
-                permutation_variables: vec![vec![0, 2], vec![0, 1], vec![], vec![]],
+                vector_variables: vec![vec![0, 2], vec![0, 1], vec![], vec![]],
                 ..Default::default()
             }),
             ..Default::default()
@@ -493,8 +493,7 @@ mod tests {
         assert_eq!(expression.eval(&state, &metadata, &tables), 40);
         let expression = NumericTableExpression::Table1DSum(0, SetExpression::SetVariable(1));
         assert_eq!(expression.eval(&state, &metadata, &tables), 30);
-        let expression =
-            NumericTableExpression::Table1DSum(0, SetExpression::PermutationVariable(0));
+        let expression = NumericTableExpression::Table1DSum(0, SetExpression::VectorVariable(0));
         assert_eq!(expression.eval(&state, &metadata, &tables), 40);
         let expression = NumericTableExpression::Table1DSum(
             0,
@@ -531,7 +530,7 @@ mod tests {
 
         let expression = NumericTableExpression::Table2DSum(
             0,
-            SetExpression::PermutationVariable(0),
+            SetExpression::VectorVariable(0),
             SetExpression::SetVariable(1),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 180);
@@ -539,14 +538,14 @@ mod tests {
         let expression = NumericTableExpression::Table2DSum(
             0,
             SetExpression::SetVariable(0),
-            SetExpression::PermutationVariable(1),
+            SetExpression::VectorVariable(1),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 180);
 
         let expression = NumericTableExpression::Table2DSum(
             0,
-            SetExpression::PermutationVariable(0),
-            SetExpression::PermutationVariable(1),
+            SetExpression::VectorVariable(0),
+            SetExpression::VectorVariable(1),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 180);
 
@@ -561,7 +560,7 @@ mod tests {
 
         let expression = NumericTableExpression::Table2DSum(
             0,
-            SetExpression::PermutationVariable(0),
+            SetExpression::VectorVariable(0),
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
                 SetExpression::SetVariable(1),
             )))),
@@ -582,7 +581,7 @@ mod tests {
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
                 SetExpression::SetVariable(0),
             )))),
-            SetExpression::PermutationVariable(1),
+            SetExpression::VectorVariable(1),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 180);
 
@@ -613,7 +612,7 @@ mod tests {
 
         let expression = NumericTableExpression::Table2DSumX(
             0,
-            SetExpression::PermutationVariable(0),
+            SetExpression::VectorVariable(0),
             ElementExpression::Constant(0),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 80);
@@ -644,7 +643,7 @@ mod tests {
         let expression = NumericTableExpression::Table2DSumY(
             0,
             ElementExpression::Constant(0),
-            SetExpression::PermutationVariable(0),
+            SetExpression::VectorVariable(0),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 40);
 
@@ -689,7 +688,7 @@ mod tests {
             0,
             SetExpression::SetVariable(0),
             SetExpression::SetVariable(1),
-            SetExpression::PermutationVariable(1),
+            SetExpression::VectorVariable(1),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 240);
     }
@@ -710,7 +709,7 @@ mod tests {
 
         let expression = NumericTableExpression::Table3DSumX(
             0,
-            SetExpression::PermutationVariable(0),
+            SetExpression::VectorVariable(0),
             ElementExpression::Constant(1),
             ElementExpression::Constant(2),
         );
@@ -744,7 +743,7 @@ mod tests {
         let expression = NumericTableExpression::Table3DSumY(
             0,
             ElementExpression::Constant(1),
-            SetExpression::PermutationVariable(0),
+            SetExpression::VectorVariable(0),
             ElementExpression::Constant(2),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 120);
@@ -778,7 +777,7 @@ mod tests {
             0,
             ElementExpression::Constant(1),
             ElementExpression::Constant(2),
-            SetExpression::PermutationVariable(0),
+            SetExpression::VectorVariable(0),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 160);
 
@@ -810,7 +809,7 @@ mod tests {
         let expression = NumericTableExpression::Table3DSumXY(
             0,
             SetExpression::SetVariable(0),
-            SetExpression::PermutationVariable(1),
+            SetExpression::VectorVariable(1),
             ElementExpression::Constant(2),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 180);
@@ -834,7 +833,7 @@ mod tests {
             0,
             SetExpression::SetVariable(0),
             ElementExpression::Constant(2),
-            SetExpression::PermutationVariable(1),
+            SetExpression::VectorVariable(1),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 300);
     }
@@ -857,7 +856,7 @@ mod tests {
             0,
             ElementExpression::Constant(2),
             SetExpression::SetVariable(0),
-            SetExpression::PermutationVariable(1),
+            SetExpression::VectorVariable(1),
         );
         assert_eq!(expression.eval(&state, &metadata, &tables), 180);
     }

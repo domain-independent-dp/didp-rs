@@ -76,8 +76,8 @@ impl<'a, 'b, T: variable::Numeric> Iterator for ApplicableTransitions<'a, 'b, T>
 pub struct OneParameterSuccessorGenerator<'a, T: variable::Numeric> {
     relevant_set_variables: Vec<usize>,
     set_element_to_transitions: Vec<Vec<Vec<Transition<T>>>>,
-    relevant_permutation_variables: Vec<usize>,
-    permutation_element_to_transitions: Vec<Vec<Vec<Transition<T>>>>,
+    relevant_vector_variables: Vec<usize>,
+    vector_element_to_transitions: Vec<Vec<Vec<Transition<T>>>>,
     global_transitions: Vec<&'a Transition<T>>,
     metadata: &'a didp_parser::StateMetadata,
     registry: &'a didp_parser::TableRegistry,
@@ -101,11 +101,11 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
                 (0..m).map(|_| Vec::new()).collect()
             })
             .collect();
-        let n = model.state_metadata.number_of_permutation_variables();
-        let mut relevant_permutation_variables = collections::BTreeSet::new();
-        let mut permutation_element_to_transitions: Vec<Vec<Vec<Transition<T>>>> = (0..n)
+        let n = model.state_metadata.number_of_vector_variables();
+        let mut relevant_vector_variables = collections::BTreeSet::new();
+        let mut vector_element_to_transitions: Vec<Vec<Vec<Transition<T>>>> = (0..n)
             .map(|i| {
-                let m = model.state_metadata.permutation_variable_capacity(i);
+                let m = model.state_metadata.vector_variable_capacity(i);
                 (0..m).map(|_| Vec::new()).collect()
             })
             .collect();
@@ -115,10 +115,10 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
                 let op = Transition {
                     name: op.name.clone(),
                     elements_in_set_variable: op.elements_in_set_variable[1..].to_vec(),
-                    elements_in_permutation_variable: op.elements_in_permutation_variable.clone(),
+                    elements_in_vector_variable: op.elements_in_vector_variable.clone(),
                     preconditions: op.preconditions.clone(),
                     set_effects: op.set_effects.clone(),
-                    permutation_effects: op.permutation_effects.clone(),
+                    vector_effects: op.vector_effects.clone(),
                     element_effects: op.element_effects.clone(),
                     integer_effects: op.integer_effects.clone(),
                     integer_resource_effects: op.integer_resource_effects.clone(),
@@ -129,15 +129,14 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
                 let (i, v) = op.elements_in_set_variable[0];
                 set_element_to_transitions[i][v].push(op);
                 relevant_set_variables.insert(i);
-            } else if !op.elements_in_permutation_variable.is_empty() {
+            } else if !op.elements_in_vector_variable.is_empty() {
                 let op = Transition {
                     name: op.name.clone(),
                     elements_in_set_variable: op.elements_in_set_variable.clone(),
-                    elements_in_permutation_variable: op.elements_in_permutation_variable[1..]
-                        .to_vec(),
+                    elements_in_vector_variable: op.elements_in_vector_variable[1..].to_vec(),
                     preconditions: op.preconditions.clone(),
                     set_effects: op.set_effects.clone(),
-                    permutation_effects: op.permutation_effects.clone(),
+                    vector_effects: op.vector_effects.clone(),
                     element_effects: op.element_effects.clone(),
                     integer_effects: op.integer_effects.clone(),
                     integer_resource_effects: op.integer_resource_effects.clone(),
@@ -145,9 +144,9 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
                     continuous_resource_effects: op.continuous_resource_effects.clone(),
                     cost: op.cost.clone(),
                 };
-                let (i, v) = op.elements_in_permutation_variable[0];
-                permutation_element_to_transitions[i][v].push(op);
-                relevant_permutation_variables.insert(i);
+                let (i, v) = op.elements_in_vector_variable[0];
+                vector_element_to_transitions[i][v].push(op);
+                relevant_vector_variables.insert(i);
             } else {
                 global_transitions.push(op);
             }
@@ -155,8 +154,8 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
         OneParameterSuccessorGenerator {
             relevant_set_variables: relevant_set_variables.into_iter().collect(),
             set_element_to_transitions,
-            relevant_permutation_variables: relevant_permutation_variables.into_iter().collect(),
-            permutation_element_to_transitions,
+            relevant_vector_variables: relevant_vector_variables.into_iter().collect(),
+            vector_element_to_transitions,
             global_transitions,
             metadata: &model.state_metadata,
             registry: &model.table_registry,
@@ -183,9 +182,9 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
                 }
             }
         }
-        for i in &self.relevant_permutation_variables {
-            for v in &state.signature_variables.permutation_variables[*i] {
-                for op in &self.permutation_element_to_transitions[*i][*v] {
+        for i in &self.relevant_vector_variables {
+            for v in &state.signature_variables.vector_variables[*i] {
+                for op in &self.vector_element_to_transitions[*i][*v] {
                     if op.is_applicable(state, self.metadata, self.registry) {
                         result.push(op);
                     }
@@ -206,7 +205,7 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
             relevant_iter: None,
             variable_index: 0,
             ones: None,
-            permutation_iter: None,
+            vector_iter: None,
             iter: None,
         }
     }
@@ -219,25 +218,23 @@ pub struct OneParameterApplicableTransitions<'a, 'b, T: variable::Numeric> {
     relevant_iter: Option<std::slice::Iter<'a, usize>>,
     variable_index: usize,
     ones: Option<fixedbitset::Ones<'b>>,
-    permutation_iter: Option<std::slice::Iter<'b, usize>>,
+    vector_iter: Option<std::slice::Iter<'b, usize>>,
     iter: Option<std::slice::Iter<'a, Transition<T>>>,
 }
 
 impl<'a, 'b, T: variable::Numeric> OneParameterApplicableTransitions<'a, 'b, T> {
-    fn next_permutation(&mut self) -> Option<&'a Transition<T>> {
-        if let Some(permutation_iter) = &mut self.permutation_iter {
-            if let Some(v) = permutation_iter.next() {
+    fn next_vector(&mut self) -> Option<&'a Transition<T>> {
+        if let Some(vector_iter) = &mut self.vector_iter {
+            if let Some(v) = vector_iter.next() {
                 self.iter = Some(
-                    self.generator.permutation_element_to_transitions[self.variable_index][*v]
-                        .iter(),
+                    self.generator.vector_element_to_transitions[self.variable_index][*v].iter(),
                 );
                 return self.next();
             }
         }
         match self.relevant_iter.as_mut().unwrap().next() {
             Some(v) => {
-                self.permutation_iter =
-                    Some(self.state.signature_variables.permutation_variables[*v].iter());
+                self.vector_iter = Some(self.state.signature_variables.vector_variables[*v].iter());
                 self.variable_index = *v;
                 self.next()
             }
@@ -246,8 +243,8 @@ impl<'a, 'b, T: variable::Numeric> OneParameterApplicableTransitions<'a, 'b, T> 
     }
 
     fn next_set(&mut self) -> Option<&'a Transition<T>> {
-        if self.permutation_iter.is_some() {
-            return self.next_permutation();
+        if self.vector_iter.is_some() {
+            return self.next_vector();
         }
 
         if let Some(ones) = &mut self.ones {
@@ -265,8 +262,8 @@ impl<'a, 'b, T: variable::Numeric> OneParameterApplicableTransitions<'a, 'b, T> 
             }
             None => {
                 self.ones = None;
-                self.relevant_iter = Some(self.generator.relevant_permutation_variables.iter());
-                self.next_permutation()
+                self.relevant_iter = Some(self.generator.relevant_vector_variables.iter());
+                self.next_vector()
             }
         }
     }

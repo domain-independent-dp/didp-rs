@@ -3,13 +3,19 @@ use approx::{AbsDiffEq, RelativeEq};
 use std::collections;
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Table1D<T: Copy>(Vec<T>);
+pub struct Table1D<T>(Vec<T>);
 
-impl<T: Copy> Table1D<T> {
+impl<T> Table1D<T> {
     pub fn new(vector: Vec<T>) -> Table1D<T> {
         Table1D(vector)
     }
 
+    pub fn get(&self, x: variable::Element) -> &T {
+        &self.0[x]
+    }
+}
+
+impl<T: Copy> Table1D<T> {
     pub fn eval(&self, x: variable::Element) -> T {
         self.0[x]
     }
@@ -25,7 +31,7 @@ impl<T: variable::Numeric> Table1D<T> {
     }
 }
 
-impl<T: Copy + AbsDiffEq> AbsDiffEq for Table1D<T>
+impl<T: AbsDiffEq> AbsDiffEq for Table1D<T>
 where
     T::Epsilon: Copy,
 {
@@ -43,7 +49,7 @@ where
     }
 }
 
-impl<T: Copy + RelativeEq> RelativeEq for Table1D<T>
+impl<T: RelativeEq> RelativeEq for Table1D<T>
 where
     T::Epsilon: Copy,
 {
@@ -60,13 +66,19 @@ where
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Table2D<T: Copy>(Vec<Vec<T>>);
+pub struct Table2D<T>(Vec<Vec<T>>);
 
-impl<T: Copy> Table2D<T> {
+impl<T> Table2D<T> {
     pub fn new(vector: Vec<Vec<T>>) -> Table2D<T> {
         Table2D(vector)
     }
 
+    pub fn get(&self, x: variable::Element, y: variable::Element) -> &T {
+        &self.0[x][y]
+    }
+}
+
+impl<T: Copy> Table2D<T> {
     pub fn eval(&self, x: variable::Element, y: variable::Element) -> T {
         self.0[x][y]
     }
@@ -86,7 +98,7 @@ impl<T: variable::Numeric> Table2D<T> {
     }
 }
 
-impl<T: Copy + AbsDiffEq> AbsDiffEq for Table2D<T>
+impl<T: AbsDiffEq> AbsDiffEq for Table2D<T>
 where
     T::Epsilon: Copy,
 {
@@ -105,7 +117,7 @@ where
     }
 }
 
-impl<T: Copy + RelativeEq> RelativeEq for Table2D<T>
+impl<T: RelativeEq> RelativeEq for Table2D<T>
 where
     T::Epsilon: Copy,
 {
@@ -123,13 +135,19 @@ where
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Table3D<T: Copy>(Vec<Vec<Vec<T>>>);
+pub struct Table3D<T>(Vec<Vec<Vec<T>>>);
 
-impl<T: Copy> Table3D<T> {
+impl<T> Table3D<T> {
     pub fn new(vector: Vec<Vec<Vec<T>>>) -> Table3D<T> {
         Table3D(vector)
     }
 
+    pub fn get(&self, x: variable::Element, y: variable::Element, z: variable::Element) -> &T {
+        &self.0[x][y][z]
+    }
+}
+
+impl<T: Copy> Table3D<T> {
     pub fn eval(&self, x: variable::Element, y: variable::Element, z: variable::Element) -> T {
         self.0[x][y][z]
     }
@@ -165,7 +183,7 @@ impl<T: variable::Numeric> Table3D<T> {
     }
 }
 
-impl<T: Copy + AbsDiffEq> AbsDiffEq for Table3D<T>
+impl<T: AbsDiffEq> AbsDiffEq for Table3D<T>
 where
     T::Epsilon: Copy,
 {
@@ -186,7 +204,7 @@ where
     }
 }
 
-impl<T: Copy + RelativeEq> RelativeEq for Table3D<T>
+impl<T: RelativeEq> RelativeEq for Table3D<T>
 where
     T::Epsilon: Copy,
 {
@@ -206,16 +224,25 @@ where
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Table<T: Copy> {
+pub struct Table<T> {
     map: collections::HashMap<Vec<variable::Element>, T>,
     default: T,
 }
 
-impl<T: Copy> Table<T> {
+impl<T> Table<T> {
     pub fn new(map: collections::HashMap<Vec<variable::Element>, T>, default: T) -> Table<T> {
         Table { map, default }
     }
 
+    pub fn get(&self, args: &[variable::Element]) -> &T {
+        match self.map.get(args) {
+            Some(value) => value,
+            None => &self.default,
+        }
+    }
+}
+
+impl<T: Copy> Table<T> {
     pub fn eval(&self, args: &[variable::Element]) -> T {
         match self.map.get(args) {
             Some(value) => *value,
@@ -224,7 +251,7 @@ impl<T: Copy> Table<T> {
     }
 }
 
-impl<T: Copy + AbsDiffEq> AbsDiffEq for Table<T>
+impl<T: AbsDiffEq> AbsDiffEq for Table<T>
 where
     T::Epsilon: Copy,
 {
@@ -248,7 +275,7 @@ where
     }
 }
 
-impl<T: Copy + RelativeEq> RelativeEq for Table<T>
+impl<T: RelativeEq> RelativeEq for Table<T>
 where
     T::Epsilon: Copy,
 {
@@ -280,6 +307,14 @@ mod tests {
     use approx::{assert_relative_eq, assert_relative_ne};
 
     #[test]
+    fn table_1d_get() {
+        let f = Table1D::new(vec![10, 20, 30]);
+        assert_eq!(*f.get(0), 10);
+        assert_eq!(*f.get(1), 20);
+        assert_eq!(*f.get(2), 30);
+    }
+
+    #[test]
     fn table_1d_eval() {
         let f = Table1D::new(vec![10, 20, 30]);
         assert_eq!(f.eval(0), 10);
@@ -303,6 +338,12 @@ mod tests {
         assert_relative_eq!(t1, t2);
         let t2 = Table1D::new(vec![10.0, 20.0, 31.0]);
         assert_relative_ne!(t1, t2);
+    }
+
+    #[test]
+    fn table_2d_get() {
+        let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
+        assert_eq!(*f.get(0, 1), 20);
     }
 
     #[test]
@@ -348,6 +389,16 @@ mod tests {
         assert_relative_eq!(t1, t2);
         let t2 = Table2D::new(vec![vec![10.0], vec![21.0]]);
         assert_relative_ne!(t1, t2);
+    }
+
+    #[test]
+    fn table_3d_get() {
+        let f = Table3D::new(vec![
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+        ]);
+        assert_eq!(*f.get(0, 1, 2), 60);
     }
 
     #[test]
@@ -474,6 +525,25 @@ mod tests {
         assert_relative_eq!(t1, t2);
         let t2 = Table3D::new(vec![vec![vec![10.0]], vec![vec![21.0]]]);
         assert_relative_ne!(t1, t2);
+    }
+
+    #[test]
+    fn table_get() {
+        let mut map = collections::HashMap::<Vec<variable::Element>, variable::Integer>::new();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, 100);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, 200);
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, 300);
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, 400);
+        let f = Table::new(map, 0);
+        assert_eq!(*f.get(&[0, 1, 0, 0]), 100);
+        assert_eq!(*f.get(&[0, 1, 0, 1]), 200);
+        assert_eq!(*f.get(&[0, 1, 2, 0]), 300);
+        assert_eq!(*f.get(&[0, 1, 2, 1]), 400);
+        assert_eq!(*f.get(&[0, 1, 2, 2]), 0);
     }
 
     #[test]

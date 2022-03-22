@@ -1,4 +1,4 @@
-use crate::variable::{Continuous, Element, Integer, Numeric, Permutation, Set};
+use crate::variable::{Continuous, Element, Integer, Numeric, Set, Vector};
 use crate::yaml_util;
 use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
@@ -16,7 +16,7 @@ pub struct State {
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
 pub struct SignatureVariables {
     pub set_variables: Vec<Set>,
-    pub permutation_variables: Vec<Permutation>,
+    pub vector_variables: Vec<Vector>,
     pub element_variables: Vec<Element>,
     pub integer_variables: Vec<Integer>,
     pub continuous_variables: Vec<OrderedFloat<Continuous>>,
@@ -43,11 +43,10 @@ impl State {
             }
             set_variables.push(set);
         }
-        let mut permutation_variables =
-            Vec::with_capacity(metadata.permutation_variable_names.len());
-        for name in &metadata.permutation_variable_names {
-            let permutation = yaml_util::get_usize_array_by_key(value, name)?;
-            permutation_variables.push(permutation);
+        let mut vector_variables = Vec::with_capacity(metadata.vector_variable_names.len());
+        for name in &metadata.vector_variable_names {
+            let vector = yaml_util::get_usize_array_by_key(value, name)?;
+            vector_variables.push(vector);
         }
         let mut element_variables = Vec::with_capacity(metadata.element_variable_names.len());
         for name in &metadata.element_variable_names {
@@ -84,7 +83,7 @@ impl State {
         Ok(State {
             signature_variables: Rc::new(SignatureVariables {
                 set_variables,
-                permutation_variables,
+                vector_variables,
                 element_variables,
                 integer_variables,
                 continuous_variables,
@@ -108,9 +107,9 @@ pub struct StateMetadata {
     pub name_to_set_variable: collections::HashMap<String, usize>,
     pub set_variable_to_object: Vec<usize>,
 
-    pub permutation_variable_names: Vec<String>,
-    pub name_to_permutation_variable: collections::HashMap<String, usize>,
-    pub permutation_variable_to_object: Vec<usize>,
+    pub vector_variable_names: Vec<String>,
+    pub name_to_vector_variable: collections::HashMap<String, usize>,
+    pub vector_variable_to_object: Vec<usize>,
 
     pub element_variable_names: Vec<String>,
     pub name_to_element_variable: collections::HashMap<String, usize>,
@@ -140,8 +139,8 @@ impl StateMetadata {
         self.set_variable_names.len()
     }
 
-    pub fn number_of_permutation_variables(&self) -> usize {
-        self.permutation_variable_names.len()
+    pub fn number_of_vector_variables(&self) -> usize {
+        self.vector_variable_names.len()
     }
 
     pub fn number_of_element_variables(&self) -> usize {
@@ -172,13 +171,12 @@ impl StateMetadata {
         self.object_numbers[self.set_variable_to_object[self.name_to_set_variable[name]]]
     }
 
-    pub fn permutation_variable_capacity(&self, i: usize) -> usize {
-        self.object_numbers[self.permutation_variable_to_object[i]]
+    pub fn vector_variable_capacity(&self, i: usize) -> usize {
+        self.object_numbers[self.vector_variable_to_object[i]]
     }
 
-    pub fn permutation_variable_capacity_by_name(&self, name: &str) -> usize {
-        self.object_numbers
-            [self.permutation_variable_to_object[self.name_to_permutation_variable[name]]]
+    pub fn vector_variable_capacity_by_name(&self, name: &str) -> usize {
+        self.object_numbers[self.vector_variable_to_object[self.name_to_vector_variable[name]]]
     }
 
     pub fn element_variable_capacity(&self, i: usize) -> usize {
@@ -266,36 +264,35 @@ impl StateMetadata {
         let mut elements_in_set_variable_array: Vec<Vec<(usize, usize)>> =
             Vec::with_capacity(array.len());
         elements_in_set_variable_array.push(vec![]);
-        let mut elements_in_permutation_variable_array: Vec<Vec<(usize, usize)>> =
+        let mut elements_in_vector_variable_array: Vec<Vec<(usize, usize)>> =
             Vec::with_capacity(array.len());
-        elements_in_permutation_variable_array.push(vec![]);
+        elements_in_vector_variable_array.push(vec![]);
         for value in array {
             let map = yaml_util::get_map(value)?;
             let name = yaml_util::get_string_by_key(&map, "name")?;
             let object = yaml_util::get_string_by_key(&map, "object")?;
-            let (n, set_index, permutation_index) =
-                if let Some(i) = self.name_to_object.get(&object) {
-                    (self.object_numbers[*i], None, None)
-                } else if let Some(i) = self.name_to_set_variable.get(&object) {
-                    (self.set_variable_capacity(*i), Some(*i), None)
-                } else if let Some(i) = self.name_to_permutation_variable.get(&object) {
-                    (self.permutation_variable_capacity(*i), None, Some(*i))
-                } else {
-                    return Err(yaml_util::YamlContentErr::new(format!(
-                        "no such object, set variable, or permutation variable `{}`",
-                        object
-                    )));
-                };
+            let (n, set_index, vector_index) = if let Some(i) = self.name_to_object.get(&object) {
+                (self.object_numbers[*i], None, None)
+            } else if let Some(i) = self.name_to_set_variable.get(&object) {
+                (self.set_variable_capacity(*i), Some(*i), None)
+            } else if let Some(i) = self.name_to_vector_variable.get(&object) {
+                (self.vector_variable_capacity(*i), None, Some(*i))
+            } else {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "no such object, set variable, or vector variable `{}`",
+                    object
+                )));
+            };
             let mut new_parameteres_set = Vec::with_capacity(parameters_array.len() * n);
             let mut new_elements_in_set_variable_array =
                 Vec::with_capacity(elements_in_set_variable_array.len() * n);
-            let mut new_elements_in_permutation_variable_array =
-                Vec::with_capacity(elements_in_permutation_variable_array.len() * n);
-            for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in
+            let mut new_elements_in_vector_variable_array =
+                Vec::with_capacity(elements_in_vector_variable_array.len() * n);
+            for ((parameters, elements_in_set_variable), elements_in_vector_variable) in
                 parameters_array
                     .iter()
                     .zip(elements_in_set_variable_array.iter())
-                    .zip(elements_in_permutation_variable_array.iter())
+                    .zip(elements_in_vector_variable_array.iter())
             {
                 for i in 0..n {
                     let mut parameters = parameters.clone();
@@ -304,26 +301,24 @@ impl StateMetadata {
                     if let Some(j) = set_index {
                         elements_in_set_variable.push((j, i));
                     }
-                    let mut elements_in_permutation_variable =
-                        elements_in_permutation_variable.clone();
-                    if let Some(j) = permutation_index {
-                        elements_in_permutation_variable.push((j, i));
+                    let mut elements_in_vector_variable = elements_in_vector_variable.clone();
+                    if let Some(j) = vector_index {
+                        elements_in_vector_variable.push((j, i));
                     }
                     new_parameteres_set.push(parameters);
                     new_elements_in_set_variable_array.push(elements_in_set_variable);
-                    new_elements_in_permutation_variable_array
-                        .push(elements_in_permutation_variable);
+                    new_elements_in_vector_variable_array.push(elements_in_vector_variable);
                 }
             }
             parameters_array = new_parameteres_set;
             elements_in_set_variable_array = new_elements_in_set_variable_array;
-            elements_in_permutation_variable_array = new_elements_in_permutation_variable_array;
+            elements_in_vector_variable_array = new_elements_in_vector_variable_array;
         }
 
         Ok((
             parameters_array,
             elements_in_set_variable_array,
-            elements_in_permutation_variable_array,
+            elements_in_vector_variable_array,
         ))
     }
 
@@ -346,9 +341,9 @@ impl StateMetadata {
         let mut set_variable_names = Vec::new();
         let mut name_to_set_variable = collections::HashMap::new();
         let mut set_variable_to_object = Vec::new();
-        let mut permutation_variable_names = Vec::new();
-        let mut name_to_permutation_variable = collections::HashMap::new();
-        let mut permutation_variable_to_object = Vec::new();
+        let mut vector_variable_names = Vec::new();
+        let mut name_to_vector_variable = collections::HashMap::new();
+        let mut vector_variable_to_object = Vec::new();
         let mut element_variable_names = Vec::new();
         let mut name_to_element_variable = collections::HashMap::new();
         let mut element_variable_to_object = Vec::new();
@@ -375,12 +370,11 @@ impl StateMetadata {
                     name_to_set_variable.insert(name.clone(), set_variable_names.len());
                     set_variable_names.push(name);
                 }
-                "permutation" => {
+                "vector" => {
                     let id = Self::get_object_id(map, &name_to_object)?;
-                    permutation_variable_to_object.push(id);
-                    name_to_permutation_variable
-                        .insert(name.clone(), permutation_variable_names.len());
-                    permutation_variable_names.push(name);
+                    vector_variable_to_object.push(id);
+                    name_to_vector_variable.insert(name.clone(), vector_variable_names.len());
+                    vector_variable_names.push(name);
                 }
                 "element" => {
                     let id = Self::get_object_id(map, &name_to_object)?;
@@ -429,9 +423,9 @@ impl StateMetadata {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            permutation_variable_names,
-            name_to_permutation_variable,
-            permutation_variable_to_object,
+            vector_variable_names,
+            name_to_vector_variable,
+            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -511,18 +505,18 @@ mod tests {
         name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 1];
 
-        let permutation_variable_names = vec![
+        let vector_variable_names = vec![
             String::from("p0"),
             String::from("p1"),
             String::from("p2"),
             String::from("p3"),
         ];
-        let mut name_to_permutation_variable = HashMap::new();
-        name_to_permutation_variable.insert(String::from("p0"), 0);
-        name_to_permutation_variable.insert(String::from("p1"), 1);
-        name_to_permutation_variable.insert(String::from("p2"), 2);
-        name_to_permutation_variable.insert(String::from("p3"), 3);
-        let permutation_variable_to_object = vec![0, 0, 0, 1];
+        let mut name_to_vector_variable = HashMap::new();
+        name_to_vector_variable.insert(String::from("p0"), 0);
+        name_to_vector_variable.insert(String::from("p1"), 1);
+        name_to_vector_variable.insert(String::from("p2"), 2);
+        name_to_vector_variable.insert(String::from("p3"), 3);
+        let vector_variable_to_object = vec![0, 0, 0, 1];
 
         let element_variable_names = vec![
             String::from("e0"),
@@ -592,9 +586,9 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            permutation_variable_names,
-            name_to_permutation_variable,
-            permutation_variable_to_object,
+            vector_variable_names,
+            name_to_vector_variable,
+            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -665,7 +659,7 @@ cr3: 3
         let mut expected = State {
             signature_variables: Rc::new(SignatureVariables {
                 set_variables: vec![s0, s1, s2, s3],
-                permutation_variables: vec![vec![0, 2], vec![0, 1], vec![0], vec![]],
+                vector_variables: vec![vec![0, 2], vec![0, 1], vec![0], vec![]],
                 element_variables: vec![0, 1, 2, 3],
                 integer_variables: vec![0, 1, 2, 3],
                 continuous_variables: vec![
@@ -781,9 +775,9 @@ cr3: 3
     }
 
     #[test]
-    fn number_of_permutation_variables() {
+    fn number_of_vector_variables() {
         let metadata = generate_metadata();
-        assert_eq!(metadata.number_of_permutation_variables(), 4);
+        assert_eq!(metadata.number_of_vector_variables(), 4);
     }
 
     #[test]
@@ -835,21 +829,21 @@ cr3: 3
     }
 
     #[test]
-    fn permutation_variable_capacity() {
+    fn vector_variable_capacity() {
         let metadata = generate_metadata();
-        assert_eq!(metadata.permutation_variable_capacity(0), 10);
-        assert_eq!(metadata.permutation_variable_capacity(1), 10);
-        assert_eq!(metadata.permutation_variable_capacity(2), 10);
-        assert_eq!(metadata.permutation_variable_capacity(3), 2);
+        assert_eq!(metadata.vector_variable_capacity(0), 10);
+        assert_eq!(metadata.vector_variable_capacity(1), 10);
+        assert_eq!(metadata.vector_variable_capacity(2), 10);
+        assert_eq!(metadata.vector_variable_capacity(3), 2);
     }
 
     #[test]
-    fn permutation_variable_capacity_by_name() {
+    fn vector_variable_capacity_by_name() {
         let metadata = generate_metadata();
-        assert_eq!(metadata.permutation_variable_capacity_by_name("p0"), 10);
-        assert_eq!(metadata.permutation_variable_capacity_by_name("p1"), 10);
-        assert_eq!(metadata.permutation_variable_capacity_by_name("p2"), 10);
-        assert_eq!(metadata.permutation_variable_capacity_by_name("p3"), 2);
+        assert_eq!(metadata.vector_variable_capacity_by_name("p0"), 10);
+        assert_eq!(metadata.vector_variable_capacity_by_name("p1"), 10);
+        assert_eq!(metadata.vector_variable_capacity_by_name("p2"), 10);
+        assert_eq!(metadata.vector_variable_capacity_by_name("p3"), 2);
     }
 
     #[test]
@@ -1009,19 +1003,19 @@ cr3: 3
         let yaml = &yaml[0];
         let result = metadata.ground_parameters_from_yaml(&yaml);
         assert!(result.is_ok());
-        let (parameters, elements_in_set_variable_array, elements_in_permutation_variable_array) =
+        let (parameters, elements_in_set_variable_array, elements_in_vector_variable_array) =
             result.unwrap();
         let expected_elements_in_set_variable_array =
             vec![vec![(3, 0)], vec![(3, 1)], vec![(3, 0)], vec![(3, 1)]];
-        let expected_elements_in_permutation_variable_array = vec![vec![], vec![], vec![], vec![]];
+        let expected_elements_in_vector_variable_array = vec![vec![], vec![], vec![], vec![]];
         assert_eq!(parameters, expected_parameters);
         assert_eq!(
             elements_in_set_variable_array,
             expected_elements_in_set_variable_array
         );
         assert_eq!(
-            elements_in_permutation_variable_array,
-            expected_elements_in_permutation_variable_array
+            elements_in_vector_variable_array,
+            expected_elements_in_vector_variable_array
         );
 
         let yaml = yaml_rust::YamlLoader::load_from_str(
@@ -1038,11 +1032,11 @@ cr3: 3
         let yaml = &yaml[0];
         let result = metadata.ground_parameters_from_yaml(&yaml);
         assert!(result.is_ok());
-        let (parameters, elements_in_set_variable_array, elements_in_permutation_variable_array) =
+        let (parameters, elements_in_set_variable_array, elements_in_vector_variable_array) =
             result.unwrap();
         let expected_elements_in_set_variable_array =
             vec![vec![(3, 0)], vec![(3, 0)], vec![(3, 1)], vec![(3, 1)]];
-        let expected_elements_in_permutation_variable_array =
+        let expected_elements_in_vector_variable_array =
             vec![vec![(3, 0)], vec![(3, 1)], vec![(3, 0)], vec![(3, 1)]];
         assert_eq!(parameters, expected_parameters);
         assert_eq!(
@@ -1050,8 +1044,8 @@ cr3: 3
             expected_elements_in_set_variable_array
         );
         assert_eq!(
-            elements_in_permutation_variable_array,
-            expected_elements_in_permutation_variable_array
+            elements_in_vector_variable_array,
+            expected_elements_in_vector_variable_array
         );
     }
 
@@ -1120,16 +1114,16 @@ cr3: 3
   type: set
   object: small
 - name: p0
-  type: permutation
+  type: vector
   object: object
 - name: p1
-  type: permutation 
+  type: vector 
   object: object
 - name: p2
-  type: permutation
+  type: vector
   object: object
 - name: p3
-  type: permutation
+  type: vector
   object: small
 - name: e0
   type: element 

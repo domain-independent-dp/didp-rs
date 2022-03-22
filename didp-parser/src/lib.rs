@@ -269,7 +269,7 @@ impl<T: variable::Numeric> Model<T> {
                 expression::Condition::Constant(true) => continue,
                 expression::Condition::Constant(false)
                     if condition.elements_in_set_variable.is_empty()
-                        && condition.elements_in_permutation_variable.is_empty() =>
+                        && condition.elements_in_vector_variable.is_empty() =>
                 {
                     return Err(ModelErr::new(String::from(
                         "model has a constraint never satisfied",

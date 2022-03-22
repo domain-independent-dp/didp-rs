@@ -88,7 +88,7 @@ impl<T: Numeric> BaseCase<T> {
                 match c.condition {
                     Condition::Constant(false)
                         if c.elements_in_set_variable.is_empty()
-                            && c.elements_in_permutation_variable.is_empty() =>
+                            && c.elements_in_vector_variable.is_empty() =>
                     {
                         return Err(util::ModelErr::new(String::from(
                             "terminal condition never satisfied",

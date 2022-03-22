@@ -176,18 +176,18 @@ mod tests {
         name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
 
-        let permutation_variable_names = vec![
+        let vector_variable_names = vec![
             String::from("p0"),
             String::from("p1"),
             String::from("p2"),
             String::from("p3"),
         ];
-        let mut name_to_permutation_variable = HashMap::new();
-        name_to_permutation_variable.insert(String::from("p0"), 0);
-        name_to_permutation_variable.insert(String::from("p1"), 1);
-        name_to_permutation_variable.insert(String::from("p2"), 2);
-        name_to_permutation_variable.insert(String::from("p3"), 3);
-        let permutation_variable_to_object = vec![0, 0, 0, 0];
+        let mut name_to_vector_variable = HashMap::new();
+        name_to_vector_variable.insert(String::from("p0"), 0);
+        name_to_vector_variable.insert(String::from("p1"), 1);
+        name_to_vector_variable.insert(String::from("p2"), 2);
+        name_to_vector_variable.insert(String::from("p3"), 3);
+        let vector_variable_to_object = vec![0, 0, 0, 0];
 
         let element_variable_names = vec![
             String::from("e0"),
@@ -221,9 +221,9 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            permutation_variable_names,
-            name_to_permutation_variable,
-            permutation_variable_to_object,
+            vector_variable_names,
+            name_to_vector_variable,
+            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -402,7 +402,7 @@ mod tests {
         if let NumericTableExpression::Table2DSum(i, x, y) = expression {
             assert_eq!(i, 0);
             assert!(matches!(x, SetExpression::SetVariable(0)));
-            assert!(matches!(y, SetExpression::PermutationVariable(0)));
+            assert!(matches!(y, SetExpression::VectorVariable(0)));
         }
         assert_eq!(rest, &tokens[3..]);
 
@@ -442,7 +442,7 @@ mod tests {
         if let NumericTableExpression::Table2DSumY(i, x, y) = expression {
             assert_eq!(i, 0);
             assert!(matches!(x, ElementExpression::Constant(0)));
-            assert!(matches!(y, SetExpression::PermutationVariable(0)));
+            assert!(matches!(y, SetExpression::VectorVariable(0)));
         }
         assert_eq!(rest, &tokens[3..]);
 
@@ -524,7 +524,7 @@ mod tests {
             assert_eq!(i, 0);
             assert!(matches!(x, SetExpression::SetVariable(0)));
             assert!(matches!(y, SetExpression::SetVariable(1)));
-            assert!(matches!(z, SetExpression::PermutationVariable(0)));
+            assert!(matches!(z, SetExpression::VectorVariable(0)));
         }
         assert_eq!(rest, &tokens[4..]);
 
@@ -587,7 +587,7 @@ mod tests {
             assert_eq!(i, 0);
             assert!(matches!(x, ElementExpression::Constant(0)));
             assert!(matches!(y, ElementExpression::Constant(1)));
-            assert!(matches!(z, SetExpression::PermutationVariable(0)));
+            assert!(matches!(z, SetExpression::VectorVariable(0)));
         }
         assert_eq!(rest, &tokens[4..]);
 
@@ -629,7 +629,7 @@ mod tests {
             assert_eq!(i, 0);
             assert!(matches!(x, SetExpression::SetVariable(0)));
             assert!(matches!(y, ElementExpression::Constant(1)));
-            assert!(matches!(z, SetExpression::PermutationVariable(0)));
+            assert!(matches!(z, SetExpression::VectorVariable(0)));
         }
         assert_eq!(rest, &tokens[4..]);
 
@@ -650,7 +650,7 @@ mod tests {
             assert_eq!(i, 0);
             assert!(matches!(x, ElementExpression::Constant(0)));
             assert!(matches!(y, SetExpression::SetVariable(1)));
-            assert!(matches!(z, SetExpression::PermutationVariable(0)));
+            assert!(matches!(z, SetExpression::VectorVariable(0)));
         }
         assert_eq!(rest, &tokens[4..]);
 
@@ -720,7 +720,7 @@ mod tests {
             ));
             assert!(matches!(
                 args[3],
-                ArgumentExpression::Set(SetExpression::PermutationVariable(3))
+                ArgumentExpression::Set(SetExpression::VectorVariable(3))
             ));
         }
         assert_eq!(rest, &tokens[5..]);

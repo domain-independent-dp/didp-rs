@@ -4,7 +4,7 @@ use std::iter::Sum;
 use std::str;
 
 pub type Set = fixedbitset::FixedBitSet;
-pub type Permutation = Vec<usize>;
+pub type Vector = Vec<usize>;
 pub type Element = usize;
 pub type Integer = i32;
 pub type Continuous = f64;

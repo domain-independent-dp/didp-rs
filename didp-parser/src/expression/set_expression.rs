@@ -4,7 +4,7 @@ use crate::variable;
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SetExpression {
     SetVariable(usize),
-    PermutationVariable(usize),
+    VectorVariable(usize),
     Complement(Box<SetExpression>),
     SetOperation(SetOperator, Box<SetExpression>, Box<SetExpression>),
     SetElementOperation(SetElementOperator, Box<SetExpression>, ElementExpression),
@@ -27,10 +27,9 @@ impl SetExpression {
     pub fn eval(&self, state: &state::State, metadata: &state::StateMetadata) -> variable::Set {
         match self {
             SetExpression::SetVariable(i) => state.signature_variables.set_variables[*i].clone(),
-            SetExpression::PermutationVariable(i) => {
-                let mut set =
-                    variable::Set::with_capacity(metadata.permutation_variable_capacity(*i));
-                for v in &state.signature_variables.permutation_variables[*i] {
+            SetExpression::VectorVariable(i) => {
+                let mut set = variable::Set::with_capacity(metadata.vector_variable_capacity(*i));
+                for v in &state.signature_variables.vector_variables[*i] {
                     set.insert(*v);
                 }
                 set
@@ -124,18 +123,18 @@ mod tests {
         name_to_set_variable.insert("s3".to_string(), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
 
-        let permutation_variable_names = vec![
+        let vector_variable_names = vec![
             "p0".to_string(),
             "p1".to_string(),
             "p2".to_string(),
             "p3".to_string(),
         ];
-        let mut name_to_permutation_variable = HashMap::new();
-        name_to_permutation_variable.insert("p0".to_string(), 0);
-        name_to_permutation_variable.insert("p1".to_string(), 1);
-        name_to_permutation_variable.insert("p2".to_string(), 2);
-        name_to_permutation_variable.insert("p3".to_string(), 3);
-        let permutation_variable_to_object = vec![0, 0, 0, 0];
+        let mut name_to_vector_variable = HashMap::new();
+        name_to_vector_variable.insert("p0".to_string(), 0);
+        name_to_vector_variable.insert("p1".to_string(), 1);
+        name_to_vector_variable.insert("p2".to_string(), 2);
+        name_to_vector_variable.insert("p3".to_string(), 3);
+        let vector_variable_to_object = vec![0, 0, 0, 0];
 
         let element_variable_names = vec![
             "e0".to_string(),
@@ -157,9 +156,9 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            permutation_variable_names,
-            name_to_permutation_variable,
-            permutation_variable_to_object,
+            vector_variable_names,
+            name_to_vector_variable,
+            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -177,7 +176,7 @@ mod tests {
         state::State {
             signature_variables: Rc::new(state::SignatureVariables {
                 set_variables: vec![set1, set2],
-                permutation_variables: vec![vec![0, 2]],
+                vector_variables: vec![vec![0, 2]],
                 element_variables: vec![1],
                 ..Default::default()
             }),
@@ -215,10 +214,10 @@ mod tests {
     }
 
     #[test]
-    fn permutation_variable_eval() {
+    fn vector_variable_eval() {
         let metadata = generate_metadata();
         let state = generate_state();
-        let expression = SetExpression::PermutationVariable(0);
+        let expression = SetExpression::VectorVariable(0);
         let mut set = variable::Set::with_capacity(10);
         set.insert(0);
         set.insert(2);

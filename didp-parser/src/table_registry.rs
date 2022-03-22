@@ -10,7 +10,7 @@ use std::str;
 use yaml_rust::Yaml;
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct TableData<T: Copy> {
+pub struct TableData<T> {
     pub name_to_constant: collections::HashMap<String, T>,
     pub tables_1d: Vec<table::Table1D<T>>,
     pub name_to_table_1d: collections::HashMap<String, usize>,
@@ -22,7 +22,7 @@ pub struct TableData<T: Copy> {
     pub name_to_table: collections::HashMap<String, usize>,
 }
 
-impl<T: Copy + AbsDiffEq> AbsDiffEq for TableData<T>
+impl<T: AbsDiffEq> AbsDiffEq for TableData<T>
 where
     T::Epsilon: Copy,
 {
@@ -69,7 +69,7 @@ where
     }
 }
 
-impl<T: Copy + RelativeEq> RelativeEq for TableData<T>
+impl<T: RelativeEq> RelativeEq for TableData<T>
 where
     T::Epsilon: Copy,
 {

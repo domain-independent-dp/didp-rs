@@ -244,10 +244,10 @@ mod tests {
         name_to_set_variable.insert("s1".to_string(), 1);
         let set_variable_to_object = vec![0, 0];
 
-        let permutation_variable_names = vec!["p0".to_string()];
-        let mut name_to_permutation_variable = HashMap::new();
-        name_to_permutation_variable.insert("p0".to_string(), 0);
-        let permutation_variable_to_object = vec![0];
+        let vector_variable_names = vec!["p0".to_string()];
+        let mut name_to_vector_variable = HashMap::new();
+        name_to_vector_variable.insert("p0".to_string(), 0);
+        let vector_variable_to_object = vec![0];
 
         let element_variable_names = vec!["e0".to_string()];
         let mut name_to_element_variable = HashMap::new();
@@ -287,9 +287,9 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            permutation_variable_names,
-            name_to_permutation_variable,
-            permutation_variable_to_object,
+            vector_variable_names,
+            name_to_vector_variable,
+            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -357,7 +357,7 @@ mod tests {
         state::State {
             signature_variables: Rc::new(state::SignatureVariables {
                 set_variables: vec![set1, set2],
-                permutation_variables: vec![vec![0, 2]],
+                vector_variables: vec![vec![0, 2]],
                 element_variables: vec![1],
                 integer_variables: vec![1, 2, 3],
                 continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],

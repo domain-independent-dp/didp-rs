@@ -126,18 +126,18 @@ mod tests {
         name_to_set_variable.insert("s3".to_string(), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
 
-        let permutation_variable_names = vec![
+        let vector_variable_names = vec![
             "p0".to_string(),
             "p1".to_string(),
             "p2".to_string(),
             "p3".to_string(),
         ];
-        let mut name_to_permutation_variable = HashMap::new();
-        name_to_permutation_variable.insert("p0".to_string(), 0);
-        name_to_permutation_variable.insert("p1".to_string(), 1);
-        name_to_permutation_variable.insert("p2".to_string(), 2);
-        name_to_permutation_variable.insert("p3".to_string(), 3);
-        let permutation_variable_to_object = vec![0, 0, 0, 0];
+        let mut name_to_vector_variable = HashMap::new();
+        name_to_vector_variable.insert("p0".to_string(), 0);
+        name_to_vector_variable.insert("p1".to_string(), 1);
+        name_to_vector_variable.insert("p2".to_string(), 2);
+        name_to_vector_variable.insert("p3".to_string(), 3);
+        let vector_variable_to_object = vec![0, 0, 0, 0];
 
         let element_variable_names = vec![
             "e0".to_string(),
@@ -183,9 +183,9 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            permutation_variable_names,
-            name_to_permutation_variable,
-            permutation_variable_to_object,
+            vector_variable_names,
+            name_to_vector_variable,
+            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,

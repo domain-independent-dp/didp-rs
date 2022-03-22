@@ -12,7 +12,7 @@ use yaml_rust::Yaml;
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct GroundedCondition {
     pub elements_in_set_variable: Vec<(usize, usize)>,
-    pub elements_in_permutation_variable: Vec<(usize, usize)>,
+    pub elements_in_vector_variable: Vec<(usize, usize)>,
     pub condition: expression::Condition,
 }
 
@@ -28,8 +28,8 @@ impl GroundedCondition {
                 return None;
             }
         }
-        for (i, v) in &self.elements_in_permutation_variable {
-            if !state.signature_variables.permutation_variables[*i].contains(v) {
+        for (i, v) in &self.elements_in_vector_variable {
+            if !state.signature_variables.vector_variables[*i].contains(v) {
                 return None;
             }
         }
@@ -57,7 +57,7 @@ impl GroundedCondition {
                 Ok(vec![GroundedCondition {
                     condition: condition.simplify(registry),
                     elements_in_set_variable: vec![],
-                    elements_in_permutation_variable: vec![],
+                    elements_in_vector_variable: vec![],
                 }])
             }
             Yaml::Hash(map) => {
@@ -67,16 +67,14 @@ impl GroundedCondition {
                         let (
                             parameters_array,
                             elements_in_set_variable_array,
-                            elements_in_permutation_variable_array,
+                            elements_in_vector_variable_array,
                         ) = metadata.ground_parameters_from_yaml(forall)?;
                         let mut conditions = Vec::with_capacity(parameters_array.len());
-                        for (
-                            (forall, elements_in_set_variable),
-                            elements_in_permutation_variable,
-                        ) in parameters_array
-                            .into_iter()
-                            .zip(elements_in_set_variable_array.into_iter())
-                            .zip(elements_in_permutation_variable_array.into_iter())
+                        for ((forall, elements_in_set_variable), elements_in_vector_variable) in
+                            parameters_array
+                                .into_iter()
+                                .zip(elements_in_set_variable_array.into_iter())
+                                .zip(elements_in_vector_variable_array.into_iter())
                         {
                             let mut parameters = parameters.clone();
                             parameters.extend(forall);
@@ -89,7 +87,7 @@ impl GroundedCondition {
                             conditions.push(GroundedCondition {
                                 condition: condition.simplify(registry),
                                 elements_in_set_variable,
-                                elements_in_permutation_variable,
+                                elements_in_vector_variable,
                             });
                         }
                         Ok(conditions)
@@ -104,7 +102,7 @@ impl GroundedCondition {
                         Ok(vec![GroundedCondition {
                             condition: condition.simplify(registry),
                             elements_in_set_variable: vec![],
-                            elements_in_permutation_variable: vec![],
+                            elements_in_vector_variable: vec![],
                         }])
                     }
                 }
@@ -138,10 +136,10 @@ mod tests {
         name_to_set_variable.insert(String::from("s0"), 0);
         let set_variable_to_object = vec![0];
 
-        let permutation_variable_names = vec![String::from("p0")];
-        let mut name_to_permutation_variable = HashMap::new();
-        name_to_permutation_variable.insert(String::from("p0"), 0);
-        let permutation_variable_to_object = vec![0];
+        let vector_variable_names = vec![String::from("p0")];
+        let mut name_to_vector_variable = HashMap::new();
+        name_to_vector_variable.insert(String::from("p0"), 0);
+        let vector_variable_to_object = vec![0];
 
         let element_variable_names = vec![String::from("e0")];
         let mut name_to_element_variable = HashMap::new();
@@ -155,9 +153,9 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            permutation_variable_names,
-            name_to_permutation_variable,
-            permutation_variable_to_object,
+            vector_variable_names,
+            name_to_vector_variable,
+            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -198,7 +196,7 @@ mod tests {
         let state = state::State {
             signature_variables: Rc::new(state::SignatureVariables {
                 set_variables: vec![s0],
-                permutation_variables: vec![vec![1]],
+                vector_variables: vec![vec![1]],
                 element_variables: vec![0],
                 ..Default::default()
             }),
@@ -220,7 +218,7 @@ mod tests {
         let condition = GroundedCondition {
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Variable(0),
-                SetExpression::PermutationVariable(0),
+                SetExpression::VectorVariable(0),
             )),
             ..Default::default()
         };
@@ -232,10 +230,10 @@ mod tests {
         let condition = GroundedCondition {
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Constant(0),
-                SetExpression::PermutationVariable(0),
+                SetExpression::VectorVariable(0),
             )),
             elements_in_set_variable: vec![(0, 0)],
-            elements_in_permutation_variable: vec![],
+            elements_in_vector_variable: vec![],
         };
         assert_eq!(
             condition.is_satisfied(&state, &metadata, &registry),
@@ -245,10 +243,10 @@ mod tests {
         let condition = GroundedCondition {
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Constant(1),
-                SetExpression::PermutationVariable(0),
+                SetExpression::VectorVariable(0),
             )),
             elements_in_set_variable: vec![(0, 1)],
-            elements_in_permutation_variable: vec![],
+            elements_in_vector_variable: vec![],
         };
         assert!(condition
             .is_satisfied(&state, &metadata, &registry)
@@ -260,7 +258,7 @@ mod tests {
                 ElementExpression::Constant(0),
             )),
             elements_in_set_variable: vec![(0, 0), (0, 0)],
-            elements_in_permutation_variable: vec![],
+            elements_in_vector_variable: vec![],
         };
         assert_eq!(
             condition.is_satisfied(&state, &metadata, &registry),
@@ -273,7 +271,7 @@ mod tests {
                 ElementExpression::Constant(1),
             )),
             elements_in_set_variable: vec![(0, 1), (0, 0)],
-            elements_in_permutation_variable: vec![],
+            elements_in_vector_variable: vec![],
         };
         assert!(condition
             .is_satisfied(&state, &metadata, &registry)
@@ -285,7 +283,7 @@ mod tests {
                 SetExpression::SetVariable(0),
             )),
             elements_in_set_variable: vec![],
-            elements_in_permutation_variable: vec![(0, 0)],
+            elements_in_vector_variable: vec![(0, 0)],
         };
         assert!(condition
             .is_satisfied(&state, &metadata, &registry)
@@ -297,7 +295,7 @@ mod tests {
                 SetExpression::SetVariable(0),
             )),
             elements_in_set_variable: vec![],
-            elements_in_permutation_variable: vec![(0, 1)],
+            elements_in_vector_variable: vec![(0, 1)],
         };
         assert_eq!(
             condition.is_satisfied(&state, &metadata, &registry),
@@ -329,7 +327,7 @@ condition: (and (is_in e0 s0) true)
         assert!(conditions.is_ok());
         let expected = vec![GroundedCondition {
             elements_in_set_variable: Vec::new(),
-            elements_in_permutation_variable: Vec::new(),
+            elements_in_vector_variable: Vec::new(),
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Variable(0),
                 SetExpression::SetVariable(0),
@@ -370,7 +368,7 @@ condition: (and (is_in e0 s0) true)
         assert!(conditions.is_ok());
         let expected = vec![GroundedCondition {
             elements_in_set_variable: Vec::new(),
-            elements_in_permutation_variable: Vec::new(),
+            elements_in_vector_variable: Vec::new(),
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Constant(0),
                 SetExpression::SetVariable(0),
@@ -401,12 +399,12 @@ forall:
         let expected = vec![
             GroundedCondition {
                 elements_in_set_variable: vec![(0, 0)],
-                elements_in_permutation_variable: Vec::new(),
+                elements_in_vector_variable: Vec::new(),
                 condition: Condition::Constant(true),
             },
             GroundedCondition {
                 elements_in_set_variable: vec![(0, 1)],
-                elements_in_permutation_variable: Vec::new(),
+                elements_in_vector_variable: Vec::new(),
                 condition: Condition::Constant(false),
             },
         ];
@@ -434,7 +432,7 @@ forall:
         let expected = vec![
             GroundedCondition {
                 elements_in_set_variable: Vec::new(),
-                elements_in_permutation_variable: vec![(0, 0)],
+                elements_in_vector_variable: vec![(0, 0)],
                 condition: Condition::Set(SetCondition::IsIn(
                     ElementExpression::Constant(0),
                     SetExpression::SetVariable(0),
@@ -442,7 +440,7 @@ forall:
             },
             GroundedCondition {
                 elements_in_set_variable: Vec::new(),
-                elements_in_permutation_variable: vec![(0, 1)],
+                elements_in_vector_variable: vec![(0, 1)],
                 condition: Condition::Set(SetCondition::IsIn(
                     ElementExpression::Constant(1),
                     SetExpression::SetVariable(0),

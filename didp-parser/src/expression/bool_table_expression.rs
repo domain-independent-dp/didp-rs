@@ -126,7 +126,7 @@ mod tests {
         state::State {
             signature_variables: Rc::new(state::SignatureVariables {
                 set_variables: vec![set1, set2],
-                permutation_variables: vec![vec![0, 2]],
+                vector_variables: vec![vec![0, 2]],
                 element_variables: vec![1],
                 ..Default::default()
             }),

@@ -17,10 +17,10 @@ use std::str;
 pub struct Transition<T: Numeric> {
     pub name: String,
     pub elements_in_set_variable: Vec<(usize, usize)>,
-    pub elements_in_permutation_variable: Vec<(usize, usize)>,
+    pub elements_in_vector_variable: Vec<(usize, usize)>,
     pub preconditions: Vec<grounded_condition::GroundedCondition>,
     pub set_effects: Vec<(usize, expression::SetExpression)>,
-    pub permutation_effects: Vec<(usize, expression::ElementExpression)>,
+    pub vector_effects: Vec<(usize, expression::ElementExpression)>,
     pub element_effects: Vec<(usize, expression::ElementExpression)>,
     pub integer_effects: Vec<(usize, expression::NumericExpression<Integer>)>,
     pub continuous_effects: Vec<(usize, expression::NumericExpression<Continuous>)>,
@@ -41,8 +41,8 @@ impl<T: Numeric> Transition<T> {
                 return false;
             }
         }
-        for (i, v) in &self.elements_in_permutation_variable {
-            if !state.signature_variables.permutation_variables[*i].contains(v) {
+        for (i, v) in &self.elements_in_vector_variable {
+            if !state.signature_variables.vector_variables[*i].contains(v) {
                 return false;
             }
         }
@@ -74,9 +74,9 @@ impl<T: Numeric> Transition<T> {
             i += 1;
         }
 
-        let mut permutation_variables = state.signature_variables.permutation_variables.clone();
-        for e in &self.permutation_effects {
-            permutation_variables[e.0].push(e.1.eval(state));
+        let mut vector_variables = state.signature_variables.vector_variables.clone();
+        for e in &self.vector_effects {
+            vector_variables[e.0].push(e.1.eval(state));
         }
 
         let mut element_variables = state.signature_variables.element_variables.clone();
@@ -111,7 +111,7 @@ impl<T: Numeric> Transition<T> {
             signature_variables: {
                 Rc::new(state::SignatureVariables {
                     set_variables,
-                    permutation_variables,
+                    vector_variables,
                     element_variables,
                     integer_variables,
                     continuous_variables,
@@ -157,7 +157,7 @@ where
     let (
         parameters_array,
         elements_in_set_variable_array,
-        elements_in_permutation_variable_array,
+        elements_in_vector_variable_array,
         parameter_names,
     ) = match map.get(&PARAMETERS_KEY) {
         Some(value) => {
@@ -186,11 +186,11 @@ where
         None => None,
     };
     let mut transitions = Vec::with_capacity(parameters_array.len());
-    'outer: for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in
+    'outer: for ((parameters, elements_in_set_variable), elements_in_vector_variable) in
         parameters_array
             .into_iter()
             .zip(elements_in_set_variable_array.into_iter())
-            .zip(elements_in_permutation_variable_array.into_iter())
+            .zip(elements_in_vector_variable_array.into_iter())
     {
         let mut name = lifted_name.clone();
         for parameter_name in &parameter_names {
@@ -212,7 +212,7 @@ where
                             expression::Condition::Constant(true) => continue,
                             expression::Condition::Constant(false)
                                 if condition.elements_in_set_variable.is_empty()
-                                    && condition.elements_in_permutation_variable.is_empty() =>
+                                    && condition.elements_in_vector_variable.is_empty() =>
                             {
                                 continue 'outer
                             }
@@ -225,7 +225,7 @@ where
             None => Vec::new(),
         };
         let mut set_effects = Vec::new();
-        let mut permutation_effects = Vec::new();
+        let mut vector_effects = Vec::new();
         let mut element_effects = Vec::new();
         let mut integer_effects = Vec::new();
         let mut continuous_effects = Vec::new();
@@ -237,9 +237,9 @@ where
             if let Some(i) = metadata.name_to_set_variable.get(&variable) {
                 let effect = expression_parser::parse_set(effect, metadata, &parameters)?;
                 set_effects.push((*i, effect));
-            } else if let Some(i) = metadata.name_to_permutation_variable.get(&variable) {
+            } else if let Some(i) = metadata.name_to_vector_variable.get(&variable) {
                 let effect = expression_parser::parse_element(effect, metadata, &parameters)?;
-                permutation_effects.push((*i, effect));
+                vector_effects.push((*i, effect));
             } else if let Some(i) = metadata.name_to_element_variable.get(&variable) {
                 let effect = expression_parser::parse_element(effect, metadata, &parameters)?;
                 element_effects.push((*i, effect));
@@ -290,10 +290,10 @@ where
         transitions.push(Transition {
             name,
             elements_in_set_variable,
-            elements_in_permutation_variable,
+            elements_in_vector_variable,
             preconditions,
             set_effects,
-            permutation_effects,
+            vector_effects,
             element_effects,
             integer_effects,
             continuous_effects,
@@ -350,18 +350,18 @@ mod tests {
         name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
 
-        let permutation_variable_names = vec![
+        let vector_variable_names = vec![
             "p0".to_string(),
             "p1".to_string(),
             "p2".to_string(),
             "p3".to_string(),
         ];
-        let mut name_to_permutation_variable = HashMap::new();
-        name_to_permutation_variable.insert("p0".to_string(), 0);
-        name_to_permutation_variable.insert("p1".to_string(), 1);
-        name_to_permutation_variable.insert("p2".to_string(), 2);
-        name_to_permutation_variable.insert("p3".to_string(), 3);
-        let permutation_variable_to_object = vec![0, 0, 0, 0];
+        let mut name_to_vector_variable = HashMap::new();
+        name_to_vector_variable.insert("p0".to_string(), 0);
+        name_to_vector_variable.insert("p1".to_string(), 1);
+        name_to_vector_variable.insert("p2".to_string(), 2);
+        name_to_vector_variable.insert("p3".to_string(), 3);
+        let vector_variable_to_object = vec![0, 0, 0, 0];
 
         let element_variable_names = vec![
             "e0".to_string(),
@@ -431,9 +431,9 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            permutation_variable_names,
-            name_to_permutation_variable,
-            permutation_variable_to_object,
+            vector_variable_names,
+            name_to_vector_variable,
+            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -484,7 +484,7 @@ mod tests {
         state::State {
             signature_variables: Rc::new(state::SignatureVariables {
                 set_variables: vec![set1, set2],
-                permutation_variables: vec![vec![0, 2], vec![1, 2]],
+                vector_variables: vec![vec![0, 2], vec![1, 2]],
                 element_variables: vec![1, 2],
                 integer_variables: vec![1, 2, 3],
                 continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
@@ -529,7 +529,7 @@ mod tests {
         let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 0), (1, 1)],
-            elements_in_permutation_variable: vec![(0, 0), (1, 2)],
+            elements_in_vector_variable: vec![(0, 0), (1, 2)],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
@@ -568,7 +568,7 @@ mod tests {
         let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 1), (1, 1)],
-            elements_in_permutation_variable: vec![(0, 0), (1, 2)],
+            elements_in_vector_variable: vec![(0, 0), (1, 2)],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
@@ -577,7 +577,7 @@ mod tests {
         let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 1), (1, 1)],
-            elements_in_permutation_variable: vec![(0, 1), (1, 2)],
+            elements_in_vector_variable: vec![(0, 1), (1, 2)],
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
@@ -599,8 +599,8 @@ mod tests {
             Box::new(SetExpression::SetVariable(1)),
             ElementExpression::Constant(0),
         );
-        let permutation_effect1 = ElementExpression::Constant(1);
-        let permutation_effect2 = ElementExpression::Constant(0);
+        let vector_effect1 = ElementExpression::Constant(1);
+        let vector_effect2 = ElementExpression::Constant(0);
         let element_effect1 = ElementExpression::Constant(2);
         let element_effect2 = ElementExpression::Constant(1);
         let integer_effect1 = NumericExpression::NumericOperation(
@@ -646,7 +646,7 @@ mod tests {
         let transition = Transition {
             name: String::from(""),
             set_effects: vec![(0, set_effect1), (1, set_effect2)],
-            permutation_effects: vec![(0, permutation_effect1), (1, permutation_effect2)],
+            vector_effects: vec![(0, vector_effect1), (1, vector_effect2)],
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
             integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
             continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
@@ -675,7 +675,7 @@ mod tests {
         let expected = state::State {
             signature_variables: Rc::new(state::SignatureVariables {
                 set_variables: vec![set1, set2],
-                permutation_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
+                vector_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
                 element_variables: vec![2, 1],
                 integer_variables: vec![0, 4, 3],
                 continuous_variables: vec![OrderedFloat(0.0), OrderedFloat(4.0), OrderedFloat(3.0)],
@@ -781,7 +781,7 @@ cost: (+ cost (f1 e))
             Transition {
                 name: String::from("transition e:0"),
                 elements_in_set_variable: vec![(0, 0)],
-                elements_in_permutation_variable: Vec::new(),
+                elements_in_vector_variable: Vec::new(),
                 preconditions: vec![grounded_condition::GroundedCondition {
                     condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
                         ComparisonOperator::Ge,
@@ -802,7 +802,7 @@ cost: (+ cost (f1 e))
                         ElementExpression::Constant(0),
                     ),
                 )],
-                permutation_effects: vec![(0, ElementExpression::Constant(0))],
+                vector_effects: vec![(0, ElementExpression::Constant(0))],
                 element_effects: vec![(0, ElementExpression::Constant(0))],
                 integer_effects: vec![(0, NumericExpression::Constant(1))],
                 integer_resource_effects: vec![(0, NumericExpression::Constant(2))],
@@ -816,7 +816,7 @@ cost: (+ cost (f1 e))
             Transition {
                 name: String::from("transition e:1"),
                 elements_in_set_variable: vec![(0, 1)],
-                elements_in_permutation_variable: Vec::new(),
+                elements_in_vector_variable: Vec::new(),
                 preconditions: vec![grounded_condition::GroundedCondition {
                     condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
                         ComparisonOperator::Ge,
@@ -837,7 +837,7 @@ cost: (+ cost (f1 e))
                         ElementExpression::Constant(1),
                     ),
                 )],
-                permutation_effects: vec![(0, ElementExpression::Constant(1))],
+                vector_effects: vec![(0, ElementExpression::Constant(1))],
                 element_effects: vec![(0, ElementExpression::Constant(1))],
                 integer_effects: vec![(0, NumericExpression::Constant(1))],
                 integer_resource_effects: vec![(0, NumericExpression::Constant(2))],
