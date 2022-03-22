@@ -5,6 +5,7 @@ use std::str;
 use yaml_rust::Yaml;
 
 mod base_case;
+mod base_state;
 pub mod expression;
 pub mod expression_parser;
 mod grounded_condition;
@@ -17,6 +18,7 @@ pub mod variable;
 mod yaml_util;
 
 pub use base_case::BaseCase;
+pub use base_state::BaseState;
 pub use expression_parser::ParseErr;
 pub use grounded_condition::GroundedCondition;
 pub use state::{ResourceVariables, SignatureVariables, State, StateMetadata};
@@ -83,8 +85,10 @@ pub struct Model<T: variable::Numeric> {
     pub table_registry: table_registry::TableRegistry,
     pub constraints: Vec<GroundedCondition>,
     pub base_cases: Vec<BaseCase<T>>,
+    pub base_states: Vec<BaseState<T>>,
     pub reduce_function: ReduceFunction,
-    pub transitions: Vec<Transition<T>>,
+    pub forward_transitions: Vec<Transition<T>>,
+    pub backward_transitions: Vec<Transition<T>>,
 }
 
 impl<T: variable::Numeric> Model<T> {
@@ -96,7 +100,13 @@ impl<T: variable::Numeric> Model<T> {
         })
     }
 
-    pub fn get_base_case_cost(&self, state: &state::State) -> Option<T> {
+    pub fn get_base_cost(&self, state: &state::State) -> Option<T> {
+        for base_state in &self.base_states {
+            let cost = base_state.get_cost(state);
+            if cost.is_some() {
+                return cost;
+            }
+        }
         for base_case in &self.base_cases {
             let cost = base_case.get_cost(state, &self.state_metadata, &self.table_registry);
             if cost.is_some() {
@@ -190,27 +200,46 @@ impl<T: variable::Numeric> Model<T> {
                     &table_registry,
                     &parameters,
                 )?;
-                let conditions = Self::filiter_grounded_conditions(conditions)?;
+                let conditions = Self::filter_constraints(conditions)?;
                 constraints.extend(conditions);
             }
         }
 
         let mut base_cases = Vec::new();
-        for base_case in yaml_util::get_array_by_key(&problem, "base_cases")? {
-            let base_case = BaseCase::load_from_yaml(&base_case, &state_metadata, &table_registry)?;
-            base_cases.push(base_case);
+        if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("base_cases")) {
+            for base_case in yaml_util::get_array(array)? {
+                let base_case =
+                    BaseCase::load_from_yaml(&base_case, &state_metadata, &table_registry)?;
+                base_cases.push(base_case);
+            }
+        }
+        let mut base_states = Vec::new();
+        if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("base_states")) {
+            for base_state in yaml_util::get_array(array)? {
+                let base_state = BaseState::load_from_yaml(&base_state, &state_metadata)?;
+                base_states.push(base_state);
+            }
+        }
+        if base_cases.is_empty() && base_states.is_empty() {
+            return Err(ModelErr::new(String::from("no base case or condition")).into());
         }
 
         let reduce_function = yaml_util::get_yaml_by_key(&domain, "reduce")?;
         let reduce_function = ReduceFunction::load_from_yaml(reduce_function)?;
 
-        let mut transitions = Vec::new();
+        let mut forward_transitions = Vec::new();
+        let mut backward_transitions = Vec::new();
         for transition in yaml_util::get_array_by_key(&domain, "transitions")? {
-            transitions.extend(transition::load_transitions_from_yaml(
+            let (transition, backward) = transition::load_transitions_from_yaml(
                 &transition,
                 &state_metadata,
                 &table_registry,
-            )?);
+            )?;
+            if backward {
+                backward_transitions.extend(transition)
+            } else {
+                forward_transitions.extend(transition)
+            }
         }
 
         Ok(Model {
@@ -221,12 +250,14 @@ impl<T: variable::Numeric> Model<T> {
             table_registry,
             constraints,
             base_cases,
+            base_states,
             reduce_function,
-            transitions,
+            forward_transitions,
+            backward_transitions,
         })
     }
 
-    fn filiter_grounded_conditions(
+    fn filter_constraints(
         conditions: Vec<grounded_condition::GroundedCondition>,
     ) -> Result<Vec<grounded_condition::GroundedCondition>, ModelErr> {
         let mut result = Vec::with_capacity(conditions.len());
@@ -235,7 +266,7 @@ impl<T: variable::Numeric> Model<T> {
                 expression::Condition::Constant(true) => continue,
                 expression::Condition::Constant(false) => {
                     return Err(ModelErr::new(String::from(
-                        "model has a condition never satisfied",
+                        "model has a constraint never satisfied",
                     )))
                 }
                 _ => result.push(condition),
@@ -359,7 +390,7 @@ base_cases:
                     ..Default::default()
                 }],
             }],
-            transitions: vec![Transition {
+            forward_transitions: vec![Transition {
                 name: String::from("add"),
                 integer_effects: vec![(
                     0,
@@ -386,7 +417,8 @@ base_cases:
         assert_eq!(model.table_registry, expected.table_registry);
         assert_eq!(model.constraints, expected.constraints);
         assert_eq!(model.base_cases, expected.base_cases);
-        assert_eq!(model.transitions, expected.transitions);
+        assert_eq!(model.forward_transitions, expected.forward_transitions);
+        assert_eq!(model.backward_transitions, expected.backward_transitions);
         assert_eq!(model, expected);
 
         let domain = r"
@@ -569,8 +601,9 @@ table_values:
                     },
                 ],
             }],
+            base_states: Vec::new(),
             reduce_function: ReduceFunction::Min,
-            transitions: vec![
+            forward_transitions: vec![
                 Transition {
                     name: String::from("visit to:0"),
                     elements_in_set_variable: vec![(0, 0)],
@@ -725,6 +758,7 @@ table_values:
                     ..Default::default()
                 },
             ],
+            backward_transitions: Vec::new(),
         };
         assert_eq!(model.domain_name, expected.domain_name);
         assert_eq!(model.problem_name, expected.problem_name);
@@ -733,7 +767,8 @@ table_values:
         assert_eq!(model.table_registry, expected.table_registry);
         assert_eq!(model.constraints, expected.constraints);
         assert_eq!(model.base_cases, expected.base_cases);
-        assert_eq!(model.transitions, expected.transitions);
+        assert_eq!(model.forward_transitions, expected.forward_transitions);
+        assert_eq!(model.backward_transitions, expected.backward_transitions);
         assert_eq!(model, expected);
     }
 

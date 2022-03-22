@@ -10,9 +10,14 @@ pub struct SuccessorGenerator<'a, T: variable::Numeric> {
 }
 
 impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
-    pub fn new(model: &'a didp_parser::Model<T>) -> SuccessorGenerator<'a, T> {
+    pub fn new(model: &'a didp_parser::Model<T>, backward: bool) -> SuccessorGenerator<'a, T> {
+        let transitions = if backward {
+            &model.backward_transitions
+        } else {
+            &model.forward_transitions
+        };
         SuccessorGenerator {
-            transitions: &model.transitions,
+            transitions,
             metadata: &model.state_metadata,
             registry: &model.table_registry,
         }
@@ -79,7 +84,15 @@ pub struct OneParameterSuccessorGenerator<'a, T: variable::Numeric> {
 }
 
 impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
-    pub fn new(model: &'a didp_parser::Model<T>) -> OneParameterSuccessorGenerator<'a, T> {
+    pub fn new(
+        model: &'a didp_parser::Model<T>,
+        backward: bool,
+    ) -> OneParameterSuccessorGenerator<'a, T> {
+        let transitions = if backward {
+            &model.backward_transitions
+        } else {
+            &model.forward_transitions
+        };
         let n = model.state_metadata.number_of_set_variables();
         let mut relevant_set_variables = collections::BTreeSet::new();
         let mut set_element_to_transitions: Vec<Vec<Vec<Transition<T>>>> = (0..n)
@@ -97,7 +110,7 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
             })
             .collect();
         let mut global_transitions = Vec::new();
-        for op in &model.transitions {
+        for op in transitions {
             if !op.elements_in_set_variable.is_empty() {
                 let op = Transition {
                     name: op.name.clone(),

@@ -5,6 +5,7 @@ use crate::state;
 use crate::table_registry;
 use crate::variable::{Continuous, Integer, Numeric};
 use crate::yaml_util;
+use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 use std::collections;
 use std::error;
@@ -135,14 +136,21 @@ impl<T: Numeric> Transition<T> {
     }
 }
 
+type TranstionsWithDirection<T> = (Vec<Transition<T>>, bool);
+
 pub fn load_transitions_from_yaml<T: Numeric>(
     value: &yaml_rust::Yaml,
     metadata: &state::StateMetadata,
     registry: &table_registry::TableRegistry,
-) -> Result<Vec<Transition<T>>, Box<dyn error::Error>>
+) -> Result<TranstionsWithDirection<T>, Box<dyn error::Error>>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
+    lazy_static! {
+        static ref PARAMETERS_KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("parameters");
+        static ref PRECONDITIONS_KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("preconditions");
+        static ref DIRECTION_KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("direction");
+    }
     let map = yaml_util::get_map(value)?;
     let lifted_name = yaml_util::get_string_by_key(map, "name")?;
 
@@ -151,7 +159,7 @@ where
         elements_in_set_variable_array,
         elements_in_permutation_variable_array,
         parameter_names,
-    ) = match map.get(&yaml_rust::Yaml::from_str("parameters")) {
+    ) = match map.get(&PARAMETERS_KEY) {
         Some(value) => {
             let result = metadata.ground_parameters_from_yaml(value)?;
             let array = yaml_util::get_array(value)?;
@@ -171,10 +179,12 @@ where
         ),
     };
 
-    let lifted_preconditions = map.get(&yaml_rust::Yaml::from_str("preconditions"));
     let lifted_effects = yaml_util::get_map_by_key(map, "effects")?;
     let lifted_cost = yaml_util::get_string_by_key(map, "cost")?;
-
+    let lifted_preconditions = match map.get(&PRECONDITIONS_KEY) {
+        Some(lifted_preconditions) => Some(yaml_util::get_array(lifted_preconditions)?),
+        None => None,
+    };
     let mut transitions = Vec::with_capacity(parameters_array.len());
     'outer: for ((parameters, elements_in_set_variable), elements_in_permutation_variable) in
         parameters_array
@@ -188,7 +198,6 @@ where
         }
         let preconditions = match lifted_preconditions {
             Some(lifted_preconditions) => {
-                let lifted_preconditions = yaml_util::get_array(lifted_preconditions)?;
                 let mut preconditions = Vec::with_capacity(lifted_preconditions.len());
                 for condition in lifted_preconditions {
                     let conditions =
@@ -288,7 +297,25 @@ where
             cost,
         })
     }
-    Ok(transitions)
+    let backward = match map.get(&DIRECTION_KEY) {
+        Some(direction) => {
+            let direction = yaml_util::get_string(direction)?;
+            match &direction[..] {
+                "forward" => false,
+                "backward" => true,
+                _ => {
+                    return Err(yaml_util::YamlContentErr::new(format!(
+                        "no such direction `{}`",
+                        direction
+                    ))
+                    .into())
+                }
+            }
+        }
+        None => false,
+    };
+
+    Ok((transitions, backward))
 }
 
 #[cfg(test)]
@@ -644,7 +671,7 @@ cost: '0'
             cost: NumericExpression::Constant(0),
             ..Default::default()
         }];
-        assert_eq!(transitions.unwrap(), expected);
+        assert_eq!(transitions.unwrap(), (expected, false));
 
         let transition = r"
 name: transition
@@ -665,7 +692,7 @@ cost: '0'
             cost: NumericExpression::Constant(0),
             ..Default::default()
         }];
-        assert_eq!(transitions.unwrap(), expected);
+        assert_eq!(transitions.unwrap(), (expected, false));
 
         let transition = r"
 name: transition
@@ -762,7 +789,7 @@ cost: (+ cost (f1 e))
                 ..Default::default()
             },
         ];
-        assert_eq!(transitions.unwrap(), expected);
+        assert_eq!(transitions.unwrap(), (expected, false));
     }
 
     #[test]
