@@ -41,9 +41,7 @@ impl Condition {
             }
             Self::Comparison(condition) => condition.eval(state, metadata, registry),
             Self::Set(set) => set.eval(state, metadata, &registry),
-            Self::Table(table) => {
-                table.eval(state, &registry.element_tables, &registry.bool_tables)
-            }
+            Self::Table(table) => table.eval(state, registry, &registry.bool_tables),
         }
     }
 
@@ -73,12 +71,10 @@ impl Condition {
                 set_condition::SetCondition::Constant(value) => Self::Constant(value),
                 condition => Self::Set(condition),
             },
-            Self::Table(condition) => {
-                match condition.simplify(&registry.element_tables, &registry.bool_tables) {
-                    element_expression::TableExpression::Constant(value) => Self::Constant(value),
-                    condition => Self::Table(condition),
-                }
-            }
+            Self::Table(condition) => match condition.simplify(registry, &registry.bool_tables) {
+                element_expression::TableExpression::Constant(value) => Self::Constant(value),
+                condition => Self::Table(condition),
+            },
             _ => self.clone(),
         }
     }

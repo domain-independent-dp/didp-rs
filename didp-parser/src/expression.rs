@@ -4,6 +4,7 @@ mod numeric_expression;
 mod numeric_table_expression;
 mod set_condition;
 mod set_expression;
+mod vector_expression;
 
 pub use condition::{Comparison, ComparisonOperator, Condition};
 pub use element_expression::{ElementExpression, TableExpression};

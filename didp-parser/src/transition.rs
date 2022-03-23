@@ -76,12 +76,12 @@ impl<T: Numeric> Transition<T> {
 
         let mut vector_variables = state.signature_variables.vector_variables.clone();
         for e in &self.vector_effects {
-            vector_variables[e.0].push(e.1.eval(state, &registry.element_tables));
+            vector_variables[e.0].push(e.1.eval(state, registry));
         }
 
         let mut element_variables = state.signature_variables.element_variables.clone();
         for e in &self.element_effects {
-            element_variables[e.0] = e.1.eval(state, &registry.element_tables);
+            element_variables[e.0] = e.1.eval(state, registry);
         }
 
         let mut integer_variables = state.signature_variables.integer_variables.clone();

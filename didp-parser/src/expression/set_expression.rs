@@ -45,13 +45,13 @@ impl SetExpression {
                 set
             }
             SetExpression::Complement(s) => {
-                let mut s = s.eval(&state, metadata, registry);
+                let mut s = s.eval(state, metadata, registry);
                 s.toggle_range(..);
                 s
             }
             SetExpression::SetOperation(op, a, b) => {
                 let mut a = a.eval(&state, metadata, registry);
-                let b = b.eval(&state, metadata, registry);
+                let b = b.eval(state, metadata, registry);
                 match op {
                     SetOperator::Union => {
                         a.union_with(&b);
@@ -68,8 +68,8 @@ impl SetExpression {
                 }
             }
             SetExpression::SetElementOperation(op, s, e) => {
-                let mut s = s.eval(&state, metadata, registry);
-                let e = e.eval(&state, &registry.element_tables);
+                let mut s = s.eval(state, metadata, registry);
+                let e = e.eval(state, registry);
                 match op {
                     SetElementOperator::Add => {
                         s.insert(e);
@@ -81,9 +81,7 @@ impl SetExpression {
                     }
                 }
             }
-            SetExpression::Table(table) => {
-                table.eval(&state, &registry.element_tables, &registry.set_tables)
-            }
+            SetExpression::Table(table) => table.eval(state, registry, &registry.set_tables),
         }
     }
 }
@@ -163,11 +161,7 @@ mod tests {
         set.insert(0);
         set.insert(2);
         let default = variable::Set::with_capacity(3);
-        let tables_1d = vec![table::Table1D::new(vec![
-            set.clone(),
-            default.clone(),
-            default.clone(),
-        ])];
+        let tables_1d = vec![table::Table1D::new(vec![set, default.clone(), default])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("s1"), 0);
         table_registry::TableRegistry {

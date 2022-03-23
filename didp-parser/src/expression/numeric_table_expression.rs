@@ -49,9 +49,7 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
     ) -> T {
         match self {
             Self::Constant(value) => *value,
-            Self::Table1D(i, x) => {
-                tables.tables_1d[*i].eval(x.eval(state, &registry.element_tables))
-            }
+            Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(state, registry)),
             Self::Table1DSum(i, SetExpression::SetVariable(x)) => {
                 tables.tables_1d[*i].sum(&state.signature_variables.set_variables[*x])
             }
@@ -60,10 +58,9 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 x.iter().map(|x| tables.tables_1d[*i].eval(*x)).sum()
             }
             Self::Table1DSum(i, x) => tables.tables_1d[*i].sum(&x.eval(state, metadata, registry)),
-            Self::Table2D(i, x, y) => tables.tables_2d[*i].eval(
-                x.eval(state, &registry.element_tables),
-                y.eval(state, &registry.element_tables),
-            ),
+            Self::Table2D(i, x, y) => {
+                tables.tables_2d[*i].eval(x.eval(state, registry), y.eval(state, registry))
+            }
             Self::Table2DSum(i, SetExpression::SetVariable(x), SetExpression::SetVariable(y)) => {
                 let x = &state.signature_variables.set_variables[*x];
                 let y = &state.signature_variables.set_variables[*y];
@@ -122,34 +119,32 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
             ),
             Self::Table2DSumX(i, SetExpression::SetVariable(x), y) => {
                 let x = &state.signature_variables.set_variables[*x];
-                tables.tables_2d[*i].sum_x(x, y.eval(state, &registry.element_tables))
+                tables.tables_2d[*i].sum_x(x, y.eval(state, registry))
             }
             Self::Table2DSumX(i, SetExpression::VectorVariable(x), y) => {
                 let x = &state.signature_variables.vector_variables[*x];
-                let y = y.eval(state, &registry.element_tables);
+                let y = y.eval(state, registry);
                 x.iter().map(|x| tables.tables_2d[*i].eval(*x, y)).sum()
             }
             Self::Table2DSumX(i, x, y) => tables.tables_2d[*i].sum_x(
                 &x.eval(&state, metadata, registry),
-                y.eval(&state, &registry.element_tables),
+                y.eval(&state, registry),
             ),
             Self::Table2DSumY(i, x, SetExpression::SetVariable(y)) => {
                 let y = &state.signature_variables.set_variables[*y];
-                tables.tables_2d[*i].sum_y(x.eval(&state, &registry.element_tables), y)
+                tables.tables_2d[*i].sum_y(x.eval(&state, registry), y)
             }
             Self::Table2DSumY(i, x, SetExpression::VectorVariable(y)) => {
                 let y = &state.signature_variables.vector_variables[*y];
-                let x = x.eval(state, &registry.element_tables);
+                let x = x.eval(state, registry);
                 y.iter().map(|y| tables.tables_2d[*i].eval(x, *y)).sum()
             }
-            Self::Table2DSumY(i, x, y) => tables.tables_2d[*i].sum_y(
-                x.eval(state, &registry.element_tables),
-                &y.eval(state, metadata, registry),
-            ),
+            Self::Table2DSumY(i, x, y) => tables.tables_2d[*i]
+                .sum_y(x.eval(state, registry), &y.eval(state, metadata, registry)),
             Self::Table3D(i, x, y, z) => tables.tables_3d[*i].eval(
-                x.eval(state, &registry.element_tables),
-                y.eval(state, &registry.element_tables),
-                z.eval(state, &registry.element_tables),
+                x.eval(state, registry),
+                y.eval(state, registry),
+                z.eval(state, registry),
             ),
             Self::Table3DSum(
                 i,
@@ -169,52 +164,52 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
             Self::Table3DSumX(i, SetExpression::SetVariable(x), y, z) => tables.tables_3d[*i]
                 .sum_x(
                     &state.signature_variables.set_variables[*x],
-                    y.eval(state, &registry.element_tables),
-                    z.eval(state, &registry.element_tables),
+                    y.eval(state, registry),
+                    z.eval(state, registry),
                 ),
             Self::Table3DSumX(i, SetExpression::VectorVariable(x), y, z) => {
                 let x = &state.signature_variables.vector_variables[*x];
-                let y = y.eval(state, &registry.element_tables);
-                let z = z.eval(state, &registry.element_tables);
+                let y = y.eval(state, registry);
+                let z = z.eval(state, registry);
                 x.iter().map(|x| tables.tables_3d[*i].eval(*x, y, z)).sum()
             }
             Self::Table3DSumX(i, x, y, z) => tables.tables_3d[*i].sum_x(
                 &x.eval(state, metadata, registry),
-                y.eval(state, &registry.element_tables),
-                z.eval(state, &registry.element_tables),
+                y.eval(state, registry),
+                z.eval(state, registry),
             ),
             Self::Table3DSumY(i, x, SetExpression::SetVariable(y), z) => tables.tables_3d[*i]
                 .sum_y(
-                    x.eval(state, &registry.element_tables),
+                    x.eval(state, registry),
                     &state.signature_variables.set_variables[*y],
-                    z.eval(state, &registry.element_tables),
+                    z.eval(state, registry),
                 ),
             Self::Table3DSumY(i, x, SetExpression::VectorVariable(y), z) => {
-                let x = x.eval(state, &registry.element_tables);
+                let x = x.eval(state, registry);
                 let y = &state.signature_variables.vector_variables[*y];
-                let z = z.eval(state, &registry.element_tables);
+                let z = z.eval(state, registry);
                 y.iter().map(|y| tables.tables_3d[*i].eval(x, *y, z)).sum()
             }
             Self::Table3DSumY(i, x, y, z) => tables.tables_3d[*i].sum_y(
-                x.eval(state, &registry.element_tables),
+                x.eval(state, registry),
                 &y.eval(state, metadata, registry),
-                z.eval(state, &registry.element_tables),
+                z.eval(state, registry),
             ),
             Self::Table3DSumZ(i, x, y, SetExpression::SetVariable(z)) => tables.tables_3d[*i]
                 .sum_z(
-                    x.eval(state, &registry.element_tables),
-                    y.eval(state, &registry.element_tables),
+                    x.eval(state, registry),
+                    y.eval(state, registry),
                     &state.signature_variables.set_variables[*z],
                 ),
             Self::Table3DSumZ(i, x, y, SetExpression::VectorVariable(z)) => {
-                let x = x.eval(state, &registry.element_tables);
-                let y = y.eval(state, &registry.element_tables);
+                let x = x.eval(state, registry);
+                let y = y.eval(state, registry);
                 let z = &state.signature_variables.vector_variables[*z];
                 z.iter().map(|z| tables.tables_3d[*i].eval(x, y, *z)).sum()
             }
             Self::Table3DSumZ(i, x, y, z) => tables.tables_3d[*i].sum_z(
-                x.eval(state, &registry.element_tables),
-                y.eval(state, &registry.element_tables),
+                x.eval(state, registry),
+                y.eval(state, registry),
                 &z.eval(state, metadata, registry),
             ),
             Self::Table3DSumXY(
@@ -225,12 +220,12 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
             ) => tables.tables_3d[*i].sum_xy(
                 &state.signature_variables.set_variables[*x],
                 &state.signature_variables.set_variables[*y],
-                z.eval(state, &registry.element_tables),
+                z.eval(state, registry),
             ),
             Self::Table3DSumXY(i, x, y, z) => tables.tables_3d[*i].sum_xy(
                 &x.eval(state, metadata, registry),
                 &y.eval(state, metadata, registry),
-                z.eval(state, &registry.element_tables),
+                z.eval(state, registry),
             ),
             Self::Table3DSumXZ(
                 i,
@@ -239,12 +234,12 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 SetExpression::SetVariable(z),
             ) => tables.tables_3d[*i].sum_xz(
                 &state.signature_variables.set_variables[*x],
-                y.eval(state, &registry.element_tables),
+                y.eval(state, registry),
                 &state.signature_variables.set_variables[*z],
             ),
             Self::Table3DSumXZ(i, x, y, z) => tables.tables_3d[*i].sum_xz(
                 &x.eval(state, metadata, registry),
-                y.eval(state, &registry.element_tables),
+                y.eval(state, registry),
                 &z.eval(state, metadata, registry),
             ),
             Self::Table3DSumYZ(
@@ -253,20 +248,18 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 SetExpression::SetVariable(y),
                 SetExpression::SetVariable(z),
             ) => tables.tables_3d[*i].sum_yz(
-                x.eval(state, &registry.element_tables),
+                x.eval(state, registry),
                 &state.signature_variables.set_variables[*y],
                 &state.signature_variables.set_variables[*z],
             ),
             Self::Table3DSumYZ(i, x, y, z) => tables.tables_3d[*i].sum_yz(
-                x.eval(state, &registry.element_tables),
+                x.eval(state, registry),
                 &y.eval(state, metadata, registry),
                 &z.eval(state, metadata, registry),
             ),
             Self::Table(i, args) => {
-                let args: Vec<variable::Element> = args
-                    .iter()
-                    .map(|x| x.eval(state, &registry.element_tables))
-                    .collect();
+                let args: Vec<variable::Element> =
+                    args.iter().map(|x| x.eval(state, registry)).collect();
                 tables.tables[*i].eval(&args)
             }
             Self::TableSum(i, args) => {
@@ -348,7 +341,7 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 }
                 ArgumentExpression::Element(e) => {
                     for r in &mut result {
-                        r.push(e.eval(state, &registry.element_tables));
+                        r.push(e.eval(state, registry));
                     }
                 }
             }

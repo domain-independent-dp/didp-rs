@@ -22,22 +22,17 @@ impl SetCondition {
     ) -> bool {
         match self {
             Self::Constant(value) => *value,
-            Self::Eq(x, y) => {
-                x.eval(state, &registry.element_tables) == y.eval(state, &registry.element_tables)
+            Self::Eq(x, y) => x.eval(state, registry) == y.eval(state, registry),
+            Self::Ne(x, y) => x.eval(state, registry) != y.eval(state, registry),
+            Self::IsIn(e, SetExpression::SetVariable(i)) => {
+                state.signature_variables.set_variables[*i].contains(e.eval(state, registry))
             }
-            Self::Ne(x, y) => {
-                x.eval(state, &registry.element_tables) != y.eval(state, &registry.element_tables)
-            }
-            Self::IsIn(e, SetExpression::SetVariable(i)) => state.signature_variables.set_variables
-                [*i]
-                .contains(e.eval(state, &registry.element_tables)),
             Self::IsIn(e, SetExpression::VectorVariable(i)) => {
-                state.signature_variables.vector_variables[*i]
-                    .contains(&e.eval(state, &registry.element_tables))
+                state.signature_variables.vector_variables[*i].contains(&e.eval(state, registry))
             }
             Self::IsIn(e, s) => s
                 .eval(state, metadata, registry)
-                .contains(e.eval(state, &registry.element_tables)),
+                .contains(e.eval(state, registry)),
             Self::IsSubset(SetExpression::SetVariable(i), SetExpression::SetVariable(j)) => {
                 let x = &state.signature_variables.set_variables[*i];
                 let y = &state.signature_variables.set_variables[*j];
