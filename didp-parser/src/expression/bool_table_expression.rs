@@ -1,6 +1,6 @@
 use super::set_expression;
 use crate::state;
-use crate::table_registry;
+use crate::table_data;
 use crate::variable;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -22,7 +22,7 @@ pub enum BoolTableExpression {
 }
 
 impl BoolTableExpression {
-    pub fn eval(&self, state: &state::State, tables: &table_registry::TableData<bool>) -> bool {
+    pub fn eval(&self, state: &state::State, tables: &table_data::TableData<bool>) -> bool {
         match self {
             Self::Constant(value) => *value,
             Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(state)),
@@ -37,7 +37,7 @@ impl BoolTableExpression {
         }
     }
 
-    pub fn simplify(&self, tables: &table_registry::TableData<bool>) -> BoolTableExpression {
+    pub fn simplify(&self, tables: &table_data::TableData<bool>) -> BoolTableExpression {
         match self {
             Self::Table1D(i, set_expression::ElementExpression::Constant(x)) => {
                 Self::Constant(tables.tables_1d[*i].eval(*x))
@@ -74,11 +74,10 @@ impl BoolTableExpression {
 mod tests {
     use super::*;
     use crate::table;
-    use crate::table_registry;
     use std::collections::HashMap;
     use std::rc::Rc;
 
-    fn generate_tables() -> table_registry::TableData<bool> {
+    fn generate_tables() -> table_data::TableData<bool> {
         let mut name_to_constant = HashMap::new();
         name_to_constant.insert(String::from("f0"), true);
 
@@ -103,7 +102,7 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
-        table_registry::TableData {
+        table_data::TableData {
             name_to_constant,
             tables_1d,
             name_to_table_1d,

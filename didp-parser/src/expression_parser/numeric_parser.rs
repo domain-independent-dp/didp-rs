@@ -207,9 +207,7 @@ fn parse_atom<T: Numeric>(
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    if token == "cost" {
-        Ok(NumericExpression::Cost)
-    } else if let Some(v) = registry.integer_tables.name_to_constant.get(token) {
+    if let Some(v) = registry.integer_tables.name_to_constant.get(token) {
         Ok(NumericExpression::Constant(T::from_integer(*v)))
     } else if let Some(v) = registry.continuous_tables.name_to_constant.get(token) {
         Ok(NumericExpression::Constant(T::from_continuous(*v)))
@@ -221,6 +219,8 @@ where
         Ok(NumericExpression::ContinuousVariable(*i))
     } else if let Some(i) = metadata.name_to_continuous_resource_variable.get(token) {
         Ok(NumericExpression::ContinuousResourceVariable(*i))
+    } else if token == "cost" {
+        Ok(NumericExpression::Cost)
     } else {
         let n: T = token.parse().map_err(|e| {
             ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
@@ -234,6 +234,7 @@ mod tests {
     use super::*;
     use crate::expression::*;
     use crate::table;
+    use crate::table_data;
     use crate::variable::Continuous;
     use std::collections::HashMap;
 
@@ -382,7 +383,7 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
-        let integer_tables = table_registry::TableData {
+        let integer_tables = table_data::TableData {
             name_to_constant,
             tables_1d,
             name_to_table_1d,
@@ -413,7 +414,7 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("cf4"), 0);
 
-        let continuous_tables = table_registry::TableData {
+        let continuous_tables = table_data::TableData {
             name_to_constant,
             tables_1d,
             name_to_table_1d,

@@ -187,6 +187,35 @@ impl StateMetadata {
         self.object_numbers[self.element_variable_to_object[self.name_to_element_variable[name]]]
     }
 
+    pub fn get_name_set(&self) -> collections::HashSet<String> {
+        let mut name_set = collections::HashSet::new();
+        for name in &self.object_names {
+            name_set.insert(name.clone());
+        }
+        for name in &self.set_variable_names {
+            name_set.insert(name.clone());
+        }
+        for name in &self.vector_variable_names {
+            name_set.insert(name.clone());
+        }
+        for name in &self.element_variable_names {
+            name_set.insert(name.clone());
+        }
+        for name in &self.integer_variable_names {
+            name_set.insert(name.clone());
+        }
+        for name in &self.continuous_variable_names {
+            name_set.insert(name.clone());
+        }
+        for name in &self.integer_resource_variable_names {
+            name_set.insert(name.clone());
+        }
+        for name in &self.continuous_resource_variable_names {
+            name_set.insert(name.clone());
+        }
+        name_set
+    }
+
     pub fn dominance(&self, a: &State, b: &State) -> Option<Ordering> {
         let status = Some(Ordering::Equal);
         let status = Self::compare_resource_variables(
@@ -267,9 +296,17 @@ impl StateMetadata {
         let mut elements_in_vector_variable_array: Vec<Vec<(usize, usize)>> =
             Vec::with_capacity(array.len());
         elements_in_vector_variable_array.push(vec![]);
+        let mut reserved_names = collections::HashSet::new();
         for value in array {
             let map = yaml_util::get_map(value)?;
             let name = yaml_util::get_string_by_key(&map, "name")?;
+            if let Some(name) = reserved_names.get(&name) {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "parameter name `{}` is already used",
+                    name
+                )));
+            }
+            reserved_names.insert(name.clone());
             let object = yaml_util::get_string_by_key(&map, "object")?;
             let (n, set_index, vector_index) = if let Some(i) = self.name_to_object.get(&object) {
                 (self.object_numbers[*i], None, None)
@@ -327,10 +364,22 @@ impl StateMetadata {
         variables: &yaml_rust::Yaml,
         object_numbers_yaml: &yaml_rust::Yaml,
     ) -> Result<StateMetadata, yaml_util::YamlContentErr> {
+        let mut reserved_names = collections::HashSet::new();
         let object_names = yaml_util::get_string_array(objects)?;
         let mut name_to_object = collections::HashMap::new();
         for (i, name) in object_names.iter().enumerate() {
-            name_to_object.insert(name.clone(), i);
+            match reserved_names.get(name) {
+                Some(name) => {
+                    return Err(yaml_util::YamlContentErr::new(format!(
+                        "object name `{}` is already used",
+                        name
+                    )))
+                }
+                None => {
+                    reserved_names.insert(name.clone());
+                    name_to_object.insert(name.clone(), i);
+                }
+            }
         }
         let object_numbers_yaml = yaml_util::get_map(object_numbers_yaml)?;
         let mut object_numbers: Vec<usize> = (0..object_names.len()).map(|_| 0).collect();
@@ -362,6 +411,13 @@ impl StateMetadata {
         for value in variables {
             let map = yaml_util::get_map(value)?;
             let name = yaml_util::get_string_by_key(map, "name")?;
+            if let Some(name) = reserved_names.get(&name) {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "variable name `{}` is already used",
+                    name
+                )));
+            }
+            reserved_names.insert(name.clone());
             let variable_type = yaml_util::get_string_by_key(map, "type")?;
             match &variable_type[..] {
                 "set" => {
@@ -865,6 +921,43 @@ cr3: 3
     }
 
     #[test]
+    fn get_name_set() {
+        let metadata = generate_metadata();
+        let mut expected = collections::HashSet::new();
+        expected.insert(String::from("object"));
+        expected.insert(String::from("small"));
+        expected.insert(String::from("s0"));
+        expected.insert(String::from("s1"));
+        expected.insert(String::from("s2"));
+        expected.insert(String::from("s3"));
+        expected.insert(String::from("p0"));
+        expected.insert(String::from("p1"));
+        expected.insert(String::from("p2"));
+        expected.insert(String::from("p3"));
+        expected.insert(String::from("e0"));
+        expected.insert(String::from("e1"));
+        expected.insert(String::from("e2"));
+        expected.insert(String::from("e3"));
+        expected.insert(String::from("i0"));
+        expected.insert(String::from("i1"));
+        expected.insert(String::from("i2"));
+        expected.insert(String::from("i3"));
+        expected.insert(String::from("c0"));
+        expected.insert(String::from("c1"));
+        expected.insert(String::from("c2"));
+        expected.insert(String::from("c3"));
+        expected.insert(String::from("ir0"));
+        expected.insert(String::from("ir1"));
+        expected.insert(String::from("ir2"));
+        expected.insert(String::from("ir3"));
+        expected.insert(String::from("cr0"));
+        expected.insert(String::from("cr1"));
+        expected.insert(String::from("cr2"));
+        expected.insert(String::from("cr3"));
+        assert_eq!(metadata.get_name_set(), expected);
+    }
+
+    #[test]
     fn dominance() {
         let metadata = generate_metadata();
 
@@ -1052,11 +1145,27 @@ cr3: 3
     #[test]
     fn ground_parameters_from_yaml_err() {
         let metadata = generate_metadata();
+
         let yaml = yaml_rust::YamlLoader::load_from_str(
             r"
 - name: v0
   object: small
 - name: v1
+  object: s5
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let result = metadata.ground_parameters_from_yaml(&yaml);
+        assert!(result.is_err());
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+- name: v0
+  object: small
+- name: v0
   object: s5
 ",
         );
@@ -1207,6 +1316,109 @@ small: 2
 
     #[test]
     fn state_metadata_load_from_yaml_err() {
+        let objects = r"
+- object
+- object
+";
+        let variables = r"
+- name: s0
+  type: set 
+  object: object
+";
+        let object_numbers = r"
+object: 10
+";
+        let objects = yaml_rust::YamlLoader::load_from_str(objects);
+        assert!(objects.is_ok());
+        let objects = objects.unwrap();
+        assert_eq!(objects.len(), 1);
+        let objects = &objects[0];
+
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
+
+        let object_numbers = yaml_rust::YamlLoader::load_from_str(object_numbers);
+        assert!(object_numbers.is_ok());
+        let object_numbers = object_numbers.unwrap();
+        assert_eq!(object_numbers.len(), 1);
+        let object_numbers = &object_numbers[0];
+
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
+        assert!(metadata.is_err());
+
+        let objects = r"
+- object
+- small
+";
+        let variables = r"
+- name: object
+  type: set 
+  object: object
+";
+        let object_numbers = r"
+object: 10
+small: 3
+";
+        let objects = yaml_rust::YamlLoader::load_from_str(objects);
+        assert!(objects.is_ok());
+        let objects = objects.unwrap();
+        assert_eq!(objects.len(), 1);
+        let objects = &objects[0];
+
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
+
+        let object_numbers = yaml_rust::YamlLoader::load_from_str(object_numbers);
+        assert!(object_numbers.is_ok());
+        let object_numbers = object_numbers.unwrap();
+        assert_eq!(object_numbers.len(), 1);
+        let object_numbers = &object_numbers[0];
+
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
+        assert!(metadata.is_err());
+
+        let objects = r"
+- object
+- small
+";
+        let variables = r"
+- name: s0
+  type: set 
+  object: object
+- name: s0
+  type: numeric
+";
+        let object_numbers = r"
+object: 10
+small: 3
+";
+        let objects = yaml_rust::YamlLoader::load_from_str(objects);
+        assert!(objects.is_ok());
+        let objects = objects.unwrap();
+        assert_eq!(objects.len(), 1);
+        let objects = &objects[0];
+
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
+
+        let object_numbers = yaml_rust::YamlLoader::load_from_str(object_numbers);
+        assert!(object_numbers.is_ok());
+        let object_numbers = object_numbers.unwrap();
+        assert_eq!(object_numbers.len(), 1);
+        let object_numbers = &object_numbers[0];
+
+        let metadata = StateMetadata::load_from_yaml(objects, variables, object_numbers);
+        assert!(metadata.is_err());
+
         let objects = r"
 - object
 - small

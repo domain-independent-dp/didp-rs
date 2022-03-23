@@ -11,6 +11,7 @@ pub mod expression_parser;
 mod grounded_condition;
 mod state;
 pub mod table;
+mod table_data;
 mod table_registry;
 mod transition;
 mod util;
@@ -22,7 +23,8 @@ pub use base_state::BaseState;
 pub use expression_parser::ParseErr;
 pub use grounded_condition::GroundedCondition;
 pub use state::{ResourceVariables, SignatureVariables, State, StateMetadata};
-pub use table_registry::{TableData, TableRegistry};
+pub use table_data::TableData;
+pub use table_registry::TableRegistry;
 pub use transition::Transition;
 pub use util::ModelErr;
 
@@ -243,6 +245,9 @@ impl<T: variable::Numeric> Model<T> {
             } else {
                 forward_transitions.extend(transition)
             }
+        }
+        if forward_transitions.is_empty() && backward_transitions.is_empty() {
+            return Err(ModelErr::new(String::from("no transitions")).into());
         }
 
         Ok(Model {
@@ -802,7 +807,7 @@ table_values:
                 stage: 0,
             },
             table_registry: table_registry::TableRegistry {
-                integer_tables: table_registry::TableData {
+                integer_tables: table_data::TableData {
                     tables_1d: vec![
                         table::Table1D::new(vec![0, 1, 1]),
                         table::Table1D::new(vec![10000, 2, 2]),
@@ -816,7 +821,7 @@ table_values:
                     name_to_table_2d: numeric_name_to_table_2d,
                     ..Default::default()
                 },
-                bool_tables: table_registry::TableData {
+                bool_tables: table_data::TableData {
                     tables_2d: vec![table::Table2D::new(vec![
                         vec![false, true, true],
                         vec![true, false, true],

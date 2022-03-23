@@ -105,6 +105,7 @@ mod tests {
     use super::*;
 
     use crate::table;
+    use crate::table_data;
     use std::collections::HashMap;
 
     fn generate_metadata() -> state::StateMetadata {
@@ -225,7 +226,7 @@ mod tests {
         name_to_table.insert(String::from("f4"), 0);
 
         table_registry::TableRegistry {
-            integer_tables: table_registry::TableData {
+            integer_tables: table_data::TableData {
                 name_to_constant,
                 tables_1d,
                 name_to_table_1d,

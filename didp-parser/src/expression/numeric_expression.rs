@@ -159,6 +159,7 @@ mod tests {
     use super::*;
     use crate::state;
     use crate::table;
+    use crate::table_data;
     use crate::variable::*;
     use ordered_float::OrderedFloat;
     use std::collections::HashMap;
@@ -298,7 +299,7 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
-        let integer_tables = table_registry::TableData {
+        let integer_tables = table_data::TableData {
             name_to_constant,
             tables_1d,
             name_to_table_1d,
@@ -358,7 +359,7 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("cf4"), 0);
 
-        let continuous_tables = table_registry::TableData {
+        let continuous_tables = table_data::TableData {
             name_to_constant,
             tables_1d,
             name_to_table_1d,

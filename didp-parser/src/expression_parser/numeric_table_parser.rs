@@ -3,7 +3,7 @@ use super::util;
 use super::util::ParseErr;
 use crate::expression::{ArgumentExpression, NumericTableExpression};
 use crate::state;
-use crate::table_registry;
+use crate::table_data;
 use crate::variable;
 use std::collections;
 use std::fmt;
@@ -15,7 +15,7 @@ pub fn parse_expression<'a, 'b, 'c, T: variable::Numeric>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
-    tables: &'b table_registry::TableData<T>,
+    tables: &'b table_data::TableData<T>,
     parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<NumericTableParsingResult<'a, T>, ParseErr>
 where
@@ -239,7 +239,7 @@ mod tests {
         parameters
     }
 
-    fn generate_tables() -> table_registry::TableData<variable::Integer> {
+    fn generate_tables() -> table_data::TableData<variable::Integer> {
         let mut name_to_constant = collections::HashMap::new();
         name_to_constant.insert(String::from("f0"), 0);
 
@@ -259,7 +259,7 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
-        table_registry::TableData {
+        table_data::TableData {
             name_to_constant,
             tables_1d,
             name_to_table_1d,

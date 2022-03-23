@@ -228,6 +228,7 @@ mod tests {
     use super::super::set_expression;
     use super::*;
     use crate::table;
+    use crate::table_data;
     use ordered_float::OrderedFloat;
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -332,7 +333,7 @@ mod tests {
         name_to_table.insert(String::from("f4"), 0);
 
         table_registry::TableRegistry {
-            bool_tables: table_registry::TableData {
+            bool_tables: table_data::TableData {
                 name_to_constant,
                 tables_1d,
                 name_to_table_1d,

@@ -327,6 +327,7 @@ where
 mod tests {
     use super::*;
     use crate::table;
+    use crate::table_data;
     use crate::variable::Set;
     use expression::*;
     use std::collections::HashMap;
@@ -463,7 +464,7 @@ mod tests {
         name_to_table_2d.insert(String::from("f2"), 0);
 
         table_registry::TableRegistry {
-            integer_tables: table_registry::TableData {
+            integer_tables: table_data::TableData {
                 tables_1d,
                 name_to_table_1d,
                 tables_2d,

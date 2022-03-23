@@ -1,7 +1,7 @@
 use super::set_expression::{ArgumentExpression, ElementExpression, SetExpression};
 use crate::state;
 use crate::table;
-use crate::table_registry::TableData;
+use crate::table_data::TableData;
 use crate::variable;
 use std::iter;
 

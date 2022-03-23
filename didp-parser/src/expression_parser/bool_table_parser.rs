@@ -3,14 +3,14 @@ use super::util;
 use super::util::ParseErr;
 use crate::expression::BoolTableExpression;
 use crate::state;
-use crate::table_registry;
+use crate::table_data;
 use std::collections;
 
 pub fn parse_expression<'a, 'b, 'c>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
-    tables: &'b table_registry::TableData<bool>,
+    tables: &'b table_data::TableData<bool>,
     parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<Option<(BoolTableExpression, &'a [String])>, ParseErr> {
     if let Some(i) = tables.name_to_table_1d.get(name) {
@@ -114,7 +114,7 @@ mod tests {
         parameters
     }
 
-    fn generate_tables() -> table_registry::TableData<bool> {
+    fn generate_tables() -> table_data::TableData<bool> {
         let mut name_to_constant = HashMap::new();
         name_to_constant.insert(String::from("f0"), true);
 
@@ -139,7 +139,7 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
-        table_registry::TableData {
+        table_data::TableData {
             name_to_constant,
             tables_1d,
             name_to_table_1d,

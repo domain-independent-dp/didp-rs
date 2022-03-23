@@ -125,16 +125,16 @@ fn parse_atom(
     metadata: &state::StateMetadata,
     parameters: &collections::HashMap<String, usize>,
 ) -> Result<ArgumentExpression, ParseErr> {
-    if token == "stage" {
-        Ok(ArgumentExpression::Element(ElementExpression::Stage))
+    if let Some(v) = parameters.get(token) {
+        Ok(ArgumentExpression::Element(ElementExpression::Constant(*v)))
     } else if let Some(i) = metadata.name_to_element_variable.get(token) {
         Ok(ArgumentExpression::Element(ElementExpression::Variable(*i)))
     } else if let Some(i) = metadata.name_to_set_variable.get(token) {
         Ok(ArgumentExpression::Set(SetExpression::SetVariable(*i)))
     } else if let Some(i) = metadata.name_to_vector_variable.get(token) {
         Ok(ArgumentExpression::Set(SetExpression::VectorVariable(*i)))
-    } else if let Some(v) = parameters.get(token) {
-        Ok(ArgumentExpression::Element(ElementExpression::Constant(*v)))
+    } else if token == "stage" {
+        Ok(ArgumentExpression::Element(ElementExpression::Stage))
     } else {
         let v: variable::Element = token.parse().map_err(|e| {
             ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))

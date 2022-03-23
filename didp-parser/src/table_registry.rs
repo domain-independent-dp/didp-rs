@@ -1,8 +1,8 @@
 use crate::state;
 use crate::table;
+use crate::table_data::TableData;
 use crate::variable;
 use crate::yaml_util;
-use approx::{AbsDiffEq, RelativeEq};
 use lazy_static::lazy_static;
 use std::collections;
 use std::fmt;
@@ -10,124 +10,33 @@ use std::str;
 use yaml_rust::Yaml;
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct TableData<T> {
-    pub name_to_constant: collections::HashMap<String, T>,
-    pub tables_1d: Vec<table::Table1D<T>>,
-    pub name_to_table_1d: collections::HashMap<String, usize>,
-    pub tables_2d: Vec<table::Table2D<T>>,
-    pub name_to_table_2d: collections::HashMap<String, usize>,
-    pub tables_3d: Vec<table::Table3D<T>>,
-    pub name_to_table_3d: collections::HashMap<String, usize>,
-    pub tables: Vec<table::Table<T>>,
-    pub name_to_table: collections::HashMap<String, usize>,
-}
-
-impl<T: AbsDiffEq> AbsDiffEq for TableData<T>
-where
-    T::Epsilon: Copy,
-{
-    type Epsilon = T::Epsilon;
-
-    fn default_epsilon() -> T::Epsilon {
-        T::default_epsilon()
-    }
-
-    fn abs_diff_eq(&self, other: &Self, epsilon: T::Epsilon) -> bool {
-        if self.name_to_constant.len() != other.name_to_constant.len() {
-            return false;
-        }
-        for (key, x) in &self.name_to_constant {
-            match other.name_to_constant.get(key) {
-                Some(y) if x.abs_diff_eq(y, epsilon) => {}
-                _ => return false,
-            }
-        }
-        self.name_to_table_1d == other.name_to_table_1d
-            && self.name_to_table_2d == other.name_to_table_2d
-            && self.name_to_table_3d == other.name_to_table_3d
-            && self.name_to_table == other.name_to_table
-            && self
-                .tables_1d
-                .iter()
-                .zip(other.tables_1d.iter())
-                .all(|(x, y)| x.abs_diff_eq(y, epsilon))
-            && self
-                .tables_2d
-                .iter()
-                .zip(other.tables_2d.iter())
-                .all(|(x, y)| x.abs_diff_eq(y, epsilon))
-            && self
-                .tables_3d
-                .iter()
-                .zip(other.tables_3d.iter())
-                .all(|(x, y)| x.abs_diff_eq(y, epsilon))
-            && self
-                .tables
-                .iter()
-                .zip(other.tables.iter())
-                .all(|(x, y)| x.abs_diff_eq(y, epsilon))
-    }
-}
-
-impl<T: RelativeEq> RelativeEq for TableData<T>
-where
-    T::Epsilon: Copy,
-{
-    fn default_max_relative() -> T::Epsilon {
-        T::default_max_relative()
-    }
-
-    fn relative_eq(&self, other: &Self, epsilon: T::Epsilon, max_relative: T::Epsilon) -> bool {
-        if self.name_to_constant.len() != other.name_to_constant.len() {
-            return false;
-        }
-        for (key, x) in &self.name_to_constant {
-            match other.name_to_constant.get(key) {
-                Some(y) if x.relative_eq(y, epsilon, max_relative) => {}
-                _ => return false,
-            }
-        }
-        self.name_to_table_1d == other.name_to_table_1d
-            && self.name_to_table_2d == other.name_to_table_2d
-            && self.name_to_table_3d == other.name_to_table_3d
-            && self.name_to_table == other.name_to_table
-            && self
-                .tables_1d
-                .iter()
-                .zip(other.tables_1d.iter())
-                .all(|(x, y)| x.relative_eq(y, epsilon, max_relative))
-            && self
-                .tables_2d
-                .iter()
-                .zip(other.tables_2d.iter())
-                .all(|(x, y)| x.relative_eq(y, epsilon, max_relative))
-            && self
-                .tables_3d
-                .iter()
-                .zip(other.tables_3d.iter())
-                .all(|(x, y)| x.relative_eq(y, epsilon, max_relative))
-            && self
-                .tables
-                .iter()
-                .zip(other.tables.iter())
-                .all(|(x, y)| x.relative_eq(y, epsilon, max_relative))
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Default)]
 pub struct TableRegistry {
     pub integer_tables: TableData<variable::Integer>,
     pub continuous_tables: TableData<variable::Continuous>,
+    pub set_tables: TableData<variable::Set>,
+    pub vector_tables: TableData<variable::Vector>,
     pub bool_tables: TableData<bool>,
 }
 
 enum TableReturnType {
     Integer(variable::Integer),
     Continuous(variable::Continuous),
+    Set(variable::Set),
+    Vector(usize, variable::Vector),
     Bool(bool),
 }
 
 impl TableRegistry {
+    pub fn get_name_set(&self) -> collections::HashSet<String> {
+        let mut name_set = collections::HashSet::new();
+        name_set.extend(self.integer_tables.get_name_set());
+        name_set.extend(self.continuous_tables.get_name_set());
+        name_set.extend(self.set_tables.get_name_set());
+        name_set.extend(self.vector_tables.get_name_set());
+        name_set.extend(self.bool_tables.get_name_set());
+        name_set
+    }
+
     pub fn load_from_yaml(
         tables: &Yaml,
         table_values: &Yaml,
@@ -139,9 +48,17 @@ impl TableRegistry {
         let tables = yaml_util::get_array(tables)?;
         let mut table_names = Vec::with_capacity(tables.len());
         let mut name_to_signature = collections::HashMap::new();
+        let mut reserved_names = metadata.get_name_set();
         for value in tables {
             let map = yaml_util::get_map(value)?;
             let name = yaml_util::get_string_by_key(map, "name")?;
+            if let Some(name) = reserved_names.get(&name) {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "table name `{}` is already used",
+                    name
+                )));
+            }
+            reserved_names.insert(name.clone());
             let args = match map.get(&ARGS_KEY) {
                 Some(value) => yaml_util::get_string_array(value)?,
                 None => Vec::new(),
@@ -179,6 +96,64 @@ impl TableRegistry {
                             .insert(name.clone(), (arg_types, TableReturnType::Continuous(0.0)));
                     }
                 }
+                "set" => {
+                    let object_name = yaml_util::get_string_by_key(map, "object")?;
+                    let object = match metadata.name_to_object.get(&object_name) {
+                        Some(object) => *object,
+                        None => {
+                            return Err(yaml_util::YamlContentErr::new(format!(
+                                "no such object `{}`",
+                                object_name
+                            )))
+                        }
+                    };
+                    let n = metadata.object_numbers[object];
+                    let mut default = variable::Set::with_capacity(n);
+                    if let Ok(array) = yaml_util::get_usize_array_by_key(map, "default") {
+                        for v in array {
+                            if v >= n {
+                                return Err(yaml_util::YamlContentErr::new(format!(
+                                    "element `{}` is too large for object `{}`",
+                                    v, object_name
+                                )));
+                            }
+                            default.insert(v);
+                        }
+                    }
+                    name_to_signature
+                        .insert(name.clone(), (arg_types, TableReturnType::Set(default)));
+                }
+                "vector" => {
+                    let object_name = yaml_util::get_string_by_key(map, "object")?;
+                    let object = match metadata.name_to_object.get(&object_name) {
+                        Some(object) => *object,
+                        None => {
+                            return Err(yaml_util::YamlContentErr::new(format!(
+                                "no such object `{}`",
+                                object_name
+                            )))
+                        }
+                    };
+                    let n = metadata.object_numbers[object];
+                    let default = match yaml_util::get_usize_array_by_key(map, "default") {
+                        Ok(array) => {
+                            for v in &array {
+                                if *v >= n {
+                                    return Err(yaml_util::YamlContentErr::new(format!(
+                                        "element `{}` is too large for object `{}`",
+                                        *v, object_name
+                                    )));
+                                }
+                            }
+                            array
+                        }
+                        _ => Vec::new(),
+                    };
+                    name_to_signature.insert(
+                        name.clone(),
+                        (arg_types, TableReturnType::Vector(n, default)),
+                    );
+                }
                 "bool" => {
                     if let Ok(value) = yaml_util::get_bool_by_key(map, "default") {
                         name_to_signature
@@ -215,6 +190,24 @@ impl TableRegistry {
         let mut continuous_name_to_table_3d = collections::HashMap::new();
         let mut continuous_tables = Vec::new();
         let mut continuous_name_to_table = collections::HashMap::new();
+        let mut name_to_set_constant = collections::HashMap::new();
+        let mut set_tables_1d = Vec::new();
+        let mut set_name_to_table_1d = collections::HashMap::new();
+        let mut set_tables_2d = Vec::new();
+        let mut set_name_to_table_2d = collections::HashMap::new();
+        let mut set_tables_3d = Vec::new();
+        let mut set_name_to_table_3d = collections::HashMap::new();
+        let mut set_tables = Vec::new();
+        let mut set_name_to_table = collections::HashMap::new();
+        let mut name_to_vector_constant = collections::HashMap::new();
+        let mut vector_tables_1d = Vec::new();
+        let mut vector_name_to_table_1d = collections::HashMap::new();
+        let mut vector_tables_2d = Vec::new();
+        let mut vector_name_to_table_2d = collections::HashMap::new();
+        let mut vector_tables_3d = Vec::new();
+        let mut vector_name_to_table_3d = collections::HashMap::new();
+        let mut vector_tables = Vec::new();
+        let mut vector_name_to_table = collections::HashMap::new();
         let mut name_to_bool_constant = collections::HashMap::new();
         let mut bool_tables_1d = Vec::new();
         let mut bool_name_to_table_1d = collections::HashMap::new();
@@ -239,6 +232,14 @@ impl TableRegistry {
                     TableReturnType::Bool(_) => {
                         name_to_bool_constant.insert(name, yaml_util::get_bool(value)?);
                     }
+                    TableReturnType::Set(default) => {
+                        let value = Self::load_set_from_yaml(value, default.len())?;
+                        name_to_set_constant.insert(name, value);
+                    }
+                    TableReturnType::Vector(capacity, _) => {
+                        let value = Self::load_vector_from_yaml(value, *capacity)?;
+                        name_to_vector_constant.insert(name, value);
+                    }
                 }
             } else if arg_types.len() == 1 {
                 let size = metadata.object_numbers[arg_types[0]];
@@ -257,6 +258,17 @@ impl TableRegistry {
                         let f = Self::load_bool_table_1d_from_yaml(value, size, *default)?;
                         bool_name_to_table_1d.insert(name, bool_tables_1d.len());
                         bool_tables_1d.push(f);
+                    }
+                    TableReturnType::Set(default) => {
+                        let f = Self::load_set_table_1d_from_yaml(value, size, default)?;
+                        set_name_to_table_1d.insert(name, set_tables_1d.len());
+                        set_tables_1d.push(f);
+                    }
+                    TableReturnType::Vector(capacity, default) => {
+                        let f =
+                            Self::load_vector_table_1d_from_yaml(value, size, default, *capacity)?;
+                        vector_name_to_table_1d.insert(name, vector_tables_1d.len());
+                        vector_tables_1d.push(f);
                     }
                 }
             } else if arg_types.len() == 2 {
@@ -280,6 +292,18 @@ impl TableRegistry {
                             Self::load_bool_table_2d_from_yaml(value, size_x, size_y, *default)?;
                         bool_name_to_table_2d.insert(name, bool_tables_2d.len());
                         bool_tables_2d.push(f);
+                    }
+                    TableReturnType::Set(default) => {
+                        let f = Self::load_set_table_2d_from_yaml(value, size_x, size_y, default)?;
+                        set_name_to_table_2d.insert(name, set_tables_2d.len());
+                        set_tables_2d.push(f);
+                    }
+                    TableReturnType::Vector(capacity, default) => {
+                        let f = Self::load_vector_table_2d_from_yaml(
+                            value, size_x, size_y, default, *capacity,
+                        )?;
+                        vector_name_to_table_2d.insert(name, vector_tables_2d.len());
+                        vector_tables_2d.push(f);
                     }
                 }
             } else if arg_types.len() == 3 {
@@ -308,6 +332,20 @@ impl TableRegistry {
                         bool_name_to_table_3d.insert(name, bool_tables_3d.len());
                         bool_tables_3d.push(f);
                     }
+                    TableReturnType::Set(default) => {
+                        let f = Self::load_set_table_3d_from_yaml(
+                            value, size_x, size_y, size_z, default,
+                        )?;
+                        set_name_to_table_3d.insert(name, set_tables_3d.len());
+                        set_tables_3d.push(f);
+                    }
+                    TableReturnType::Vector(capacity, default) => {
+                        let f = Self::load_vector_table_3d_from_yaml(
+                            value, size_x, size_y, size_z, default, *capacity,
+                        )?;
+                        vector_name_to_table_3d.insert(name, vector_tables_3d.len());
+                        vector_tables_3d.push(f);
+                    }
                 }
             } else {
                 let size: Vec<usize> = arg_types
@@ -329,6 +367,21 @@ impl TableRegistry {
                         let f = Self::load_bool_table_from_yaml(value, size, *default)?;
                         bool_name_to_table.insert(name, bool_tables.len());
                         bool_tables.push(f);
+                    }
+                    TableReturnType::Set(default) => {
+                        let f = Self::load_set_table_from_yaml(value, size, default.clone())?;
+                        set_name_to_table.insert(name, set_tables.len());
+                        set_tables.push(f);
+                    }
+                    TableReturnType::Vector(capacity, default) => {
+                        let f = Self::load_vector_table_from_yaml(
+                            value,
+                            size,
+                            default.clone(),
+                            *capacity,
+                        )?;
+                        vector_name_to_table.insert(name, vector_tables.len());
+                        vector_tables.push(f);
                     }
                 }
             }
@@ -355,6 +408,28 @@ impl TableRegistry {
                 name_to_table_3d: continuous_name_to_table_3d,
                 tables: continuous_tables,
                 name_to_table: continuous_name_to_table,
+            },
+            set_tables: TableData {
+                name_to_constant: name_to_set_constant,
+                tables_1d: set_tables_1d,
+                name_to_table_1d: set_name_to_table_1d,
+                tables_2d: set_tables_2d,
+                name_to_table_2d: set_name_to_table_2d,
+                tables_3d: set_tables_3d,
+                name_to_table_3d: set_name_to_table_3d,
+                tables: set_tables,
+                name_to_table: set_name_to_table,
+            },
+            vector_tables: TableData {
+                name_to_constant: name_to_vector_constant,
+                tables_1d: vector_tables_1d,
+                name_to_table_1d: vector_name_to_table_1d,
+                tables_2d: vector_tables_2d,
+                name_to_table_2d: vector_name_to_table_2d,
+                tables_3d: vector_tables_3d,
+                name_to_table_3d: vector_name_to_table_3d,
+                tables: vector_tables,
+                name_to_table: vector_name_to_table,
             },
             bool_tables: TableData {
                 name_to_constant: name_to_bool_constant,
@@ -385,7 +460,7 @@ impl TableRegistry {
             let value = yaml_util::get_numeric(value)?;
             if args >= size {
                 return Err(yaml_util::YamlContentErr::new(format!(
-                    "`{}` is greater than the number of the object for table",
+                    "`{}` is greater than the number of the objects for table",
                     args,
                 )));
             }
@@ -501,7 +576,7 @@ impl TableRegistry {
             let value = yaml_util::get_bool(value)?;
             if args >= size {
                 return Err(yaml_util::YamlContentErr::new(format!(
-                    "`{}` is greater than the number of the object for table",
+                    "`{}` is greater than the number of the objects for table",
                     args,
                 )));
             }
@@ -595,12 +670,264 @@ impl TableRegistry {
         }
         Ok(table::Table::new(body, default))
     }
+
+    fn load_set_from_yaml(
+        value: &Yaml,
+        capacity: usize,
+    ) -> Result<variable::Set, yaml_util::YamlContentErr> {
+        let array = yaml_util::get_usize_array(value)?;
+        let mut set = variable::Set::with_capacity(capacity);
+        for v in array {
+            if v >= capacity {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "element `{}` in a set table is too large for the object",
+                    v,
+                )));
+            }
+            set.insert(v);
+        }
+        Ok(set)
+    }
+
+    fn load_set_table_1d_from_yaml(
+        value: &Yaml,
+        size: usize,
+        default: &variable::Set,
+    ) -> Result<table::Table1D<variable::Set>, yaml_util::YamlContentErr> {
+        let mut body: Vec<variable::Set> = (0..size).map(|_| default.clone()).collect();
+        let map = yaml_util::get_map(value)?;
+        for (args, value) in map {
+            let args = yaml_util::get_usize(args)?;
+            let value = Self::load_set_from_yaml(value, default.len())?;
+            if args >= size {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "`{}` is greater than the number of the objects for table",
+                    args,
+                )));
+            }
+            body[args] = value;
+        }
+        Ok(table::Table1D::new(body))
+    }
+
+    fn load_set_table_2d_from_yaml(
+        value: &Yaml,
+        size_x: usize,
+        size_y: usize,
+        default: &variable::Set,
+    ) -> Result<table::Table2D<variable::Set>, yaml_util::YamlContentErr> {
+        let mut body: Vec<Vec<variable::Set>> = (0..size_x)
+            .map(|_| (0..size_y).map(|_| default.clone()).collect())
+            .collect();
+        let map = yaml_util::get_map(value)?;
+        for (args, value) in map {
+            let args = yaml_util::get_usize_array(args)?;
+            let x = args[0];
+            let y = args[1];
+            let value = Self::load_set_from_yaml(value, default.len())?;
+            if x >= size_x || y >= size_y {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "`({}, {})` is greater than the numbers of objects for table",
+                    x, y,
+                )));
+            }
+            body[x][y] = value;
+        }
+        Ok(table::Table2D::new(body))
+    }
+
+    fn load_set_table_3d_from_yaml(
+        value: &Yaml,
+        size_x: usize,
+        size_y: usize,
+        size_z: usize,
+        default: &variable::Set,
+    ) -> Result<table::Table3D<variable::Set>, yaml_util::YamlContentErr> {
+        let mut body: Vec<Vec<Vec<variable::Set>>> = (0..size_x)
+            .map(|_| {
+                (0..size_y)
+                    .map(|_| (0..size_z).map(|_| default.clone()).collect())
+                    .collect()
+            })
+            .collect();
+        let map = yaml_util::get_map(value)?;
+        for (args, value) in map {
+            let args = yaml_util::get_usize_array(args)?;
+            let x = args[0];
+            let y = args[1];
+            let z = args[2];
+            let value = Self::load_set_from_yaml(value, default.len())?;
+            if x >= size_x || y >= size_y || z >= size_z {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "`({}, {}, {})` is greater than the numbers of objects for table",
+                    x, y, z,
+                )));
+            }
+            body[x][y][z] = value;
+        }
+        Ok(table::Table3D::new(body))
+    }
+
+    fn load_set_table_from_yaml(
+        value: &Yaml,
+        size: Vec<usize>,
+        default: variable::Set,
+    ) -> Result<table::Table<variable::Set>, yaml_util::YamlContentErr> {
+        let map = yaml_util::get_map(value)?;
+        let mut body = collections::HashMap::with_capacity(map.len());
+        for (args, value) in map {
+            let args = yaml_util::get_usize_array(args)?;
+            if args.len() != size.len() {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "expected `{}` arguments for table, but passed `{}`",
+                    size.len(),
+                    args.len()
+                )));
+            }
+            let value = Self::load_set_from_yaml(value, default.len())?;
+            if args.iter().zip(size.iter()).any(|(a, b)| a >= b) {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "`{:?}` is greater than the numbers of objects for table",
+                    args,
+                )));
+            }
+            body.insert(args, value);
+        }
+        Ok(table::Table::new(body, default))
+    }
+
+    fn load_vector_from_yaml(
+        value: &Yaml,
+        capacity: usize,
+    ) -> Result<variable::Vector, yaml_util::YamlContentErr> {
+        let value = yaml_util::get_usize_array(value)?;
+        for v in &value {
+            if *v >= capacity {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "element `{}` in a vector table is too large for the object",
+                    *v,
+                )));
+            }
+        }
+        Ok(value)
+    }
+
+    fn load_vector_table_1d_from_yaml(
+        value: &Yaml,
+        size: usize,
+        default: &[variable::Element],
+        capacity: usize,
+    ) -> Result<table::Table1D<variable::Vector>, yaml_util::YamlContentErr> {
+        let mut body: Vec<variable::Vector> = (0..size).map(|_| default.to_vec()).collect();
+        let map = yaml_util::get_map(value)?;
+        for (args, value) in map {
+            let args = yaml_util::get_usize(args)?;
+            let value = Self::load_vector_from_yaml(value, capacity)?;
+            if args >= size {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "`{}` is greater than the number of the objects for table",
+                    args,
+                )));
+            }
+            body[args] = value;
+        }
+        Ok(table::Table1D::new(body))
+    }
+
+    fn load_vector_table_2d_from_yaml(
+        value: &Yaml,
+        size_x: usize,
+        size_y: usize,
+        default: &[variable::Element],
+        capacity: usize,
+    ) -> Result<table::Table2D<variable::Vector>, yaml_util::YamlContentErr> {
+        let mut body: Vec<Vec<variable::Vector>> = (0..size_x)
+            .map(|_| (0..size_y).map(|_| default.to_vec()).collect())
+            .collect();
+        let map = yaml_util::get_map(value)?;
+        for (args, value) in map {
+            let args = yaml_util::get_usize_array(args)?;
+            let x = args[0];
+            let y = args[1];
+            let value = Self::load_vector_from_yaml(value, capacity)?;
+            if x >= size_x || y >= size_y {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "`({}, {})` is greater than the numbers of objects for table",
+                    x, y,
+                )));
+            }
+            body[x][y] = value;
+        }
+        Ok(table::Table2D::new(body))
+    }
+
+    fn load_vector_table_3d_from_yaml(
+        value: &Yaml,
+        size_x: usize,
+        size_y: usize,
+        size_z: usize,
+        default: &[variable::Element],
+        capacity: usize,
+    ) -> Result<table::Table3D<variable::Vector>, yaml_util::YamlContentErr> {
+        let mut body: Vec<Vec<Vec<variable::Vector>>> = (0..size_x)
+            .map(|_| {
+                (0..size_y)
+                    .map(|_| (0..size_z).map(|_| default.to_vec()).collect())
+                    .collect()
+            })
+            .collect();
+        let map = yaml_util::get_map(value)?;
+        for (args, value) in map {
+            let args = yaml_util::get_usize_array(args)?;
+            let x = args[0];
+            let y = args[1];
+            let z = args[2];
+            let value = Self::load_vector_from_yaml(value, capacity)?;
+            if x >= size_x || y >= size_y || z >= size_z {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "`({}, {}, {})` is greater than the numbers of objects for table",
+                    x, y, z,
+                )));
+            }
+            body[x][y][z] = value;
+        }
+        Ok(table::Table3D::new(body))
+    }
+
+    fn load_vector_table_from_yaml(
+        value: &Yaml,
+        size: Vec<usize>,
+        default: variable::Vector,
+        capacity: usize,
+    ) -> Result<table::Table<variable::Vector>, yaml_util::YamlContentErr> {
+        let map = yaml_util::get_map(value)?;
+        let mut body = collections::HashMap::with_capacity(map.len());
+        for (args, value) in map {
+            let args = yaml_util::get_usize_array(args)?;
+            if args.len() != size.len() {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "expected `{}` arguments for table, but passed `{}`",
+                    size.len(),
+                    args.len()
+                )));
+            }
+            let value = Self::load_vector_from_yaml(value, capacity)?;
+            if args.iter().zip(size.iter()).any(|(a, b)| a >= b) {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "`{:?}` is greater than the numbers of objects for table",
+                    args,
+                )));
+            }
+            body.insert(args, value);
+        }
+        Ok(table::Table::new(body, default))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use approx::{assert_relative_eq, assert_relative_ne};
+    use approx::assert_relative_eq;
     use collections::HashMap;
 
     fn generate_metadata() -> state::StateMetadata {
@@ -794,52 +1121,179 @@ mod tests {
             name_to_table,
         };
 
+        let mut name_to_constant = HashMap::new();
+        let mut set = variable::Set::with_capacity(3);
+        set.insert(0);
+        set.insert(2);
+        let default = variable::Set::with_capacity(3);
+        name_to_constant.insert(String::from("s0"), set.clone());
+
+        let tables_1d = vec![table::Table1D::new(vec![
+            set.clone(),
+            default.clone(),
+            default.clone(),
+        ])];
+        let mut name_to_table_1d = HashMap::new();
+        name_to_table_1d.insert(String::from("s1"), 0);
+
+        let tables_2d = vec![table::Table2D::new(vec![
+            vec![set.clone(), default.clone(), default.clone()],
+            vec![default.clone(), default.clone(), default.clone()],
+            vec![default.clone(), default.clone(), default.clone()],
+        ])];
+        let mut name_to_table_2d = HashMap::new();
+        name_to_table_2d.insert(String::from("s2"), 0);
+
+        let tables_3d = vec![table::Table3D::new(vec![
+            vec![
+                vec![set.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+            ],
+            vec![
+                vec![set.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+            ],
+            vec![
+                vec![set.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+            ],
+        ])];
+        let mut name_to_table_3d = HashMap::new();
+        name_to_table_3d.insert(String::from("s3"), 0);
+
+        let mut map = HashMap::new();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, set);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, default.clone());
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, default.clone());
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, default.clone());
+        let tables = vec![table::Table::new(map, default)];
+        let mut name_to_table = HashMap::new();
+        name_to_table.insert(String::from("s4"), 0);
+
+        let set_tables = TableData {
+            name_to_constant,
+            tables_1d,
+            name_to_table_1d,
+            tables_2d,
+            name_to_table_2d,
+            tables_3d,
+            name_to_table_3d,
+            tables,
+            name_to_table,
+        };
+
+        let mut name_to_constant = HashMap::new();
+        let vector = vec![0, 2];
+        let default = Vec::new();
+        name_to_constant.insert(String::from("v0"), vector.clone());
+
+        let tables_1d = vec![table::Table1D::new(vec![
+            vector.clone(),
+            default.clone(),
+            default.clone(),
+        ])];
+        let mut name_to_table_1d = HashMap::new();
+        name_to_table_1d.insert(String::from("v1"), 0);
+
+        let tables_2d = vec![table::Table2D::new(vec![
+            vec![vector.clone(), default.clone(), default.clone()],
+            vec![default.clone(), default.clone(), default.clone()],
+            vec![default.clone(), default.clone(), default.clone()],
+        ])];
+        let mut name_to_table_2d = HashMap::new();
+        name_to_table_2d.insert(String::from("v2"), 0);
+
+        let tables_3d = vec![table::Table3D::new(vec![
+            vec![
+                vec![vector.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+            ],
+            vec![
+                vec![vector.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+            ],
+            vec![
+                vec![vector.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+            ],
+        ])];
+        let mut name_to_table_3d = HashMap::new();
+        name_to_table_3d.insert(String::from("v3"), 0);
+
+        let mut map = HashMap::new();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, vector);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, default.clone());
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, default.clone());
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, default.clone());
+        let tables = vec![table::Table::new(map, default)];
+        let mut name_to_table = HashMap::new();
+        name_to_table.insert(String::from("v4"), 0);
+
+        let vector_tables = TableData {
+            name_to_constant,
+            tables_1d,
+            name_to_table_1d,
+            tables_2d,
+            name_to_table_2d,
+            tables_3d,
+            name_to_table_3d,
+            tables,
+            name_to_table,
+        };
+
         TableRegistry {
             integer_tables,
             continuous_tables,
+            set_tables,
+            vector_tables,
             bool_tables,
         }
     }
 
     #[test]
-    fn table_data_relative_eq() {
-        let mut name_to_table_1d = collections::HashMap::new();
-        name_to_table_1d.insert(String::from("t0"), 0);
-        name_to_table_1d.insert(String::from("t1"), 1);
-        let t1 = TableData {
-            tables_1d: vec![
-                table::Table1D::new(vec![1.0, 2.0]),
-                table::Table1D::new(vec![2.0, 3.0]),
-            ],
-            name_to_table_1d: name_to_table_1d.clone(),
-            ..Default::default()
-        };
-        let t2 = TableData {
-            tables_1d: vec![
-                table::Table1D::new(vec![1.0, 2.0]),
-                table::Table1D::new(vec![2.0, 3.0]),
-            ],
-            name_to_table_1d: name_to_table_1d.clone(),
-            ..Default::default()
-        };
-        assert_relative_eq!(t1, t2);
-        let t2 = TableData {
-            tables_1d: vec![
-                table::Table1D::new(vec![1.0, 2.0]),
-                table::Table1D::new(vec![3.0, 3.0]),
-            ],
-            name_to_table_1d,
-            ..Default::default()
-        };
-        assert_relative_ne!(t1, t2);
-        let mut name_to_table_1d = collections::HashMap::new();
-        name_to_table_1d.insert(String::from("t0"), 0);
-        let t2 = TableData {
-            tables_1d: vec![table::Table1D::new(vec![1.0, 2.0])],
-            name_to_table_1d,
-            ..Default::default()
-        };
-        assert_relative_ne!(t1, t2);
+    fn table_registry_get_name_set() {
+        let registry = generate_registry();
+        let mut expected = collections::HashSet::new();
+        expected.insert(String::from("i0"));
+        expected.insert(String::from("i1"));
+        expected.insert(String::from("i2"));
+        expected.insert(String::from("i3"));
+        expected.insert(String::from("i4"));
+        expected.insert(String::from("c0"));
+        expected.insert(String::from("c1"));
+        expected.insert(String::from("c2"));
+        expected.insert(String::from("c3"));
+        expected.insert(String::from("c4"));
+        expected.insert(String::from("b0"));
+        expected.insert(String::from("b1"));
+        expected.insert(String::from("b2"));
+        expected.insert(String::from("b3"));
+        expected.insert(String::from("b4"));
+        expected.insert(String::from("s0"));
+        expected.insert(String::from("s1"));
+        expected.insert(String::from("s2"));
+        expected.insert(String::from("s3"));
+        expected.insert(String::from("s4"));
+        expected.insert(String::from("v0"));
+        expected.insert(String::from("v1"));
+        expected.insert(String::from("v2"));
+        expected.insert(String::from("v3"));
+        expected.insert(String::from("v4"));
+        assert_eq!(registry.get_name_set(), expected);
     }
 
     #[test]
@@ -907,6 +1361,46 @@ mod tests {
         - object
         - object
         - object
+- name: s0
+  type: set
+  object: object
+- name: s1
+  type: set
+  object: object
+  args: [object]
+  default: []
+- name: s2
+  type: set
+  object: object
+  args: [object, object]
+- name: s3
+  type: set
+  object: object
+  args: [object, object, object]
+- name: s4
+  type: set
+  object: object
+  args: [object, object, object, object]
+- name: v0
+  type: vector
+  object: object
+- name: v1
+  type: vector
+  object: object
+  args: [object]
+  default: []
+- name: v2
+  type: vector
+  object: object
+  args: [object, object]
+- name: v3
+  type: vector
+  object: object
+  args: [object, object, object]
+- name: v4
+  type: vector 
+  object: object
+  args: [object, object, object, object]
 ";
         let table_values = r"
 i0: 0
@@ -930,6 +1424,16 @@ b1: { 0: true, 1: false, 2: false }
 b2: { [0, 0]: true }
 b3: { [0, 0, 0]: true, [1, 0, 0]: true, [2, 0, 0]: true }
 b4: { [0, 1, 0, 0]: true, [0, 1, 0, 1]: false, [0, 1, 2, 0]: false, [0, 1, 2, 1]: false }
+s0: [0, 2]
+s1: { 0: [0, 2] }
+s2: { [0, 0]: [0, 2] }
+s3: { [0, 0, 0]: [0, 2], [1, 0, 0]: [0, 2], [2, 0, 0]: [0, 2] }
+s4: { [0, 1, 0, 0]: [0, 2]}
+v0: [0, 2]
+v1: { 0: [0, 2] }
+v2: { [0, 0]: [0, 2] }
+v3: { [0, 0, 0]: [0, 2], [1, 0, 0]: [0, 2], [2, 0, 0]: [0, 2] }
+v4: { [0, 1, 0, 0]: [0, 2]}
 ";
 
         let tables = yaml_rust::YamlLoader::load_from_str(tables);
@@ -945,6 +1449,7 @@ b4: { [0, 1, 0, 0]: true, [0, 1, 0, 1]: false, [0, 1, 2, 0]: false, [0, 1, 2, 1]
         let table_values = &table_values[0];
 
         let registry = TableRegistry::load_from_yaml(tables, table_values, &metadata);
+        println!("{:?}", registry);
         assert!(registry.is_ok());
         let registry = registry.unwrap();
         assert_eq!(registry.integer_tables, expected.integer_tables);
@@ -955,6 +1460,82 @@ b4: { [0, 1, 0, 0]: true, [0, 1, 0, 1]: false, [0, 1, 2, 0]: false, [0, 1, 2, 1]
     #[test]
     fn load_from_yaml_err() {
         let metadata = generate_metadata();
+
+        let tables = r"
+- name: f0
+  type: integer
+- name: f0
+  type: integer
+  args: [object]
+";
+
+        let tables = yaml_rust::YamlLoader::load_from_str(tables);
+        assert!(tables.is_ok());
+        let tables = tables.unwrap();
+        assert_eq!(tables.len(), 1);
+        let tables = &tables[0];
+
+        let table_values = r"
+f0: 0
+f0:
+      0: 10
+      1: 20
+      2: 30
+";
+        let table_values = yaml_rust::YamlLoader::load_from_str(table_values);
+        assert!(table_values.is_ok());
+        let table_values = table_values.unwrap();
+        assert_eq!(table_values.len(), 1);
+        let table_values = &table_values[0];
+
+        let registry = TableRegistry::load_from_yaml(tables, table_values, &metadata);
+        assert!(registry.is_err());
+
+        let tables = r"
+- name: object
+  type: integer
+";
+
+        let tables = yaml_rust::YamlLoader::load_from_str(tables);
+        assert!(tables.is_ok());
+        let tables = tables.unwrap();
+        assert_eq!(tables.len(), 1);
+        let tables = &tables[0];
+
+        let table_values = r"
+object: 0
+";
+        let table_values = yaml_rust::YamlLoader::load_from_str(table_values);
+        assert!(table_values.is_ok());
+        let table_values = table_values.unwrap();
+        assert_eq!(table_values.len(), 1);
+        let table_values = &table_values[0];
+
+        let registry = TableRegistry::load_from_yaml(tables, table_values, &metadata);
+        assert!(registry.is_err());
+
+        let tables = r"
+- name: e0
+  type: integer
+";
+
+        let tables = yaml_rust::YamlLoader::load_from_str(tables);
+        assert!(tables.is_ok());
+        let tables = tables.unwrap();
+        assert_eq!(tables.len(), 1);
+        let tables = &tables[0];
+
+        let table_values = r"
+e0: 0
+";
+        let table_values = yaml_rust::YamlLoader::load_from_str(table_values);
+        assert!(table_values.is_ok());
+        let table_values = table_values.unwrap();
+        assert_eq!(table_values.len(), 1);
+        let table_values = &table_values[0];
+
+        let registry = TableRegistry::load_from_yaml(tables, table_values, &metadata);
+        assert!(registry.is_err());
 
         let tables = r"
 - name: f1
@@ -1179,6 +1760,98 @@ b1:
       [0, 0]: true
       [0, 1]: 0
       [0, 2]: false
+";
+        let table_values = yaml_rust::YamlLoader::load_from_str(table_values);
+        assert!(table_values.is_ok());
+        let table_values = table_values.unwrap();
+        assert_eq!(table_values.len(), 1);
+        let table_values = &table_values[0];
+        let registry = TableRegistry::load_from_yaml(tables, table_values, &metadata);
+        assert!(registry.is_err());
+
+        let tables = r"
+- name: f0
+  type: set
+  object: object
+";
+
+        let tables = yaml_rust::YamlLoader::load_from_str(tables);
+        assert!(tables.is_ok());
+        let tables = tables.unwrap();
+        assert_eq!(tables.len(), 1);
+        let tables = &tables[0];
+
+        let table_values = r"
+f0: [0, 10]
+";
+        let table_values = yaml_rust::YamlLoader::load_from_str(table_values);
+        assert!(table_values.is_ok());
+        let table_values = table_values.unwrap();
+        assert_eq!(table_values.len(), 1);
+        let table_values = &table_values[0];
+        let registry = TableRegistry::load_from_yaml(tables, table_values, &metadata);
+        assert!(registry.is_err());
+
+        let tables = r"
+- name: f0
+  type: set
+  object: null
+";
+
+        let tables = yaml_rust::YamlLoader::load_from_str(tables);
+        assert!(tables.is_ok());
+        let tables = tables.unwrap();
+        assert_eq!(tables.len(), 1);
+        let tables = &tables[0];
+
+        let table_values = r"
+f0: [0, 1]
+";
+        let table_values = yaml_rust::YamlLoader::load_from_str(table_values);
+        assert!(table_values.is_ok());
+        let table_values = table_values.unwrap();
+        assert_eq!(table_values.len(), 1);
+        let table_values = &table_values[0];
+        let registry = TableRegistry::load_from_yaml(tables, table_values, &metadata);
+        assert!(registry.is_err());
+
+        let tables = r"
+- name: f0
+  type: vector
+  object: null
+";
+
+        let tables = yaml_rust::YamlLoader::load_from_str(tables);
+        assert!(tables.is_ok());
+        let tables = tables.unwrap();
+        assert_eq!(tables.len(), 1);
+        let tables = &tables[0];
+
+        let table_values = r"
+f0: [0, 1]
+";
+        let table_values = yaml_rust::YamlLoader::load_from_str(table_values);
+        assert!(table_values.is_ok());
+        let table_values = table_values.unwrap();
+        assert_eq!(table_values.len(), 1);
+        let table_values = &table_values[0];
+        let registry = TableRegistry::load_from_yaml(tables, table_values, &metadata);
+        assert!(registry.is_err());
+
+        let tables = r"
+- name: f0
+  type: vector
+  object: object
+";
+
+        let tables = yaml_rust::YamlLoader::load_from_str(tables);
+        assert!(tables.is_ok());
+        let tables = tables.unwrap();
+        assert_eq!(tables.len(), 1);
+        let tables = &tables[0];
+
+        let table_values = r"
+f0: [0, 10]
 ";
         let table_values = yaml_rust::YamlLoader::load_from_str(table_values);
         assert!(table_values.is_ok());
