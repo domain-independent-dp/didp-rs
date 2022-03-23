@@ -13,6 +13,7 @@ pub trait Numeric:
     num_traits::Num
     + ToNumeric
     + FromNumeric
+    + num_traits::FromPrimitive
     + Copy
     + Sum
     + PartialOrd
@@ -33,7 +34,6 @@ pub trait ToNumeric {
 pub trait FromNumeric {
     fn from_integer(n: Integer) -> Self;
     fn from_continuous(n: Continuous) -> Self;
-    fn from_i64(n: i64) -> Self;
     fn from_usize(n: usize) -> Self;
     fn from<T: ToNumeric>(n: T) -> Self;
 }
@@ -58,11 +58,6 @@ impl FromNumeric for Integer {
 
     #[inline]
     fn from_continuous(n: Continuous) -> Integer {
-        n as Integer
-    }
-
-    #[inline]
-    fn from_i64(n: i64) -> Integer {
         n as Integer
     }
 
@@ -98,11 +93,6 @@ impl FromNumeric for Continuous {
     #[inline]
     fn from_continuous(n: Continuous) -> Continuous {
         n
-    }
-
-    #[inline]
-    fn from_i64(n: i64) -> Continuous {
-        n as Continuous
     }
 
     #[inline]

@@ -1,33 +1,35 @@
 use super::set_parser;
 use super::util;
 use super::util::ParseErr;
-use crate::expression::BoolTableExpression;
+use crate::expression::TableExpression;
 use crate::state;
 use crate::table_data;
 use std::collections;
 
-pub fn parse_expression<'a, 'b, 'c>(
+type TableExpressionResult<'a, T> = Option<(TableExpression<T>, &'a [String])>;
+
+pub fn parse_expression<'a, 'b, 'c, T: Clone>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     tables: &'b table_data::TableData<bool>,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<Option<(BoolTableExpression, &'a [String])>, ParseErr> {
+) -> Result<TableExpressionResult<'a, T>, ParseErr> {
     if let Some(i) = tables.name_to_table_1d.get(name) {
         let (x, rest) = set_parser::parse_element_expression(tokens, metadata, parameters)?;
         let rest = util::parse_closing(rest)?;
-        Ok(Some((BoolTableExpression::Table1D(*i, x), rest)))
+        Ok(Some((TableExpression::Table1D(*i, x), rest)))
     } else if let Some(i) = tables.name_to_table_2d.get(name) {
         let (x, rest) = set_parser::parse_element_expression(tokens, metadata, parameters)?;
         let (y, rest) = set_parser::parse_element_expression(rest, metadata, parameters)?;
         let rest = util::parse_closing(rest)?;
-        Ok(Some((BoolTableExpression::Table2D(*i, x, y), rest)))
+        Ok(Some((TableExpression::Table2D(*i, x, y), rest)))
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
         let (x, rest) = set_parser::parse_element_expression(tokens, metadata, parameters)?;
         let (y, rest) = set_parser::parse_element_expression(rest, metadata, parameters)?;
         let (z, rest) = set_parser::parse_element_expression(rest, metadata, parameters)?;
         let rest = util::parse_closing(rest)?;
-        Ok(Some((BoolTableExpression::Table3D(*i, x, y, z), rest)))
+        Ok(Some((TableExpression::Table3D(*i, x, y, z), rest)))
     } else if let Some(i) = tables.name_to_table.get(name) {
         let result = parse_table(*i, tokens, metadata, parameters)?;
         Ok(Some(result))
@@ -36,12 +38,12 @@ pub fn parse_expression<'a, 'b, 'c>(
     }
 }
 
-fn parse_table<'a, 'b, 'c>(
+fn parse_table<'a, 'b, 'c, T: Clone>(
     i: usize,
     tokens: &'a [String],
     metadata: &'b state::StateMetadata,
     parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(BoolTableExpression, &'a [String]), ParseErr> {
+) -> Result<(TableExpression<T>, &'a [String]), ParseErr> {
     let mut args = Vec::new();
     let mut xs = tokens;
     loop {
@@ -49,7 +51,7 @@ fn parse_table<'a, 'b, 'c>(
             .split_first()
             .ok_or_else(|| ParseErr::new("could not find closing `)`".to_string()))?;
         if next_token == ")" {
-            return Ok((BoolTableExpression::Table(i, args), rest));
+            return Ok((TableExpression::Table(i, args), rest));
         }
         let (expression, new_xs) = set_parser::parse_element_expression(xs, metadata, parameters)?;
         args.push(expression);
@@ -162,17 +164,17 @@ mod tests {
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, _) = result.unwrap();
         assert!(matches!(
             expression,
-            BoolTableExpression::Table1D(0, ElementExpression::Constant(0))
+            TableExpression::Table1D(0, ElementExpression::Constant(0))
         ));
 
-        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f0", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -188,18 +190,18 @@ mod tests {
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "e1", ")", "n0", ")"]
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [")", "n0", ")"].iter().map(|x| String::from(*x)).collect();
-        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f1", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
     }
 
@@ -213,21 +215,21 @@ mod tests {
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, _) = result.unwrap();
         assert!(matches!(
             expression,
-            BoolTableExpression::Table2D(
+            TableExpression::Table2D(
                 0,
                 ElementExpression::Constant(0),
                 ElementExpression::Variable(1)
             )
         ));
 
-        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f0", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -243,21 +245,21 @@ mod tests {
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "e1", "e3", ")", "n0", ")"]
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", ")", "n0", ")"]
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
     }
 
@@ -271,14 +273,14 @@ mod tests {
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, _) = result.unwrap();
         assert!(matches!(
             expression,
-            BoolTableExpression::Table3D(
+            TableExpression::Table3D(
                 0,
                 ElementExpression::Constant(0),
                 ElementExpression::Variable(1),
@@ -286,7 +288,7 @@ mod tests {
             )
         ));
 
-        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f0", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -302,21 +304,21 @@ mod tests {
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "e1", "e3", "e4", ")", "n0", ")"]
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "e1", ")", "n0", ")"]
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f3", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
     }
 
@@ -330,13 +332,13 @@ mod tests {
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f4", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f4", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, _) = result.unwrap();
-        assert!(matches!(expression, BoolTableExpression::Table(0, _)));
-        if let BoolTableExpression::Table(i, args) = expression {
+        assert!(matches!(expression, TableExpression::Table(0, _)));
+        if let TableExpression::Table(i, args) = expression {
             assert_eq!(i, 0);
             assert_eq!(args.len(), 4);
             assert!(matches!(args[0], ElementExpression::Constant(0)));
@@ -345,7 +347,7 @@ mod tests {
             assert!(matches!(args[3], ElementExpression::Variable(3)));
         }
 
-        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f0", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -361,14 +363,14 @@ mod tests {
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "e1", "e3", "e4"]
             .iter()
             .map(|x| String::from(*x))
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression::<bool>("f2", &tokens, &metadata, &tables, &parameters);
         assert!(result.is_err());
     }
 }

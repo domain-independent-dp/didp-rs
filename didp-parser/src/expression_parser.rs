@@ -6,11 +6,11 @@ use std::collections;
 use std::fmt;
 use std::str;
 
-mod bool_table_parser;
 mod condition_parser;
 mod numeric_parser;
 mod numeric_table_parser;
 mod set_parser;
+mod table_parser;
 mod util;
 
 pub use util::ParseErr;

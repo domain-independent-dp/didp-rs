@@ -1,6 +1,6 @@
-use super::bool_table_parser;
 use super::numeric_parser;
 use super::set_parser;
+use super::table_parser;
 use super::util;
 use super::util::ParseErr;
 use crate::expression::{Comparison, ComparisonOperator, Condition, SetCondition};
@@ -23,7 +23,7 @@ pub fn parse_expression<'a, 'b, 'c>(
             let (name, rest) = rest
                 .split_first()
                 .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
-            if let Some((expression, rest)) = bool_table_parser::parse_expression(
+            if let Some((expression, rest)) = table_parser::parse_expression(
                 name,
                 rest,
                 metadata,
@@ -393,9 +393,9 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
-            Condition::Table(BoolTableExpression::Table(_, _))
+            Condition::Table(TableExpression::Table(_, _))
         ));
-        if let Condition::Table(BoolTableExpression::Table(i, args)) = expression {
+        if let Condition::Table(TableExpression::Table(i, args)) = expression {
             assert_eq!(i, 0);
             assert_eq!(args.len(), 4);
             assert_eq!(args[0], ElementExpression::Constant(0));

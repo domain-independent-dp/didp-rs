@@ -2,7 +2,7 @@ use super::numeric_table_expression;
 use super::set_expression;
 use crate::state;
 use crate::table_registry;
-use crate::variable::{Continuous, Integer, Numeric};
+use crate::variable::{Continuous, FromNumeric, Integer, Numeric};
 use std::boxed::Box;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -68,18 +68,20 @@ impl<T: Numeric> NumericExpression<T> {
             }
             Self::Cardinality(set_expression::SetExpression::SetVariable(i)) => {
                 let set = &state.signature_variables.set_variables[*i];
-                T::from_usize(set.count_ones(..))
+                FromNumeric::from_usize(set.count_ones(..))
             }
             Self::Cardinality(set_expression::SetExpression::VectorVariable(i)) => {
                 let set = &state.signature_variables.vector_variables[*i];
-                T::from_usize(set.len())
+                FromNumeric::from_usize(set.len())
             }
-            Self::Cardinality(set) => T::from_usize(set.eval(state, metadata).count_ones(..)),
+            Self::Cardinality(set) => {
+                FromNumeric::from_usize(set.eval(state, metadata, registry).count_ones(..))
+            }
             Self::IntegerTable(t) => {
-                T::from_integer(t.eval(state, metadata, &registry.integer_tables))
+                T::from_integer(t.eval(state, metadata, registry, &registry.integer_tables))
             }
             Self::ContinuousTable(t) => {
-                T::from_continuous(t.eval(state, metadata, &registry.continuous_tables))
+                T::from_continuous(t.eval(state, metadata, registry, &registry.continuous_tables))
             }
         }
     }
@@ -112,14 +114,16 @@ impl<T: Numeric> NumericExpression<T> {
                     (a, b) => Self::NumericOperation(op.clone(), Box::new(a), Box::new(b)),
                 }
             }
-            Self::IntegerTable(expression) => match expression.simplify(&registry.integer_tables) {
-                numeric_table_expression::NumericTableExpression::Constant(value) => {
-                    Self::Constant(T::from_integer(value))
+            Self::IntegerTable(expression) => {
+                match expression.simplify(registry, &registry.integer_tables) {
+                    numeric_table_expression::NumericTableExpression::Constant(value) => {
+                        Self::Constant(T::from_integer(value))
+                    }
+                    expression => Self::IntegerTable(expression),
                 }
-                expression => Self::IntegerTable(expression),
-            },
+            }
             Self::ContinuousTable(expression) => {
-                match expression.simplify(&registry.continuous_tables) {
+                match expression.simplify(registry, &registry.continuous_tables) {
                     numeric_table_expression::NumericTableExpression::Constant(value) => {
                         Self::Constant(T::from_continuous(value))
                     }
@@ -156,6 +160,7 @@ impl<T: Numeric> NumericExpression<T> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::element_expression;
     use super::*;
     use crate::state;
     use crate::table;
@@ -566,10 +571,10 @@ mod tests {
             numeric_table_expression::NumericTableExpression::Table(
                 0,
                 vec![
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(1),
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(0),
                 ],
             ),
         );
@@ -578,10 +583,10 @@ mod tests {
             numeric_table_expression::NumericTableExpression::Table(
                 0,
                 vec![
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(1),
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
                 ],
             ),
         );
@@ -590,10 +595,10 @@ mod tests {
             numeric_table_expression::NumericTableExpression::Table(
                 0,
                 vec![
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(1),
-                    set_expression::ElementExpression::Constant(2),
-                    set_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(2),
+                    element_expression::ElementExpression::Constant(0),
                 ],
             ),
         );
@@ -602,10 +607,10 @@ mod tests {
             numeric_table_expression::NumericTableExpression::Table(
                 0,
                 vec![
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(1),
-                    set_expression::ElementExpression::Constant(2),
-                    set_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(2),
+                    element_expression::ElementExpression::Constant(1),
                 ],
             ),
         );
@@ -615,10 +620,10 @@ mod tests {
             numeric_table_expression::NumericTableExpression::Table(
                 0,
                 vec![
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(1),
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(0),
                 ],
             ),
         );
@@ -627,10 +632,10 @@ mod tests {
             numeric_table_expression::NumericTableExpression::Table(
                 0,
                 vec![
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(1),
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
                 ],
             ),
         );
@@ -639,10 +644,10 @@ mod tests {
             numeric_table_expression::NumericTableExpression::Table(
                 0,
                 vec![
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(1),
-                    set_expression::ElementExpression::Constant(2),
-                    set_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(2),
+                    element_expression::ElementExpression::Constant(0),
                 ],
             ),
         );
@@ -651,10 +656,10 @@ mod tests {
             numeric_table_expression::NumericTableExpression::Table(
                 0,
                 vec![
-                    set_expression::ElementExpression::Constant(0),
-                    set_expression::ElementExpression::Constant(1),
-                    set_expression::ElementExpression::Constant(2),
-                    set_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(2),
+                    element_expression::ElementExpression::Constant(1),
                 ],
             ),
         );
@@ -847,7 +852,7 @@ mod tests {
         let expression = NumericExpression::IntegerTable(
             numeric_table_expression::NumericTableExpression::Table1D(
                 0,
-                set_expression::ElementExpression::Constant(0),
+                element_expression::ElementExpression::Constant(0),
             ),
         );
         assert_eq!(
@@ -858,7 +863,7 @@ mod tests {
         let expression = NumericExpression::<Integer>::IntegerTable(
             numeric_table_expression::NumericTableExpression::Table1D(
                 0,
-                set_expression::ElementExpression::Variable(0),
+                element_expression::ElementExpression::Variable(0),
             ),
         );
         assert_eq!(expression.simplify(&registry), expression);
@@ -871,7 +876,7 @@ mod tests {
         let expression = NumericExpression::ContinuousTable(
             numeric_table_expression::NumericTableExpression::Table1D(
                 0,
-                set_expression::ElementExpression::Constant(0),
+                element_expression::ElementExpression::Constant(0),
             ),
         );
         assert_eq!(
@@ -882,7 +887,7 @@ mod tests {
         let expression = NumericExpression::<Continuous>::ContinuousTable(
             numeric_table_expression::NumericTableExpression::Table1D(
                 0,
-                set_expression::ElementExpression::Variable(0),
+                element_expression::ElementExpression::Variable(0),
             ),
         );
         assert_eq!(expression.simplify(&registry), expression);

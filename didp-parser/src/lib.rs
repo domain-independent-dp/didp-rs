@@ -868,7 +868,7 @@ table_values:
                     name: String::from("visit to:0"),
                     elements_in_set_variable: vec![(0, 0)],
                     preconditions: vec![GroundedCondition {
-                        condition: Condition::Table(BoolTableExpression::Table2D(
+                        condition: Condition::Table(TableExpression::Table2D(
                             0,
                             ElementExpression::Variable(0),
                             ElementExpression::Constant(0),
@@ -919,7 +919,7 @@ table_values:
                     name: String::from("visit to:1"),
                     elements_in_set_variable: vec![(0, 1)],
                     preconditions: vec![GroundedCondition {
-                        condition: Condition::Table(BoolTableExpression::Table2D(
+                        condition: Condition::Table(TableExpression::Table2D(
                             0,
                             ElementExpression::Variable(0),
                             ElementExpression::Constant(1),
@@ -970,7 +970,7 @@ table_values:
                     name: String::from("visit to:2"),
                     elements_in_set_variable: vec![(0, 2)],
                     preconditions: vec![GroundedCondition {
-                        condition: Condition::Table(BoolTableExpression::Table2D(
+                        condition: Condition::Table(TableExpression::Table2D(
                             0,
                             ElementExpression::Variable(0),
                             ElementExpression::Constant(2),

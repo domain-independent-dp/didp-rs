@@ -66,7 +66,7 @@ impl<T: Numeric> Transition<T> {
                 set_variables.push(state.signature_variables.set_variables[i].clone());
                 i += 1;
             }
-            set_variables.push(e.1.eval(state, metadata));
+            set_variables.push(e.1.eval(state, metadata, registry));
             i += 1;
         }
         while i < len {
@@ -76,12 +76,12 @@ impl<T: Numeric> Transition<T> {
 
         let mut vector_variables = state.signature_variables.vector_variables.clone();
         for e in &self.vector_effects {
-            vector_variables[e.0].push(e.1.eval(state));
+            vector_variables[e.0].push(e.1.eval(state, &registry.element_tables));
         }
 
         let mut element_variables = state.signature_variables.element_variables.clone();
         for e in &self.element_effects {
-            element_variables[e.0] = e.1.eval(state);
+            element_variables[e.0] = e.1.eval(state, &registry.element_tables);
         }
 
         let mut integer_variables = state.signature_variables.integer_variables.clone();

@@ -15,6 +15,7 @@ pub struct TableRegistry {
     pub continuous_tables: TableData<variable::Continuous>,
     pub set_tables: TableData<variable::Set>,
     pub vector_tables: TableData<variable::Vector>,
+    pub element_tables: TableData<variable::Element>,
     pub bool_tables: TableData<bool>,
 }
 
@@ -23,6 +24,7 @@ enum TableReturnType {
     Continuous(variable::Continuous),
     Set(variable::Set),
     Vector(usize, variable::Vector),
+    Element(variable::Element),
     Bool(bool),
 }
 
@@ -33,6 +35,7 @@ impl TableRegistry {
         name_set.extend(self.continuous_tables.get_name_set());
         name_set.extend(self.set_tables.get_name_set());
         name_set.extend(self.vector_tables.get_name_set());
+        name_set.extend(self.element_tables.get_name_set());
         name_set.extend(self.bool_tables.get_name_set());
         name_set
     }
@@ -154,6 +157,15 @@ impl TableRegistry {
                         (arg_types, TableReturnType::Vector(n, default)),
                     );
                 }
+                "element" => {
+                    if let Ok(value) = yaml_util::get_usize_by_key(map, "default") {
+                        name_to_signature
+                            .insert(name.clone(), (arg_types, TableReturnType::Element(value)));
+                    } else {
+                        name_to_signature
+                            .insert(name.clone(), (arg_types, TableReturnType::Element(0)));
+                    }
+                }
                 "bool" => {
                     if let Ok(value) = yaml_util::get_bool_by_key(map, "default") {
                         name_to_signature
@@ -208,6 +220,15 @@ impl TableRegistry {
         let mut vector_name_to_table_3d = collections::HashMap::new();
         let mut vector_tables = Vec::new();
         let mut vector_name_to_table = collections::HashMap::new();
+        let mut name_to_element_constant = collections::HashMap::new();
+        let mut element_tables_1d = Vec::new();
+        let mut element_name_to_table_1d = collections::HashMap::new();
+        let mut element_tables_2d = Vec::new();
+        let mut element_name_to_table_2d = collections::HashMap::new();
+        let mut element_tables_3d = Vec::new();
+        let mut element_name_to_table_3d = collections::HashMap::new();
+        let mut element_tables = Vec::new();
+        let mut element_name_to_table = collections::HashMap::new();
         let mut name_to_bool_constant = collections::HashMap::new();
         let mut bool_tables_1d = Vec::new();
         let mut bool_name_to_table_1d = collections::HashMap::new();
@@ -229,9 +250,6 @@ impl TableRegistry {
                     TableReturnType::Continuous(_) => {
                         name_to_continuous_constant.insert(name, yaml_util::get_numeric(value)?);
                     }
-                    TableReturnType::Bool(_) => {
-                        name_to_bool_constant.insert(name, yaml_util::get_bool(value)?);
-                    }
                     TableReturnType::Set(default) => {
                         let value = Self::load_set_from_yaml(value, default.len())?;
                         name_to_set_constant.insert(name, value);
@@ -239,6 +257,12 @@ impl TableRegistry {
                     TableReturnType::Vector(capacity, _) => {
                         let value = Self::load_vector_from_yaml(value, *capacity)?;
                         name_to_vector_constant.insert(name, value);
+                    }
+                    TableReturnType::Element(_) => {
+                        name_to_element_constant.insert(name, yaml_util::get_usize(value)?);
+                    }
+                    TableReturnType::Bool(_) => {
+                        name_to_bool_constant.insert(name, yaml_util::get_bool(value)?);
                     }
                 }
             } else if arg_types.len() == 1 {
@@ -254,11 +278,6 @@ impl TableRegistry {
                         continuous_name_to_table_1d.insert(name, continuous_tables_1d.len());
                         continuous_tables_1d.push(f);
                     }
-                    TableReturnType::Bool(default) => {
-                        let f = Self::load_bool_table_1d_from_yaml(value, size, *default)?;
-                        bool_name_to_table_1d.insert(name, bool_tables_1d.len());
-                        bool_tables_1d.push(f);
-                    }
                     TableReturnType::Set(default) => {
                         let f = Self::load_set_table_1d_from_yaml(value, size, default)?;
                         set_name_to_table_1d.insert(name, set_tables_1d.len());
@@ -269,6 +288,16 @@ impl TableRegistry {
                             Self::load_vector_table_1d_from_yaml(value, size, default, *capacity)?;
                         vector_name_to_table_1d.insert(name, vector_tables_1d.len());
                         vector_tables_1d.push(f);
+                    }
+                    TableReturnType::Element(default) => {
+                        let f = Self::load_numeric_table_1d_from_yaml(value, size, *default)?;
+                        element_name_to_table_1d.insert(name, element_tables_1d.len());
+                        element_tables_1d.push(f);
+                    }
+                    TableReturnType::Bool(default) => {
+                        let f = Self::load_bool_table_1d_from_yaml(value, size, *default)?;
+                        bool_name_to_table_1d.insert(name, bool_tables_1d.len());
+                        bool_tables_1d.push(f);
                     }
                 }
             } else if arg_types.len() == 2 {
@@ -287,12 +316,6 @@ impl TableRegistry {
                         continuous_name_to_table_2d.insert(name, continuous_tables_2d.len());
                         continuous_tables_2d.push(f);
                     }
-                    TableReturnType::Bool(default) => {
-                        let f =
-                            Self::load_bool_table_2d_from_yaml(value, size_x, size_y, *default)?;
-                        bool_name_to_table_2d.insert(name, bool_tables_2d.len());
-                        bool_tables_2d.push(f);
-                    }
                     TableReturnType::Set(default) => {
                         let f = Self::load_set_table_2d_from_yaml(value, size_x, size_y, default)?;
                         set_name_to_table_2d.insert(name, set_tables_2d.len());
@@ -304,6 +327,18 @@ impl TableRegistry {
                         )?;
                         vector_name_to_table_2d.insert(name, vector_tables_2d.len());
                         vector_tables_2d.push(f);
+                    }
+                    TableReturnType::Element(default) => {
+                        let f =
+                            Self::load_numeric_table_2d_from_yaml(value, size_x, size_y, *default)?;
+                        element_name_to_table_2d.insert(name, element_tables_2d.len());
+                        element_tables_2d.push(f);
+                    }
+                    TableReturnType::Bool(default) => {
+                        let f =
+                            Self::load_bool_table_2d_from_yaml(value, size_x, size_y, *default)?;
+                        bool_name_to_table_2d.insert(name, bool_tables_2d.len());
+                        bool_tables_2d.push(f);
                     }
                 }
             } else if arg_types.len() == 3 {
@@ -325,13 +360,6 @@ impl TableRegistry {
                         continuous_name_to_table_3d.insert(name, continuous_tables_3d.len());
                         continuous_tables_3d.push(f);
                     }
-                    TableReturnType::Bool(default) => {
-                        let f = Self::load_bool_table_3d_from_yaml(
-                            value, size_x, size_y, size_z, *default,
-                        )?;
-                        bool_name_to_table_3d.insert(name, bool_tables_3d.len());
-                        bool_tables_3d.push(f);
-                    }
                     TableReturnType::Set(default) => {
                         let f = Self::load_set_table_3d_from_yaml(
                             value, size_x, size_y, size_z, default,
@@ -345,6 +373,20 @@ impl TableRegistry {
                         )?;
                         vector_name_to_table_3d.insert(name, vector_tables_3d.len());
                         vector_tables_3d.push(f);
+                    }
+                    TableReturnType::Element(default) => {
+                        let f = Self::load_numeric_table_3d_from_yaml(
+                            value, size_x, size_y, size_z, *default,
+                        )?;
+                        element_name_to_table_3d.insert(name, element_tables_3d.len());
+                        element_tables_3d.push(f);
+                    }
+                    TableReturnType::Bool(default) => {
+                        let f = Self::load_bool_table_3d_from_yaml(
+                            value, size_x, size_y, size_z, *default,
+                        )?;
+                        bool_name_to_table_3d.insert(name, bool_tables_3d.len());
+                        bool_tables_3d.push(f);
                     }
                 }
             } else {
@@ -363,11 +405,6 @@ impl TableRegistry {
                         continuous_name_to_table.insert(name, continuous_tables.len());
                         continuous_tables.push(f);
                     }
-                    TableReturnType::Bool(default) => {
-                        let f = Self::load_bool_table_from_yaml(value, size, *default)?;
-                        bool_name_to_table.insert(name, bool_tables.len());
-                        bool_tables.push(f);
-                    }
                     TableReturnType::Set(default) => {
                         let f = Self::load_set_table_from_yaml(value, size, default.clone())?;
                         set_name_to_table.insert(name, set_tables.len());
@@ -382,6 +419,16 @@ impl TableRegistry {
                         )?;
                         vector_name_to_table.insert(name, vector_tables.len());
                         vector_tables.push(f);
+                    }
+                    TableReturnType::Element(default) => {
+                        let f = Self::load_numeric_table_from_yaml(value, size, *default)?;
+                        element_name_to_table.insert(name, element_tables.len());
+                        element_tables.push(f);
+                    }
+                    TableReturnType::Bool(default) => {
+                        let f = Self::load_bool_table_from_yaml(value, size, *default)?;
+                        bool_name_to_table.insert(name, bool_tables.len());
+                        bool_tables.push(f);
                     }
                 }
             }
@@ -431,6 +478,17 @@ impl TableRegistry {
                 tables: vector_tables,
                 name_to_table: vector_name_to_table,
             },
+            element_tables: TableData {
+                name_to_constant: name_to_element_constant,
+                tables_1d: element_tables_1d,
+                name_to_table_1d: element_name_to_table_1d,
+                tables_2d: element_tables_2d,
+                name_to_table_2d: element_name_to_table_2d,
+                tables_3d: element_tables_3d,
+                name_to_table_3d: element_name_to_table_3d,
+                tables: element_tables,
+                name_to_table: element_name_to_table,
+            },
             bool_tables: TableData {
                 name_to_constant: name_to_bool_constant,
                 tables_1d: bool_tables_1d,
@@ -445,7 +503,7 @@ impl TableRegistry {
         })
     }
 
-    fn load_numeric_table_1d_from_yaml<T: variable::Numeric>(
+    fn load_numeric_table_1d_from_yaml<T: str::FromStr + num_traits::FromPrimitive + Copy>(
         value: &Yaml,
         size: usize,
         default: T,
@@ -469,7 +527,7 @@ impl TableRegistry {
         Ok(table::Table1D::new(body))
     }
 
-    fn load_numeric_table_2d_from_yaml<T: variable::Numeric>(
+    fn load_numeric_table_2d_from_yaml<T: str::FromStr + num_traits::FromPrimitive + Copy>(
         value: &Yaml,
         size_x: usize,
         size_y: usize,
@@ -498,7 +556,7 @@ impl TableRegistry {
         Ok(table::Table2D::new(body))
     }
 
-    fn load_numeric_table_3d_from_yaml<T: variable::Numeric>(
+    fn load_numeric_table_3d_from_yaml<T: str::FromStr + num_traits::FromPrimitive + Copy>(
         value: &Yaml,
         size_x: usize,
         size_y: usize,
@@ -533,7 +591,7 @@ impl TableRegistry {
         Ok(table::Table3D::new(body))
     }
 
-    fn load_numeric_table_from_yaml<T: variable::Numeric>(
+    fn load_numeric_table_from_yaml<T: str::FromStr + num_traits::FromPrimitive>(
         value: &Yaml,
         size: Vec<usize>,
         default: T,
@@ -1255,11 +1313,60 @@ mod tests {
             name_to_table,
         };
 
+        let mut name_to_constant = HashMap::new();
+        name_to_constant.insert(String::from("t0"), 1);
+
+        let tables_1d = vec![table::Table1D::new(vec![1, 0, 0])];
+        let mut name_to_table_1d = HashMap::new();
+        name_to_table_1d.insert(String::from("t1"), 0);
+
+        let tables_2d = vec![table::Table2D::new(vec![
+            vec![1, 0, 0],
+            vec![0, 0, 0],
+            vec![0, 0, 0],
+        ])];
+        let mut name_to_table_2d = HashMap::new();
+        name_to_table_2d.insert(String::from("t2"), 0);
+
+        let tables_3d = vec![table::Table3D::new(vec![
+            vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+            vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+            vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+        ])];
+        let mut name_to_table_3d = HashMap::new();
+        name_to_table_3d.insert(String::from("t3"), 0);
+
+        let mut map = HashMap::new();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, 1);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, 0);
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, 0);
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, 0);
+        let tables = vec![table::Table::new(map, 0)];
+        let mut name_to_table = HashMap::new();
+        name_to_table.insert(String::from("t4"), 0);
+
+        let element_tables = TableData {
+            name_to_constant,
+            tables_1d,
+            name_to_table_1d,
+            tables_2d,
+            name_to_table_2d,
+            tables_3d,
+            name_to_table_3d,
+            tables,
+            name_to_table,
+        };
+
         TableRegistry {
             integer_tables,
             continuous_tables,
             set_tables,
             vector_tables,
+            element_tables,
             bool_tables,
         }
     }
@@ -1288,6 +1395,11 @@ mod tests {
         expected.insert(String::from("s2"));
         expected.insert(String::from("s3"));
         expected.insert(String::from("s4"));
+        expected.insert(String::from("t0"));
+        expected.insert(String::from("t1"));
+        expected.insert(String::from("t2"));
+        expected.insert(String::from("t3"));
+        expected.insert(String::from("t4"));
         expected.insert(String::from("v0"));
         expected.insert(String::from("v1"));
         expected.insert(String::from("v2"));
@@ -1401,6 +1513,24 @@ mod tests {
   type: vector 
   object: object
   args: [object, object, object, object]
+- name: t0
+  type: element
+- name: t1
+  type: element
+  args:
+        - object
+- name: t2
+  type: element
+  args:
+        - object
+        - object
+  default: 10
+- name: t3
+  type: element 
+  args: [object, object, object]
+- name: t4
+  type: element
+  args: [object, object, object, object]
 ";
         let table_values = r"
 i0: 0
@@ -1434,6 +1564,11 @@ v1: { 0: [0, 2] }
 v2: { [0, 0]: [0, 2] }
 v3: { [0, 0, 0]: [0, 2], [1, 0, 0]: [0, 2], [2, 0, 0]: [0, 2] }
 v4: { [0, 1, 0, 0]: [0, 2]}
+t0: 0
+t1: { 0: 1 }
+t2: { [0, 0]: 1 }
+t3: { [0, 0, 0]: 1, [1, 0, 0]: 1, [2, 0, 0]: 1 }
+t4: { [0, 1, 0, 0]: 1 }
 ";
 
         let tables = yaml_rust::YamlLoader::load_from_str(tables);
@@ -1449,7 +1584,6 @@ v4: { [0, 1, 0, 0]: [0, 2]}
         let table_values = &table_values[0];
 
         let registry = TableRegistry::load_from_yaml(tables, table_values, &metadata);
-        println!("{:?}", registry);
         assert!(registry.is_ok());
         let registry = registry.unwrap();
         assert_eq!(registry.integer_tables, expected.integer_tables);

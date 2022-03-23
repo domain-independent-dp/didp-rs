@@ -1,9 +1,17 @@
-use super::set_expression::{ArgumentExpression, ElementExpression, SetExpression};
+use super::element_expression::ElementExpression;
+use super::set_expression::SetExpression;
 use crate::state;
 use crate::table;
 use crate::table_data::TableData;
+use crate::table_registry;
 use crate::variable;
 use std::iter;
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ArgumentExpression {
+    Set(SetExpression),
+    Element(ElementExpression),
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NumericTableExpression<T: variable::Numeric> {
@@ -36,11 +44,14 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
         &self,
         state: &state::State,
         metadata: &state::StateMetadata,
+        registry: &table_registry::TableRegistry,
         tables: &TableData<T>,
     ) -> T {
         match self {
             Self::Constant(value) => *value,
-            Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(state)),
+            Self::Table1D(i, x) => {
+                tables.tables_1d[*i].eval(x.eval(state, &registry.element_tables))
+            }
             Self::Table1DSum(i, SetExpression::SetVariable(x)) => {
                 tables.tables_1d[*i].sum(&state.signature_variables.set_variables[*x])
             }
@@ -48,8 +59,11 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 let x = &state.signature_variables.vector_variables[*x];
                 x.iter().map(|x| tables.tables_1d[*i].eval(*x)).sum()
             }
-            Self::Table1DSum(i, x) => tables.tables_1d[*i].sum(&x.eval(state, metadata)),
-            Self::Table2D(i, x, y) => tables.tables_2d[*i].eval(x.eval(state), y.eval(state)),
+            Self::Table1DSum(i, x) => tables.tables_1d[*i].sum(&x.eval(state, metadata, registry)),
+            Self::Table2D(i, x, y) => tables.tables_2d[*i].eval(
+                x.eval(state, &registry.element_tables),
+                y.eval(state, &registry.element_tables),
+            ),
             Self::Table2DSum(i, SetExpression::SetVariable(x), SetExpression::SetVariable(y)) => {
                 let x = &state.signature_variables.set_variables[*x];
                 let y = &state.signature_variables.set_variables[*y];
@@ -86,52 +100,57 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
             }
             Self::Table2DSum(i, x, SetExpression::SetVariable(y)) => {
                 let y = &state.signature_variables.set_variables[*y];
-                tables.tables_2d[*i].sum(&x.eval(state, metadata), y)
+                tables.tables_2d[*i].sum(&x.eval(state, metadata, registry), y)
             }
             Self::Table2DSum(i, SetExpression::SetVariable(x), y) => {
                 let x = &state.signature_variables.set_variables[*x];
-                tables.tables_2d[*i].sum(x, &y.eval(state, metadata))
+                tables.tables_2d[*i].sum(x, &y.eval(state, metadata, registry))
             }
             Self::Table2DSum(i, x, SetExpression::VectorVariable(y)) => {
-                let x = x.eval(state, metadata);
+                let x = x.eval(state, metadata, registry);
                 let y = &state.signature_variables.vector_variables[*y];
                 y.iter().map(|y| tables.tables_2d[*i].sum_x(&x, *y)).sum()
             }
             Self::Table2DSum(i, SetExpression::VectorVariable(x), y) => {
                 let x = &state.signature_variables.vector_variables[*x];
-                let y = y.eval(state, metadata);
+                let y = y.eval(state, metadata, registry);
                 x.iter().map(|x| tables.tables_2d[*i].sum_y(*x, &y)).sum()
             }
-            Self::Table2DSum(i, x, y) => {
-                tables.tables_2d[*i].sum(&x.eval(&state, metadata), &y.eval(&state, metadata))
-            }
+            Self::Table2DSum(i, x, y) => tables.tables_2d[*i].sum(
+                &x.eval(&state, metadata, registry),
+                &y.eval(&state, metadata, registry),
+            ),
             Self::Table2DSumX(i, SetExpression::SetVariable(x), y) => {
                 let x = &state.signature_variables.set_variables[*x];
-                tables.tables_2d[*i].sum_x(x, y.eval(state))
+                tables.tables_2d[*i].sum_x(x, y.eval(state, &registry.element_tables))
             }
             Self::Table2DSumX(i, SetExpression::VectorVariable(x), y) => {
                 let x = &state.signature_variables.vector_variables[*x];
-                let y = y.eval(state);
+                let y = y.eval(state, &registry.element_tables);
                 x.iter().map(|x| tables.tables_2d[*i].eval(*x, y)).sum()
             }
-            Self::Table2DSumX(i, x, y) => {
-                tables.tables_2d[*i].sum_x(&x.eval(&state, metadata), y.eval(&state))
-            }
+            Self::Table2DSumX(i, x, y) => tables.tables_2d[*i].sum_x(
+                &x.eval(&state, metadata, registry),
+                y.eval(&state, &registry.element_tables),
+            ),
             Self::Table2DSumY(i, x, SetExpression::SetVariable(y)) => {
                 let y = &state.signature_variables.set_variables[*y];
-                tables.tables_2d[*i].sum_y(x.eval(&state), y)
+                tables.tables_2d[*i].sum_y(x.eval(&state, &registry.element_tables), y)
             }
             Self::Table2DSumY(i, x, SetExpression::VectorVariable(y)) => {
                 let y = &state.signature_variables.vector_variables[*y];
-                let x = x.eval(state);
+                let x = x.eval(state, &registry.element_tables);
                 y.iter().map(|y| tables.tables_2d[*i].eval(x, *y)).sum()
             }
-            Self::Table2DSumY(i, x, y) => {
-                tables.tables_2d[*i].sum_y(x.eval(state), &y.eval(state, metadata))
-            }
-            Self::Table3D(i, x, y, z) => {
-                tables.tables_3d[*i].eval(x.eval(state), y.eval(state), z.eval(state))
-            }
+            Self::Table2DSumY(i, x, y) => tables.tables_2d[*i].sum_y(
+                x.eval(state, &registry.element_tables),
+                &y.eval(state, metadata, registry),
+            ),
+            Self::Table3D(i, x, y, z) => tables.tables_3d[*i].eval(
+                x.eval(state, &registry.element_tables),
+                y.eval(state, &registry.element_tables),
+                z.eval(state, &registry.element_tables),
+            ),
             Self::Table3DSum(
                 i,
                 SetExpression::SetVariable(x),
@@ -143,55 +162,61 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 &state.signature_variables.set_variables[*z],
             ),
             Self::Table3DSum(i, x, y, z) => tables.tables_3d[*i].sum(
-                &x.eval(&state, metadata),
-                &y.eval(&state, metadata),
-                &z.eval(&state, metadata),
+                &x.eval(&state, metadata, registry),
+                &y.eval(&state, metadata, registry),
+                &z.eval(&state, metadata, registry),
             ),
             Self::Table3DSumX(i, SetExpression::SetVariable(x), y, z) => tables.tables_3d[*i]
                 .sum_x(
                     &state.signature_variables.set_variables[*x],
-                    y.eval(state),
-                    z.eval(state),
+                    y.eval(state, &registry.element_tables),
+                    z.eval(state, &registry.element_tables),
                 ),
             Self::Table3DSumX(i, SetExpression::VectorVariable(x), y, z) => {
                 let x = &state.signature_variables.vector_variables[*x];
-                let y = y.eval(state);
-                let z = z.eval(state);
+                let y = y.eval(state, &registry.element_tables);
+                let z = z.eval(state, &registry.element_tables);
                 x.iter().map(|x| tables.tables_3d[*i].eval(*x, y, z)).sum()
             }
-            Self::Table3DSumX(i, x, y, z) => {
-                tables.tables_3d[*i].sum_x(&x.eval(state, metadata), y.eval(state), z.eval(state))
-            }
+            Self::Table3DSumX(i, x, y, z) => tables.tables_3d[*i].sum_x(
+                &x.eval(state, metadata, registry),
+                y.eval(state, &registry.element_tables),
+                z.eval(state, &registry.element_tables),
+            ),
             Self::Table3DSumY(i, x, SetExpression::SetVariable(y), z) => tables.tables_3d[*i]
                 .sum_y(
-                    x.eval(state),
+                    x.eval(state, &registry.element_tables),
                     &state.signature_variables.set_variables[*y],
-                    z.eval(state),
+                    z.eval(state, &registry.element_tables),
                 ),
             Self::Table3DSumY(i, x, SetExpression::VectorVariable(y), z) => {
-                let x = x.eval(state);
+                let x = x.eval(state, &registry.element_tables);
                 let y = &state.signature_variables.vector_variables[*y];
-                let z = z.eval(state);
+                let z = z.eval(state, &registry.element_tables);
                 y.iter().map(|y| tables.tables_3d[*i].eval(x, *y, z)).sum()
             }
-            Self::Table3DSumY(i, x, y, z) => {
-                tables.tables_3d[*i].sum_y(x.eval(state), &y.eval(state, metadata), z.eval(state))
-            }
+            Self::Table3DSumY(i, x, y, z) => tables.tables_3d[*i].sum_y(
+                x.eval(state, &registry.element_tables),
+                &y.eval(state, metadata, registry),
+                z.eval(state, &registry.element_tables),
+            ),
             Self::Table3DSumZ(i, x, y, SetExpression::SetVariable(z)) => tables.tables_3d[*i]
                 .sum_z(
-                    x.eval(state),
-                    y.eval(state),
+                    x.eval(state, &registry.element_tables),
+                    y.eval(state, &registry.element_tables),
                     &state.signature_variables.set_variables[*z],
                 ),
             Self::Table3DSumZ(i, x, y, SetExpression::VectorVariable(z)) => {
-                let x = x.eval(state);
-                let y = y.eval(state);
+                let x = x.eval(state, &registry.element_tables);
+                let y = y.eval(state, &registry.element_tables);
                 let z = &state.signature_variables.vector_variables[*z];
                 z.iter().map(|z| tables.tables_3d[*i].eval(x, y, *z)).sum()
             }
-            Self::Table3DSumZ(i, x, y, z) => {
-                tables.tables_3d[*i].sum_z(x.eval(state), y.eval(state), &z.eval(state, metadata))
-            }
+            Self::Table3DSumZ(i, x, y, z) => tables.tables_3d[*i].sum_z(
+                x.eval(state, &registry.element_tables),
+                y.eval(state, &registry.element_tables),
+                &z.eval(state, metadata, registry),
+            ),
             Self::Table3DSumXY(
                 i,
                 SetExpression::SetVariable(x),
@@ -200,12 +225,12 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
             ) => tables.tables_3d[*i].sum_xy(
                 &state.signature_variables.set_variables[*x],
                 &state.signature_variables.set_variables[*y],
-                z.eval(state),
+                z.eval(state, &registry.element_tables),
             ),
             Self::Table3DSumXY(i, x, y, z) => tables.tables_3d[*i].sum_xy(
-                &x.eval(state, metadata),
-                &y.eval(state, metadata),
-                z.eval(state),
+                &x.eval(state, metadata, registry),
+                &y.eval(state, metadata, registry),
+                z.eval(state, &registry.element_tables),
             ),
             Self::Table3DSumXZ(
                 i,
@@ -214,13 +239,13 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 SetExpression::SetVariable(z),
             ) => tables.tables_3d[*i].sum_xz(
                 &state.signature_variables.set_variables[*x],
-                y.eval(state),
+                y.eval(state, &registry.element_tables),
                 &state.signature_variables.set_variables[*z],
             ),
             Self::Table3DSumXZ(i, x, y, z) => tables.tables_3d[*i].sum_xz(
-                &x.eval(state, metadata),
-                y.eval(state),
-                &z.eval(state, metadata),
+                &x.eval(state, metadata, registry),
+                y.eval(state, &registry.element_tables),
+                &z.eval(state, metadata, registry),
             ),
             Self::Table3DSumYZ(
                 i,
@@ -228,24 +253,33 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 SetExpression::SetVariable(y),
                 SetExpression::SetVariable(z),
             ) => tables.tables_3d[*i].sum_yz(
-                x.eval(state),
+                x.eval(state, &registry.element_tables),
                 &state.signature_variables.set_variables[*y],
                 &state.signature_variables.set_variables[*z],
             ),
             Self::Table3DSumYZ(i, x, y, z) => tables.tables_3d[*i].sum_yz(
-                x.eval(state),
-                &y.eval(state, metadata),
-                &z.eval(state, metadata),
+                x.eval(state, &registry.element_tables),
+                &y.eval(state, metadata, registry),
+                &z.eval(state, metadata, registry),
             ),
             Self::Table(i, args) => {
-                let args: Vec<variable::Element> = args.iter().map(|x| x.eval(state)).collect();
+                let args: Vec<variable::Element> = args
+                    .iter()
+                    .map(|x| x.eval(state, &registry.element_tables))
+                    .collect();
                 tables.tables[*i].eval(&args)
             }
-            Self::TableSum(i, args) => Self::sum_table(&tables.tables[*i], args, state, metadata),
+            Self::TableSum(i, args) => {
+                Self::sum_table(&tables.tables[*i], args, state, metadata, registry)
+            }
         }
     }
 
-    pub fn simplify(&self, tables: &TableData<T>) -> NumericTableExpression<T> {
+    pub fn simplify(
+        &self,
+        registry: &table_registry::TableRegistry,
+        tables: &TableData<T>,
+    ) -> NumericTableExpression<T> {
         match self {
             Self::Table1D(i, ElementExpression::Constant(x)) => {
                 Self::Constant(tables.tables_1d[*i].eval(*x))
@@ -292,12 +326,13 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
         args: &[ArgumentExpression],
         state: &state::State,
         metadata: &state::StateMetadata,
+        registry: &table_registry::TableRegistry,
     ) -> T {
         let mut result = vec![vec![]];
         for v in args {
             match v {
                 ArgumentExpression::Set(s) => {
-                    let s = s.eval(state, metadata);
+                    let s = s.eval(state, metadata, registry);
                     result = result
                         .into_iter()
                         .flat_map(|r| {
@@ -313,7 +348,7 @@ impl<T: variable::Numeric> NumericTableExpression<T> {
                 }
                 ArgumentExpression::Element(e) => {
                     for r in &mut result {
-                        r.push(e.eval(state));
+                        r.push(e.eval(state, &registry.element_tables));
                     }
                 }
             }
@@ -390,7 +425,7 @@ mod tests {
         }
     }
 
-    fn generate_tables() -> TableData<variable::Integer> {
+    fn generate_registry() -> table_registry::TableRegistry {
         let mut name_to_constant = HashMap::new();
         name_to_constant.insert(String::from("f0"), 0);
 
@@ -427,16 +462,19 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
-        TableData {
-            name_to_constant,
-            tables_1d,
-            name_to_table_1d,
-            tables_2d,
-            name_to_table_2d,
-            tables_3d,
-            name_to_table_3d,
-            tables,
-            name_to_table,
+        table_registry::TableRegistry {
+            integer_tables: TableData {
+                name_to_constant,
+                tables_1d,
+                name_to_table_1d,
+                tables_2d,
+                name_to_table_2d,
+                tables_3d,
+                name_to_table_3d,
+                tables,
+                name_to_table,
+            },
+            ..Default::default()
         }
     }
 
@@ -465,60 +503,87 @@ mod tests {
     #[test]
     fn constant_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
         let expression = NumericTableExpression::Constant(10);
-        assert_eq!(expression.eval(&state, &metadata, &tables), 10);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            10
+        );
     }
 
     #[test]
     fn table_1d_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
         let expression = NumericTableExpression::Table1D(0, ElementExpression::Constant(0));
-        assert_eq!(expression.eval(&state, &metadata, &tables), 10);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            10
+        );
         let expression = NumericTableExpression::Table1D(0, ElementExpression::Constant(1));
-        assert_eq!(expression.eval(&state, &metadata, &tables), 20);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            20
+        );
         let expression = NumericTableExpression::Table1D(0, ElementExpression::Constant(2));
-        assert_eq!(expression.eval(&state, &metadata, &tables), 30);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            30
+        );
     }
 
     #[test]
     fn table_1d_sum_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
         let expression = NumericTableExpression::Table1DSum(0, SetExpression::SetVariable(0));
-        assert_eq!(expression.eval(&state, &metadata, &tables), 40);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            40
+        );
         let expression = NumericTableExpression::Table1DSum(0, SetExpression::SetVariable(1));
-        assert_eq!(expression.eval(&state, &metadata, &tables), 30);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            30
+        );
         let expression = NumericTableExpression::Table1DSum(0, SetExpression::VectorVariable(0));
-        assert_eq!(expression.eval(&state, &metadata, &tables), 40);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            40
+        );
         let expression = NumericTableExpression::Table1DSum(
             0,
             SetExpression::Complement(Box::new(SetExpression::SetVariable(0))),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 20);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            20
+        );
     }
 
     #[test]
     fn table_2d_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
         let expression = NumericTableExpression::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Constant(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 20);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            20
+        );
     }
 
     #[test]
     fn table_2d_sum_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = NumericTableExpression::Table2DSum(
@@ -526,28 +591,40 @@ mod tests {
             SetExpression::SetVariable(0),
             SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
 
         let expression = NumericTableExpression::Table2DSum(
             0,
             SetExpression::VectorVariable(0),
             SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
 
         let expression = NumericTableExpression::Table2DSum(
             0,
             SetExpression::SetVariable(0),
             SetExpression::VectorVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
 
         let expression = NumericTableExpression::Table2DSum(
             0,
             SetExpression::VectorVariable(0),
             SetExpression::VectorVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
 
         let expression = NumericTableExpression::Table2DSum(
             0,
@@ -556,7 +633,10 @@ mod tests {
                 SetExpression::SetVariable(1),
             )))),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
 
         let expression = NumericTableExpression::Table2DSum(
             0,
@@ -565,7 +645,10 @@ mod tests {
                 SetExpression::SetVariable(1),
             )))),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
 
         let expression = NumericTableExpression::Table2DSum(
             0,
@@ -574,7 +657,10 @@ mod tests {
             )))),
             SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
 
         let expression = NumericTableExpression::Table2DSum(
             0,
@@ -583,7 +669,10 @@ mod tests {
             )))),
             SetExpression::VectorVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
 
         let expression = NumericTableExpression::Table2DSum(
             0,
@@ -594,13 +683,16 @@ mod tests {
                 SetExpression::SetVariable(1),
             )))),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
     }
 
     #[test]
     fn table_2d_sum_x_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = NumericTableExpression::Table2DSumX(
@@ -608,14 +700,20 @@ mod tests {
             SetExpression::SetVariable(0),
             ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 80);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            80
+        );
 
         let expression = NumericTableExpression::Table2DSumX(
             0,
             SetExpression::VectorVariable(0),
             ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 80);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            80
+        );
 
         let expression = NumericTableExpression::Table2DSumX(
             0,
@@ -624,13 +722,16 @@ mod tests {
             )))),
             ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 80);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            80
+        );
     }
 
     #[test]
     fn table_2d_sum_y_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = NumericTableExpression::Table2DSumY(
@@ -638,14 +739,20 @@ mod tests {
             ElementExpression::Constant(0),
             SetExpression::SetVariable(0),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 40);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            40
+        );
 
         let expression = NumericTableExpression::Table2DSumY(
             0,
             ElementExpression::Constant(0),
             SetExpression::VectorVariable(0),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 40);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            40
+        );
 
         let expression = NumericTableExpression::Table2DSumY(
             0,
@@ -654,13 +761,16 @@ mod tests {
                 SetExpression::SetVariable(0),
             )))),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 40);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            40
+        );
     }
 
     #[test]
     fn table_3d_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
         let expression = NumericTableExpression::Table3D(
             0,
@@ -668,13 +778,16 @@ mod tests {
             ElementExpression::Constant(1),
             ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 60);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            60
+        );
     }
 
     #[test]
     fn table_3d_sum_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
         let expression = NumericTableExpression::Table3DSum(
             0,
@@ -682,7 +795,10 @@ mod tests {
             SetExpression::SetVariable(1),
             SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 240);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            240
+        );
 
         let expression = NumericTableExpression::Table3DSum(
             0,
@@ -690,13 +806,16 @@ mod tests {
             SetExpression::SetVariable(1),
             SetExpression::VectorVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 240);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            240
+        );
     }
 
     #[test]
     fn table_3d_sum_x_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = NumericTableExpression::Table3DSumX(
@@ -705,7 +824,10 @@ mod tests {
             ElementExpression::Constant(1),
             ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 120);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            120
+        );
 
         let expression = NumericTableExpression::Table3DSumX(
             0,
@@ -713,7 +835,10 @@ mod tests {
             ElementExpression::Constant(1),
             ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 120);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            120
+        );
 
         let expression = NumericTableExpression::Table3DSumX(
             0,
@@ -723,13 +848,16 @@ mod tests {
             ElementExpression::Constant(1),
             ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 120);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            120
+        );
     }
 
     #[test]
     fn table_3d_sum_y_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = NumericTableExpression::Table3DSumY(
@@ -738,7 +866,10 @@ mod tests {
             SetExpression::SetVariable(0),
             ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 120);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            120
+        );
 
         let expression = NumericTableExpression::Table3DSumY(
             0,
@@ -746,7 +877,10 @@ mod tests {
             SetExpression::VectorVariable(0),
             ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 120);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            120
+        );
 
         let expression = NumericTableExpression::Table3DSumY(
             0,
@@ -756,13 +890,16 @@ mod tests {
             )))),
             ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 120);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            120
+        );
     }
 
     #[test]
     fn table_3d_sum_z_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = NumericTableExpression::Table3DSumZ(
@@ -771,7 +908,10 @@ mod tests {
             ElementExpression::Constant(2),
             SetExpression::SetVariable(0),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 160);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            160
+        );
 
         let expression = NumericTableExpression::Table3DSumZ(
             0,
@@ -779,7 +919,10 @@ mod tests {
             ElementExpression::Constant(2),
             SetExpression::VectorVariable(0),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 160);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            160
+        );
 
         let expression = NumericTableExpression::Table3DSumZ(
             0,
@@ -789,13 +932,16 @@ mod tests {
                 SetExpression::SetVariable(0),
             )))),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 160);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            160
+        );
     }
 
     #[test]
     fn table_3d_sum_xy_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = NumericTableExpression::Table3DSumXY(
@@ -804,7 +950,10 @@ mod tests {
             SetExpression::SetVariable(1),
             ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
 
         let expression = NumericTableExpression::Table3DSumXY(
             0,
@@ -812,13 +961,16 @@ mod tests {
             SetExpression::VectorVariable(1),
             ElementExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
     }
 
     #[test]
     fn table_3d_sum_xz_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = NumericTableExpression::Table3DSumXZ(
@@ -827,7 +979,10 @@ mod tests {
             ElementExpression::Constant(2),
             SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 300);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            300
+        );
 
         let expression = NumericTableExpression::Table3DSumXZ(
             0,
@@ -835,13 +990,16 @@ mod tests {
             ElementExpression::Constant(2),
             SetExpression::VectorVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 300);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            300
+        );
     }
 
     #[test]
     fn table_3d_sum_yz_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
 
         let expression = NumericTableExpression::Table3DSumYZ(
@@ -850,7 +1008,10 @@ mod tests {
             SetExpression::SetVariable(0),
             SetExpression::SetVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
 
         let expression = NumericTableExpression::Table3DSumYZ(
             0,
@@ -858,13 +1019,16 @@ mod tests {
             SetExpression::SetVariable(0),
             SetExpression::VectorVariable(1),
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 180);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            180
+        );
     }
 
     #[test]
     fn table_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
         let expression = NumericTableExpression::Table(
             0,
@@ -875,7 +1039,10 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 100);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            100
+        );
         let expression = NumericTableExpression::Table(
             0,
             vec![
@@ -885,7 +1052,10 @@ mod tests {
                 ElementExpression::Constant(1),
             ],
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 200);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            200
+        );
         let expression = NumericTableExpression::Table(
             0,
             vec![
@@ -895,7 +1065,10 @@ mod tests {
                 ElementExpression::Constant(0),
             ],
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 300);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            300
+        );
         let expression = NumericTableExpression::Table(
             0,
             vec![
@@ -905,13 +1078,16 @@ mod tests {
                 ElementExpression::Constant(1),
             ],
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 400);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            400
+        );
     }
 
     #[test]
     fn table_sum_eval() {
         let metadata = generate_metadata();
-        let tables = generate_tables();
+        let registry = generate_registry();
         let state = generate_state();
         let expression = NumericTableExpression::TableSum(
             0,
@@ -922,50 +1098,53 @@ mod tests {
                 ArgumentExpression::Set(SetExpression::SetVariable(1)),
             ],
         );
-        assert_eq!(expression.eval(&state, &metadata, &tables), 1000);
+        assert_eq!(
+            expression.eval(&state, &metadata, &registry, &registry.integer_tables),
+            1000
+        );
     }
 
     #[test]
     fn constant_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
         let expression = NumericTableExpression::Constant(0);
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Constant(0)
         ));
     }
 
     #[test]
     fn table_1d_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table1D(0, ElementExpression::Constant(0));
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Constant(10)
         ));
 
         let expression = NumericTableExpression::Table1D(0, ElementExpression::Variable(0));
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table1D(0, ElementExpression::Variable(0))
         ));
     }
 
     #[test]
     fn table_1d_sum_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table1DSum(0, SetExpression::SetVariable(0));
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table1DSum(0, SetExpression::SetVariable(0),)
         ));
     }
 
     #[test]
     fn table_2d_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table2D(
             0,
@@ -973,7 +1152,7 @@ mod tests {
             ElementExpression::Constant(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Constant(10)
         ));
 
@@ -983,7 +1162,7 @@ mod tests {
             ElementExpression::Variable(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table2D(
                 0,
                 ElementExpression::Constant(0),
@@ -994,7 +1173,7 @@ mod tests {
 
     #[test]
     fn table_2d_sum_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table2DSum(
             0,
@@ -1002,7 +1181,7 @@ mod tests {
             SetExpression::SetVariable(1),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table2DSum(
                 0,
                 SetExpression::SetVariable(0),
@@ -1013,7 +1192,7 @@ mod tests {
 
     #[test]
     fn table_2d_sum_x_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table2DSumX(
             0,
@@ -1021,7 +1200,7 @@ mod tests {
             ElementExpression::Constant(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table2DSumX(
                 0,
                 SetExpression::SetVariable(0),
@@ -1032,7 +1211,7 @@ mod tests {
 
     #[test]
     fn table_2d_sum_y_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table2DSumY(
             0,
@@ -1040,7 +1219,7 @@ mod tests {
             SetExpression::SetVariable(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table2DSumY(
                 0,
                 ElementExpression::Constant(0),
@@ -1051,7 +1230,7 @@ mod tests {
 
     #[test]
     fn table_3d_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table3D(
             0,
@@ -1060,7 +1239,7 @@ mod tests {
             ElementExpression::Constant(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Constant(10)
         ));
 
@@ -1071,7 +1250,7 @@ mod tests {
             ElementExpression::Variable(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table3D(
                 0,
                 ElementExpression::Constant(0),
@@ -1083,7 +1262,7 @@ mod tests {
 
     #[test]
     fn table_3d_sum_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table3DSum(
             0,
@@ -1092,7 +1271,7 @@ mod tests {
             SetExpression::SetVariable(2),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table3DSum(
                 0,
                 SetExpression::SetVariable(0),
@@ -1104,7 +1283,7 @@ mod tests {
 
     #[test]
     fn table_3d_sum_x_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table3DSumX(
             0,
@@ -1113,7 +1292,7 @@ mod tests {
             ElementExpression::Constant(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table3DSumX(
                 0,
                 SetExpression::SetVariable(0),
@@ -1125,7 +1304,7 @@ mod tests {
 
     #[test]
     fn table_3d_sum_y_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table3DSumY(
             0,
@@ -1134,7 +1313,7 @@ mod tests {
             ElementExpression::Constant(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table3DSumY(
                 0,
                 ElementExpression::Constant(0),
@@ -1146,7 +1325,7 @@ mod tests {
 
     #[test]
     fn table_3d_sum_z_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table3DSumZ(
             0,
@@ -1155,7 +1334,7 @@ mod tests {
             SetExpression::SetVariable(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table3DSumZ(
                 0,
                 ElementExpression::Constant(0),
@@ -1167,7 +1346,7 @@ mod tests {
 
     #[test]
     fn table_3d_sum_xy_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table3DSumXY(
             0,
@@ -1176,7 +1355,7 @@ mod tests {
             ElementExpression::Constant(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table3DSumXY(
                 0,
                 SetExpression::SetVariable(0),
@@ -1188,7 +1367,7 @@ mod tests {
 
     #[test]
     fn table_3d_sum_xz_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table3DSumXZ(
             0,
@@ -1197,7 +1376,7 @@ mod tests {
             SetExpression::SetVariable(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table3DSumXZ(
                 0,
                 SetExpression::SetVariable(0),
@@ -1209,7 +1388,7 @@ mod tests {
 
     #[test]
     fn table_3d_sum_yz_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table3DSumYZ(
             0,
@@ -1218,7 +1397,7 @@ mod tests {
             SetExpression::SetVariable(0),
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Table3DSumYZ(
                 0,
                 ElementExpression::Constant(0),
@@ -1230,7 +1409,7 @@ mod tests {
 
     #[test]
     fn table_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::Table(
             0,
@@ -1242,7 +1421,7 @@ mod tests {
             ],
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Constant(100)
         ));
 
@@ -1255,7 +1434,7 @@ mod tests {
                 ElementExpression::Variable(0),
             ],
         );
-        let simplified = expression.simplify(&tables);
+        let simplified = expression.simplify(&registry, &registry.integer_tables);
         assert!(matches!(simplified, NumericTableExpression::Table(0, _)));
         if let NumericTableExpression::Table(_, args) = simplified {
             assert_eq!(args.len(), 4);
@@ -1267,7 +1446,7 @@ mod tests {
     }
     #[test]
     fn table_sum_simplify() {
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let expression = NumericTableExpression::TableSum(
             0,
@@ -1279,7 +1458,7 @@ mod tests {
             ],
         );
         assert!(matches!(
-            expression.simplify(&tables),
+            expression.simplify(&registry, &registry.integer_tables),
             NumericTableExpression::Constant(100)
         ));
 
@@ -1292,7 +1471,7 @@ mod tests {
                 ArgumentExpression::Element(ElementExpression::Variable(0)),
             ],
         );
-        let simplified = expression.simplify(&tables);
+        let simplified = expression.simplify(&registry, &registry.integer_tables);
         assert!(matches!(simplified, NumericTableExpression::TableSum(0, _)));
         if let NumericTableExpression::TableSum(_, args) = simplified {
             assert_eq!(args.len(), 4);

@@ -1,4 +1,4 @@
-use super::bool_table_expression;
+use super::element_expression;
 use super::numeric_expression::NumericExpression;
 use super::set_condition;
 use crate::state;
@@ -14,7 +14,7 @@ pub enum Condition {
     Or(Box<Condition>, Box<Condition>),
     Comparison(Box<Comparison>),
     Set(set_condition::SetCondition),
-    Table(bool_table_expression::BoolTableExpression),
+    Table(element_expression::TableExpression<bool>),
 }
 
 impl Default for Condition {
@@ -40,8 +40,10 @@ impl Condition {
                 x.eval(state, metadata, registry) || y.eval(state, metadata, registry)
             }
             Self::Comparison(condition) => condition.eval(state, metadata, registry),
-            Self::Set(condition) => condition.eval(state, metadata),
-            Self::Table(condition) => condition.eval(state, &registry.bool_tables),
+            Self::Set(set) => set.eval(state, metadata, &registry),
+            Self::Table(table) => {
+                table.eval(state, &registry.element_tables, &registry.bool_tables)
+            }
         }
     }
 
@@ -71,12 +73,12 @@ impl Condition {
                 set_condition::SetCondition::Constant(value) => Self::Constant(value),
                 condition => Self::Set(condition),
             },
-            Self::Table(condition) => match condition.simplify(&registry.bool_tables) {
-                bool_table_expression::BoolTableExpression::Constant(value) => {
-                    Self::Constant(value)
+            Self::Table(condition) => {
+                match condition.simplify(&registry.element_tables, &registry.bool_tables) {
+                    element_expression::TableExpression::Constant(value) => Self::Constant(value),
+                    condition => Self::Table(condition),
                 }
-                condition => Self::Table(condition),
-            },
+            }
             _ => self.clone(),
         }
     }
@@ -225,7 +227,7 @@ pub enum ComparisonOperator {
 
 #[cfg(test)]
 mod tests {
-    use super::super::set_expression;
+    use super::super::element_expression;
     use super::*;
     use crate::table;
     use crate::table_data;
@@ -953,9 +955,9 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = Condition::Table(bool_table_expression::BoolTableExpression::Table1D(
+        let expression = Condition::Table(element_expression::TableExpression::Table1D(
             0,
-            set_expression::ElementExpression::Constant(0),
+            element_expression::ElementExpression::Constant(0),
         ));
         assert!(expression.eval(&state, &metadata, &registry));
     }
@@ -966,8 +968,8 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
         let expression = Condition::Set(set_condition::SetCondition::Eq(
-            set_expression::ElementExpression::Variable(0),
-            set_expression::ElementExpression::Constant(1),
+            element_expression::ElementExpression::Variable(0),
+            element_expression::ElementExpression::Constant(1),
         ));
         assert!(expression.eval(&state, &metadata, &registry));
     }
@@ -1782,21 +1784,21 @@ mod tests {
     fn table_simplify() {
         let registry = generate_registry();
 
-        let expression = Condition::Table(bool_table_expression::BoolTableExpression::Table1D(
+        let expression = Condition::Table(element_expression::TableExpression::Table1D(
             0,
-            set_expression::ElementExpression::Constant(0),
+            element_expression::ElementExpression::Constant(0),
         ));
         assert_eq!(expression.simplify(&registry), Condition::Constant(true));
 
-        let expression = Condition::Table(bool_table_expression::BoolTableExpression::Table1D(
+        let expression = Condition::Table(element_expression::TableExpression::Table1D(
             0,
-            set_expression::ElementExpression::Variable(0),
+            element_expression::ElementExpression::Variable(0),
         ));
         assert_eq!(
             expression.simplify(&registry),
-            Condition::Table(bool_table_expression::BoolTableExpression::Table1D(
+            Condition::Table(element_expression::TableExpression::Table1D(
                 0,
-                set_expression::ElementExpression::Variable(0),
+                element_expression::ElementExpression::Variable(0),
             ))
         );
     }
@@ -1805,14 +1807,14 @@ mod tests {
     fn set_simplify() {
         let registry = generate_registry();
         let expression = Condition::Set(set_condition::SetCondition::Eq(
-            set_expression::ElementExpression::Variable(0),
-            set_expression::ElementExpression::Constant(1),
+            element_expression::ElementExpression::Variable(0),
+            element_expression::ElementExpression::Constant(1),
         ));
         assert_eq!(
             expression.simplify(&registry),
             Condition::Set(set_condition::SetCondition::Eq(
-                set_expression::ElementExpression::Variable(0),
-                set_expression::ElementExpression::Constant(1),
+                element_expression::ElementExpression::Variable(0),
+                element_expression::ElementExpression::Constant(1),
             ))
         );
     }
