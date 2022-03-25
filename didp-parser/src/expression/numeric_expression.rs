@@ -25,6 +25,10 @@ pub enum NumericExpression<T: Numeric> {
     Length(VectorExpression),
     IntegerTable(NumericTableExpression<Integer>),
     ContinuousTable(NumericTableExpression<Continuous>),
+    IntegerLast(Box<NumericVectorExpression<Integer>>),
+    ContinuousLast(Box<NumericVectorExpression<Continuous>>),
+    IntegerAt(Box<NumericVectorExpression<Integer>>, ElementExpression),
+    ContinuousAt(Box<NumericVectorExpression<Continuous>>, ElementExpression),
     IntegerReduceSum(Box<NumericVectorExpression<Integer>>),
     ContinuousReduceSum(Box<NumericVectorExpression<Continuous>>),
     IntegerReduceProduct(Box<NumericVectorExpression<Integer>>),
@@ -113,150 +117,147 @@ impl<T: Numeric> NumericExpression<T> {
             Self::ContinuousTable(t) => {
                 T::from_continuous(t.eval(state, registry, &registry.continuous_tables))
             }
-            Self::IntegerReduceSum(vector) => match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => {
-                    T::from_integer(vector.iter().copied().sum())
+            Self::IntegerLast(vector) => T::from_integer(match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => *vector.last().unwrap(),
+                vector => *vector
+                    .eval(state, registry, &registry.integer_tables)
+                    .last()
+                    .unwrap(),
+            }),
+            Self::ContinuousLast(vector) => T::from_continuous(match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => *vector.last().unwrap(),
+                vector => *vector
+                    .eval(state, registry, &registry.continuous_tables)
+                    .last()
+                    .unwrap(),
+            }),
+            Self::IntegerAt(vector, i) => T::from_integer(match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => vector[i.eval(state, registry)],
+                vector => {
+                    vector.eval(state, registry, &registry.integer_tables)[i.eval(state, registry)]
                 }
-                vector => T::from_integer(
-                    vector
-                        .eval(state, registry, &registry.integer_tables)
-                        .into_iter()
-                        .sum(),
-                ),
-            },
-            Self::ContinuousReduceSum(vector) => match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => {
-                    T::from_continuous(vector.iter().copied().sum())
-                }
-                vector => T::from_continuous(
-                    vector
-                        .eval(state, registry, &registry.continuous_tables)
-                        .into_iter()
-                        .sum(),
-                ),
-            },
-            Self::IntegerReduceProduct(vector) => match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => {
-                    T::from_integer(vector.iter().copied().product())
-                }
-                vector => T::from_integer(
-                    vector
-                        .eval(state, registry, &registry.integer_tables)
-                        .into_iter()
-                        .product(),
-                ),
-            },
-            Self::ContinuousReduceProduct(vector) => match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => {
-                    T::from_continuous(vector.iter().copied().product())
-                }
-                vector => T::from_continuous(
-                    vector
-                        .eval(state, registry, &registry.continuous_tables)
-                        .into_iter()
-                        .product(),
-                ),
-            },
-            Self::InnerProductII(x, y) => match (x.as_ref(), y.as_ref()) {
+            }),
+            Self::ContinuousAt(vector, i) => T::from_continuous(match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => vector[i.eval(state, registry)],
+                vector => vector.eval(state, registry, &registry.continuous_tables)
+                    [i.eval(state, registry)],
+            }),
+            Self::IntegerReduceSum(vector) => T::from_integer(match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => vector.iter().copied().sum(),
+                vector => vector
+                    .eval(state, registry, &registry.integer_tables)
+                    .into_iter()
+                    .sum(),
+            }),
+            Self::ContinuousReduceSum(vector) => T::from_continuous(match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => vector.iter().copied().sum(),
+                vector => vector
+                    .eval(state, registry, &registry.continuous_tables)
+                    .into_iter()
+                    .sum(),
+            }),
+            Self::IntegerReduceProduct(vector) => T::from_integer(match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => vector.iter().copied().product(),
+                vector => vector
+                    .eval(state, registry, &registry.integer_tables)
+                    .into_iter()
+                    .product(),
+            }),
+            Self::ContinuousReduceProduct(vector) => T::from_continuous(match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => vector.iter().copied().product(),
+                vector => vector
+                    .eval(state, registry, &registry.continuous_tables)
+                    .into_iter()
+                    .product(),
+            }),
+            Self::InnerProductII(x, y) => T::from_integer(match (x.as_ref(), y.as_ref()) {
                 (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    T::from_integer(x.iter().zip(y).map(|(x, y)| *x * *y).sum())
+                    x.iter().zip(y).map(|(x, y)| *x * *y).sum()
                 }
-                (NumericVectorExpression::Constant(x), y) => T::from_integer(
-                    x.iter()
-                        .zip(y.eval(state, registry, &registry.integer_tables))
-                        .map(|(x, y)| *x * y)
-                        .sum(),
-                ),
-                (x, NumericVectorExpression::Constant(y)) => T::from_integer(
-                    x.eval(state, registry, &registry.integer_tables)
-                        .into_iter()
-                        .zip(y)
-                        .map(|(x, y)| x * *y)
-                        .sum(),
-                ),
-                (x, y) => T::from_integer(
-                    x.eval(state, registry, &registry.integer_tables)
-                        .into_iter()
-                        .zip(y.eval(state, registry, &registry.integer_tables))
-                        .map(|(x, y)| x * y)
-                        .sum(),
-                ),
-            },
-            Self::InnerProductIC(x, y) => match (x.as_ref(), y.as_ref()) {
+                (NumericVectorExpression::Constant(x), y) => x
+                    .iter()
+                    .zip(y.eval(state, registry, &registry.integer_tables))
+                    .map(|(x, y)| *x * y)
+                    .sum(),
+                (x, NumericVectorExpression::Constant(y)) => x
+                    .eval(state, registry, &registry.integer_tables)
+                    .into_iter()
+                    .zip(y)
+                    .map(|(x, y)| x * *y)
+                    .sum(),
+                (x, y) => x
+                    .eval(state, registry, &registry.integer_tables)
+                    .into_iter()
+                    .zip(y.eval(state, registry, &registry.integer_tables))
+                    .map(|(x, y)| x * y)
+                    .sum(),
+            }),
+            Self::InnerProductIC(x, y) => T::from_continuous(match (x.as_ref(), y.as_ref()) {
                 (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    T::from_continuous(x.iter().zip(y).map(|(x, y)| x.to_continuous() * *y).sum())
+                    x.iter().zip(y).map(|(x, y)| x.to_continuous() * *y).sum()
                 }
-                (NumericVectorExpression::Constant(x), y) => T::from_continuous(
-                    x.iter()
-                        .zip(y.eval(state, registry, &registry.continuous_tables))
-                        .map(|(x, y)| x.to_continuous() * y)
-                        .sum(),
-                ),
-                (x, NumericVectorExpression::Constant(y)) => T::from_continuous(
-                    x.eval(state, registry, &registry.integer_tables)
-                        .into_iter()
-                        .zip(y)
-                        .map(|(x, y)| x.to_continuous() * *y)
-                        .sum(),
-                ),
-                (x, y) => T::from_continuous(
-                    x.eval(state, registry, &registry.integer_tables)
-                        .into_iter()
-                        .zip(y.eval(state, registry, &registry.continuous_tables))
-                        .map(|(x, y)| x.to_continuous() * y)
-                        .sum(),
-                ),
-            },
-            Self::InnerProductCI(x, y) => match (x.as_ref(), y.as_ref()) {
+                (NumericVectorExpression::Constant(x), y) => x
+                    .iter()
+                    .zip(y.eval(state, registry, &registry.continuous_tables))
+                    .map(|(x, y)| x.to_continuous() * y)
+                    .sum(),
+                (x, NumericVectorExpression::Constant(y)) => x
+                    .eval(state, registry, &registry.integer_tables)
+                    .into_iter()
+                    .zip(y)
+                    .map(|(x, y)| x.to_continuous() * *y)
+                    .sum(),
+                (x, y) => x
+                    .eval(state, registry, &registry.integer_tables)
+                    .into_iter()
+                    .zip(y.eval(state, registry, &registry.continuous_tables))
+                    .map(|(x, y)| x.to_continuous() * y)
+                    .sum(),
+            }),
+            Self::InnerProductCI(x, y) => T::from_continuous(match (x.as_ref(), y.as_ref()) {
                 (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    T::from_continuous(x.iter().zip(y).map(|(x, y)| *x * y.to_continuous()).sum())
+                    x.iter().zip(y).map(|(x, y)| *x * y.to_continuous()).sum()
                 }
-                (NumericVectorExpression::Constant(x), y) => T::from_continuous(
-                    x.iter()
-                        .zip(y.eval(state, registry, &registry.integer_tables))
-                        .map(|(x, y)| *x * y.to_continuous())
-                        .sum(),
-                ),
-                (x, NumericVectorExpression::Constant(y)) => T::from_continuous(
-                    x.eval(state, registry, &registry.continuous_tables)
-                        .into_iter()
-                        .zip(y)
-                        .map(|(x, y)| x * y.to_continuous())
-                        .sum(),
-                ),
-                (x, y) => T::from_continuous(
-                    x.eval(state, registry, &registry.continuous_tables)
-                        .into_iter()
-                        .zip(y.eval(state, registry, &registry.integer_tables))
-                        .map(|(x, y)| x * y.to_continuous())
-                        .sum(),
-                ),
-            },
-            Self::InnerProductCC(x, y) => match (x.as_ref(), y.as_ref()) {
+                (NumericVectorExpression::Constant(x), y) => x
+                    .iter()
+                    .zip(y.eval(state, registry, &registry.integer_tables))
+                    .map(|(x, y)| *x * y.to_continuous())
+                    .sum(),
+                (x, NumericVectorExpression::Constant(y)) => x
+                    .eval(state, registry, &registry.continuous_tables)
+                    .into_iter()
+                    .zip(y)
+                    .map(|(x, y)| x * y.to_continuous())
+                    .sum(),
+                (x, y) => x
+                    .eval(state, registry, &registry.continuous_tables)
+                    .into_iter()
+                    .zip(y.eval(state, registry, &registry.integer_tables))
+                    .map(|(x, y)| x * y.to_continuous())
+                    .sum(),
+            }),
+            Self::InnerProductCC(x, y) => T::from_continuous(match (x.as_ref(), y.as_ref()) {
                 (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    T::from_continuous(x.iter().zip(y).map(|(x, y)| *x * *y).sum())
+                    x.iter().zip(y).map(|(x, y)| *x * *y).sum()
                 }
-                (NumericVectorExpression::Constant(x), y) => T::from_continuous(
-                    x.iter()
-                        .zip(y.eval(state, registry, &registry.continuous_tables))
-                        .map(|(x, y)| *x * y)
-                        .sum(),
-                ),
-                (x, NumericVectorExpression::Constant(y)) => T::from_continuous(
-                    x.eval(state, registry, &registry.continuous_tables)
-                        .into_iter()
-                        .zip(y)
-                        .map(|(x, y)| x * *y)
-                        .sum(),
-                ),
-                (x, y) => T::from_continuous(
-                    x.eval(state, registry, &registry.continuous_tables)
-                        .into_iter()
-                        .zip(y.eval(state, registry, &registry.continuous_tables))
-                        .map(|(x, y)| x * y)
-                        .sum(),
-                ),
-            },
+                (NumericVectorExpression::Constant(x), y) => x
+                    .iter()
+                    .zip(y.eval(state, registry, &registry.continuous_tables))
+                    .map(|(x, y)| *x * y)
+                    .sum(),
+                (x, NumericVectorExpression::Constant(y)) => x
+                    .eval(state, registry, &registry.continuous_tables)
+                    .into_iter()
+                    .zip(y)
+                    .map(|(x, y)| x * *y)
+                    .sum(),
+                (x, y) => x
+                    .eval(state, registry, &registry.continuous_tables)
+                    .into_iter()
+                    .zip(y.eval(state, registry, &registry.continuous_tables))
+                    .map(|(x, y)| x * y)
+                    .sum(),
+            }),
         }
     }
 
@@ -308,6 +309,44 @@ impl<T: Numeric> NumericExpression<T> {
                         Self::Constant(T::from_continuous(value))
                     }
                     expression => Self::ContinuousTable(expression),
+                }
+            }
+            Self::IntegerLast(vector) => {
+                match vector.simplify(registry, &registry.integer_tables) {
+                    NumericVectorExpression::Constant(vector) => {
+                        Self::Constant(T::from_integer(*vector.last().unwrap()))
+                    }
+                    vector => Self::IntegerLast(Box::new(vector)),
+                }
+            }
+            Self::ContinuousLast(vector) => {
+                match vector.simplify(registry, &registry.continuous_tables) {
+                    NumericVectorExpression::Constant(vector) => {
+                        Self::Constant(T::from_continuous(*vector.last().unwrap()))
+                    }
+                    vector => Self::ContinuousLast(Box::new(vector)),
+                }
+            }
+            Self::IntegerAt(vector, i) => {
+                match (
+                    vector.simplify(registry, &registry.integer_tables),
+                    i.simplify(registry),
+                ) {
+                    (NumericVectorExpression::Constant(vector), ElementExpression::Constant(i)) => {
+                        Self::Constant(T::from_integer(vector[i]))
+                    }
+                    (vector, i) => Self::IntegerAt(Box::new(vector), i),
+                }
+            }
+            Self::ContinuousAt(vector, i) => {
+                match (
+                    vector.simplify(registry, &registry.continuous_tables),
+                    i.simplify(registry),
+                ) {
+                    (NumericVectorExpression::Constant(vector), ElementExpression::Constant(i)) => {
+                        Self::Constant(T::from_continuous(vector[i]))
+                    }
+                    (vector, i) => Self::ContinuousAt(Box::new(vector), i),
                 }
             }
             Self::IntegerReduceSum(vector) => {
