@@ -1,13 +1,16 @@
+use super::reference_expression::ReferenceExpression;
 use crate::state::State;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
-use crate::variable::Element;
+use crate::variable::{Element, Vector};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ElementExpression {
     Stage,
     Constant(Element),
     Variable(usize),
+    Last(Box<VectorExpression>),
+    At(Box<VectorExpression>, Box<ElementExpression>),
     Table(Box<TableExpression<Element>>),
 }
 
@@ -17,17 +20,158 @@ impl ElementExpression {
             Self::Stage => state.stage,
             Self::Constant(x) => *x,
             Self::Variable(i) => state.signature_variables.element_variables[*i],
+            Self::Last(vector) => match vector.as_ref() {
+                VectorExpression::Reference(vector) => *vector
+                    .eval(
+                        state,
+                        registry,
+                        &state.signature_variables.vector_variables,
+                        &registry.vector_tables,
+                    )
+                    .last()
+                    .unwrap(),
+                vector => *vector.eval(state, registry).last().unwrap(),
+            },
+            Self::At(vector, i) => match vector.as_ref() {
+                VectorExpression::Reference(vector) => vector.eval(
+                    state,
+                    registry,
+                    &state.signature_variables.vector_variables,
+                    &registry.vector_tables,
+                )[i.eval(state, registry)],
+                vector => vector.eval(state, registry)[i.eval(state, registry)],
+            },
             Self::Table(table) => *table.eval(state, registry, &registry.element_tables),
         }
     }
 
     pub fn simplify(&self, registry: &TableRegistry) -> ElementExpression {
         match self {
+            Self::Last(vector) => match vector.simplify(registry) {
+                VectorExpression::Reference(ReferenceExpression::Constant(vector)) => {
+                    Self::Constant(*vector.last().unwrap())
+                }
+                vector => Self::Last(Box::new(vector)),
+            },
+            Self::At(vector, i) => match (vector.simplify(registry), i.simplify(registry)) {
+                (
+                    VectorExpression::Reference(ReferenceExpression::Constant(vector)),
+                    ElementExpression::Constant(i),
+                ) => Self::Constant(vector[i]),
+                (vector, i) => Self::At(Box::new(vector), Box::new(i)),
+            },
             Self::Table(table) => match table.simplify(registry, &registry.element_tables) {
                 TableExpression::Constant(value) => Self::Constant(value),
                 expression => Self::Table(Box::new(expression)),
             },
             _ => self.clone(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum VectorExpression {
+    Reference(ReferenceExpression<Vector>),
+    Indices(Box<VectorExpression>),
+    Reverse(Box<VectorExpression>),
+    Set(ElementExpression, Box<VectorExpression>, ElementExpression),
+    Push(ElementExpression, Box<VectorExpression>),
+    Pop(Box<VectorExpression>),
+}
+
+impl VectorExpression {
+    pub fn eval(&self, state: &State, registry: &TableRegistry) -> Vector {
+        match self {
+            Self::Reference(expression) => expression
+                .eval(
+                    state,
+                    registry,
+                    &state.signature_variables.vector_variables,
+                    &registry.vector_tables,
+                )
+                .clone(),
+            Self::Indices(vector) => {
+                let mut vector = vector.eval(state, registry);
+                vector.iter_mut().enumerate().for_each(|(i, v)| *v = i);
+                vector
+            }
+            Self::Reverse(vector) => {
+                let mut vector = vector.eval(state, registry);
+                vector.reverse();
+                vector
+            }
+            Self::Set(element, vector, i) => {
+                let mut vector = vector.eval(state, registry);
+                vector[i.eval(state, registry)] = element.eval(state, registry);
+                vector
+            }
+            Self::Push(element, vector) => {
+                let element = element.eval(state, registry);
+                let mut vector = vector.eval(state, registry);
+                vector.push(element);
+                vector
+            }
+            Self::Pop(vector) => {
+                let mut vector = vector.eval(state, registry);
+                vector.pop();
+                vector
+            }
+        }
+    }
+
+    pub fn simplify(&self, registry: &TableRegistry) -> VectorExpression {
+        match self {
+            Self::Reference(vector) => {
+                Self::Reference(vector.simplify(registry, &registry.vector_tables))
+            }
+            Self::Indices(vector) => match vector.simplify(registry) {
+                VectorExpression::Reference(ReferenceExpression::Constant(mut vector)) => {
+                    vector.iter_mut().enumerate().for_each(|(i, v)| *v = i);
+                    Self::Reference(ReferenceExpression::Constant(vector))
+                }
+                vector => Self::Indices(Box::new(vector)),
+            },
+            Self::Reverse(vector) => match vector.simplify(registry) {
+                VectorExpression::Reference(ReferenceExpression::Constant(mut vector)) => {
+                    vector.reverse();
+                    Self::Reference(ReferenceExpression::Constant(vector))
+                }
+                vector => Self::Reverse(Box::new(vector)),
+            },
+            Self::Set(element, vector, i) => match (
+                element.simplify(registry),
+                vector.simplify(registry),
+                i.simplify(registry),
+            ) {
+                (
+                    ElementExpression::Constant(element),
+                    VectorExpression::Reference(ReferenceExpression::Constant(mut vector)),
+                    ElementExpression::Constant(i),
+                ) => {
+                    vector[i] = element;
+                    Self::Reference(ReferenceExpression::Constant(vector))
+                }
+                (element, vector, i) => Self::Set(element, Box::new(vector), i),
+            },
+            Self::Push(element, vector) => {
+                match (element.simplify(registry), vector.simplify(registry)) {
+                    (
+                        ElementExpression::Constant(element),
+                        VectorExpression::Reference(ReferenceExpression::Constant(mut vector)),
+                    ) => {
+                        vector.push(element);
+                        Self::Reference(ReferenceExpression::Constant(vector))
+                    }
+                    (element, vector) => Self::Push(element, Box::new(vector)),
+                }
+            }
+            Self::Pop(vector) => match vector.simplify(registry) {
+                VectorExpression::Reference(ReferenceExpression::Constant(mut vector)) => {
+                    vector.pop();
+                    Self::Reference(ReferenceExpression::Constant(vector))
+                }
+                vector => Self::Pop(Box::new(vector)),
+            },
         }
     }
 }
@@ -146,18 +290,29 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
+        let element_tables = TableData {
+            name_to_constant,
+            tables_1d,
+            name_to_table_1d,
+            tables_2d,
+            name_to_table_2d,
+            tables_3d,
+            name_to_table_3d,
+            tables,
+            name_to_table,
+        };
+
+        let mut name_to_table_1d = HashMap::new();
+        name_to_table_1d.insert(String::from("t1"), 0);
+        let vector_tables = TableData {
+            tables_1d: vec![Table1D::new(vec![vec![0, 1]])],
+            name_to_table_1d,
+            ..Default::default()
+        };
+
         TableRegistry {
-            element_tables: TableData {
-                name_to_constant,
-                tables_1d,
-                name_to_table_1d,
-                tables_2d,
-                name_to_table_2d,
-                tables_3d,
-                name_to_table_3d,
-                tables,
-                name_to_table,
-            },
+            element_tables,
+            vector_tables,
             ..Default::default()
         }
     }
@@ -206,7 +361,173 @@ mod tests {
     }
 
     #[test]
-    fn constant_eval() {
+    fn element_last_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = ElementExpression::Last(Box::new(VectorExpression::Reference(
+            ReferenceExpression::Constant(vec![0, 1]),
+        )));
+        assert_eq!(expression.eval(&state, &registry), 1);
+    }
+
+    #[test]
+    fn element_at_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = ElementExpression::At(
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![0, 1],
+            ))),
+            Box::new(ElementExpression::Constant(0)),
+        );
+        assert_eq!(expression.eval(&state, &registry), 0);
+    }
+
+    #[test]
+    fn element_table_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = ElementExpression::Table(Box::new(TableExpression::Constant(0)));
+        assert_eq!(expression.eval(&state, &registry), 0);
+    }
+
+    #[test]
+    fn vector_reference_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2]));
+        assert_eq!(expression.eval(&state, &registry), vec![1, 2]);
+    }
+
+    #[test]
+    fn vector_indices_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = VectorExpression::Indices(Box::new(VectorExpression::Reference(
+            ReferenceExpression::Constant(vec![1, 2]),
+        )));
+        assert_eq!(expression.eval(&state, &registry), vec![0, 1]);
+    }
+
+    #[test]
+    fn vector_reverse_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+            ReferenceExpression::Constant(vec![1, 2]),
+        )));
+        assert_eq!(expression.eval(&state, &registry), vec![2, 1]);
+    }
+
+    #[test]
+    fn vector_set_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = VectorExpression::Set(
+            ElementExpression::Constant(3),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![1, 2],
+            ))),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(expression.eval(&state, &registry), vec![3, 2]);
+    }
+
+    #[test]
+    fn vector_push_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = VectorExpression::Push(
+            ElementExpression::Constant(0),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![1, 2],
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry), vec![1, 2, 0]);
+    }
+
+    #[test]
+    fn vector_pop_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = VectorExpression::Pop(Box::new(VectorExpression::Reference(
+            ReferenceExpression::Constant(vec![1, 2]),
+        )));
+        assert_eq!(expression.eval(&state, &registry), vec![1]);
+    }
+
+    #[test]
+    fn vector_reference_simplify() {
+        let registry = generate_registry();
+        let expression = VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2]));
+        assert_eq!(expression.simplify(&registry), expression);
+        let expression = VectorExpression::Reference(ReferenceExpression::Table(
+            TableExpression::Table1D(0, ElementExpression::Constant(0)),
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1]))
+        );
+    }
+
+    #[test]
+    fn vector_indices_simplify() {
+        let registry = generate_registry();
+
+        let expression = VectorExpression::Indices(Box::new(VectorExpression::Reference(
+            ReferenceExpression::Variable(0),
+        )));
+        assert_eq!(expression.simplify(&registry), expression);
+
+        let expression = VectorExpression::Indices(Box::new(VectorExpression::Reference(
+            ReferenceExpression::Constant(vec![1, 2]),
+        )));
+        assert_eq!(
+            expression.simplify(&registry),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1]))
+        );
+    }
+
+    #[test]
+    fn vector_push_simplify() {
+        let registry = generate_registry();
+        let expression = VectorExpression::Push(
+            ElementExpression::Constant(0),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![1, 2],
+            ))),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2, 0]))
+        );
+        let expression = VectorExpression::Push(
+            ElementExpression::Constant(0),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                0,
+            ))),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn vector_pop_simplify() {
+        let registry = generate_registry();
+        let expression = VectorExpression::Pop(Box::new(VectorExpression::Reference(
+            ReferenceExpression::Constant(vec![1, 2]),
+        )));
+        assert_eq!(
+            expression.simplify(&registry),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![1]))
+        );
+        let expression = VectorExpression::Pop(Box::new(VectorExpression::Reference(
+            ReferenceExpression::Variable(0),
+        )));
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn table_constant_eval() {
         let registry = generate_registry();
         let state = generate_state();
 

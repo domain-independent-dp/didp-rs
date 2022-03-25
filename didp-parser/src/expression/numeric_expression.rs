@@ -1,10 +1,11 @@
+use super::element_expression::{ElementExpression, VectorExpression};
 use super::numeric_table_expression::NumericTableExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
-use super::vector_expression::VectorExpression;
 use crate::state::State;
+use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
-use crate::variable::{Continuous, FromNumeric, Integer, Numeric};
+use crate::variable::{Continuous, FromNumeric, Integer, Numeric, ToNumeric};
 use std::boxed::Box;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -24,6 +25,26 @@ pub enum NumericExpression<T: Numeric> {
     Length(VectorExpression),
     IntegerTable(NumericTableExpression<Integer>),
     ContinuousTable(NumericTableExpression<Continuous>),
+    IntegerReduceSum(Box<NumericVectorExpression<Integer>>),
+    ContinuousReduceSum(Box<NumericVectorExpression<Continuous>>),
+    IntegerReduceProduct(Box<NumericVectorExpression<Integer>>),
+    ContinuousReduceProduct(Box<NumericVectorExpression<Continuous>>),
+    InnerProductII(
+        Box<NumericVectorExpression<Integer>>,
+        Box<NumericVectorExpression<Integer>>,
+    ),
+    InnerProductIC(
+        Box<NumericVectorExpression<Integer>>,
+        Box<NumericVectorExpression<Continuous>>,
+    ),
+    InnerProductCI(
+        Box<NumericVectorExpression<Continuous>>,
+        Box<NumericVectorExpression<Integer>>,
+    ),
+    InnerProductCC(
+        Box<NumericVectorExpression<Continuous>>,
+        Box<NumericVectorExpression<Continuous>>,
+    ),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -92,6 +113,150 @@ impl<T: Numeric> NumericExpression<T> {
             Self::ContinuousTable(t) => {
                 T::from_continuous(t.eval(state, registry, &registry.continuous_tables))
             }
+            Self::IntegerReduceSum(vector) => match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => {
+                    T::from_integer(vector.iter().copied().sum())
+                }
+                vector => T::from_integer(
+                    vector
+                        .eval(state, registry, &registry.integer_tables)
+                        .into_iter()
+                        .sum(),
+                ),
+            },
+            Self::ContinuousReduceSum(vector) => match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => {
+                    T::from_continuous(vector.iter().copied().sum())
+                }
+                vector => T::from_continuous(
+                    vector
+                        .eval(state, registry, &registry.continuous_tables)
+                        .into_iter()
+                        .sum(),
+                ),
+            },
+            Self::IntegerReduceProduct(vector) => match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => {
+                    T::from_integer(vector.iter().copied().product())
+                }
+                vector => T::from_integer(
+                    vector
+                        .eval(state, registry, &registry.integer_tables)
+                        .into_iter()
+                        .product(),
+                ),
+            },
+            Self::ContinuousReduceProduct(vector) => match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => {
+                    T::from_continuous(vector.iter().copied().product())
+                }
+                vector => T::from_continuous(
+                    vector
+                        .eval(state, registry, &registry.continuous_tables)
+                        .into_iter()
+                        .product(),
+                ),
+            },
+            Self::InnerProductII(x, y) => match (x.as_ref(), y.as_ref()) {
+                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
+                    T::from_integer(x.iter().zip(y).map(|(x, y)| *x * *y).sum())
+                }
+                (NumericVectorExpression::Constant(x), y) => T::from_integer(
+                    x.iter()
+                        .zip(y.eval(state, registry, &registry.integer_tables))
+                        .map(|(x, y)| *x * y)
+                        .sum(),
+                ),
+                (x, NumericVectorExpression::Constant(y)) => T::from_integer(
+                    x.eval(state, registry, &registry.integer_tables)
+                        .into_iter()
+                        .zip(y)
+                        .map(|(x, y)| x * *y)
+                        .sum(),
+                ),
+                (x, y) => T::from_integer(
+                    x.eval(state, registry, &registry.integer_tables)
+                        .into_iter()
+                        .zip(y.eval(state, registry, &registry.integer_tables))
+                        .map(|(x, y)| x * y)
+                        .sum(),
+                ),
+            },
+            Self::InnerProductIC(x, y) => match (x.as_ref(), y.as_ref()) {
+                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
+                    T::from_continuous(x.iter().zip(y).map(|(x, y)| x.to_continuous() * *y).sum())
+                }
+                (NumericVectorExpression::Constant(x), y) => T::from_continuous(
+                    x.iter()
+                        .zip(y.eval(state, registry, &registry.continuous_tables))
+                        .map(|(x, y)| x.to_continuous() * y)
+                        .sum(),
+                ),
+                (x, NumericVectorExpression::Constant(y)) => T::from_continuous(
+                    x.eval(state, registry, &registry.integer_tables)
+                        .into_iter()
+                        .zip(y)
+                        .map(|(x, y)| x.to_continuous() * *y)
+                        .sum(),
+                ),
+                (x, y) => T::from_continuous(
+                    x.eval(state, registry, &registry.integer_tables)
+                        .into_iter()
+                        .zip(y.eval(state, registry, &registry.continuous_tables))
+                        .map(|(x, y)| x.to_continuous() * y)
+                        .sum(),
+                ),
+            },
+            Self::InnerProductCI(x, y) => match (x.as_ref(), y.as_ref()) {
+                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
+                    T::from_continuous(x.iter().zip(y).map(|(x, y)| *x * y.to_continuous()).sum())
+                }
+                (NumericVectorExpression::Constant(x), y) => T::from_continuous(
+                    x.iter()
+                        .zip(y.eval(state, registry, &registry.integer_tables))
+                        .map(|(x, y)| *x * y.to_continuous())
+                        .sum(),
+                ),
+                (x, NumericVectorExpression::Constant(y)) => T::from_continuous(
+                    x.eval(state, registry, &registry.continuous_tables)
+                        .into_iter()
+                        .zip(y)
+                        .map(|(x, y)| x * y.to_continuous())
+                        .sum(),
+                ),
+                (x, y) => T::from_continuous(
+                    x.eval(state, registry, &registry.continuous_tables)
+                        .into_iter()
+                        .zip(y.eval(state, registry, &registry.integer_tables))
+                        .map(|(x, y)| x * y.to_continuous())
+                        .sum(),
+                ),
+            },
+            Self::InnerProductCC(x, y) => match (x.as_ref(), y.as_ref()) {
+                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
+                    T::from_continuous(x.iter().zip(y).map(|(x, y)| *x * *y).sum())
+                }
+                (NumericVectorExpression::Constant(x), y) => T::from_continuous(
+                    x.iter()
+                        .zip(y.eval(state, registry, &registry.continuous_tables))
+                        .map(|(x, y)| *x * y)
+                        .sum(),
+                ),
+                (x, NumericVectorExpression::Constant(y)) => T::from_continuous(
+                    x.eval(state, registry, &registry.continuous_tables)
+                        .into_iter()
+                        .zip(y)
+                        .map(|(x, y)| x * *y)
+                        .sum(),
+                ),
+                (x, y) => T::from_continuous(
+                    x.eval(state, registry, &registry.continuous_tables)
+                        .into_iter()
+                        .zip(y.eval(state, registry, &registry.continuous_tables))
+                        .map(|(x, y)| x * y)
+                        .sum(),
+                ),
+            },
         }
     }
 
@@ -145,6 +310,88 @@ impl<T: Numeric> NumericExpression<T> {
                     expression => Self::ContinuousTable(expression),
                 }
             }
+            Self::IntegerReduceSum(vector) => {
+                match vector.simplify(registry, &registry.integer_tables) {
+                    NumericVectorExpression::Constant(vector) => {
+                        Self::Constant(T::from_integer(vector.into_iter().sum()))
+                    }
+                    vector => Self::IntegerReduceSum(Box::new(vector)),
+                }
+            }
+            Self::ContinuousReduceSum(vector) => {
+                match vector.simplify(registry, &registry.continuous_tables) {
+                    NumericVectorExpression::Constant(vector) => {
+                        Self::Constant(T::from_continuous(vector.into_iter().sum()))
+                    }
+                    vector => Self::ContinuousReduceSum(Box::new(vector)),
+                }
+            }
+            Self::IntegerReduceProduct(vector) => {
+                match vector.simplify(registry, &registry.integer_tables) {
+                    NumericVectorExpression::Constant(vector) => {
+                        Self::Constant(T::from_integer(vector.into_iter().product()))
+                    }
+                    vector => Self::IntegerReduceProduct(Box::new(vector)),
+                }
+            }
+            Self::ContinuousReduceProduct(vector) => {
+                match vector.simplify(registry, &registry.continuous_tables) {
+                    NumericVectorExpression::Constant(vector) => {
+                        Self::Constant(T::from_continuous(vector.into_iter().product()))
+                    }
+                    vector => Self::ContinuousReduceProduct(Box::new(vector)),
+                }
+            }
+            Self::InnerProductII(x, y) => match (
+                x.simplify(registry, &registry.integer_tables),
+                y.simplify(registry, &registry.integer_tables),
+            ) {
+                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
+                    Self::Constant(T::from_integer(
+                        x.into_iter().zip(y).map(|(x, y)| x * y).sum(),
+                    ))
+                }
+                (x, y) => Self::InnerProductII(Box::new(x), Box::new(y)),
+            },
+            Self::InnerProductIC(x, y) => match (
+                x.simplify(registry, &registry.integer_tables),
+                y.simplify(registry, &registry.continuous_tables),
+            ) {
+                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
+                    Self::Constant(T::from_continuous(
+                        x.into_iter()
+                            .zip(y)
+                            .map(|(x, y)| x.to_continuous() * y)
+                            .sum(),
+                    ))
+                }
+                (x, y) => Self::InnerProductIC(Box::new(x), Box::new(y)),
+            },
+            Self::InnerProductCI(x, y) => match (
+                x.simplify(registry, &registry.continuous_tables),
+                y.simplify(registry, &registry.integer_tables),
+            ) {
+                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
+                    Self::Constant(T::from_continuous(
+                        x.into_iter()
+                            .zip(y)
+                            .map(|(x, y)| x * y.to_continuous())
+                            .sum(),
+                    ))
+                }
+                (x, y) => Self::InnerProductCI(Box::new(x), Box::new(y)),
+            },
+            Self::InnerProductCC(x, y) => match (
+                x.simplify(registry, &registry.continuous_tables),
+                y.simplify(registry, &registry.continuous_tables),
+            ) {
+                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
+                    Self::Constant(T::from_continuous(
+                        x.into_iter().zip(y).map(|(x, y)| x * y).sum(),
+                    ))
+                }
+                (x, y) => Self::InnerProductCC(Box::new(x), Box::new(y)),
+            },
             _ => self.clone(),
         }
     }
@@ -170,6 +417,335 @@ impl<T: Numeric> NumericExpression<T> {
                 }
             }
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ElementOrVectorExpression {
+    Element(ElementExpression),
+    Vector(VectorExpression),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum NumericVectorExpression<T: Numeric> {
+    Constant(Vec<T>),
+    Reverse(Box<NumericVectorExpression<T>>),
+    Push(NumericExpression<T>, Box<NumericVectorExpression<T>>),
+    Pop(Box<NumericVectorExpression<T>>),
+    Set(
+        NumericExpression<T>,
+        Box<NumericVectorExpression<T>>,
+        ElementExpression,
+    ),
+    NumericOperation(
+        NumericOperator,
+        NumericExpression<T>,
+        Box<NumericVectorExpression<T>>,
+    ),
+    VectorOperation(
+        NumericOperator,
+        Box<NumericVectorExpression<T>>,
+        Box<NumericVectorExpression<T>>,
+    ),
+    Table(usize, Vec<ElementOrVectorExpression>),
+    Table1D(usize, VectorExpression),
+    Table2D(usize, VectorExpression, VectorExpression),
+    Table2DX(usize, VectorExpression, ElementExpression),
+    Table2DY(usize, ElementExpression, VectorExpression),
+}
+
+impl<T: Numeric> NumericVectorExpression<T> {
+    pub fn eval(&self, state: &State, registry: &TableRegistry, tables: &TableData<T>) -> Vec<T> {
+        let variables = &state.signature_variables.vector_variables;
+        let vector_tables = &registry.vector_tables;
+        match self {
+            Self::Constant(vector) => vector.clone(),
+            Self::Reverse(vector) => {
+                let mut vector = vector.eval(state, registry, tables);
+                vector.reverse();
+                vector
+            }
+            Self::Push(value, vector) => {
+                let mut vector = vector.eval(state, registry, tables);
+                vector.push(value.eval(state, registry));
+                vector
+            }
+            Self::Pop(vector) => {
+                let mut vector = vector.eval(state, registry, tables);
+                vector.pop();
+                vector
+            }
+            Self::Set(value, vector, i) => {
+                let mut vector = vector.eval(state, registry, tables);
+                vector[i.eval(state, registry)] = value.eval(state, registry);
+                vector
+            }
+            Self::NumericOperation(op, x, y) => {
+                Self::eval_operation(op, x.eval(state, registry), y.eval(state, registry, tables))
+            }
+            Self::VectorOperation(op, x, y) => match (x.as_ref(), y.as_ref()) {
+                (Self::Constant(x), y) => {
+                    Self::eval_vector_operation(op, x, y.eval(state, registry, tables))
+                }
+                (x, Self::Constant(y)) => {
+                    Self::eval_vector_operation(op, y, x.eval(state, registry, tables))
+                }
+                (x, y) => Self::eval_vector_operation(
+                    op,
+                    &x.eval(state, registry, tables),
+                    y.eval(state, registry, tables),
+                ),
+            },
+            Self::Table(i, args) => Self::eval_table(*i, args, state, registry, tables),
+            Self::Table1D(i, VectorExpression::Reference(x)) => x
+                .eval(state, registry, variables, vector_tables)
+                .iter()
+                .map(|x| tables.tables_1d[*i].eval(*x))
+                .collect(),
+            Self::Table1D(i, x) => x
+                .eval(state, registry)
+                .into_iter()
+                .map(|x| tables.tables_1d[*i].eval(x))
+                .collect(),
+            Self::Table2D(i, VectorExpression::Reference(x), VectorExpression::Reference(y)) => x
+                .eval(state, registry, variables, vector_tables)
+                .iter()
+                .zip(y.eval(state, registry, variables, vector_tables))
+                .map(|(x, y)| tables.tables_2d[*i].eval(*x, *y))
+                .collect(),
+            Self::Table2D(i, VectorExpression::Reference(x), y) => x
+                .eval(state, registry, variables, vector_tables)
+                .iter()
+                .zip(y.eval(state, registry))
+                .map(|(x, y)| tables.tables_2d[*i].eval(*x, y))
+                .collect(),
+            Self::Table2D(i, x, VectorExpression::Reference(y)) => x
+                .eval(state, registry)
+                .into_iter()
+                .zip(y.eval(state, registry, variables, vector_tables))
+                .map(|(x, y)| tables.tables_2d[*i].eval(x, *y))
+                .collect(),
+            Self::Table2D(i, x, y) => x
+                .eval(state, registry)
+                .into_iter()
+                .zip(y.eval(state, registry))
+                .map(|(x, y)| tables.tables_2d[*i].eval(x, y))
+                .collect(),
+            Self::Table2DX(i, VectorExpression::Reference(x), y) => {
+                let y = y.eval(state, registry);
+                x.eval(state, registry, variables, vector_tables)
+                    .iter()
+                    .map(|x| tables.tables_2d[*i].eval(*x, y))
+                    .collect()
+            }
+            Self::Table2DX(i, x, y) => {
+                let y = y.eval(state, registry);
+                x.eval(state, registry)
+                    .into_iter()
+                    .map(|x| tables.tables_2d[*i].eval(x, y))
+                    .collect()
+            }
+            Self::Table2DY(i, x, VectorExpression::Reference(y)) => {
+                let x = x.eval(state, registry);
+                y.eval(state, registry, variables, vector_tables)
+                    .iter()
+                    .map(|y| tables.tables_2d[*i].eval(x, *y))
+                    .collect()
+            }
+            Self::Table2DY(i, x, y) => {
+                let x = x.eval(state, registry);
+                y.eval(state, registry)
+                    .into_iter()
+                    .map(|y| tables.tables_2d[*i].eval(x, y))
+                    .collect()
+            }
+        }
+    }
+
+    pub fn simplify(
+        &self,
+        registry: &TableRegistry,
+        tables: &TableData<T>,
+    ) -> NumericVectorExpression<T> {
+        match self {
+            Self::Reverse(vector) => match vector.simplify(registry, tables) {
+                Self::Constant(mut vector) => {
+                    vector.reverse();
+                    Self::Constant(vector)
+                }
+                vector => Self::Reverse(Box::new(vector)),
+            },
+            Self::Push(value, vector) => {
+                match (value.simplify(registry), vector.simplify(registry, tables)) {
+                    (NumericExpression::Constant(value), Self::Constant(mut vector)) => {
+                        vector.push(value);
+                        Self::Constant(vector)
+                    }
+                    (value, vector) => Self::Push(value, Box::new(vector)),
+                }
+            }
+            Self::Pop(vector) => match vector.simplify(registry, tables) {
+                Self::Constant(mut vector) => {
+                    vector.pop();
+                    Self::Constant(vector)
+                }
+                vector => Self::Pop(Box::new(vector)),
+            },
+            Self::Set(value, vector, i) => match (
+                value.simplify(registry),
+                vector.simplify(registry, tables),
+                i.simplify(registry),
+            ) {
+                (
+                    NumericExpression::Constant(value),
+                    Self::Constant(mut vector),
+                    ElementExpression::Constant(i),
+                ) => {
+                    vector[i] = value;
+                    Self::Constant(vector)
+                }
+                (value, vector, i) => Self::Set(value, Box::new(vector), i),
+            },
+            Self::NumericOperation(op, x, y) => {
+                match (x.simplify(registry), y.simplify(registry, tables)) {
+                    (NumericExpression::Constant(x), Self::Constant(y)) => {
+                        Self::Constant(Self::eval_operation(op, x, y))
+                    }
+                    (x, y) => Self::NumericOperation(op.clone(), x, Box::new(y)),
+                }
+            }
+            Self::VectorOperation(op, x, y) => {
+                match (x.simplify(registry, tables), y.simplify(registry, tables)) {
+                    (Self::Constant(x), Self::Constant(y)) => {
+                        Self::Constant(Self::eval_vector_operation(op, &x, y))
+                    }
+                    (x, y) => Self::VectorOperation(op.clone(), Box::new(x), Box::new(y)),
+                }
+            }
+            Self::Table1D(i, x) => match x.simplify(registry) {
+                VectorExpression::Reference(ReferenceExpression::Constant(x)) => {
+                    Self::Constant(x.iter().map(|x| tables.tables_1d[*i].eval(*x)).collect())
+                }
+                x => Self::Table1D(*i, x),
+            },
+            Self::Table2D(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (
+                    VectorExpression::Reference(ReferenceExpression::Constant(x)),
+                    VectorExpression::Reference(ReferenceExpression::Constant(y)),
+                ) => Self::Constant(
+                    x.into_iter()
+                        .zip(y)
+                        .map(|(x, y)| tables.tables_2d[*i].eval(x, y))
+                        .collect(),
+                ),
+                (x, y) => Self::Table2D(*i, x, y),
+            },
+            Self::Table2DX(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (
+                    VectorExpression::Reference(ReferenceExpression::Constant(x)),
+                    ElementExpression::Constant(y),
+                ) => Self::Constant(
+                    x.into_iter()
+                        .map(|x| tables.tables_2d[*i].eval(x, y))
+                        .collect(),
+                ),
+                (x, y) => Self::Table2DX(*i, x, y),
+            },
+            Self::Table2DY(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (
+                    ElementExpression::Constant(x),
+                    VectorExpression::Reference(ReferenceExpression::Constant(y)),
+                ) => Self::Constant(
+                    y.into_iter()
+                        .map(|y| tables.tables_2d[*i].eval(x, y))
+                        .collect(),
+                ),
+                (x, y) => Self::Table2DY(*i, x, y),
+            },
+            _ => self.clone(),
+        }
+    }
+
+    fn eval_table(
+        i: usize,
+        args: &[ElementOrVectorExpression],
+        state: &State,
+        registry: &TableRegistry,
+        tables: &TableData<T>,
+    ) -> Vec<T> {
+        let mut result = vec![vec![]];
+        let mut vector_mode = false;
+        for arg in args {
+            match arg {
+                ElementOrVectorExpression::Element(element) => {
+                    let element = element.eval(state, registry);
+                    result.iter_mut().for_each(|r| r.push(element));
+                }
+                ElementOrVectorExpression::Vector(vector) => {
+                    if vector_mode {
+                        result
+                            .iter_mut()
+                            .zip(vector.eval(state, registry).into_iter())
+                            .for_each(|(r, v)| r.push(v));
+                    } else {
+                        result = vector
+                            .eval(state, registry)
+                            .into_iter()
+                            .map(|v| {
+                                let mut r = result[0].clone();
+                                r.push(v);
+                                r
+                            })
+                            .collect();
+                        vector_mode = true;
+                    }
+                }
+            }
+        }
+        result
+            .into_iter()
+            .map(|r| tables.tables[i].eval(&r))
+            .collect()
+    }
+
+    fn eval_operation(op: &NumericOperator, x: T, mut y: Vec<T>) -> Vec<T> {
+        match op {
+            NumericOperator::Add => y.iter_mut().for_each(|y| *y = *y + x),
+            NumericOperator::Subtract => y.iter_mut().for_each(|y| *y = *y - x),
+            NumericOperator::Multiply => y.iter_mut().for_each(|y| *y = *y * x),
+            NumericOperator::Divide => y.iter_mut().for_each(|y| *y = *y / x),
+            NumericOperator::Max => y.iter_mut().for_each(|y| {
+                if x > *y {
+                    *y = x
+                }
+            }),
+            NumericOperator::Min => y.iter_mut().for_each(|y| {
+                if x < *y {
+                    *y = x
+                }
+            }),
+        }
+        y
+    }
+    fn eval_vector_operation(op: &NumericOperator, x: &[T], mut y: Vec<T>) -> Vec<T> {
+        y.truncate(x.len());
+        match op {
+            NumericOperator::Add => y.iter_mut().zip(x).for_each(|(y, x)| *y = *y + *x),
+            NumericOperator::Subtract => y.iter_mut().zip(x).for_each(|(y, x)| *y = *y - *x),
+            NumericOperator::Multiply => y.iter_mut().zip(x).for_each(|(y, x)| *y = *y * *x),
+            NumericOperator::Divide => y.iter_mut().zip(x).for_each(|(y, x)| *y = *y / *x),
+            NumericOperator::Max => y.iter_mut().zip(x).for_each(|(y, x)| {
+                if *x > *y {
+                    *y = *x
+                }
+            }),
+            NumericOperator::Min => y.iter_mut().zip(x).for_each(|(y, x)| {
+                if *x < *y {
+                    *y = *x
+                }
+            }),
+        }
+        y
     }
 }
 
