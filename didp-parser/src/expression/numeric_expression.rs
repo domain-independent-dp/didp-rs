@@ -1,19 +1,11 @@
-use super::numeric_table_expression;
-use super::set_expression;
-use crate::state;
-use crate::table_registry;
+use super::numeric_table_expression::NumericTableExpression;
+use super::reference_expression::ReferenceExpression;
+use super::set_expression::SetExpression;
+use super::vector_expression::VectorExpression;
+use crate::state::State;
+use crate::table_registry::TableRegistry;
 use crate::variable::{Continuous, FromNumeric, Integer, Numeric};
 use std::boxed::Box;
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum NumericOperator {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Max,
-    Min,
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum NumericExpression<T: Numeric> {
@@ -28,9 +20,20 @@ pub enum NumericExpression<T: Numeric> {
         Box<NumericExpression<T>>,
         Box<NumericExpression<T>>,
     ),
-    Cardinality(set_expression::SetExpression),
-    IntegerTable(numeric_table_expression::NumericTableExpression<Integer>),
-    ContinuousTable(numeric_table_expression::NumericTableExpression<Continuous>),
+    Cardinality(SetExpression),
+    Length(VectorExpression),
+    IntegerTable(NumericTableExpression<Integer>),
+    ContinuousTable(NumericTableExpression<Continuous>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum NumericOperator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Max,
+    Min,
 }
 
 impl<T: Numeric> Default for NumericExpression<T> {
@@ -40,12 +43,7 @@ impl<T: Numeric> Default for NumericExpression<T> {
 }
 
 impl<T: Numeric> NumericExpression<T> {
-    pub fn eval(
-        &self,
-        state: &state::State,
-        metadata: &state::StateMetadata,
-        registry: &table_registry::TableRegistry,
-    ) -> T {
+    pub fn eval(&self, state: &State, registry: &TableRegistry) -> T {
         match self {
             Self::Constant(x) => *x,
             Self::IntegerVariable(i) => {
@@ -62,49 +60,54 @@ impl<T: Numeric> NumericExpression<T> {
             }
             Self::Cost => panic!(String::from("cost cannot be accessd from eval function")),
             Self::NumericOperation(op, a, b) => {
-                let a = a.eval(state, metadata, registry);
-                let b = b.eval(state, metadata, registry);
+                let a = a.eval(state, registry);
+                let b = b.eval(state, registry);
                 Self::eval_operation(op, a, b)
             }
-            Self::Cardinality(set_expression::SetExpression::SetVariable(i)) => {
-                let set = &state.signature_variables.set_variables[*i];
+            Self::Cardinality(SetExpression::Reference(expression)) => {
+                let set = expression.eval(
+                    state,
+                    registry,
+                    &state.signature_variables.set_variables,
+                    &registry.set_tables,
+                );
                 FromNumeric::from_usize(set.count_ones(..))
             }
-            Self::Cardinality(set_expression::SetExpression::VectorVariable(i)) => {
-                let set = &state.signature_variables.vector_variables[*i];
-                FromNumeric::from_usize(set.len())
-            }
             Self::Cardinality(set) => {
-                FromNumeric::from_usize(set.eval(state, metadata, registry).count_ones(..))
+                FromNumeric::from_usize(set.eval(state, registry).count_ones(..))
             }
+            Self::Length(VectorExpression::Reference(expression)) => {
+                let vector = expression.eval(
+                    state,
+                    registry,
+                    &state.signature_variables.vector_variables,
+                    &registry.vector_tables,
+                );
+                FromNumeric::from_usize(vector.len())
+            }
+            Self::Length(vector) => FromNumeric::from_usize(vector.eval(state, registry).len()),
             Self::IntegerTable(t) => {
-                T::from_integer(t.eval(state, metadata, registry, &registry.integer_tables))
+                T::from_integer(t.eval(state, registry, &registry.integer_tables))
             }
             Self::ContinuousTable(t) => {
-                T::from_continuous(t.eval(state, metadata, registry, &registry.continuous_tables))
+                T::from_continuous(t.eval(state, registry, &registry.continuous_tables))
             }
         }
     }
 
-    pub fn eval_cost(
-        &self,
-        cost: T,
-        state: &state::State,
-        metadata: &state::StateMetadata,
-        registry: &table_registry::TableRegistry,
-    ) -> T {
+    pub fn eval_cost(&self, cost: T, state: &State, registry: &TableRegistry) -> T {
         match self {
             Self::Cost => cost,
             Self::NumericOperation(op, a, b) => {
-                let a = a.eval_cost(cost, state, metadata, registry);
-                let b = b.eval_cost(cost, state, metadata, registry);
+                let a = a.eval_cost(cost, state, registry);
+                let b = b.eval_cost(cost, state, registry);
                 Self::eval_operation(op, a, b)
             }
-            _ => self.eval(state, metadata, registry),
+            _ => self.eval(state, registry),
         }
     }
 
-    pub fn simplify(&self, registry: &table_registry::TableRegistry) -> NumericExpression<T> {
+    pub fn simplify(&self, registry: &TableRegistry) -> NumericExpression<T> {
         match self {
             Self::NumericOperation(op, a, b) => {
                 match (a.simplify(registry), b.simplify(registry)) {
@@ -114,9 +117,21 @@ impl<T: Numeric> NumericExpression<T> {
                     (a, b) => Self::NumericOperation(op.clone(), Box::new(a), Box::new(b)),
                 }
             }
+            Self::Cardinality(expression) => match expression.simplify(registry) {
+                SetExpression::Reference(ReferenceExpression::Constant(set)) => {
+                    Self::Constant(FromNumeric::from_usize(set.count_ones(..)))
+                }
+                expression => Self::Cardinality(expression),
+            },
+            Self::Length(expression) => match expression.simplify(registry) {
+                VectorExpression::Reference(ReferenceExpression::Constant(vector)) => {
+                    Self::Constant(FromNumeric::from_usize(vector.len()))
+                }
+                expression => Self::Length(expression),
+            },
             Self::IntegerTable(expression) => {
                 match expression.simplify(registry, &registry.integer_tables) {
-                    numeric_table_expression::NumericTableExpression::Constant(value) => {
+                    NumericTableExpression::Constant(value) => {
                         Self::Constant(T::from_integer(value))
                     }
                     expression => Self::IntegerTable(expression),
@@ -124,7 +139,7 @@ impl<T: Numeric> NumericExpression<T> {
             }
             Self::ContinuousTable(expression) => {
                 match expression.simplify(registry, &registry.continuous_tables) {
-                    numeric_table_expression::NumericTableExpression::Constant(value) => {
+                    NumericTableExpression::Constant(value) => {
                         Self::Constant(T::from_continuous(value))
                     }
                     expression => Self::ContinuousTable(expression),
@@ -161,6 +176,7 @@ impl<T: Numeric> NumericExpression<T> {
 #[cfg(test)]
 mod tests {
     use super::super::element_expression;
+    use super::super::reference_expression::ReferenceExpression;
     use super::*;
     use crate::state;
     use crate::table;
@@ -169,80 +185,6 @@ mod tests {
     use ordered_float::OrderedFloat;
     use std::collections::HashMap;
     use std::rc::Rc;
-
-    fn generate_metadata() -> state::StateMetadata {
-        let object_names = vec!["object".to_string()];
-        let object_numbers = vec![10];
-        let mut name_to_object = HashMap::new();
-        name_to_object.insert("object".to_string(), 0);
-
-        let set_variable_names = vec!["s0".to_string(), "s1".to_string()];
-        let mut name_to_set_variable = HashMap::new();
-        name_to_set_variable.insert("s0".to_string(), 0);
-        name_to_set_variable.insert("s1".to_string(), 1);
-        let set_variable_to_object = vec![0, 0];
-
-        let vector_variable_names = vec!["p0".to_string()];
-        let mut name_to_vector_variable = HashMap::new();
-        name_to_vector_variable.insert("p0".to_string(), 0);
-        let vector_variable_to_object = vec![0];
-
-        let element_variable_names = vec!["e0".to_string()];
-        let mut name_to_element_variable = HashMap::new();
-        name_to_element_variable.insert("e0".to_string(), 0);
-        let element_variable_to_object = vec![0];
-
-        let integer_variable_names = vec!["i0".to_string(), "i1".to_string(), "i2".to_string()];
-        let mut name_to_integer_variable = HashMap::new();
-        name_to_integer_variable.insert("i0".to_string(), 0);
-        name_to_integer_variable.insert("i1".to_string(), 1);
-        name_to_integer_variable.insert("i2".to_string(), 2);
-
-        let continuous_variable_names = vec!["c0".to_string(), "c1".to_string(), "c2".to_string()];
-        let mut name_to_continuous_variable = HashMap::new();
-        name_to_continuous_variable.insert("c0".to_string(), 0);
-        name_to_continuous_variable.insert("c1".to_string(), 1);
-        name_to_continuous_variable.insert("c2".to_string(), 2);
-
-        let integer_resource_variable_names =
-            vec!["ir0".to_string(), "ir1".to_string(), "ir2".to_string()];
-        let mut name_to_integer_resource_variable = HashMap::new();
-        name_to_integer_resource_variable.insert("ir0".to_string(), 0);
-        name_to_integer_resource_variable.insert("ir1".to_string(), 1);
-        name_to_integer_resource_variable.insert("ir2".to_string(), 2);
-
-        let continuous_resource_variable_names =
-            vec!["cr0".to_string(), "cr1".to_string(), "cr2".to_string()];
-        let mut name_to_continuous_resource_variable = HashMap::new();
-        name_to_continuous_resource_variable.insert("cr0".to_string(), 0);
-        name_to_continuous_resource_variable.insert("cr1".to_string(), 1);
-        name_to_continuous_resource_variable.insert("cr2".to_string(), 2);
-
-        state::StateMetadata {
-            object_names,
-            name_to_object,
-            object_numbers,
-            set_variable_names,
-            name_to_set_variable,
-            set_variable_to_object,
-            vector_variable_names,
-            name_to_vector_variable,
-            vector_variable_to_object,
-            element_variable_names,
-            name_to_element_variable,
-            element_variable_to_object,
-            integer_variable_names,
-            name_to_integer_variable,
-            continuous_variable_names,
-            name_to_continuous_variable,
-            integer_resource_variable_names,
-            name_to_integer_resource_variable,
-            integer_less_is_better: vec![false, false, true, false],
-            continuous_resource_variable_names,
-            name_to_continuous_resource_variable,
-            continuous_less_is_better: vec![false, false, true, false],
-        }
-    }
 
     fn generate_state() -> state::State {
         let mut set1 = Set::with_capacity(3);
@@ -267,7 +209,7 @@ mod tests {
         }
     }
 
-    fn generate_registry() -> table_registry::TableRegistry {
+    fn generate_registry() -> TableRegistry {
         let mut name_to_constant = HashMap::new();
         name_to_constant.insert(String::from("f0"), 0);
 
@@ -376,7 +318,7 @@ mod tests {
             name_to_table,
         };
 
-        table_registry::TableRegistry {
+        TableRegistry {
             integer_tables,
             continuous_tables,
             ..Default::default()
@@ -385,87 +327,79 @@ mod tests {
 
     #[test]
     fn number_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression = NumericExpression::Constant(2);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 2);
+        assert_eq!(expression.eval(&state, &registry), 2);
     }
 
     #[test]
     fn integer_variable_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression = NumericExpression::<Integer>::IntegerVariable(0);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 1);
+        assert_eq!(expression.eval(&state, &registry), 1);
         let expression = NumericExpression::<Integer>::IntegerVariable(1);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 2);
+        assert_eq!(expression.eval(&state, &registry), 2);
         let expression = NumericExpression::<Integer>::IntegerVariable(2);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 3);
+        assert_eq!(expression.eval(&state, &registry), 3);
     }
 
     #[test]
     fn integer_resource_variable_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression = NumericExpression::<Integer>::IntegerResourceVariable(0);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 4);
+        assert_eq!(expression.eval(&state, &registry), 4);
         let expression = NumericExpression::<Integer>::IntegerResourceVariable(1);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 5);
+        assert_eq!(expression.eval(&state, &registry), 5);
         let expression = NumericExpression::<Integer>::IntegerResourceVariable(2);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 6);
+        assert_eq!(expression.eval(&state, &registry), 6);
     }
 
     #[test]
     fn continuous_variable_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression = NumericExpression::<Continuous>::ContinuousVariable(0);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 1.0);
+        assert_eq!(expression.eval(&state, &registry), 1.0);
         let expression = NumericExpression::<Continuous>::ContinuousVariable(1);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 2.0);
+        assert_eq!(expression.eval(&state, &registry), 2.0);
         let expression = NumericExpression::<Continuous>::ContinuousVariable(2);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 3.0);
+        assert_eq!(expression.eval(&state, &registry), 3.0);
     }
 
     #[test]
     fn continuous_resource_variable_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression = NumericExpression::<Continuous>::ContinuousResourceVariable(0);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 4.0);
+        assert_eq!(expression.eval(&state, &registry), 4.0);
         let expression = NumericExpression::<Continuous>::ContinuousResourceVariable(1);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 5.0);
+        assert_eq!(expression.eval(&state, &registry), 5.0);
         let expression = NumericExpression::<Continuous>::ContinuousResourceVariable(2);
-        assert_eq!(expression.eval(&state, &metadata, &registry), 6.0);
+        assert_eq!(expression.eval(&state, &registry), 6.0);
     }
 
     #[test]
     fn cost_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<Integer> = NumericExpression::Cost {};
-        assert_eq!(expression.eval_cost(0, &state, &metadata, &registry), 0);
+        assert_eq!(expression.eval_cost(0, &state, &registry), 0);
     }
 
     #[test]
     #[should_panic]
     fn cost_eval_panic() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<Integer> = NumericExpression::Cost {};
-        assert_eq!(expression.eval(&state, &metadata, &registry), 0);
+        assert_eq!(expression.eval(&state, &registry), 0);
     }
 
     #[test]
     fn add_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<Integer> = NumericExpression::NumericOperation(
@@ -473,12 +407,11 @@ mod tests {
             Box::new(NumericExpression::Constant(3)),
             Box::new(NumericExpression::Constant(2)),
         );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 5);
+        assert_eq!(expression.eval(&state, &registry), 5);
     }
 
     #[test]
     fn subtract_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<Integer> = NumericExpression::NumericOperation(
@@ -486,12 +419,11 @@ mod tests {
             Box::new(NumericExpression::Constant(3)),
             Box::new(NumericExpression::Constant(2)),
         );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 1);
+        assert_eq!(expression.eval(&state, &registry), 1);
     }
 
     #[test]
     fn multiply_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<Integer> = NumericExpression::NumericOperation(
@@ -499,12 +431,11 @@ mod tests {
             Box::new(NumericExpression::Constant(3)),
             Box::new(NumericExpression::Constant(2)),
         );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 6);
+        assert_eq!(expression.eval(&state, &registry), 6);
     }
 
     #[test]
     fn divide_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<Integer> = NumericExpression::NumericOperation(
@@ -512,12 +443,11 @@ mod tests {
             Box::new(NumericExpression::Constant(3)),
             Box::new(NumericExpression::Constant(2)),
         );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 1);
+        assert_eq!(expression.eval(&state, &registry), 1);
     }
 
     #[test]
     fn max_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<Integer> = NumericExpression::NumericOperation(
@@ -525,12 +455,11 @@ mod tests {
             Box::new(NumericExpression::Constant(3)),
             Box::new(NumericExpression::Constant(2)),
         );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 3);
+        assert_eq!(expression.eval(&state, &registry), 3);
     }
 
     #[test]
     fn min_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression: NumericExpression<Integer> = NumericExpression::NumericOperation(
@@ -538,86 +467,81 @@ mod tests {
             Box::new(NumericExpression::Constant(3)),
             Box::new(NumericExpression::Constant(2)),
         );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 2);
+        assert_eq!(expression.eval(&state, &registry), 2);
     }
 
     #[test]
     fn cardinality_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = NumericExpression::<Integer>::Cardinality(
-            set_expression::SetExpression::SetVariable(0),
-        );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 2);
-        let expression = NumericExpression::<Integer>::Cardinality(
-            set_expression::SetExpression::VectorVariable(0),
-        );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 2);
-        let expression =
-            NumericExpression::<Integer>::Cardinality(set_expression::SetExpression::Complement(
-                Box::new(set_expression::SetExpression::SetVariable(0)),
-            ));
-        assert_eq!(expression.eval(&state, &metadata, &registry), 1);
+        let expression = NumericExpression::<Integer>::Cardinality(SetExpression::Reference(
+            ReferenceExpression::Variable(0),
+        ));
+        assert_eq!(expression.eval(&state, &registry), 2);
+        let expression = NumericExpression::<Integer>::Cardinality(SetExpression::Complement(
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+        ));
+        assert_eq!(expression.eval(&state, &registry), 1);
+    }
+
+    #[test]
+    fn length_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let expression = NumericExpression::<Integer>::Length(VectorExpression::Reference(
+            ReferenceExpression::Variable(0),
+        ));
+        assert_eq!(expression.eval(&state, &registry), 2);
     }
 
     #[test]
     fn table_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
 
-        let expression = NumericExpression::<Integer>::IntegerTable(
-            numeric_table_expression::NumericTableExpression::Table(
-                0,
-                vec![
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(1),
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(0),
-                ],
-            ),
-        );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 100);
-        let expression = NumericExpression::<Integer>::IntegerTable(
-            numeric_table_expression::NumericTableExpression::Table(
-                0,
-                vec![
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(1),
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(1),
-                ],
-            ),
-        );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 200);
-        let expression = NumericExpression::<Integer>::IntegerTable(
-            numeric_table_expression::NumericTableExpression::Table(
-                0,
-                vec![
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(1),
-                    element_expression::ElementExpression::Constant(2),
-                    element_expression::ElementExpression::Constant(0),
-                ],
-            ),
-        );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 300);
-        let expression = NumericExpression::<Integer>::IntegerTable(
-            numeric_table_expression::NumericTableExpression::Table(
-                0,
-                vec![
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(1),
-                    element_expression::ElementExpression::Constant(2),
-                    element_expression::ElementExpression::Constant(1),
-                ],
-            ),
-        );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 400);
+        let expression = NumericExpression::<Integer>::IntegerTable(NumericTableExpression::Table(
+            0,
+            vec![
+                element_expression::ElementExpression::Constant(0),
+                element_expression::ElementExpression::Constant(1),
+                element_expression::ElementExpression::Constant(0),
+                element_expression::ElementExpression::Constant(0),
+            ],
+        ));
+        assert_eq!(expression.eval(&state, &registry), 100);
+        let expression = NumericExpression::<Integer>::IntegerTable(NumericTableExpression::Table(
+            0,
+            vec![
+                element_expression::ElementExpression::Constant(0),
+                element_expression::ElementExpression::Constant(1),
+                element_expression::ElementExpression::Constant(0),
+                element_expression::ElementExpression::Constant(1),
+            ],
+        ));
+        assert_eq!(expression.eval(&state, &registry), 200);
+        let expression = NumericExpression::<Integer>::IntegerTable(NumericTableExpression::Table(
+            0,
+            vec![
+                element_expression::ElementExpression::Constant(0),
+                element_expression::ElementExpression::Constant(1),
+                element_expression::ElementExpression::Constant(2),
+                element_expression::ElementExpression::Constant(0),
+            ],
+        ));
+        assert_eq!(expression.eval(&state, &registry), 300);
+        let expression = NumericExpression::<Integer>::IntegerTable(NumericTableExpression::Table(
+            0,
+            vec![
+                element_expression::ElementExpression::Constant(0),
+                element_expression::ElementExpression::Constant(1),
+                element_expression::ElementExpression::Constant(2),
+                element_expression::ElementExpression::Constant(1),
+            ],
+        ));
+        assert_eq!(expression.eval(&state, &registry), 400);
 
-        let expression = NumericExpression::<Continuous>::ContinuousTable(
-            numeric_table_expression::NumericTableExpression::Table(
+        let expression =
+            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
                 0,
                 vec![
                     element_expression::ElementExpression::Constant(0),
@@ -625,11 +549,10 @@ mod tests {
                     element_expression::ElementExpression::Constant(0),
                     element_expression::ElementExpression::Constant(0),
                 ],
-            ),
-        );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 100.0);
-        let expression = NumericExpression::<Continuous>::ContinuousTable(
-            numeric_table_expression::NumericTableExpression::Table(
+            ));
+        assert_eq!(expression.eval(&state, &registry), 100.0);
+        let expression =
+            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
                 0,
                 vec![
                     element_expression::ElementExpression::Constant(0),
@@ -637,11 +560,10 @@ mod tests {
                     element_expression::ElementExpression::Constant(0),
                     element_expression::ElementExpression::Constant(1),
                 ],
-            ),
-        );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 200.0);
-        let expression = NumericExpression::<Continuous>::ContinuousTable(
-            numeric_table_expression::NumericTableExpression::Table(
+            ));
+        assert_eq!(expression.eval(&state, &registry), 200.0);
+        let expression =
+            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
                 0,
                 vec![
                     element_expression::ElementExpression::Constant(0),
@@ -649,11 +571,10 @@ mod tests {
                     element_expression::ElementExpression::Constant(2),
                     element_expression::ElementExpression::Constant(0),
                 ],
-            ),
-        );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 300.0);
-        let expression = NumericExpression::<Continuous>::ContinuousTable(
-            numeric_table_expression::NumericTableExpression::Table(
+            ));
+        assert_eq!(expression.eval(&state, &registry), 300.0);
+        let expression =
+            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
                 0,
                 vec![
                     element_expression::ElementExpression::Constant(0),
@@ -661,9 +582,8 @@ mod tests {
                     element_expression::ElementExpression::Constant(2),
                     element_expression::ElementExpression::Constant(1),
                 ],
-            ),
-        );
-        assert_eq!(expression.eval(&state, &metadata, &registry), 400.0);
+            ));
+        assert_eq!(expression.eval(&state, &registry), 400.0);
     }
 
     #[test]
@@ -839,9 +759,9 @@ mod tests {
     #[test]
     fn cardinality_simplify() {
         let registry = generate_registry();
-        let expression = NumericExpression::<Integer>::Cardinality(
-            set_expression::SetExpression::SetVariable(0),
-        );
+        let expression = NumericExpression::<Integer>::Cardinality(SetExpression::Reference(
+            ReferenceExpression::Variable(0),
+        ));
         assert_eq!(expression.simplify(&registry), expression);
     }
 
@@ -849,22 +769,17 @@ mod tests {
     fn integer_table_simplify() {
         let registry = generate_registry();
 
-        let expression = NumericExpression::IntegerTable(
-            numeric_table_expression::NumericTableExpression::Table1D(
-                0,
-                element_expression::ElementExpression::Constant(0),
-            ),
-        );
+        let expression = NumericExpression::IntegerTable(NumericTableExpression::Table1D(
+            0,
+            element_expression::ElementExpression::Constant(0),
+        ));
         assert_eq!(
             expression.simplify(&registry),
             NumericExpression::Constant(10)
         );
 
         let expression = NumericExpression::<Integer>::IntegerTable(
-            numeric_table_expression::NumericTableExpression::Table1D(
-                0,
-                element_expression::ElementExpression::Variable(0),
-            ),
+            NumericTableExpression::Table1D(0, element_expression::ElementExpression::Variable(0)),
         );
         assert_eq!(expression.simplify(&registry), expression);
     }
@@ -873,22 +788,17 @@ mod tests {
     fn continuous_table_simplify() {
         let registry = generate_registry();
 
-        let expression = NumericExpression::ContinuousTable(
-            numeric_table_expression::NumericTableExpression::Table1D(
-                0,
-                element_expression::ElementExpression::Constant(0),
-            ),
-        );
+        let expression = NumericExpression::ContinuousTable(NumericTableExpression::Table1D(
+            0,
+            element_expression::ElementExpression::Constant(0),
+        ));
         assert_eq!(
             expression.simplify(&registry),
             NumericExpression::Constant(10.0)
         );
 
         let expression = NumericExpression::<Continuous>::ContinuousTable(
-            numeric_table_expression::NumericTableExpression::Table1D(
-                0,
-                element_expression::ElementExpression::Variable(0),
-            ),
+            NumericTableExpression::Table1D(0, element_expression::ElementExpression::Variable(0)),
         );
         assert_eq!(expression.simplify(&registry), expression);
     }

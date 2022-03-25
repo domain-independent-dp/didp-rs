@@ -100,7 +100,7 @@ impl<T: variable::Numeric> Model<T> {
     pub fn check_constraints(&self, state: &state::State) -> bool {
         self.constraints.iter().all(|constraint| {
             constraint
-                .is_satisfied(state, &self.state_metadata, &self.table_registry)
+                .is_satisfied(state, &self.table_registry)
                 .unwrap_or(true)
         })
     }
@@ -113,7 +113,7 @@ impl<T: variable::Numeric> Model<T> {
             }
         }
         for base_case in &self.base_cases {
-            let cost = base_case.get_cost(state, &self.state_metadata, &self.table_registry);
+            let cost = base_case.get_cost(state, &self.table_registry);
             if cost.is_some() {
                 return cost;
             }
@@ -847,9 +847,9 @@ table_values:
                 cost: NumericExpression::Constant(0),
                 conditions: vec![
                     GroundedCondition {
-                        condition: Condition::Set(SetCondition::IsEmpty(
-                            SetExpression::SetVariable(0),
-                        )),
+                        condition: Condition::Set(SetCondition::IsEmpty(SetExpression::Reference(
+                            ReferenceExpression::Variable(0),
+                        ))),
                         ..Default::default()
                     },
                     GroundedCondition {
@@ -879,7 +879,7 @@ table_values:
                         0,
                         SetExpression::SetElementOperation(
                             SetElementOperator::Remove,
-                            Box::new(SetExpression::SetVariable(0)),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                             ElementExpression::Constant(0),
                         ),
                     )],
@@ -930,7 +930,7 @@ table_values:
                         0,
                         SetExpression::SetElementOperation(
                             SetElementOperator::Remove,
-                            Box::new(SetExpression::SetVariable(0)),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                             ElementExpression::Constant(1),
                         ),
                     )],
@@ -981,7 +981,7 @@ table_values:
                         0,
                         SetExpression::SetElementOperation(
                             SetElementOperator::Remove,
-                            Box::new(SetExpression::SetVariable(0)),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                             ElementExpression::Constant(2),
                         ),
                     )],

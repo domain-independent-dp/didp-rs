@@ -17,7 +17,9 @@ impl ElementExpression {
             Self::Stage => state.stage,
             Self::Constant(x) => *x,
             Self::Variable(i) => state.signature_variables.element_variables[*i],
-            Self::Table(table) => table.eval(state, registry, &registry.element_tables),
+            Self::Table(table) => table
+                .eval(state, registry, &registry.element_tables)
+                .clone(),
         }
     }
 
@@ -47,23 +49,26 @@ pub enum TableExpression<T: Clone> {
 }
 
 impl<T: Clone> TableExpression<T> {
-    pub fn eval(&self, state: &State, registry: &TableRegistry, tables: &TableData<T>) -> T {
+    pub fn eval<'a>(
+        &'a self,
+        state: &State,
+        registry: &'a TableRegistry,
+        tables: &'a TableData<T>,
+    ) -> &'a T {
         match self {
-            Self::Constant(value) => value.clone(),
-            Self::Table1D(i, x) => tables.tables_1d[*i].get(x.eval(state, registry)).clone(),
-            Self::Table2D(i, x, y) => tables.tables_2d[*i]
-                .get(x.eval(state, registry), y.eval(state, registry))
-                .clone(),
-            Self::Table3D(i, x, y, z) => tables.tables_3d[*i]
-                .get(
-                    x.eval(state, registry),
-                    y.eval(state, registry),
-                    z.eval(state, registry),
-                )
-                .clone(),
+            Self::Constant(value) => value,
+            Self::Table1D(i, x) => tables.tables_1d[*i].get(x.eval(state, registry)),
+            Self::Table2D(i, x, y) => {
+                tables.tables_2d[*i].get(x.eval(state, registry), y.eval(state, registry))
+            }
+            Self::Table3D(i, x, y, z) => tables.tables_3d[*i].get(
+                x.eval(state, registry),
+                y.eval(state, registry),
+                z.eval(state, registry),
+            ),
             Self::Table(i, args) => {
                 let args: Vec<Element> = args.iter().map(|x| x.eval(state, registry)).collect();
-                tables.tables[*i].get(&args).clone()
+                tables.tables[*i].get(&args)
             }
         }
     }

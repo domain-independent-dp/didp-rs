@@ -20,7 +20,6 @@ impl GroundedCondition {
     pub fn is_satisfied(
         &self,
         state: &state::State,
-        metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
     ) -> Option<bool> {
         for (i, v) in &self.elements_in_set_variable {
@@ -33,7 +32,7 @@ impl GroundedCondition {
                 return None;
             }
         }
-        Some(self.condition.eval(state, metadata, registry))
+        Some(self.condition.eval(state, registry))
     }
 
     pub fn load_grounded_conditions_from_yaml(
@@ -190,7 +189,6 @@ mod tests {
 
     #[test]
     fn is_satisfied_test() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let mut s0 = variable::Set::with_capacity(2);
         s0.insert(0);
@@ -207,51 +205,11 @@ mod tests {
         let condition = GroundedCondition {
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Variable(0),
-                SetExpression::SetVariable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
             )),
             ..Default::default()
         };
-        assert_eq!(
-            condition.is_satisfied(&state, &metadata, &registry),
-            Some(true)
-        );
-
-        let condition = GroundedCondition {
-            condition: Condition::Set(SetCondition::IsIn(
-                ElementExpression::Variable(0),
-                SetExpression::VectorVariable(0),
-            )),
-            ..Default::default()
-        };
-        assert_eq!(
-            condition.is_satisfied(&state, &metadata, &registry),
-            Some(false)
-        );
-
-        let condition = GroundedCondition {
-            condition: Condition::Set(SetCondition::IsIn(
-                ElementExpression::Constant(0),
-                SetExpression::VectorVariable(0),
-            )),
-            elements_in_set_variable: vec![(0, 0)],
-            elements_in_vector_variable: vec![],
-        };
-        assert_eq!(
-            condition.is_satisfied(&state, &metadata, &registry),
-            Some(false)
-        );
-
-        let condition = GroundedCondition {
-            condition: Condition::Set(SetCondition::IsIn(
-                ElementExpression::Constant(1),
-                SetExpression::VectorVariable(0),
-            )),
-            elements_in_set_variable: vec![(0, 1)],
-            elements_in_vector_variable: vec![],
-        };
-        assert!(condition
-            .is_satisfied(&state, &metadata, &registry)
-            .is_none());
+        assert_eq!(condition.is_satisfied(&state, &registry), Some(true));
 
         let condition = GroundedCondition {
             condition: Condition::Set(SetCondition::Ne(
@@ -261,10 +219,7 @@ mod tests {
             elements_in_set_variable: vec![(0, 0), (0, 0)],
             elements_in_vector_variable: vec![],
         };
-        assert_eq!(
-            condition.is_satisfied(&state, &metadata, &registry),
-            Some(false)
-        );
+        assert_eq!(condition.is_satisfied(&state, &registry), Some(false));
 
         let condition = GroundedCondition {
             condition: Condition::Set(SetCondition::Ne(
@@ -274,34 +229,27 @@ mod tests {
             elements_in_set_variable: vec![(0, 1), (0, 0)],
             elements_in_vector_variable: vec![],
         };
-        assert!(condition
-            .is_satisfied(&state, &metadata, &registry)
-            .is_none());
+        assert!(condition.is_satisfied(&state, &registry).is_none());
 
         let condition = GroundedCondition {
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Constant(0),
-                SetExpression::SetVariable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
             )),
             elements_in_set_variable: vec![],
             elements_in_vector_variable: vec![(0, 0)],
         };
-        assert!(condition
-            .is_satisfied(&state, &metadata, &registry)
-            .is_none());
+        assert!(condition.is_satisfied(&state, &registry).is_none());
 
         let condition = GroundedCondition {
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Constant(1),
-                SetExpression::SetVariable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
             )),
             elements_in_set_variable: vec![],
             elements_in_vector_variable: vec![(0, 1)],
         };
-        assert_eq!(
-            condition.is_satisfied(&state, &metadata, &registry),
-            Some(false)
-        );
+        assert_eq!(condition.is_satisfied(&state, &registry), Some(false));
     }
 
     #[test]
@@ -331,7 +279,7 @@ condition: (and (is_in e0 s0) true)
             elements_in_vector_variable: Vec::new(),
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Variable(0),
-                SetExpression::SetVariable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
             )),
         }];
         assert_eq!(conditions.unwrap(), expected);
@@ -372,7 +320,7 @@ condition: (and (is_in e0 s0) true)
             elements_in_vector_variable: Vec::new(),
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Constant(0),
-                SetExpression::SetVariable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
             )),
         }];
         assert_eq!(conditions.unwrap(), expected);
@@ -436,7 +384,7 @@ forall:
                 elements_in_vector_variable: vec![(0, 0)],
                 condition: Condition::Set(SetCondition::IsIn(
                     ElementExpression::Constant(0),
-                    SetExpression::SetVariable(0),
+                    SetExpression::Reference(ReferenceExpression::Variable(0)),
                 )),
             },
             GroundedCondition {
@@ -444,7 +392,7 @@ forall:
                 elements_in_vector_variable: vec![(0, 1)],
                 condition: Condition::Set(SetCondition::IsIn(
                     ElementExpression::Constant(1),
-                    SetExpression::SetVariable(0),
+                    SetExpression::Reference(ReferenceExpression::Variable(0)),
                 )),
             },
         ];

@@ -2,9 +2,10 @@ use super::numeric_table_parser;
 use super::set_parser;
 use super::util;
 use super::util::ParseErr;
+use super::vector_parser;
 use crate::expression::{NumericExpression, NumericOperator};
-use crate::state;
-use crate::table_registry;
+use crate::state::StateMetadata;
+use crate::table_registry::TableRegistry;
 use crate::variable::{Integer, Numeric};
 use std::collections;
 use std::fmt;
@@ -12,8 +13,8 @@ use std::str;
 
 pub fn parse_expression<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    registry: &'b table_registry::TableRegistry,
+    metadata: &'b StateMetadata,
+    registry: &'b TableRegistry,
     parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
@@ -27,8 +28,8 @@ where
 
 pub fn parse_integer_expression<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    registry: &'b table_registry::TableRegistry,
+    metadata: &'b StateMetadata,
+    registry: &'b TableRegistry,
     parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
@@ -46,10 +47,13 @@ where
                 name,
                 rest,
                 metadata,
-                &registry.integer_tables,
+                registry,
                 parameters,
+                &registry.integer_tables,
             )? {
                 Ok((NumericExpression::IntegerTable(expression), rest))
+            } else if name == "length" {
+                parse_length(rest, metadata, registry, parameters)
             } else {
                 let (x, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
                 let (y, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
@@ -59,7 +63,7 @@ where
             }
         }
         ")" => Err(ParseErr::new("unexpected `)`".to_string())),
-        "|" => parse_cardinality(rest, metadata, parameters),
+        "|" => parse_cardinality(rest, metadata, registry, parameters),
         _ => {
             let expression = parse_integer_atom(token, metadata, registry)?;
             Ok((expression, rest))
@@ -69,8 +73,8 @@ where
 
 pub fn parse_continuous_expression<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    registry: &'b table_registry::TableRegistry,
+    metadata: &'b StateMetadata,
+    registry: &'b TableRegistry,
     parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
@@ -88,18 +92,22 @@ where
                 name,
                 rest,
                 metadata,
-                &registry.integer_tables,
+                registry,
                 parameters,
+                &registry.integer_tables,
             )? {
                 Ok((NumericExpression::IntegerTable(expression), rest))
             } else if let Some((expression, rest)) = numeric_table_parser::parse_expression(
                 name,
                 rest,
                 metadata,
-                &registry.continuous_tables,
+                registry,
                 parameters,
+                &registry.continuous_tables,
             )? {
                 Ok((NumericExpression::ContinuousTable(expression), rest))
+            } else if name == "length" {
+                parse_length(rest, metadata, registry, parameters)
             } else {
                 let (x, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
                 let (y, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
@@ -109,7 +117,7 @@ where
             }
         }
         ")" => Err(ParseErr::new("unexpected `)`".to_string())),
-        "|" => parse_cardinality(rest, metadata, parameters),
+        "|" => parse_cardinality(rest, metadata, registry, parameters),
         _ => {
             let expression = parse_atom(token, metadata, registry)?;
             Ok((expression, rest))
@@ -162,10 +170,11 @@ where
 
 fn parse_cardinality<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
+    metadata: &'b StateMetadata,
+    registry: &'b TableRegistry,
     parameters: &'c collections::HashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr> {
-    let (expression, rest) = set_parser::parse_set_expression(tokens, metadata, parameters)?;
+    let (expression, rest) = set_parser::parse_expression(tokens, metadata, registry, parameters)?;
     let (token, rest) = rest
         .split_first()
         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
@@ -178,10 +187,22 @@ fn parse_cardinality<'a, 'b, 'c, T: Numeric>(
     Ok((NumericExpression::Cardinality(expression), rest))
 }
 
+fn parse_length<'a, 'b, 'c, T: Numeric>(
+    tokens: &'a [String],
+    metadata: &'b StateMetadata,
+    registry: &'b TableRegistry,
+    parameters: &'c collections::HashMap<String, usize>,
+) -> Result<(NumericExpression<T>, &'a [String]), ParseErr> {
+    let (expression, rest) =
+        vector_parser::parse_expression(tokens, metadata, registry, parameters)?;
+    let rest = util::parse_closing(rest)?;
+    Ok((NumericExpression::Length(expression), rest))
+}
+
 fn parse_integer_atom<T: Numeric>(
     token: &str,
-    metadata: &state::StateMetadata,
-    registry: &table_registry::TableRegistry,
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
 ) -> Result<NumericExpression<T>, ParseErr> {
     if token == "cost" {
         Ok(NumericExpression::Cost)
@@ -201,8 +222,8 @@ fn parse_integer_atom<T: Numeric>(
 
 fn parse_atom<T: Numeric>(
     token: &str,
-    metadata: &state::StateMetadata,
-    registry: &table_registry::TableRegistry,
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
 ) -> Result<NumericExpression<T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -238,7 +259,7 @@ mod tests {
     use crate::variable::Continuous;
     use std::collections::HashMap;
 
-    fn generate_metadata() -> state::StateMetadata {
+    fn generate_metadata() -> StateMetadata {
         let object_names = vec!["object".to_string()];
         let object_numbers = vec![10];
         let mut name_to_object = HashMap::new();
@@ -331,7 +352,7 @@ mod tests {
         name_to_continuous_resource_variable.insert("cr2".to_string(), 2);
         name_to_continuous_resource_variable.insert("cr3".to_string(), 3);
 
-        state::StateMetadata {
+        StateMetadata {
             object_names,
             name_to_object,
             object_numbers,
@@ -363,7 +384,7 @@ mod tests {
         parameters
     }
 
-    fn generate_registry() -> table_registry::TableRegistry {
+    fn generate_registry() -> TableRegistry {
         let mut name_to_constant = HashMap::new();
         name_to_constant.insert(String::from("f0"), 0);
 
@@ -426,7 +447,7 @@ mod tests {
             name_to_table,
         };
 
-        table_registry::TableRegistry {
+        TableRegistry {
             integer_tables,
             continuous_tables,
             ..Default::default()
@@ -511,11 +532,13 @@ mod tests {
             );
             assert_eq!(
                 args[2],
-                ArgumentExpression::Set(SetExpression::SetVariable(0))
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0)))
             );
             assert_eq!(
                 args[3],
-                ArgumentExpression::Set(SetExpression::VectorVariable(0))
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Variable(0)
+                ))
             );
         }
         assert_eq!(rest, &tokens[7..]);
@@ -546,11 +569,13 @@ mod tests {
             );
             assert_eq!(
                 args[2],
-                ArgumentExpression::Set(SetExpression::SetVariable(0))
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0)))
             );
             assert_eq!(
                 args[3],
-                ArgumentExpression::Set(SetExpression::VectorVariable(0))
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Variable(0)
+                ))
             );
         }
         assert_eq!(rest, &tokens[7..]);
@@ -711,7 +736,7 @@ mod tests {
     }
 
     #[test]
-    fn pare_cardinality_ok() {
+    fn parse_cardinality_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
@@ -724,13 +749,15 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericExpression::Cardinality(SetExpression::SetVariable(2))
+            NumericExpression::Cardinality(SetExpression::Reference(
+                ReferenceExpression::Variable(2)
+            ))
         );
         assert_eq!(rest, &tokens[3..]);
     }
 
     #[test]
-    fn pare_cardinality_err() {
+    fn parse_cardinality_err() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();

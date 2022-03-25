@@ -7,11 +7,13 @@ use std::fmt;
 use std::str;
 
 mod condition_parser;
+mod element_parser;
 mod numeric_parser;
 mod numeric_table_parser;
+mod reference_parser;
 mod set_parser;
-mod table_parser;
 mod util;
+mod vector_parser;
 
 pub use util::ParseErr;
 
@@ -37,13 +39,15 @@ where
     }
 }
 
-pub fn parse_set(
+pub fn parse_element(
     text: String,
     metadata: &state::StateMetadata,
+    registry: &table_registry::TableRegistry,
     parameters: &collections::HashMap<String, usize>,
-) -> Result<expression::SetExpression, ParseErr> {
+) -> Result<expression::ElementExpression, ParseErr> {
     let tokens = tokenize(text);
-    let (expression, rest) = set_parser::parse_set_expression(&tokens, metadata, parameters)?;
+    let (expression, rest) =
+        element_parser::parse_expression(&tokens, metadata, registry, parameters)?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -54,13 +58,33 @@ pub fn parse_set(
     }
 }
 
-pub fn parse_element(
+pub fn parse_set(
     text: String,
     metadata: &state::StateMetadata,
+    registry: &table_registry::TableRegistry,
     parameters: &collections::HashMap<String, usize>,
-) -> Result<expression::ElementExpression, ParseErr> {
+) -> Result<expression::SetExpression, ParseErr> {
     let tokens = tokenize(text);
-    let (expression, rest) = set_parser::parse_element_expression(&tokens, metadata, parameters)?;
+    let (expression, rest) = set_parser::parse_expression(&tokens, metadata, registry, parameters)?;
+    if rest.is_empty() {
+        Ok(expression)
+    } else {
+        Err(ParseErr::new(format!(
+            "unexpected tokens: `{}`",
+            rest.join(" ")
+        )))
+    }
+}
+
+pub fn parse_vector(
+    text: String,
+    metadata: &state::StateMetadata,
+    registry: &table_registry::TableRegistry,
+    parameters: &collections::HashMap<String, usize>,
+) -> Result<expression::VectorExpression, ParseErr> {
+    let tokens = tokenize(text);
+    let (expression, rest) =
+        vector_parser::parse_expression(&tokens, metadata, registry, parameters)?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -246,7 +270,7 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let text = "(+ (- 5 (/ (f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(+ (& s0 (- s2 (+ s3 2))) (- s1 1))|)))".to_string();
+        let text = "(+ (- 5 (/ (f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(+ (intersection s0 (remove s2 (add s3 2))) (remove s1 1))|)))".to_string();
         let result = parse_numeric::<variable::Integer>(text, &metadata, &registry, &parameters);
         assert!(result.is_ok());
     }
@@ -264,36 +288,40 @@ mod tests {
     #[test]
     fn parse_set_ok() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let parameters = generate_parameters();
-        let text = "(+ (& s0 (- s2 (+ s3 2))) (- s1 1))".to_string();
-        let result = parse_set(text, &metadata, &parameters);
+        let text = "(+ (intersection s0 (- s2 (+ s3 2))) (- s1 1))".to_string();
+        let result = parse_set(text, &metadata, &registry, &parameters);
         assert!(result.is_ok());
     }
 
     #[test]
     fn parse_set_err() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "s0)".to_string();
-        let result = parse_set(text, &metadata, &parameters);
+        let result = parse_set(text, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_element_ok() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "e0".to_string();
-        let result = parse_element(text, &metadata, &parameters);
+        let result = parse_element(text, &metadata, &registry, &parameters);
         assert!(result.is_ok());
     }
 
     #[test]
     fn parse_element_err() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "0)".to_string();
-        let result = parse_element(text, &metadata, &parameters);
+        let result = parse_element(text, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 

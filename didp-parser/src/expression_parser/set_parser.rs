@@ -1,145 +1,114 @@
+use super::element_parser;
+use super::reference_parser;
 use super::util;
 use super::util::ParseErr;
-use crate::expression::{
-    ArgumentExpression, ElementExpression, SetElementOperator, SetExpression, SetOperator,
-};
-use crate::state;
-use crate::variable;
-use std::collections;
+use crate::expression::{ReferenceExpression, SetElementOperator, SetExpression, SetOperator};
+use crate::state::StateMetadata;
+use crate::table_registry::TableRegistry;
+use std::collections::HashMap;
 
-pub fn parse_set_expression<'a, 'b, 'c>(
+pub fn parse_expression<'a, 'b, 'c>(
     tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    parameters: &'c collections::HashMap<String, usize>,
+    metadata: &'b StateMetadata,
+    registry: &'b TableRegistry,
+    parameters: &'c HashMap<String, usize>,
 ) -> Result<(SetExpression, &'a [String]), ParseErr> {
-    let (expression, rest) = parse_argument(tokens, metadata, parameters)?;
-    match expression {
-        ArgumentExpression::Set(expression) => Ok((expression, rest)),
-        _ => Err(ParseErr::new(format!(
-            "not a set expression: {:?}",
-            expression
-        ))),
-    }
-}
-
-pub fn parse_element_expression<'a, 'b, 'c>(
-    tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(ElementExpression, &'a [String]), ParseErr> {
-    let (expression, rest) = parse_argument(tokens, metadata, parameters)?;
-    match expression {
-        ArgumentExpression::Element(expression) => Ok((expression, rest)),
-        _ => Err(ParseErr::new(format!(
-            "not an element expression: {:?}",
-            expression
-        ))),
-    }
-}
-
-pub fn parse_argument<'a, 'b, 'c>(
-    tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(ArgumentExpression, &'a [String]), ParseErr> {
     let (token, rest) = tokens
         .split_first()
         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     match &token[..] {
         "!" => {
-            let (expression, rest) = parse_set_expression(rest, metadata, parameters)?;
-            Ok((
-                ArgumentExpression::Set(SetExpression::Complement(Box::new(expression))),
-                rest,
-            ))
+            let (expression, rest) = parse_expression(rest, metadata, registry, parameters)?;
+            Ok((SetExpression::Complement(Box::new(expression)), rest))
         }
         "(" => {
-            let (expression, rest) = parse_operation(rest, metadata, parameters)?;
-            Ok((ArgumentExpression::Set(expression), rest))
+            let (name, rest) = tokens
+                .split_first()
+                .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+            if let Some((expression, rest)) = element_parser::parse_table_expression(
+                name,
+                rest,
+                metadata,
+                registry,
+                parameters,
+                &registry.set_tables,
+            )? {
+                Ok((
+                    SetExpression::Reference(ReferenceExpression::Table(expression)),
+                    rest,
+                ))
+            } else {
+                let (expression, rest) =
+                    parse_operation(name, rest, metadata, registry, parameters)?;
+                Ok((expression, rest))
+            }
         }
         ")" => Err(ParseErr::new("unexpected `)`".to_string())),
         _ => {
-            let argument = parse_atom(token, metadata, parameters)?;
-            Ok((argument, rest))
+            let set = reference_parser::parse_atom(
+                token,
+                &registry.set_tables.name_to_constant,
+                &metadata.name_to_set_variable,
+            )?;
+            Ok((SetExpression::Reference(set), rest))
         }
     }
 }
 
 fn parse_operation<'a, 'b, 'c>(
+    name: &'a str,
     tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    parameters: &'c collections::HashMap<String, usize>,
+    metadata: &'b StateMetadata,
+    registry: &'b TableRegistry,
+    parameters: &'c HashMap<String, usize>,
 ) -> Result<(SetExpression, &'a [String]), ParseErr> {
-    let (token, rest) = tokens
-        .split_first()
-        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
-    let (x, rest) = parse_argument(rest, metadata, parameters)?;
-    let (y, rest) = parse_argument(rest, metadata, parameters)?;
-    let rest = util::parse_closing(rest)?;
-
-    match &token[..] {
-        "+" => match (x, y) {
-            (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => Ok((
+    match name {
+        "union" => {
+            let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
+            let (y, rest) = parse_expression(tokens, metadata, registry, parameters)?;
+            let rest = util::parse_closing(rest)?;
+            Ok((
                 SetExpression::SetOperation(SetOperator::Union, Box::new(x), Box::new(y)),
                 rest,
-            )),
-            (ArgumentExpression::Set(x), ArgumentExpression::Element(y)) => Ok((
-                SetExpression::SetElementOperation(SetElementOperator::Add, Box::new(x), y),
-                rest,
-            )),
-            args => Err(ParseErr::new(format!(
-                "unexpected arguments for `+`: {:?}",
-                args
-            ))),
-        },
-        "-" => match (x, y) {
-            (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => Ok((
+            ))
+        }
+        "difference" => {
+            let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
+            let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
+            let rest = util::parse_closing(rest)?;
+            Ok((
                 SetExpression::SetOperation(SetOperator::Difference, Box::new(x), Box::new(y)),
                 rest,
-            )),
-            (ArgumentExpression::Set(x), ArgumentExpression::Element(y)) => Ok((
+            ))
+        }
+        "intersection" => {
+            let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
+            let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
+            let rest = util::parse_closing(rest)?;
+            Ok((
+                SetExpression::SetOperation(SetOperator::Intersection, Box::new(x), Box::new(y)),
+                rest,
+            ))
+        }
+        "add" => {
+            let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
+            let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let rest = util::parse_closing(rest)?;
+            Ok((
+                SetExpression::SetElementOperation(SetElementOperator::Add, Box::new(x), y),
+                rest,
+            ))
+        }
+        "remove" => {
+            let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
+            let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let rest = util::parse_closing(rest)?;
+            Ok((
                 SetExpression::SetElementOperation(SetElementOperator::Remove, Box::new(x), y),
                 rest,
-            )),
-            args => Err(ParseErr::new(format!(
-                "unexpected arguments for `-`: {:?}",
-                args
-            ))),
-        },
-        "&" => match (x, y) {
-            (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => Ok((
-                SetExpression::SetOperation(SetOperator::Intersect, Box::new(x), Box::new(y)),
-                rest,
-            )),
-            args => Err(ParseErr::new(format!(
-                "unexpected arguments for `*`: {:?}",
-                args
-            ))),
-        },
+            ))
+        }
         op => Err(ParseErr::new(format!("no such operator `{}`", op))),
-    }
-}
-
-fn parse_atom(
-    token: &str,
-    metadata: &state::StateMetadata,
-    parameters: &collections::HashMap<String, usize>,
-) -> Result<ArgumentExpression, ParseErr> {
-    if let Some(v) = parameters.get(token) {
-        Ok(ArgumentExpression::Element(ElementExpression::Constant(*v)))
-    } else if let Some(i) = metadata.name_to_element_variable.get(token) {
-        Ok(ArgumentExpression::Element(ElementExpression::Variable(*i)))
-    } else if let Some(i) = metadata.name_to_set_variable.get(token) {
-        Ok(ArgumentExpression::Set(SetExpression::SetVariable(*i)))
-    } else if let Some(i) = metadata.name_to_vector_variable.get(token) {
-        Ok(ArgumentExpression::Set(SetExpression::VectorVariable(*i)))
-    } else if token == "stage" {
-        Ok(ArgumentExpression::Element(ElementExpression::Stage))
-    } else {
-        let v: variable::Element = token.parse().map_err(|e| {
-            ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
-        })?;
-        Ok(ArgumentExpression::Element(ElementExpression::Constant(v)))
     }
 }
 
@@ -148,7 +117,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    fn generate_metadata() -> state::StateMetadata {
+    fn generate_metadata() -> StateMetadata {
         let object_names = vec!["object".to_string()];
         let object_numbers = vec![10];
         let mut name_to_object = HashMap::new();
@@ -205,7 +174,7 @@ mod tests {
         name_to_integer_variable.insert("n2".to_string(), 2);
         name_to_integer_variable.insert("n3".to_string(), 3);
 
-        state::StateMetadata {
+        StateMetadata {
             object_names,
             name_to_object,
             object_numbers,
@@ -224,26 +193,26 @@ mod tests {
         }
     }
 
-    fn generate_parameters() -> collections::HashMap<String, usize> {
-        let mut parameters = collections::HashMap::new();
+    fn generate_parameters() -> HashMap<String, usize> {
+        let mut parameters = HashMap::new();
         parameters.insert("param".to_string(), 0);
         parameters
     }
 
     #[test]
-    fn parse_set_expression_ok() {
+    fn parse_expression_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["s0", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, SetExpression::SetVariable(0)));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["p0", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, SetExpression::VectorVariable(0)));
@@ -251,16 +220,16 @@ mod tests {
     }
 
     #[test]
-    fn parse_set_expression_err() {
+    fn parse_expression_err() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["e1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["11", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
     }
 
@@ -272,7 +241,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(expression, SetExpression::Complement(_)));
@@ -291,14 +260,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["!", "n2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
     }
 
@@ -311,7 +280,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -328,7 +297,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -345,7 +314,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -362,7 +331,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -379,7 +348,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
@@ -402,128 +371,28 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "-", "s2", "n1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "&", "s2", "e1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "/", "s2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_set_expression(&tokens, &metadata, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_element_expression_ok() {
-        let metadata = generate_metadata();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["e1", ")", "1", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_element_expression(&tokens, &metadata, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, ElementExpression::Variable(1)));
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["11", ")", "1", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_element_expression(&tokens, &metadata, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, ElementExpression::Constant(11)));
-        assert_eq!(rest, &tokens[1..]);
-    }
-
-    #[test]
-    fn parse_element_expression_err() {
-        let metadata = generate_metadata();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["s1", ")", "1", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_element_expression(&tokens, &metadata, &parameters);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = ["p1", ")", "1", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_element_expression(&tokens, &metadata, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_argument_ok() {
-        let metadata = generate_metadata();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["!", "s2", "s1", ")", "e0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(
-            expression,
-            ArgumentExpression::Set(SetExpression::Complement(_))
-        ));
-        if let ArgumentExpression::Set(SetExpression::Complement(s)) = expression {
-            assert!(matches!(*s, SetExpression::SetVariable(2)));
-        }
-        assert_eq!(rest, &tokens[2..]);
-
-        let tokens: Vec<String> = ["(", "+", "s2", "s1", ")", "e0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(
-            expression,
-            ArgumentExpression::Set(SetExpression::SetOperation(SetOperator::Union, _, _))
-        ));
-        if let ArgumentExpression::Set(SetExpression::SetOperation(SetOperator::Union, x, y)) =
-            expression
-        {
-            assert!(matches!(*x, SetExpression::SetVariable(2)));
-            assert!(matches!(*y, SetExpression::SetVariable(1)));
-        }
-        assert_eq!(rest, &tokens[5..]);
-    }
-
-    #[test]
-    fn parse_argument_err() {
-        let metadata = generate_metadata();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = [")", "(", "+", "s2", "s1", ")", "e0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &parameters);
         assert!(result.is_err());
     }
 
@@ -532,81 +401,16 @@ mod tests {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["stage", ")", "1", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(
-            expression,
-            ArgumentExpression::Element(ElementExpression::Stage)
-        ));
-
-        assert_eq!(rest, &tokens[1..]);
-        let tokens: Vec<String> = ["e1", ")", "1", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(
-            expression,
-            ArgumentExpression::Element(ElementExpression::Variable(1))
-        ));
-        assert_eq!(rest, &tokens[1..]);
-
         let tokens: Vec<String> = ["s1", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &metadata, &parameters);
+        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
-            ArgumentExpression::Set(SetExpression::SetVariable(1))
-        ));
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["p1", ")", "1", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(
-            expression,
-            ArgumentExpression::Set(SetExpression::VectorVariable(1))
-        ));
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["11", ")", "1", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(
-            expression,
-            ArgumentExpression::Element(ElementExpression::Constant(11))
-        ));
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["param", ")", "1", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert!(matches!(
-            expression,
-            ArgumentExpression::Element(ElementExpression::Constant(0))
+            SetExpression::Reference(ReferenceExpression::Variable(1))
         ));
         assert_eq!(rest, &tokens[1..]);
     }
@@ -620,7 +424,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &metadata, &parameters);
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 }

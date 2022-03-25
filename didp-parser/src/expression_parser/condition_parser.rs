@@ -1,6 +1,6 @@
+use super::element_parser;
 use super::numeric_parser;
 use super::set_parser;
-use super::table_parser;
 use super::util;
 use super::util::ParseErr;
 use crate::expression::{Comparison, ComparisonOperator, Condition, SetCondition};
@@ -23,12 +23,13 @@ pub fn parse_expression<'a, 'b, 'c>(
             let (name, rest) = rest
                 .split_first()
                 .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
-            if let Some((expression, rest)) = table_parser::parse_expression(
+            if let Some((expression, rest)) = element_parser::parse_table_expression(
                 name,
                 rest,
                 metadata,
-                &registry.bool_tables,
+                registry,
                 parameters,
+                &registry.bool_tables,
             )? {
                 Ok((Condition::Table(expression), rest))
             } else {
@@ -73,33 +74,36 @@ fn parse_operation<'a, 'b, 'c>(
             Ok((Condition::Or(Box::new(x), Box::new(y)), rest))
         }
         "is" => {
-            let (x, rest) = set_parser::parse_element_expression(tokens, metadata, parameters)?;
-            let (y, rest) = set_parser::parse_element_expression(rest, metadata, parameters)?;
+            let (x, rest) =
+                element_parser::parse_expression(tokens, metadata, registry, parameters)?;
+            let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(SetCondition::Eq(x, y)), rest))
         }
         "is_not" => {
-            let (x, rest) = set_parser::parse_element_expression(tokens, metadata, parameters)?;
-            let (y, rest) = set_parser::parse_element_expression(rest, metadata, parameters)?;
+            let (x, rest) =
+                element_parser::parse_expression(tokens, metadata, registry, parameters)?;
+            let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(SetCondition::Ne(x, y)), rest))
         }
         "is_in" => {
-            let (e, rest) = set_parser::parse_element_expression(tokens, metadata, parameters)?;
-            let (s, rest) = set_parser::parse_set_expression(rest, metadata, parameters)?;
+            let (element, rest) =
+                element_parser::parse_expression(tokens, metadata, registry, parameters)?;
+            let (set, rest) = set_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
-            Ok((Condition::Set(SetCondition::IsIn(e, s)), rest))
+            Ok((Condition::Set(SetCondition::IsIn(element, set)), rest))
         }
         "is_subset" => {
-            let (x, rest) = set_parser::parse_set_expression(tokens, metadata, parameters)?;
-            let (y, rest) = set_parser::parse_set_expression(rest, metadata, parameters)?;
+            let (x, rest) = set_parser::parse_expression(tokens, metadata, registry, parameters)?;
+            let (y, rest) = set_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(SetCondition::IsSubset(x, y)), rest))
         }
         "is_empty" => {
-            let (s, rest) = set_parser::parse_set_expression(tokens, metadata, parameters)?;
+            let (set, rest) = set_parser::parse_expression(tokens, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
-            Ok((Condition::Set(SetCondition::IsEmpty(s)), rest))
+            Ok((Condition::Set(SetCondition::IsEmpty(set)), rest))
         }
         _ => parse_comparison(name, tokens, metadata, registry, parameters)
             .map(|(condition, rest)| (Condition::Comparison(Box::new(condition)), rest)),
@@ -437,7 +441,9 @@ mod tests {
         if let Condition::Not(c) = expression {
             assert_eq!(
                 *c,
-                Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(0)))
+                Condition::Set(SetCondition::IsEmpty(SetExpression::Reference(
+                    ReferenceExpression::Variable(0)
+                )))
             );
         };
         assert_eq!(rest, &tokens[7..]);
@@ -491,11 +497,15 @@ mod tests {
         if let Condition::And(x, y) = expression {
             assert_eq!(
                 *x,
-                Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(0)))
+                Condition::Set(SetCondition::IsEmpty(SetExpression::Reference(
+                    ReferenceExpression::Variable(0)
+                )))
             );
             assert_eq!(
                 *y,
-                Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(1)))
+                Condition::Set(SetCondition::IsEmpty(SetExpression::Reference(
+                    ReferenceExpression::Variable(1)
+                )))
             );
         };
         assert_eq!(rest, &tokens[11..]);
@@ -550,11 +560,15 @@ mod tests {
         if let Condition::Or(x, y) = expression {
             assert_eq!(
                 *x,
-                Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(0)))
+                Condition::Set(SetCondition::IsEmpty(SetExpression::Reference(
+                    ReferenceExpression::Variable(0)
+                )))
             );
             assert_eq!(
                 *y,
-                Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(1)))
+                Condition::Set(SetCondition::IsEmpty(SetExpression::Reference(
+                    ReferenceExpression::Variable(1)
+                )))
             );
         };
         assert_eq!(rest, &tokens[11..]);
@@ -1338,7 +1352,7 @@ mod tests {
             expression,
             Condition::Set(SetCondition::IsIn(
                 ElementExpression::Constant(2),
-                SetExpression::SetVariable(0)
+                SetExpression::Reference(ReferenceExpression::Variable(0))
             ))
         ));
         assert_eq!(rest, &tokens[5..]);
@@ -1394,8 +1408,8 @@ mod tests {
         assert!(matches!(
             expression,
             Condition::Set(SetCondition::IsSubset(
-                SetExpression::SetVariable(0),
-                SetExpression::SetVariable(1)
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1))
             ))
         ));
         assert_eq!(rest, &tokens[5..]);
@@ -1443,7 +1457,9 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert!(matches!(
             expression,
-            Condition::Set(SetCondition::IsEmpty(SetExpression::SetVariable(0)))
+            Condition::Set(SetCondition::IsEmpty(SetExpression::Reference(
+                ReferenceExpression::Variable(0)
+            )))
         ));
         assert_eq!(rest, &tokens[4..]);
     }

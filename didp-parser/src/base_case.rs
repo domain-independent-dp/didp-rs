@@ -22,15 +22,14 @@ impl<T: Numeric> BaseCase<T> {
     pub fn get_cost(
         &self,
         state: &state::State,
-        metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
     ) -> Option<T> {
         let is_satisfied = self
             .conditions
             .iter()
-            .all(|x| x.is_satisfied(state, &metadata, &registry).unwrap_or(true));
+            .all(|x| x.is_satisfied(state, &registry).unwrap_or(true));
         if is_satisfied {
-            Some(self.cost.eval(state, metadata, registry))
+            Some(self.cost.eval(state, registry))
         } else {
             None
         }
@@ -148,7 +147,6 @@ mod tests {
 
     #[test]
     fn get_cost() {
-        let metadata = generate_metadata();
         let state = generate_state();
         let registry = table_registry::TableRegistry::default();
 
@@ -159,7 +157,7 @@ mod tests {
             }],
             cost: NumericExpression::Constant(1),
         };
-        assert_eq!(base_case.get_cost(&state, &metadata, &registry), Some(1));
+        assert_eq!(base_case.get_cost(&state, &registry), Some(1));
 
         let base_case = BaseCase {
             conditions: vec![
@@ -174,7 +172,7 @@ mod tests {
             ],
             cost: NumericExpression::Constant(1),
         };
-        assert_eq!(base_case.get_cost(&state, &metadata, &registry), None);
+        assert_eq!(base_case.get_cost(&state, &registry), None);
     }
 
     #[test]

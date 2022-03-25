@@ -20,7 +20,7 @@ pub struct Transition<T: Numeric> {
     pub elements_in_vector_variable: Vec<(usize, usize)>,
     pub preconditions: Vec<grounded_condition::GroundedCondition>,
     pub set_effects: Vec<(usize, expression::SetExpression)>,
-    pub vector_effects: Vec<(usize, expression::ElementExpression)>,
+    pub vector_effects: Vec<(usize, expression::VectorExpression)>,
     pub element_effects: Vec<(usize, expression::ElementExpression)>,
     pub integer_effects: Vec<(usize, expression::NumericExpression<Integer>)>,
     pub continuous_effects: Vec<(usize, expression::NumericExpression<Continuous>)>,
@@ -33,7 +33,6 @@ impl<T: Numeric> Transition<T> {
     pub fn is_applicable(
         &self,
         state: &state::State,
-        metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
     ) -> bool {
         for (i, v) in &self.elements_in_set_variable {
@@ -48,25 +47,23 @@ impl<T: Numeric> Transition<T> {
         }
         self.preconditions
             .iter()
-            .all(|c| c.is_satisfied(state, metadata, registry).unwrap_or(true))
+            .all(|c| c.is_satisfied(state, registry).unwrap_or(true))
     }
 
     pub fn apply_effects(
         &self,
         state: &state::State,
-        metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
     ) -> state::State {
         let len = state.signature_variables.set_variables.len();
         let mut set_variables = Vec::with_capacity(len);
         let mut i = 0;
-
         for e in &self.set_effects {
             while i < e.0 {
                 set_variables.push(state.signature_variables.set_variables[i].clone());
                 i += 1;
             }
-            set_variables.push(e.1.eval(state, metadata, registry));
+            set_variables.push(e.1.eval(state, registry));
             i += 1;
         }
         while i < len {
@@ -74,9 +71,19 @@ impl<T: Numeric> Transition<T> {
             i += 1;
         }
 
-        let mut vector_variables = state.signature_variables.vector_variables.clone();
+        let len = state.signature_variables.vector_variables.len();
+        let mut vector_variables = Vec::with_capacity(len);
         for e in &self.vector_effects {
-            vector_variables[e.0].push(e.1.eval(state, registry));
+            while i < e.0 {
+                vector_variables.push(state.signature_variables.vector_variables[i].clone());
+                i += 1;
+            }
+            vector_variables.push(e.1.eval(state, registry));
+            i += 1;
+        }
+        while i < len {
+            vector_variables.push(state.signature_variables.vector_variables[i].clone());
+            i += 1;
         }
 
         let mut element_variables = state.signature_variables.element_variables.clone();
@@ -86,23 +93,23 @@ impl<T: Numeric> Transition<T> {
 
         let mut integer_variables = state.signature_variables.integer_variables.clone();
         for e in &self.integer_effects {
-            integer_variables[e.0] = e.1.eval(state, metadata, registry);
+            integer_variables[e.0] = e.1.eval(state, registry);
         }
 
         let mut continuous_variables = state.signature_variables.continuous_variables.clone();
         for e in &self.continuous_effects {
-            continuous_variables[e.0] = OrderedFloat(e.1.eval(state, metadata, registry));
+            continuous_variables[e.0] = OrderedFloat(e.1.eval(state, registry));
         }
 
         let mut integer_resource_variables = state.resource_variables.integer_variables.clone();
         for e in &self.integer_resource_effects {
-            integer_resource_variables[e.0] = e.1.eval(state, metadata, registry);
+            integer_resource_variables[e.0] = e.1.eval(state, registry);
         }
 
         let mut continuous_resource_variables =
             state.resource_variables.continuous_variables.clone();
         for e in &self.continuous_resource_effects {
-            continuous_resource_variables[e.0] = e.1.eval(state, metadata, registry);
+            continuous_resource_variables[e.0] = e.1.eval(state, registry);
         }
 
         let stage = state.stage + 1;
@@ -129,10 +136,9 @@ impl<T: Numeric> Transition<T> {
         &self,
         cost: T,
         state: &state::State,
-        metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
     ) -> T {
-        self.cost.eval_cost(cost, state, metadata, registry)
+        self.cost.eval_cost(cost, state, registry)
     }
 }
 
@@ -235,13 +241,15 @@ where
             let effect = yaml_util::get_string(effect)?;
             let variable = yaml_util::get_string(variable)?;
             if let Some(i) = metadata.name_to_set_variable.get(&variable) {
-                let effect = expression_parser::parse_set(effect, metadata, &parameters)?;
+                let effect = expression_parser::parse_set(effect, metadata, registry, &parameters)?;
                 set_effects.push((*i, effect));
             } else if let Some(i) = metadata.name_to_vector_variable.get(&variable) {
-                let effect = expression_parser::parse_element(effect, metadata, &parameters)?;
+                let effect =
+                    expression_parser::parse_vector(effect, metadata, registry, &parameters)?;
                 vector_effects.push((*i, effect));
             } else if let Some(i) = metadata.name_to_element_variable.get(&variable) {
-                let effect = expression_parser::parse_element(effect, metadata, &parameters)?;
+                let effect =
+                    expression_parser::parse_element(effect, metadata, registry, &parameters)?;
                 element_effects.push((*i, effect));
             } else if let Some(i) = metadata.name_to_integer_variable.get(&variable) {
                 let effect = expression_parser::parse_numeric::<Integer>(
@@ -502,11 +510,10 @@ mod tests {
     fn applicable() {
         let state = generate_state();
         let registry = generate_registry();
-        let metadata = generate_metadata();
         let set_condition = grounded_condition::GroundedCondition {
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Constant(0),
-                SetExpression::SetVariable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
             )),
             ..Default::default()
         };
@@ -525,7 +532,7 @@ mod tests {
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
-        assert!(transition.is_applicable(&state, &metadata, &registry));
+        assert!(transition.is_applicable(&state, &registry));
 
         let transition = Transition {
             name: String::from(""),
@@ -534,18 +541,17 @@ mod tests {
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
-        assert!(transition.is_applicable(&state, &metadata, &registry));
+        assert!(transition.is_applicable(&state, &registry));
     }
 
     #[test]
     fn not_applicable() {
         let state = generate_state();
         let registry = generate_registry();
-        let metadata = generate_metadata();
         let set_condition = grounded_condition::GroundedCondition {
             condition: Condition::Set(SetCondition::IsIn(
                 ElementExpression::Constant(0),
-                SetExpression::SetVariable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
             )),
             ..Default::default()
         };
@@ -564,7 +570,7 @@ mod tests {
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
-        assert!(transition.is_applicable(&state, &metadata, &registry));
+        assert!(transition.is_applicable(&state, &registry));
 
         let transition = Transition {
             name: String::from(""),
@@ -573,7 +579,7 @@ mod tests {
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
-        assert!(!transition.is_applicable(&state, &metadata, &registry));
+        assert!(!transition.is_applicable(&state, &registry));
 
         let transition = Transition {
             name: String::from(""),
@@ -582,26 +588,35 @@ mod tests {
             cost: NumericExpression::Constant(0),
             ..Default::default()
         };
-        assert!(!transition.is_applicable(&state, &metadata, &registry));
+        assert!(!transition.is_applicable(&state, &registry));
     }
 
     #[test]
     fn appy_effects() {
         let state = generate_state();
         let registry = generate_registry();
-        let metadata = generate_metadata();
         let set_effect1 = SetExpression::SetElementOperation(
             SetElementOperator::Add,
-            Box::new(SetExpression::SetVariable(0)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(1),
         );
         let set_effect2 = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
-            Box::new(SetExpression::SetVariable(1)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
             ElementExpression::Constant(0),
         );
-        let vector_effect1 = ElementExpression::Constant(1);
-        let vector_effect2 = ElementExpression::Constant(0);
+        let vector_effect1 = VectorExpression::Push(
+            ElementExpression::Constant(1),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                0,
+            ))),
+        );
+        let vector_effect2 = VectorExpression::Push(
+            ElementExpression::Constant(0),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                1,
+            ))),
+        );
         let element_effect1 = ElementExpression::Constant(2);
         let element_effect2 = ElementExpression::Constant(1);
         let integer_effect1 = NumericExpression::NumericOperation(
@@ -687,7 +702,7 @@ mod tests {
             },
             stage: 1,
         };
-        let successor = transition.apply_effects(&state, &metadata, &registry);
+        let successor = transition.apply_effects(&state, &registry);
         assert_eq!(successor, expected);
     }
 
@@ -695,7 +710,6 @@ mod tests {
     fn eval_cost() {
         let state = generate_state();
         let registry = generate_registry();
-        let metadata = generate_metadata();
 
         let transition = Transition {
             cost: NumericExpression::NumericOperation(
@@ -705,7 +719,7 @@ mod tests {
             ),
             ..Default::default()
         };
-        assert_eq!(transition.eval_cost(0, &state, &metadata, &registry), 1);
+        assert_eq!(transition.eval_cost(0, &state, &registry), 1);
     }
 
     #[test]
@@ -766,7 +780,7 @@ preconditions:
 effects:
         e0: e
         s0: (+ s0 e)
-        p0: e
+        p0: (push e p0)
         i0: '1'
         ir0: '2'
 cost: (+ cost (f1 e))
@@ -799,11 +813,19 @@ cost: (+ cost (f1 e))
                     0,
                     SetExpression::SetElementOperation(
                         SetElementOperator::Add,
-                        Box::new(SetExpression::SetVariable(0)),
+                        Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                         ElementExpression::Constant(0),
                     ),
                 )],
-                vector_effects: vec![(0, ElementExpression::Constant(0))],
+                vector_effects: vec![(
+                    0,
+                    VectorExpression::Push(
+                        ElementExpression::Constant(0),
+                        Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                            0,
+                        ))),
+                    ),
+                )],
                 element_effects: vec![(0, ElementExpression::Constant(0))],
                 integer_effects: vec![(0, NumericExpression::Constant(1))],
                 integer_resource_effects: vec![(0, NumericExpression::Constant(2))],
@@ -834,11 +856,19 @@ cost: (+ cost (f1 e))
                     0,
                     SetExpression::SetElementOperation(
                         SetElementOperator::Add,
-                        Box::new(SetExpression::SetVariable(0)),
+                        Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                         ElementExpression::Constant(1),
                     ),
                 )],
-                vector_effects: vec![(0, ElementExpression::Constant(1))],
+                vector_effects: vec![(
+                    0,
+                    VectorExpression::Push(
+                        ElementExpression::Constant(1),
+                        Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                            0,
+                        ))),
+                    ),
+                )],
                 element_effects: vec![(0, ElementExpression::Constant(1))],
                 integer_effects: vec![(0, NumericExpression::Constant(1))],
                 integer_resource_effects: vec![(0, NumericExpression::Constant(2))],

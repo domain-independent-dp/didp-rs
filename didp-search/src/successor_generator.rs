@@ -5,7 +5,6 @@ use std::collections;
 #[derive(Debug, PartialEq, Clone)]
 pub struct SuccessorGenerator<'a, T: variable::Numeric> {
     transitions: &'a [Transition<T>],
-    metadata: &'a didp_parser::StateMetadata,
     registry: &'a didp_parser::TableRegistry,
 }
 
@@ -18,7 +17,6 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
         };
         SuccessorGenerator {
             transitions,
-            metadata: &model.state_metadata,
             registry: &model.table_registry,
         }
     }
@@ -30,7 +28,7 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
     ) -> Vec<&'a Transition<T>> {
         result.clear();
         for op in self.transitions {
-            if op.is_applicable(state, self.metadata, self.registry) {
+            if op.is_applicable(state, self.registry) {
                 result.push(op);
             }
         }
@@ -61,7 +59,7 @@ impl<'a, 'b, T: variable::Numeric> Iterator for ApplicableTransitions<'a, 'b, T>
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
             Some(op) => {
-                if op.is_applicable(self.state, self.generator.metadata, self.generator.registry) {
+                if op.is_applicable(self.state, self.generator.registry) {
                     Some(op)
                 } else {
                     self.next()
@@ -79,7 +77,6 @@ pub struct OneParameterSuccessorGenerator<'a, T: variable::Numeric> {
     relevant_vector_variables: Vec<usize>,
     vector_element_to_transitions: Vec<Vec<Vec<Transition<T>>>>,
     global_transitions: Vec<&'a Transition<T>>,
-    metadata: &'a didp_parser::StateMetadata,
     registry: &'a didp_parser::TableRegistry,
 }
 
@@ -157,7 +154,6 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
             relevant_vector_variables: relevant_vector_variables.into_iter().collect(),
             vector_element_to_transitions,
             global_transitions,
-            metadata: &model.state_metadata,
             registry: &model.table_registry,
         }
     }
@@ -169,14 +165,14 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
     ) -> Vec<&'a Transition<T>> {
         result.clear();
         for op in &self.global_transitions {
-            if op.is_applicable(state, self.metadata, self.registry) {
+            if op.is_applicable(state, self.registry) {
                 result.push(op);
             }
         }
         for i in &self.relevant_set_variables {
             for v in state.signature_variables.set_variables[*i].ones() {
                 for op in &self.set_element_to_transitions[*i][v] {
-                    if op.is_applicable(state, self.metadata, self.registry) {
+                    if op.is_applicable(state, self.registry) {
                         result.push(op);
                     }
                 }
@@ -185,7 +181,7 @@ impl<'a, T: variable::Numeric> OneParameterSuccessorGenerator<'a, T> {
         for i in &self.relevant_vector_variables {
             for v in &state.signature_variables.vector_variables[*i] {
                 for op in &self.vector_element_to_transitions[*i][*v] {
-                    if op.is_applicable(state, self.metadata, self.registry) {
+                    if op.is_applicable(state, self.registry) {
                         result.push(op);
                     }
                 }
@@ -275,7 +271,7 @@ impl<'a, 'b, T: variable::Numeric> Iterator for OneParameterApplicableTransition
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.global_iter.next() {
             Some(op) => {
-                if op.is_applicable(self.state, self.generator.metadata, self.generator.registry) {
+                if op.is_applicable(self.state, self.generator.registry) {
                     Some(op)
                 } else {
                     self.next()
@@ -284,11 +280,7 @@ impl<'a, 'b, T: variable::Numeric> Iterator for OneParameterApplicableTransition
             None => match &mut self.iter {
                 Some(iter) => match iter.next() {
                     Some(op) => {
-                        if op.is_applicable(
-                            self.state,
-                            self.generator.metadata,
-                            self.generator.registry,
-                        ) {
+                        if op.is_applicable(self.state, self.generator.registry) {
                             Some(op)
                         } else {
                             self.next()

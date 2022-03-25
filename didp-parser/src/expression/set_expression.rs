@@ -1,24 +1,22 @@
-use super::element_expression::{ElementExpression, TableExpression};
-use crate::state;
-use crate::table_registry;
-use crate::variable;
+use super::element_expression::ElementExpression;
+use super::reference_expression::ReferenceExpression;
+use crate::state::State;
+use crate::table_registry::TableRegistry;
+use crate::variable::{Element, Set};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SetExpression {
-    Constant(variable::Set),
-    SetVariable(usize),
-    VectorVariable(usize),
+    Reference(ReferenceExpression<Set>),
     Complement(Box<SetExpression>),
     SetOperation(SetOperator, Box<SetExpression>, Box<SetExpression>),
     SetElementOperation(SetElementOperator, Box<SetExpression>, ElementExpression),
-    Table(TableExpression<variable::Set>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SetOperator {
     Union,
     Difference,
-    Intersect,
+    Intersection,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -28,144 +26,134 @@ pub enum SetElementOperator {
 }
 
 impl SetExpression {
-    pub fn eval(
-        &self,
-        state: &state::State,
-        metadata: &state::StateMetadata,
-        registry: &table_registry::TableRegistry,
-    ) -> variable::Set {
+    pub fn eval(&self, state: &State, registry: &TableRegistry) -> Set {
         match self {
-            SetExpression::Constant(value) => value.clone(),
-            SetExpression::SetVariable(i) => state.signature_variables.set_variables[*i].clone(),
-            SetExpression::VectorVariable(i) => {
-                let mut set = variable::Set::with_capacity(metadata.vector_variable_capacity(*i));
-                for v in &state.signature_variables.vector_variables[*i] {
-                    set.insert(*v);
-                }
+            SetExpression::Reference(expression) => expression
+                .eval(
+                    state,
+                    registry,
+                    &state.signature_variables.set_variables,
+                    &registry.set_tables,
+                )
+                .clone(),
+            SetExpression::Complement(set) => {
+                let mut set = set.eval(state, registry);
+                set.toggle_range(..);
                 set
             }
-            SetExpression::Complement(s) => {
-                let mut s = s.eval(state, metadata, registry);
-                s.toggle_range(..);
-                s
+            SetExpression::SetOperation(op, x, y) => {
+                let x = x.eval(state, registry);
+                let y = y.eval(state, registry);
+                Self::eval_set_operation(op, x, y)
             }
-            SetExpression::SetOperation(op, a, b) => {
-                let mut a = a.eval(&state, metadata, registry);
-                let b = b.eval(state, metadata, registry);
-                match op {
-                    SetOperator::Union => {
-                        a.union_with(&b);
-                        a
+            SetExpression::SetElementOperation(op, set, element) => {
+                let set = set.eval(state, registry);
+                let element = element.eval(state, registry);
+                Self::eval_set_element_operation(op, set, element)
+            }
+        }
+    }
+
+    pub fn simplify(&self, registry: &TableRegistry) -> SetExpression {
+        match self {
+            Self::Reference(expression) => {
+                Self::Reference(expression.simplify(registry, &registry.set_tables))
+            }
+            Self::Complement(expression) => match expression.simplify(registry) {
+                Self::Reference(ReferenceExpression::Constant(mut set)) => {
+                    set.toggle_range(..);
+                    Self::Reference(ReferenceExpression::Constant(set))
+                }
+                Self::Complement(expression) => *expression,
+                expression => Self::Complement(Box::new(expression)),
+            },
+            Self::SetOperation(op, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (
+                    Self::Reference(ReferenceExpression::Constant(x)),
+                    Self::Reference(ReferenceExpression::Constant(y)),
+                ) => Self::Reference(ReferenceExpression::Constant(Self::eval_set_operation(
+                    op, x, y,
+                ))),
+                (
+                    Self::Reference(ReferenceExpression::Variable(x)),
+                    Self::Reference(ReferenceExpression::Variable(y)),
+                ) if x == y => match op {
+                    SetOperator::Union | SetOperator::Intersection => {
+                        Self::Reference(ReferenceExpression::Variable(x))
                     }
-                    SetOperator::Difference => {
-                        a.difference_with(&b);
-                        a
-                    }
-                    SetOperator::Intersect => {
-                        a.intersect_with(&b);
-                        a
-                    }
+                    op => Self::SetOperation(
+                        op.clone(),
+                        Box::new(Self::Reference(ReferenceExpression::Variable(x))),
+                        Box::new(Self::Reference(ReferenceExpression::Variable(y))),
+                    ),
+                },
+                (x, y) => Self::SetOperation(op.clone(), Box::new(x), Box::new(y)),
+            },
+            Self::SetElementOperation(op, set, element) => {
+                match (set.simplify(registry), element.simplify(registry)) {
+                    (
+                        Self::Reference(ReferenceExpression::Constant(set)),
+                        ElementExpression::Constant(element),
+                    ) => Self::Reference(ReferenceExpression::Constant(
+                        Self::eval_set_element_operation(op, set, element),
+                    )),
+                    (set, element) => Self::SetElementOperation(op.clone(), Box::new(set), element),
                 }
             }
-            SetExpression::SetElementOperation(op, s, e) => {
-                let mut s = s.eval(state, metadata, registry);
-                let e = e.eval(state, registry);
-                match op {
-                    SetElementOperator::Add => {
-                        s.insert(e);
-                        s
-                    }
-                    SetElementOperator::Remove => {
-                        s.set(e, false);
-                        s
-                    }
-                }
+        }
+    }
+
+    fn eval_set_operation(op: &SetOperator, mut x: Set, y: Set) -> Set {
+        match op {
+            SetOperator::Union => {
+                x.union_with(&y);
+                x
             }
-            SetExpression::Table(table) => table.eval(state, registry, &registry.set_tables),
+            SetOperator::Difference => {
+                x.difference_with(&y);
+                x
+            }
+            SetOperator::Intersection => {
+                x.intersect_with(&y);
+                x
+            }
+        }
+    }
+
+    fn eval_set_element_operation(op: &SetElementOperator, mut set: Set, element: Element) -> Set {
+        match op {
+            SetElementOperator::Add => {
+                set.insert(element);
+                set
+            }
+            SetElementOperator::Remove => {
+                set.set(element, false);
+                set
+            }
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::element_expression::*;
     use super::*;
-    use crate::table;
-    use crate::table_data;
+    use crate::state::*;
+    use crate::table::*;
+    use crate::table_data::TableData;
     use std::collections::HashMap;
     use std::rc::Rc;
 
-    fn generate_metadata() -> state::StateMetadata {
-        let object_names = vec!["object".to_string()];
-        let object_numbers = vec![10];
-        let mut name_to_object = HashMap::new();
-        name_to_object.insert("object".to_string(), 0);
-
-        let set_variable_names = vec![
-            "s0".to_string(),
-            "s1".to_string(),
-            "s2".to_string(),
-            "s3".to_string(),
-        ];
-        let mut name_to_set_variable = HashMap::new();
-        name_to_set_variable.insert("s0".to_string(), 0);
-        name_to_set_variable.insert("s1".to_string(), 1);
-        name_to_set_variable.insert("s2".to_string(), 2);
-        name_to_set_variable.insert("s3".to_string(), 3);
-        let set_variable_to_object = vec![0, 0, 0, 0];
-
-        let vector_variable_names = vec![
-            "p0".to_string(),
-            "p1".to_string(),
-            "p2".to_string(),
-            "p3".to_string(),
-        ];
-        let mut name_to_vector_variable = HashMap::new();
-        name_to_vector_variable.insert("p0".to_string(), 0);
-        name_to_vector_variable.insert("p1".to_string(), 1);
-        name_to_vector_variable.insert("p2".to_string(), 2);
-        name_to_vector_variable.insert("p3".to_string(), 3);
-        let vector_variable_to_object = vec![0, 0, 0, 0];
-
-        let element_variable_names = vec![
-            "e0".to_string(),
-            "e1".to_string(),
-            "e2".to_string(),
-            "e3".to_string(),
-        ];
-        let mut name_to_element_variable = HashMap::new();
-        name_to_element_variable.insert("e0".to_string(), 0);
-        name_to_element_variable.insert("e1".to_string(), 1);
-        name_to_element_variable.insert("e2".to_string(), 2);
-        name_to_element_variable.insert("e3".to_string(), 3);
-        let element_variable_to_object = vec![0, 0, 0, 0];
-
-        state::StateMetadata {
-            object_names,
-            name_to_object,
-            object_numbers,
-            set_variable_names,
-            name_to_set_variable,
-            set_variable_to_object,
-            vector_variable_names,
-            name_to_vector_variable,
-            vector_variable_to_object,
-            element_variable_names,
-            name_to_element_variable,
-            element_variable_to_object,
-            ..Default::default()
-        }
-    }
-
-    fn generate_registry() -> table_registry::TableRegistry {
-        let mut set = variable::Set::with_capacity(3);
+    fn generate_registry() -> TableRegistry {
+        let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
-        let default = variable::Set::with_capacity(3);
-        let tables_1d = vec![table::Table1D::new(vec![set, default.clone(), default])];
+        let default = Set::with_capacity(3);
+        let tables_1d = vec![Table1D::new(vec![set, default.clone(), default])];
         let mut name_to_table_1d = HashMap::new();
         name_to_table_1d.insert(String::from("s1"), 0);
-        table_registry::TableRegistry {
-            set_tables: table_data::TableData {
+        TableRegistry {
+            set_tables: TableData {
                 tables_1d,
                 name_to_table_1d,
                 ..Default::default()
@@ -174,15 +162,15 @@ mod tests {
         }
     }
 
-    fn generate_state() -> state::State {
-        let mut set1 = variable::Set::with_capacity(3);
+    fn generate_state() -> State {
+        let mut set1 = Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
-        let mut set2 = variable::Set::with_capacity(3);
+        let mut set2 = Set::with_capacity(3);
         set2.insert(0);
         set2.insert(1);
-        state::State {
-            signature_variables: Rc::new(state::SignatureVariables {
+        State {
+            signature_variables: Rc::new(SignatureVariables {
                 set_variables: vec![set1, set2],
                 vector_variables: vec![vec![0, 2]],
                 element_variables: vec![1],
@@ -192,167 +180,355 @@ mod tests {
         }
     }
 
-    #[test]
-    fn set_variable_eval() {
-        let metadata = generate_metadata();
+    fn reference_eval() {
         let registry = generate_registry();
         let state = generate_state();
-        let expression = SetExpression::SetVariable(0);
-        assert_eq!(
-            expression.eval(&state, &metadata, &registry),
-            state.signature_variables.set_variables[0]
-        );
-        let expression = SetExpression::SetVariable(1);
-        assert_eq!(
-            expression.eval(&state, &metadata, &registry),
-            state.signature_variables.set_variables[1]
-        );
-    }
-
-    #[test]
-    fn vector_variable_eval() {
-        let metadata = generate_metadata();
-        let registry = generate_registry();
-        let state = generate_state();
-        let expression = SetExpression::VectorVariable(0);
-        let mut set = variable::Set::with_capacity(10);
+        let set = Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &metadata, &registry), set);
+        let expression = SetExpression::Reference(ReferenceExpression::Constant(set.clone()));
+        assert_eq!(expression.eval(&state, &registry), set);
+        let expression = SetExpression::Reference(ReferenceExpression::Variable(0));
+        assert_eq!(
+            expression.eval(&state, &registry),
+            state.signature_variables.set_variables[0]
+        );
+        let expression = SetExpression::Reference(ReferenceExpression::Table(
+            TableExpression::Table1D(0, ElementExpression::Constant(0)),
+        ));
+        assert_eq!(expression.eval(&state, &registry), set);
     }
 
     #[test]
     fn complement_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
-        let expression = SetExpression::Complement(Box::new(SetExpression::SetVariable(0)));
-        let mut set = variable::Set::with_capacity(3);
+        let expression = SetExpression::Complement(Box::new(SetExpression::Reference(
+            ReferenceExpression::Variable(0),
+        )));
+        let mut set = Set::with_capacity(3);
         set.insert(1);
-        assert_eq!(expression.eval(&state, &metadata, &registry), set);
+        assert_eq!(expression.eval(&state, &registry), set);
     }
 
     #[test]
     fn union_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression = SetExpression::SetOperation(
             SetOperator::Union,
-            Box::new(SetExpression::SetVariable(0)),
-            Box::new(SetExpression::SetVariable(1)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
         );
-        let mut set = variable::Set::with_capacity(3);
+        let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &metadata, &registry), set);
+        assert_eq!(expression.eval(&state, &registry), set);
         let expression = SetExpression::SetOperation(
             SetOperator::Union,
-            Box::new(SetExpression::SetVariable(0)),
-            Box::new(SetExpression::SetVariable(0)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         assert_eq!(
-            expression.eval(&state, &metadata, &registry),
+            expression.eval(&state, &registry),
             state.signature_variables.set_variables[0]
         );
     }
 
     #[test]
     fn difference_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression = SetExpression::SetOperation(
             SetOperator::Difference,
-            Box::new(SetExpression::SetVariable(0)),
-            Box::new(SetExpression::SetVariable(1)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
         );
-        let mut set = variable::Set::with_capacity(3);
+        let mut set = Set::with_capacity(3);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &metadata, &registry), set);
+        assert_eq!(expression.eval(&state, &registry), set);
         let expression = SetExpression::SetOperation(
             SetOperator::Difference,
-            Box::new(SetExpression::SetVariable(0)),
-            Box::new(SetExpression::SetVariable(0)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
-        assert_eq!(
-            expression.eval(&state, &metadata, &registry),
-            variable::Set::with_capacity(3)
-        );
+        assert_eq!(expression.eval(&state, &registry), Set::with_capacity(3));
     }
 
     #[test]
     fn intersect_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression = SetExpression::SetOperation(
-            SetOperator::Intersect,
-            Box::new(SetExpression::SetVariable(0)),
-            Box::new(SetExpression::SetVariable(1)),
+            SetOperator::Intersection,
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
         );
-        let mut set = variable::Set::with_capacity(3);
+        let mut set = Set::with_capacity(3);
         set.insert(0);
-        assert_eq!(expression.eval(&state, &metadata, &registry), set);
+        assert_eq!(expression.eval(&state, &registry), set);
         let expression = SetExpression::SetOperation(
-            SetOperator::Intersect,
-            Box::new(SetExpression::SetVariable(0)),
-            Box::new(SetExpression::SetVariable(0)),
+            SetOperator::Intersection,
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         assert_eq!(
-            expression.eval(&state, &metadata, &registry),
+            expression.eval(&state, &registry),
             state.signature_variables.set_variables[0]
         );
     }
 
     #[test]
     fn set_add_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
-            Box::new(SetExpression::SetVariable(0)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(1),
         );
-        let mut set = variable::Set::with_capacity(3);
+        let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &metadata, &registry), set);
+        assert_eq!(expression.eval(&state, &registry), set);
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
-            Box::new(SetExpression::SetVariable(0)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(0),
         );
         assert_eq!(
-            expression.eval(&state, &metadata, &registry),
+            expression.eval(&state, &registry),
             state.signature_variables.set_variables[0]
         );
     }
 
     #[test]
     fn set_remove_eval() {
-        let metadata = generate_metadata();
         let registry = generate_registry();
         let state = generate_state();
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
-            Box::new(SetExpression::SetVariable(0)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(2),
         );
-        let mut set = variable::Set::with_capacity(3);
+        let mut set = Set::with_capacity(3);
         set.insert(0);
-        assert_eq!(expression.eval(&state, &metadata, &registry), set);
+        assert_eq!(expression.eval(&state, &registry), set);
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
-            Box::new(SetExpression::SetVariable(0)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(1),
         );
         assert_eq!(
-            expression.eval(&state, &metadata, &registry),
+            expression.eval(&state, &registry),
             state.signature_variables.set_variables[0]
+        );
+    }
+
+    #[test]
+    fn reference_simplify() {
+        let registry = generate_registry();
+        let set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(2);
+        let expression = SetExpression::Reference(ReferenceExpression::Constant(set.clone()));
+        assert_eq!(expression.simplify(&registry), expression);
+        let expression = SetExpression::Reference(ReferenceExpression::Variable(0));
+        assert_eq!(expression.simplify(&registry), expression);
+        let expression = SetExpression::Reference(ReferenceExpression::Table(
+            TableExpression::Table1D(0, ElementExpression::Constant(0)),
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(set))
+        );
+    }
+
+    #[test]
+    fn complement_simplify() {
+        let registry = generate_registry();
+        let expression = SetExpression::Complement(Box::new(SetExpression::Reference(
+            ReferenceExpression::Variable(0),
+        )));
+        assert_eq!(expression.simplify(&registry), expression);
+        let mut set = Set::with_capacity(3);
+        set.insert(1);
+        let expression = SetExpression::Complement(Box::new(SetExpression::Reference(
+            ReferenceExpression::Constant(set),
+        )));
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(2);
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(set))
+        );
+        let expression = SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        ))));
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Variable(0))
+        );
+    }
+
+    #[test]
+    fn union_simplify() {
+        let registry = generate_registry();
+        let expression = SetExpression::SetOperation(
+            SetOperator::Union,
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+        let mut x = Set::with_capacity(3);
+        x.insert(0);
+        x.insert(2);
+        let mut y = Set::with_capacity(3);
+        y.insert(0);
+        y.insert(1);
+        let expression = SetExpression::SetOperation(
+            SetOperator::Union,
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(x))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(y))),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(set))
+        );
+        let expression = SetExpression::SetOperation(
+            SetOperator::Union,
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Variable(0))
+        );
+    }
+
+    #[test]
+    fn difference_simplify() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let expression = SetExpression::SetOperation(
+            SetOperator::Difference,
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+        let mut x = Set::with_capacity(3);
+        x.insert(0);
+        x.insert(2);
+        let mut y = Set::with_capacity(3);
+        y.insert(0);
+        y.insert(1);
+        let expression = SetExpression::SetOperation(
+            SetOperator::Difference,
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(x))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(y))),
+        );
+        let mut set = Set::with_capacity(3);
+        set.insert(2);
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(set))
+        );
+    }
+
+    #[test]
+    fn intersect_simplify() {
+        let registry = generate_registry();
+        let expression = SetExpression::SetOperation(
+            SetOperator::Intersection,
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+        let mut x = Set::with_capacity(3);
+        x.insert(0);
+        x.insert(2);
+        let mut y = Set::with_capacity(3);
+        y.insert(0);
+        y.insert(1);
+        let expression = SetExpression::SetOperation(
+            SetOperator::Intersection,
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(x))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(y))),
+        );
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(set))
+        );
+        let expression = SetExpression::SetOperation(
+            SetOperator::Union,
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Variable(0))
+        );
+    }
+
+    #[test]
+    fn set_add_simplify() {
+        let registry = generate_registry();
+        let expression = SetExpression::SetElementOperation(
+            SetElementOperator::Add,
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            ElementExpression::Constant(1),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(2);
+        let expression = SetExpression::SetElementOperation(
+            SetElementOperator::Add,
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            ElementExpression::Constant(1),
+        );
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        set.insert(2);
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(set))
+        );
+    }
+
+    #[test]
+    fn set_remove_simplify() {
+        let registry = generate_registry();
+        let expression = SetExpression::SetElementOperation(
+            SetElementOperator::Remove,
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            ElementExpression::Constant(2),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(2);
+        let expression = SetExpression::SetElementOperation(
+            SetElementOperator::Remove,
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            ElementExpression::Constant(2),
+        );
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(set))
         );
     }
 }

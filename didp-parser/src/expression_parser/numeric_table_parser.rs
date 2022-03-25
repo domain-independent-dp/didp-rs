@@ -1,139 +1,210 @@
+use super::element_parser;
 use super::set_parser;
 use super::util;
 use super::util::ParseErr;
+use super::vector_parser;
 use crate::expression::{ArgumentExpression, NumericTableExpression};
-use crate::state;
-use crate::table_data;
-use crate::variable;
-use std::collections;
+use crate::table_data::TableData;
+use crate::table_registry::TableRegistry;
+use crate::variable::Numeric;
+use crate::StateMetadata;
+use std::collections::HashMap;
 use std::fmt;
 use std::str;
 
 type NumericTableParsingResult<'a, T> = Option<(NumericTableExpression<T>, &'a [String])>;
 
-pub fn parse_expression<'a, 'b, 'c, T: variable::Numeric>(
+pub fn parse_expression<'a, 'b, 'c, T: Numeric>(
     name: &'a str,
     tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    tables: &'b table_data::TableData<T>,
-    parameters: &'c collections::HashMap<String, usize>,
+    metadata: &'b StateMetadata,
+    registry: &TableRegistry,
+    parameters: &'c HashMap<String, usize>,
+    tables: &'b TableData<T>,
 ) -> Result<NumericTableParsingResult<'a, T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     if let Some(i) = tables.name_to_table_1d.get(name) {
-        let result = parse_table_1d(*i, tokens, metadata, parameters)?;
-        Ok(Some(result))
+        let (x, rest) = element_parser::parse_expression(tokens, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        Ok(Some((NumericTableExpression::Table1D(*i, x), rest)))
     } else if let Some(i) = tables.name_to_table_2d.get(name) {
-        let result = parse_table_2d(*i, tokens, metadata, parameters)?;
-        Ok(Some(result))
+        let (x, rest) = element_parser::parse_expression(tokens, metadata, registry, parameters)?;
+        let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        Ok(Some((NumericTableExpression::Table2D(*i, x, y), rest)))
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let result = parse_table_3d(*i, tokens, metadata, parameters)?;
-        Ok(Some(result))
+        let (x, rest) = element_parser::parse_expression(tokens, metadata, registry, parameters)?;
+        let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
+        let (z, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        Ok(Some((NumericTableExpression::Table3D(*i, x, y, z), rest)))
     } else if let Some(i) = tables.name_to_table.get(name) {
-        let result = parse_table(*i, tokens, metadata, parameters)?;
+        let result = parse_table(*i, tokens, metadata, registry, parameters)?;
         Ok(Some(result))
+    } else if name == "sum" {
+        let (name, rest) = tokens
+            .split_first()
+            .ok_or_else(|| ParseErr::new(String::from("could not get token")))?;
+        Ok(Some(parse_sum(
+            name, rest, metadata, registry, parameters, tables,
+        )?))
+    } else if name == "zip-sum" {
+        let (name, rest) = tokens
+            .split_first()
+            .ok_or_else(|| ParseErr::new(String::from("could not get token")))?;
+        Ok(Some(parse_zip_sum(
+            name, rest, metadata, registry, parameters, tables,
+        )?))
     } else {
         Ok(None)
     }
 }
 
-fn parse_table_1d<'a, 'b, 'c, T: variable::Numeric>(
+fn parse_table<'a, 'b, 'c, T: Numeric>(
     i: usize,
     tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    parameters: &'c collections::HashMap<String, usize>,
+    metadata: &'b StateMetadata,
+    registry: &'b TableRegistry,
+    parameters: &'c HashMap<String, usize>,
 ) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
-    let (x, rest) = set_parser::parse_argument(tokens, metadata, parameters)?;
-    let rest = util::parse_closing(rest)?;
-    match x {
-        ArgumentExpression::Element(x) => Ok((NumericTableExpression::Table1D(i, x), rest)),
-        ArgumentExpression::Set(x) => Ok((NumericTableExpression::Table1DSum(i, x), rest)),
+    let mut args = Vec::new();
+    let mut xs = tokens;
+    loop {
+        let (next_token, rest) = xs
+            .split_first()
+            .ok_or_else(|| ParseErr::new("could not find closing `)`".to_string()))?;
+        if next_token == ")" {
+            return Ok((NumericTableExpression::Table(i, args), rest));
+        }
+        let (expression, new_xs) =
+            element_parser::parse_expression(xs, metadata, registry, parameters)?;
+        args.push(expression);
+        xs = new_xs;
     }
 }
 
-fn parse_table_2d<'a, 'b, 'c, T: variable::Numeric>(
-    i: usize,
+fn parse_sum<'a, 'b, 'c, T: Numeric>(
+    name: &'a str,
     tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    parameters: &'c collections::HashMap<String, usize>,
+    metadata: &'b StateMetadata,
+    registry: &TableRegistry,
+    parameters: &'c HashMap<String, usize>,
+    tables: &'b TableData<T>,
 ) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
-    let (x, rest) = set_parser::parse_argument(tokens, metadata, parameters)?;
-    let (y, rest) = set_parser::parse_argument(rest, metadata, parameters)?;
-    let rest = util::parse_closing(rest)?;
-    match (x, y) {
-        (ArgumentExpression::Element(x), ArgumentExpression::Element(y)) => {
-            Ok((NumericTableExpression::Table2D(i, x, y), rest))
+    if let Some(i) = tables.name_to_table_1d.get(name) {
+        let (x, rest) = parse_argument(tokens, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        match x {
+            ArgumentExpression::Set(x) => Ok((NumericTableExpression::Table1DSum(*i, x), rest)),
+            ArgumentExpression::Vector(x) => {
+                Ok((NumericTableExpression::Table1DVectorSum(*i, x), rest))
+            }
+            _ => Err(ParseErr::new(format!(
+                "argument `{:?}` is invalid for sum",
+                name
+            ))),
         }
-        (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => {
-            Ok((NumericTableExpression::Table2DSum(i, x, y), rest))
+    } else if let Some(i) = tables.name_to_table_2d.get(name) {
+        let (x, rest) = parse_argument(tokens, metadata, registry, parameters)?;
+        let (y, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        match (x, y) {
+            (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => {
+                Ok((NumericTableExpression::Table2DSum(*i, x, y), rest))
+            }
+            (ArgumentExpression::Set(x), ArgumentExpression::Element(y)) => {
+                Ok((NumericTableExpression::Table2DSumX(*i, x, y), rest))
+            }
+            (ArgumentExpression::Element(x), ArgumentExpression::Set(y)) => {
+                Ok((NumericTableExpression::Table2DSumY(*i, x, y), rest))
+            }
+            (ArgumentExpression::Vector(x), ArgumentExpression::Element(y)) => {
+                Ok((NumericTableExpression::Table2DVectorSumX(*i, x, y), rest))
+            }
+            (ArgumentExpression::Element(x), ArgumentExpression::Vector(y)) => {
+                Ok((NumericTableExpression::Table2DVectorSumY(*i, x, y), rest))
+            }
+            _ => Err(ParseErr::new(format!(
+                "arguments `{:?}` `{:?}` are invalid for sum",
+                x, y
+            ))),
         }
-        (ArgumentExpression::Set(x), ArgumentExpression::Element(y)) => {
-            Ok((NumericTableExpression::Table2DSumX(i, x, y), rest))
+    } else if let Some(i) = tables.name_to_table_3d.get(name) {
+        let (x, rest) = parse_argument(tokens, metadata, registry, parameters)?;
+        let (y, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let (z, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        match (x, y, z) {
+            (
+                ArgumentExpression::Set(x),
+                ArgumentExpression::Set(y),
+                ArgumentExpression::Set(z),
+            ) => Ok((NumericTableExpression::Table3DSum(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Set(x),
+                ArgumentExpression::Element(y),
+                ArgumentExpression::Element(z),
+            ) => Ok((NumericTableExpression::Table3DSumX(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Element(x),
+                ArgumentExpression::Set(y),
+                ArgumentExpression::Element(z),
+            ) => Ok((NumericTableExpression::Table3DSumY(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Element(x),
+                ArgumentExpression::Element(y),
+                ArgumentExpression::Set(z),
+            ) => Ok((NumericTableExpression::Table3DSumZ(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Set(x),
+                ArgumentExpression::Set(y),
+                ArgumentExpression::Element(z),
+            ) => Ok((NumericTableExpression::Table3DSumXY(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Set(x),
+                ArgumentExpression::Element(y),
+                ArgumentExpression::Set(z),
+            ) => Ok((NumericTableExpression::Table3DSumXZ(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Element(x),
+                ArgumentExpression::Set(y),
+                ArgumentExpression::Set(z),
+            ) => Ok((NumericTableExpression::Table3DSumYZ(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Vector(x),
+                ArgumentExpression::Element(y),
+                ArgumentExpression::Element(z),
+            ) => Ok((NumericTableExpression::Table3DVectorSumX(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Element(x),
+                ArgumentExpression::Vector(y),
+                ArgumentExpression::Element(z),
+            ) => Ok((NumericTableExpression::Table3DVectorSumY(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Element(x),
+                ArgumentExpression::Element(y),
+                ArgumentExpression::Vector(z),
+            ) => Ok((NumericTableExpression::Table3DVectorSumZ(*i, x, y, z), rest)),
+            _ => Err(ParseErr::new(format!(
+                "arguments `{:?}` `{:?}` `{:?}` are invalid for sum",
+                x, y, z
+            ))),
         }
-        (ArgumentExpression::Element(x), ArgumentExpression::Set(y)) => {
-            Ok((NumericTableExpression::Table2DSumY(i, x, y), rest))
-        }
+    } else if let Some(i) = tables.name_to_table.get(name) {
+        parse_table_sum(*i, tokens, metadata, registry, parameters)
+    } else {
+        Err(ParseErr::new(format!("no such function `{:?}`", name)))
     }
 }
 
-fn parse_table_3d<'a, 'b, 'c, T: variable::Numeric>(
+fn parse_table_sum<'a, 'b, 'c, T: Numeric>(
     i: usize,
     tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    parameters: &'c collections::HashMap<String, usize>,
-) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
-    let (x, rest) = set_parser::parse_argument(tokens, metadata, parameters)?;
-    let (y, rest) = set_parser::parse_argument(rest, metadata, parameters)?;
-    let (z, rest) = set_parser::parse_argument(rest, metadata, parameters)?;
-    let rest = util::parse_closing(rest)?;
-    match (x, y, z) {
-        (
-            ArgumentExpression::Element(x),
-            ArgumentExpression::Element(y),
-            ArgumentExpression::Element(z),
-        ) => Ok((NumericTableExpression::Table3D(i, x, y, z), rest)),
-        (ArgumentExpression::Set(x), ArgumentExpression::Set(y), ArgumentExpression::Set(z)) => {
-            Ok((NumericTableExpression::Table3DSum(i, x, y, z), rest))
-        }
-        (
-            ArgumentExpression::Set(x),
-            ArgumentExpression::Element(y),
-            ArgumentExpression::Element(z),
-        ) => Ok((NumericTableExpression::Table3DSumX(i, x, y, z), rest)),
-        (
-            ArgumentExpression::Element(x),
-            ArgumentExpression::Set(y),
-            ArgumentExpression::Element(z),
-        ) => Ok((NumericTableExpression::Table3DSumY(i, x, y, z), rest)),
-        (
-            ArgumentExpression::Element(x),
-            ArgumentExpression::Element(y),
-            ArgumentExpression::Set(z),
-        ) => Ok((NumericTableExpression::Table3DSumZ(i, x, y, z), rest)),
-        (
-            ArgumentExpression::Set(x),
-            ArgumentExpression::Set(y),
-            ArgumentExpression::Element(z),
-        ) => Ok((NumericTableExpression::Table3DSumXY(i, x, y, z), rest)),
-        (
-            ArgumentExpression::Set(x),
-            ArgumentExpression::Element(y),
-            ArgumentExpression::Set(z),
-        ) => Ok((NumericTableExpression::Table3DSumXZ(i, x, y, z), rest)),
-        (
-            ArgumentExpression::Element(x),
-            ArgumentExpression::Set(y),
-            ArgumentExpression::Set(z),
-        ) => Ok((NumericTableExpression::Table3DSumYZ(i, x, y, z), rest)),
-    }
-}
-
-fn parse_table<'a, 'b, 'c, T: variable::Numeric>(
-    i: usize,
-    tokens: &'a [String],
-    metadata: &'b state::StateMetadata,
-    parameters: &'c collections::HashMap<String, usize>,
+    metadata: &'b StateMetadata,
+    registry: &'b TableRegistry,
+    parameters: &'c HashMap<String, usize>,
 ) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
     let mut args = Vec::new();
     let mut xs = tokens;
@@ -144,9 +215,113 @@ fn parse_table<'a, 'b, 'c, T: variable::Numeric>(
         if next_token == ")" {
             return Ok((NumericTableExpression::TableSum(i, args), rest));
         }
-        let (expression, new_xs) = set_parser::parse_argument(xs, metadata, parameters)?;
+        let (expression, new_xs) = parse_argument(xs, metadata, registry, parameters)?;
         args.push(expression);
         xs = new_xs;
+    }
+}
+
+fn parse_zip_sum<'a, 'b, 'c, T: Numeric>(
+    name: &'a str,
+    tokens: &'a [String],
+    metadata: &'b StateMetadata,
+    registry: &TableRegistry,
+    parameters: &'c HashMap<String, usize>,
+    tables: &'b TableData<T>,
+) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
+    if let Some(i) = tables.name_to_table_1d.get(name) {
+        Err(ParseErr::new(format!(
+            "function `{:?}` has only one argument ",
+            name
+        )))
+    } else if let Some(i) = tables.name_to_table_2d.get(name) {
+        let (x, rest) = vector_parser::parse_expression(tokens, metadata, registry, parameters)?;
+        let (y, rest) = vector_parser::parse_expression(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        Ok((NumericTableExpression::Table2DZipSum(*i, x, y), rest))
+    } else if let Some(i) = tables.name_to_table_3d.get(name) {
+        let (x, rest) = parse_argument(tokens, metadata, registry, parameters)?;
+        let (y, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let (z, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        match (x, y, z) {
+            (
+                ArgumentExpression::Vector(x),
+                ArgumentExpression::Vector(y),
+                ArgumentExpression::Vector(z),
+            ) => Ok((NumericTableExpression::Table3DZipSum(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Vector(x),
+                ArgumentExpression::Vector(y),
+                ArgumentExpression::Element(z),
+            ) => Ok((NumericTableExpression::Table3DZipSumXY(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Vector(x),
+                ArgumentExpression::Element(y),
+                ArgumentExpression::Vector(z),
+            ) => Ok((NumericTableExpression::Table3DZipSumXZ(*i, x, y, z), rest)),
+            (
+                ArgumentExpression::Element(x),
+                ArgumentExpression::Vector(y),
+                ArgumentExpression::Vector(z),
+            ) => Ok((NumericTableExpression::Table3DZipSumYZ(*i, x, y, z), rest)),
+            _ => Err(ParseErr::new(format!(
+                "arguments `{:?}` `{:?}` `{:?}` are invalid for zip-sum",
+                x, y, z
+            ))),
+        }
+    } else if let Some(i) = tables.name_to_table.get(name) {
+        parse_table_zip_sum(*i, tokens, metadata, registry, parameters)
+    } else {
+        Err(ParseErr::new(format!("no such function `{:?}`", name)))
+    }
+}
+
+fn parse_table_zip_sum<'a, 'b, 'c, T: Numeric>(
+    i: usize,
+    tokens: &'a [String],
+    metadata: &'b StateMetadata,
+    registry: &'b TableRegistry,
+    parameters: &'c HashMap<String, usize>,
+) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
+    let mut args = Vec::new();
+    let mut xs = tokens;
+    loop {
+        let (next_token, rest) = xs
+            .split_first()
+            .ok_or_else(|| ParseErr::new("could not find closing `)`".to_string()))?;
+        if next_token == ")" {
+            return Ok((NumericTableExpression::TableZipSum(i, args), rest));
+        }
+        let (expression, new_xs) = parse_argument(xs, metadata, registry, parameters)?;
+        args.push(expression);
+        xs = new_xs;
+    }
+}
+
+fn parse_argument<'a>(
+    tokens: &'a [String],
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &HashMap<String, usize>,
+) -> Result<(ArgumentExpression, &'a [String]), ParseErr> {
+    if let Ok((element, rest)) =
+        element_parser::parse_expression(tokens, metadata, registry, parameters)
+    {
+        Ok((ArgumentExpression::Element(element), rest))
+    } else if let Ok((set, rest)) =
+        set_parser::parse_expression(tokens, metadata, registry, parameters)
+    {
+        Ok((ArgumentExpression::Set(set), rest))
+    } else if let Ok((vector, rest)) =
+        vector_parser::parse_expression(tokens, metadata, registry, parameters)
+    {
+        Ok((ArgumentExpression::Vector(vector), rest))
+    } else {
+        Err(ParseErr::new(format!(
+            "could not parse tokens `{:?}`",
+            tokens
+        )))
     }
 }
 
@@ -155,9 +330,8 @@ mod tests {
     use super::*;
     use crate::expression::*;
     use crate::table;
-    use std::collections::HashMap;
 
-    fn generate_metadata() -> state::StateMetadata {
+    fn generate_metadata() -> StateMetadata {
         let object_names = vec![String::from("object")];
         let object_numbers = vec![10];
         let mut name_to_object = HashMap::new();
@@ -214,7 +388,7 @@ mod tests {
         name_to_integer_variable.insert(String::from("i2"), 2);
         name_to_integer_variable.insert(String::from("i3"), 3);
 
-        state::StateMetadata {
+        StateMetadata {
             object_names,
             name_to_object,
             object_numbers,
@@ -233,14 +407,14 @@ mod tests {
         }
     }
 
-    fn generate_parameters() -> collections::HashMap<String, usize> {
-        let mut parameters = collections::HashMap::new();
+    fn generate_parameters() -> HashMap<String, usize> {
+        let mut parameters = HashMap::new();
         parameters.insert("param".to_string(), 0);
         parameters
     }
 
-    fn generate_tables() -> table_data::TableData<variable::Integer> {
-        let mut name_to_constant = collections::HashMap::new();
+    fn generate_tables() -> TableData<Integer> {
+        let mut name_to_constant = HashMap::new();
         name_to_constant.insert(String::from("f0"), 0);
 
         let tables_1d = vec![table::Table1D::new(Vec::new())];
@@ -259,7 +433,7 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
-        table_data::TableData {
+        TableData {
             name_to_constant,
             tables_1d,
             name_to_table_1d,
