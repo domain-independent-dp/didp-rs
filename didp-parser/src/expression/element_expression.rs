@@ -17,9 +17,7 @@ impl ElementExpression {
             Self::Stage => state.stage,
             Self::Constant(x) => *x,
             Self::Variable(i) => state.signature_variables.element_variables[*i],
-            Self::Table(table) => table
-                .eval(state, registry, &registry.element_tables)
-                .clone(),
+            Self::Table(table) => *table.eval(state, registry, &registry.element_tables),
         }
     }
 
@@ -214,7 +212,7 @@ mod tests {
 
         let expression = TableExpression::Constant(1);
         assert_eq!(
-            expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(&state, &registry, &registry.element_tables),
             1
         );
     }
@@ -225,12 +223,12 @@ mod tests {
         let state = generate_state();
         let expression = TableExpression::Table1D(0, ElementExpression::Constant(0));
         assert_eq!(
-            expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(&state, &registry, &registry.element_tables),
             1
         );
         let expression = TableExpression::Table1D(0, ElementExpression::Constant(1));
         assert_eq!(
-            expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(&state, &registry, &registry.element_tables),
             0
         );
     }
@@ -245,7 +243,7 @@ mod tests {
             ElementExpression::Constant(0),
         );
         assert_eq!(
-            expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(&state, &registry, &registry.element_tables),
             1
         );
         let expression = TableExpression::Table2D(
@@ -254,7 +252,7 @@ mod tests {
             ElementExpression::Constant(1),
         );
         assert_eq!(
-            expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(&state, &registry, &registry.element_tables),
             0
         );
     }
@@ -270,7 +268,7 @@ mod tests {
             ElementExpression::Constant(0),
         );
         assert_eq!(
-            expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(&state, &registry, &registry.element_tables),
             1
         );
         let expression = TableExpression::Table3D(
@@ -280,7 +278,7 @@ mod tests {
             ElementExpression::Constant(1),
         );
         assert_eq!(
-            expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(&state, &registry, &registry.element_tables),
             0
         );
     }
@@ -299,7 +297,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(&state, &registry, &registry.element_tables),
             1
         );
         let expression = TableExpression::Table(
@@ -312,7 +310,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(&state, &registry, &registry.element_tables),
             0
         );
         let expression = TableExpression::Table(
@@ -325,7 +323,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(&state, &registry, &registry.element_tables),
             0
         );
     }

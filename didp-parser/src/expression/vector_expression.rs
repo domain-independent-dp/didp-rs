@@ -17,9 +17,7 @@ impl VectorExpression {
         match self {
             Self::Indices(expression) => {
                 let mut vector = expression.eval(state, registry);
-                for i in 0..vector.len() {
-                    vector[i] = i;
-                }
+                vector.iter_mut().enumerate().for_each(|(i, v)| *v = i);
                 vector
             }
             Self::Reference(expression) => expression
@@ -48,9 +46,7 @@ impl VectorExpression {
         match self {
             Self::Indices(expression) => match expression.simplify(registry) {
                 VectorExpression::Reference(ReferenceExpression::Constant(mut vector)) => {
-                    for i in 0..vector.len() {
-                        vector[i] = i;
-                    }
+                    vector.iter_mut().enumerate().for_each(|(i, v)| *v = i);
                     Self::Reference(ReferenceExpression::Constant(vector))
                 }
                 expression => Self::Indices(Box::new(expression)),

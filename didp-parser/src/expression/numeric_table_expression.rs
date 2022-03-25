@@ -100,160 +100,82 @@ impl<T: Numeric> NumericTableExpression<T> {
                 y.eval(state, registry),
                 z.eval(state, registry),
             ),
-            Self::Table1DSum(i, x) => {
-                let x = match x {
-                    SetExpression::Reference(x) => x
-                        .eval(
-                            state,
-                            registry,
-                            &state.signature_variables.set_variables,
-                            &registry.set_tables,
-                        )
-                        .ones(),
-                    _ => x.eval(state, registry).ones(),
-                };
-                x.map(|x| tables.tables_1d[*i].eval(x)).sum()
-            }
-            Self::Table1DVectorSum(i, x) => {
-                let x = match x {
-                    VectorExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
-                x.iter().map(|x| tables.tables_1d[*i].eval(*x)).sum()
-            }
+            Self::Table1DSum(i, SetExpression::Reference(x)) => x
+                .eval(
+                    state,
+                    registry,
+                    &state.signature_variables.set_variables,
+                    &registry.set_tables,
+                )
+                .ones()
+                .map(|x| tables.tables_1d[*i].eval(x))
+                .sum(),
+            Self::Table1DSum(i, x) => x
+                .eval(state, registry)
+                .ones()
+                .map(|x| tables.tables_1d[*i].eval(x))
+                .sum(),
+            Self::Table1DVectorSum(i, VectorExpression::Reference(x)) => x
+                .eval(
+                    state,
+                    registry,
+                    &state.signature_variables.vector_variables,
+                    &registry.vector_tables,
+                )
+                .iter()
+                .map(|x| tables.tables_1d[*i].eval(*x))
+                .sum(),
+            Self::Table1DVectorSum(i, x) => x
+                .eval(state, registry)
+                .into_iter()
+                .map(|x| tables.tables_1d[*i].eval(x))
+                .sum(),
             Self::Table2DSum(i, x, y) => {
-                let x = match x {
-                    SetExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
-                let y = match y {
-                    SetExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
+                let x = x.eval(state, registry);
+                let y = y.eval(state, registry);
                 x.ones()
                     .map(|x| y.ones().map(|y| tables.tables_2d[*i].eval(x, y)).sum())
                     .sum()
             }
-            Self::Table2DZipSum(i, x, y) => {
-                let x = match x {
-                    VectorExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
-                let y = match y {
-                    VectorExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
-                x.iter()
-                    .zip(y.iter())
-                    .map(|(x, y)| tables.tables_2d[*i].eval(*x, *y))
-                    .sum()
-            }
+            Self::Table2DZipSum(i, x, y) => x
+                .eval(state, registry)
+                .into_iter()
+                .zip(y.eval(state, registry).into_iter())
+                .map(|(x, y)| tables.tables_2d[*i].eval(x, y))
+                .sum(),
             Self::Table2DSumX(i, x, y) => {
-                let x = match x {
-                    SetExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
                 let y = y.eval(state, registry);
-                x.ones().map(|x| tables.tables_2d[*i].eval(x, y)).sum()
+                x.eval(state, registry)
+                    .ones()
+                    .map(|x| tables.tables_2d[*i].eval(x, y))
+                    .sum()
             }
             Self::Table2DSumY(i, x, y) => {
                 let x = x.eval(state, registry);
-                let y = match y {
-                    SetExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
-                y.ones().map(|y| tables.tables_2d[*i].eval(x, y)).sum()
+                y.eval(state, registry)
+                    .ones()
+                    .map(|y| tables.tables_2d[*i].eval(x, y))
+                    .sum()
             }
             Self::Table2DVectorSumX(i, x, y) => {
-                let x = match x {
-                    VectorExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
                 let y = y.eval(state, registry);
-                x.iter().map(|x| tables.tables_2d[*i].eval(*x, y)).sum()
+                x.eval(state, registry)
+                    .into_iter()
+                    .map(|x| tables.tables_2d[*i].eval(x, y))
+                    .sum()
             }
             Self::Table2DVectorSumY(i, x, y) => {
                 let x = x.eval(state, registry);
-                let y = match y {
-                    VectorExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
-                y.iter().map(|y| tables.tables_2d[*i].eval(x, *y)).sum()
+                y.eval(state, registry)
+                    .into_iter()
+                    .map(|y| tables.tables_2d[*i].eval(x, y))
+                    .sum()
             }
             Self::Table3DSum(i, x, y, z) => {
-                let x = match x {
-                    SetExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
-                let y = match y {
-                    SetExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
-                let z = match z {
-                    SetExpression::Reference(z) => z.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &z.eval(state, registry),
-                };
-                x.ones()
+                let y = y.eval(state, registry);
+                let z = z.eval(state, registry);
+                x.eval(state, registry)
+                    .ones()
                     .map(|x| {
                         y.ones()
                             .map(|y| z.ones().map(|z| tables.tables_3d[*i].eval(x, y, z)).sum())
@@ -261,269 +183,107 @@ impl<T: Numeric> NumericTableExpression<T> {
                     })
                     .sum()
             }
-            Self::Table3DZipSum(i, x, y, z) => {
-                let x = match x {
-                    VectorExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
-                let y = match y {
-                    VectorExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
-                let z = match z {
-                    VectorExpression::Reference(z) => z.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &z.eval(state, registry),
-                };
-                x.iter()
-                    .zip(y.iter())
-                    .zip(z.iter())
-                    .map(|((x, y), z)| tables.tables_3d[*i].eval(*x, *y, *z))
-                    .sum()
-            }
+            Self::Table3DZipSum(i, x, y, z) => x
+                .eval(state, registry)
+                .into_iter()
+                .zip(y.eval(state, registry).into_iter())
+                .zip(z.eval(state, registry).into_iter())
+                .map(|((x, y), z)| tables.tables_3d[*i].eval(x, y, z))
+                .sum(),
             Self::Table3DSumX(i, x, y, z) => {
-                let x = match x {
-                    SetExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
                 let y = y.eval(state, registry);
                 let z = z.eval(state, registry);
-                x.ones().map(|x| tables.tables_3d[*i].eval(x, y, z)).sum()
+                x.eval(state, registry)
+                    .ones()
+                    .map(|x| tables.tables_3d[*i].eval(x, y, z))
+                    .sum()
             }
             Self::Table3DSumY(i, x, y, z) => {
                 let x = x.eval(state, registry);
-                let y = match y {
-                    SetExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
                 let z = z.eval(state, registry);
-                y.ones().map(|y| tables.tables_3d[*i].eval(x, y, z)).sum()
+                y.eval(state, registry)
+                    .ones()
+                    .map(|y| tables.tables_3d[*i].eval(x, y, z))
+                    .sum()
             }
             Self::Table3DSumZ(i, x, y, z) => {
                 let x = x.eval(state, registry);
                 let y = y.eval(state, registry);
-                let z = match z {
-                    SetExpression::Reference(z) => z.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &z.eval(state, registry),
-                };
-                z.ones().map(|z| tables.tables_3d[*i].eval(x, y, z)).sum()
+                z.eval(state, registry)
+                    .ones()
+                    .map(|z| tables.tables_3d[*i].eval(x, y, z))
+                    .sum()
             }
             Self::Table3DVectorSumX(i, x, y, z) => {
-                let x = match x {
-                    VectorExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
                 let y = y.eval(state, registry);
                 let z = z.eval(state, registry);
-                x.iter().map(|x| tables.tables_3d[*i].eval(*x, y, z)).sum()
+                x.eval(state, registry)
+                    .into_iter()
+                    .map(|x| tables.tables_3d[*i].eval(x, y, z))
+                    .sum()
             }
             Self::Table3DVectorSumY(i, x, y, z) => {
                 let x = x.eval(state, registry);
-                let y = match y {
-                    VectorExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
                 let z = z.eval(state, registry);
-                y.iter().map(|y| tables.tables_3d[*i].eval(x, *y, z)).sum()
+                y.eval(state, registry)
+                    .into_iter()
+                    .map(|y| tables.tables_3d[*i].eval(x, y, z))
+                    .sum()
             }
             Self::Table3DVectorSumZ(i, x, y, z) => {
                 let x = x.eval(state, registry);
                 let y = y.eval(state, registry);
-                let z = match z {
-                    VectorExpression::Reference(z) => z.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &z.eval(state, registry),
-                };
-                z.iter().map(|z| tables.tables_3d[*i].eval(x, y, *z)).sum()
+                z.eval(state, registry)
+                    .into_iter()
+                    .map(|z| tables.tables_3d[*i].eval(x, y, z))
+                    .sum()
             }
             Self::Table3DSumXY(i, x, y, z) => {
-                let x = match x {
-                    SetExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
-                let y = match y {
-                    SetExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
+                let y = y.eval(state, registry);
                 let z = z.eval(state, registry);
-                x.ones()
+                x.eval(state, registry)
+                    .ones()
                     .map(|x| y.ones().map(|y| tables.tables_3d[*i].eval(x, y, z)).sum())
                     .sum()
             }
             Self::Table3DSumXZ(i, x, y, z) => {
-                let x = match x {
-                    SetExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
                 let y = y.eval(state, registry);
-                let z = match z {
-                    SetExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &z.eval(state, registry),
-                };
-                x.ones()
+                let z = z.eval(state, registry);
+                x.eval(state, registry)
+                    .ones()
                     .map(|x| z.ones().map(|z| tables.tables_3d[*i].eval(x, y, z)).sum())
                     .sum()
             }
             Self::Table3DSumYZ(i, x, y, z) => {
                 let x = x.eval(state, registry);
-                let y = match y {
-                    SetExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
-                let z = match z {
-                    SetExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    ),
-                    _ => &z.eval(state, registry),
-                };
-                y.ones()
+                let z = z.eval(state, registry);
+                y.eval(state, registry)
+                    .ones()
                     .map(|y| z.ones().map(|z| tables.tables_3d[*i].eval(x, y, z)).sum())
                     .sum()
             }
             Self::Table3DZipSumXY(i, x, y, z) => {
-                let x = match x {
-                    VectorExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
-                let y = match y {
-                    VectorExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
                 let z = z.eval(state, registry);
-                x.iter()
-                    .zip(y.iter())
-                    .map(|(x, y)| tables.tables_3d[*i].eval(*x, *y, z))
+                x.eval(state, registry)
+                    .into_iter()
+                    .zip(y.eval(state, registry).into_iter())
+                    .map(|(x, y)| tables.tables_3d[*i].eval(x, y, z))
                     .sum()
             }
             Self::Table3DZipSumXZ(i, x, y, z) => {
-                let x = match x {
-                    VectorExpression::Reference(x) => x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &x.eval(state, registry),
-                };
                 let y = y.eval(state, registry);
-                let z = match z {
-                    VectorExpression::Reference(z) => z.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &z.eval(state, registry),
-                };
-                x.iter()
-                    .zip(z.iter())
-                    .map(|(x, z)| tables.tables_3d[*i].eval(*x, y, *z))
+                x.eval(state, registry)
+                    .into_iter()
+                    .zip(z.eval(state, registry).into_iter())
+                    .map(|(x, z)| tables.tables_3d[*i].eval(x, y, z))
                     .sum()
             }
             Self::Table3DZipSumYZ(i, x, y, z) => {
                 let x = x.eval(state, registry);
-                let y = match y {
-                    VectorExpression::Reference(y) => y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &y.eval(state, registry),
-                };
-                let z = match z {
-                    VectorExpression::Reference(z) => z.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    ),
-                    _ => &z.eval(state, registry),
-                };
-                y.iter()
-                    .zip(z.iter())
-                    .map(|(y, z)| tables.tables_3d[*i].eval(x, *y, *z))
+                y.eval(state, registry)
+                    .into_iter()
+                    .zip(z.eval(state, registry).into_iter())
+                    .map(|(y, z)| tables.tables_3d[*i].eval(x, y, z))
                     .sum()
             }
         }
@@ -539,10 +299,10 @@ impl<T: Numeric> NumericTableExpression<T> {
                 let args: Vec<ElementExpression> =
                     args.iter().map(|x| x.simplify(registry)).collect();
                 let mut simplified_args = Vec::with_capacity(args.len());
-                for arg in args {
+                for arg in &args {
                     match arg {
                         ElementExpression::Constant(arg) => {
-                            simplified_args.push(arg);
+                            simplified_args.push(*arg);
                         }
                         _ => return Self::Table(*i, args),
                     }
@@ -561,18 +321,6 @@ impl<T: Numeric> NumericTableExpression<T> {
                 ElementExpression::Constant(y),
                 ElementExpression::Constant(z),
             ) => Self::Constant(tables.tables_3d[*i].eval(*x, *y, *z)),
-            Self::Table(i, args) => {
-                let mut simplified_args = Vec::with_capacity(args.len());
-                for arg in args {
-                    match arg {
-                        ElementExpression::Constant(arg) => {
-                            simplified_args.push(*arg);
-                        }
-                        _ => return self.clone(),
-                    }
-                }
-                Self::Constant(tables.tables[*i].eval(&simplified_args))
-            }
             Self::Table1DSum(i, SetExpression::Reference(ReferenceExpression::Constant(x))) => {
                 Self::Constant(x.ones().map(|x| tables.tables_1d[*i].eval(x)).sum())
             }
@@ -639,39 +387,32 @@ impl<T: Numeric> NumericTableExpression<T> {
         for v in args {
             match v {
                 ArgumentExpression::Set(set) => {
-                    let set = match set {
-                        SetExpression::Reference(set) => set.eval(
-                            state,
-                            registry,
-                            &state.signature_variables.set_variables,
-                            &registry.set_tables,
-                        ),
-                        _ => &set.eval(state, registry),
+                    result = match set {
+                        SetExpression::Reference(set) => {
+                            let set = set.eval(
+                                state,
+                                registry,
+                                &state.signature_variables.set_variables,
+                                &registry.set_tables,
+                            );
+                            Self::expand_args_with_set(result, set)
+                        }
+                        _ => Self::expand_args_with_set(result, &set.eval(state, registry)),
                     };
-                    result = Self::expand_args_with_set(result, set);
                 }
                 ArgumentExpression::Vector(vector) => {
-                    let vector = match vector {
-                        VectorExpression::Reference(vector) => vector.eval(
-                            state,
-                            registry,
-                            &state.signature_variables.vector_variables,
-                            &registry.vector_tables,
-                        ),
-                        _ => &vector.eval(state, registry),
+                    result = match vector {
+                        VectorExpression::Reference(vector) => {
+                            let vector = vector.eval(
+                                state,
+                                registry,
+                                &state.signature_variables.vector_variables,
+                                &registry.vector_tables,
+                            );
+                            Self::expand_args_with_slice(result, vector)
+                        }
+                        _ => Self::expand_args_with_slice(result, &vector.eval(state, registry)),
                     };
-                    result = result
-                        .into_iter()
-                        .flat_map(|r| {
-                            iter::repeat(r)
-                                .zip(vector.iter())
-                                .map(|(mut r, e)| {
-                                    r.push(*e);
-                                    r
-                                })
-                                .collect::<Vec<Vec<Element>>>()
-                        })
-                        .collect()
                 }
                 ArgumentExpression::Element(element) => {
                     let element = element.eval(state, registry);
@@ -692,34 +433,50 @@ impl<T: Numeric> NumericTableExpression<T> {
         for v in args {
             match v {
                 ArgumentExpression::Set(set) => {
-                    let set = match set {
-                        SetExpression::Reference(set) => set.eval(
-                            state,
-                            registry,
-                            &state.signature_variables.set_variables,
-                            &registry.set_tables,
-                        ),
-                        _ => &set.eval(state, registry),
+                    result = match set {
+                        SetExpression::Reference(set) => {
+                            let set = set.eval(
+                                state,
+                                registry,
+                                &state.signature_variables.set_variables,
+                                &registry.set_tables,
+                            );
+                            result
+                                .into_iter()
+                                .map(|rr| Self::expand_args_with_set(rr, set))
+                                .collect::<Vec<Vec<Vec<Element>>>>()
+                        }
+                        _ => {
+                            let set = &set.eval(state, registry);
+                            result
+                                .into_iter()
+                                .map(|rr| Self::expand_args_with_set(rr, &set))
+                                .collect::<Vec<Vec<Vec<Element>>>>()
+                        }
                     };
-                    result = result
-                        .into_iter()
-                        .map(|rr| Self::expand_args_with_set(rr, set))
-                        .collect::<Vec<Vec<Vec<Element>>>>();
                 }
                 ArgumentExpression::Vector(vector) => {
-                    let vector = match vector {
-                        VectorExpression::Reference(vector) => vector.eval(
-                            state,
-                            registry,
-                            &state.signature_variables.vector_variables,
-                            &registry.vector_tables,
-                        ),
-                        _ => &vector.eval(state, registry),
+                    match vector {
+                        VectorExpression::Reference(vector) => {
+                            let vector = vector.eval(
+                                state,
+                                registry,
+                                &state.signature_variables.vector_variables,
+                                &registry.vector_tables,
+                            );
+                            result
+                                .iter_mut()
+                                .zip(vector.iter())
+                                .for_each(|(rr, e)| rr.iter_mut().for_each(|r| r.push(*e)));
+                        }
+                        _ => {
+                            let vector = vector.eval(state, registry);
+                            result
+                                .iter_mut()
+                                .zip(vector.into_iter())
+                                .for_each(|(rr, e)| rr.iter_mut().for_each(|r| r.push(e)));
+                        }
                     };
-                    result
-                        .iter_mut()
-                        .zip(vector.iter())
-                        .for_each(|(rr, e)| rr.iter_mut().for_each(|r| r.push(*e)));
                 }
                 ArgumentExpression::Element(element) => {
                     let element = element.eval(state, registry);
@@ -739,6 +496,20 @@ impl<T: Numeric> NumericTableExpression<T> {
                     .zip(set.ones())
                     .map(|(mut r, e)| {
                         r.push(e);
+                        r
+                    })
+                    .collect::<Vec<Vec<Element>>>()
+            })
+            .collect()
+    }
+
+    fn expand_args_with_slice(args: Vec<Vec<Element>>, slice: &[Element]) -> Vec<Vec<Element>> {
+        args.into_iter()
+            .flat_map(|r| {
+                iter::repeat(r)
+                    .zip(slice.iter())
+                    .map(|(mut r, e)| {
+                        r.push(*e);
                         r
                     })
                     .collect::<Vec<Vec<Element>>>()

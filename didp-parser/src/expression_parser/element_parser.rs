@@ -127,6 +127,7 @@ fn parse_atom(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::table::*;
 
     fn generate_metadata() -> StateMetadata {
         let object_names = vec!["object".to_string()];
@@ -204,6 +205,47 @@ mod tests {
         }
     }
 
+    fn generate_registry() -> TableRegistry {
+        let mut name_to_constant = HashMap::new();
+        name_to_constant.insert(String::from("f0"), 1);
+
+        let tables_1d = vec![Table1D::new(vec![1, 0])];
+        let mut name_to_table_1d = HashMap::new();
+        name_to_table_1d.insert(String::from("f1"), 0);
+
+        let tables_2d = vec![Table2D::new(vec![vec![1, 0]])];
+        let mut name_to_table_2d = HashMap::new();
+        name_to_table_2d.insert(String::from("f2"), 0);
+
+        let tables_3d = vec![Table3D::new(vec![vec![vec![1, 0]]])];
+        let mut name_to_table_3d = HashMap::new();
+        name_to_table_3d.insert(String::from("f3"), 0);
+
+        let mut map = HashMap::new();
+        let key = vec![0, 0, 0, 0];
+        map.insert(key, 1);
+        let key = vec![0, 0, 0, 1];
+        map.insert(key, 0);
+        let tables = vec![Table::new(map, 0)];
+        let mut name_to_table = HashMap::new();
+        name_to_table.insert(String::from("f4"), 0);
+
+        TableRegistry {
+            element_tables: TableData {
+                name_to_constant,
+                tables_1d,
+                name_to_table_1d,
+                tables_2d,
+                name_to_table_2d,
+                tables_3d,
+                name_to_table_3d,
+                tables,
+                name_to_table,
+            },
+            ..Default::default()
+        }
+    }
+
     fn generate_parameters() -> HashMap<String, usize> {
         let mut parameters = HashMap::new();
         parameters.insert("param".to_string(), 0);
@@ -213,6 +255,7 @@ mod tests {
     #[test]
     fn parse_expression_ok() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["e1", ")", "1", ")"]
@@ -222,7 +265,7 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, ElementExpression::Variable(1)));
+        assert_eq!(expression, ElementExpression::Variable(1));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["11", ")", "1", ")"]
@@ -232,13 +275,14 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, ElementExpression::Constant(11)));
+        assert_eq!(expression, ElementExpression::Constant(11));
         assert_eq!(rest, &tokens[1..]);
     }
 
     #[test]
     fn parse_expression_err() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["s1", ")", "1", ")"]
@@ -259,16 +303,17 @@ mod tests {
     #[test]
     fn parse_atom_ok() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["stage", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, ElementExpression::Stage));
+        assert_eq!(expression, ElementExpression::Stage);
 
         assert_eq!(rest, &tokens[1..]);
         let tokens: Vec<String> = ["e1", ")", "1", ")"]
@@ -278,7 +323,7 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, ElementExpression::Variable(1)));
+        assert_eq!(expression, ElementExpression::Variable(1));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["11", ")", "1", ")"]
@@ -288,7 +333,7 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, ElementExpression::Constant(11)));
+        assert_eq!(expression, ElementExpression::Constant(11));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["param", ")", "1", ")"]
@@ -298,13 +343,14 @@ mod tests {
         let result = parse_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, ElementExpression::Constant(0)));
+        assert_eq!(expression, ElementExpression::Constant(0));
         assert_eq!(rest, &tokens[1..]);
     }
 
     #[test]
     fn parse_atom_err() {
         let metadata = generate_metadata();
+        let registry = generate_registry();
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["e4", ")", "1", ")"]

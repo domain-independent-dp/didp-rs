@@ -597,13 +597,13 @@ mod tests {
         let registry = generate_registry();
         let set_effect1 = SetExpression::SetElementOperation(
             SetElementOperator::Add,
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(1),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         let set_effect2 = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
             ElementExpression::Constant(0),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
         );
         let vector_effect1 = VectorExpression::Push(
             ElementExpression::Constant(1),
@@ -779,7 +779,7 @@ preconditions:
         - (is_not e 2)
 effects:
         e0: e
-        s0: (+ s0 e)
+        s0: (add e s0)
         p0: (push e p0)
         i0: '1'
         ir0: '2'
@@ -813,8 +813,8 @@ cost: (+ cost (f1 e))
                     0,
                     SetExpression::SetElementOperation(
                         SetElementOperator::Add,
-                        Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                         ElementExpression::Constant(0),
+                        Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                     ),
                 )],
                 vector_effects: vec![(
@@ -856,8 +856,8 @@ cost: (+ cost (f1 e))
                     0,
                     SetExpression::SetElementOperation(
                         SetElementOperator::Add,
-                        Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                         ElementExpression::Constant(1),
+                        Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                     ),
                 )],
                 vector_effects: vec![(
@@ -896,7 +896,7 @@ preconditions:
         - (>= (f2 e0 e) 10)
 effects:
         e0: e
-        s0: (+ s0 e)
+        s0: (add e s0)
         p0: e
         i0: '1'
         ir0: '2'
@@ -936,7 +936,7 @@ preconditions:
         - (>= (f2 e0 e) 10)
 effects:
         e0: e
-        s0: (+ s0 e)
+        s0: (add e s0)
         p0: e
         i0: '1'
         ir0: '2'
@@ -955,7 +955,7 @@ preconditions:
         - (>= (f2 e0 e) 10)
 effects:
         e0: e
-        s0: (+ s0 e)
+        s0: (add e s0)
         p0: e
         i0: '1'
         ir0: '2'
@@ -977,7 +977,7 @@ preconditions:
         - (>= (f2 e0 e) 10)
 effects:
         e0: e
-        s0: (+ s0 e)
+        s0: (add e s0)
         p0: e
         i0: '1'
         ir0: '2'

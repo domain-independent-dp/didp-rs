@@ -9,7 +9,7 @@ pub enum SetExpression {
     Reference(ReferenceExpression<Set>),
     Complement(Box<SetExpression>),
     SetOperation(SetOperator, Box<SetExpression>, Box<SetExpression>),
-    SetElementOperation(SetElementOperator, Box<SetExpression>, ElementExpression),
+    SetElementOperation(SetElementOperator, ElementExpression, Box<SetExpression>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -46,10 +46,10 @@ impl SetExpression {
                 let y = y.eval(state, registry);
                 Self::eval_set_operation(op, x, y)
             }
-            SetExpression::SetElementOperation(op, set, element) => {
+            SetExpression::SetElementOperation(op, element, set) => {
                 let set = set.eval(state, registry);
                 let element = element.eval(state, registry);
-                Self::eval_set_element_operation(op, set, element)
+                Self::eval_set_element_operation(op, element, set)
             }
         }
     }
@@ -89,15 +89,15 @@ impl SetExpression {
                 },
                 (x, y) => Self::SetOperation(op.clone(), Box::new(x), Box::new(y)),
             },
-            Self::SetElementOperation(op, set, element) => {
+            Self::SetElementOperation(op, element, set) => {
                 match (set.simplify(registry), element.simplify(registry)) {
                     (
                         Self::Reference(ReferenceExpression::Constant(set)),
                         ElementExpression::Constant(element),
                     ) => Self::Reference(ReferenceExpression::Constant(
-                        Self::eval_set_element_operation(op, set, element),
+                        Self::eval_set_element_operation(op, element, set),
                     )),
-                    (set, element) => Self::SetElementOperation(op.clone(), Box::new(set), element),
+                    (set, element) => Self::SetElementOperation(op.clone(), element, Box::new(set)),
                 }
             }
         }
@@ -120,7 +120,7 @@ impl SetExpression {
         }
     }
 
-    fn eval_set_element_operation(op: &SetElementOperator, mut set: Set, element: Element) -> Set {
+    fn eval_set_element_operation(op: &SetElementOperator, element: Element, mut set: Set) -> Set {
         match op {
             SetElementOperator::Add => {
                 set.insert(element);
@@ -180,10 +180,11 @@ mod tests {
         }
     }
 
+    #[test]
     fn reference_eval() {
         let registry = generate_registry();
         let state = generate_state();
-        let set = Set::with_capacity(3);
+        let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
         let expression = SetExpression::Reference(ReferenceExpression::Constant(set.clone()));
@@ -285,8 +286,8 @@ mod tests {
         let state = generate_state();
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(1),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         let mut set = Set::with_capacity(3);
         set.insert(0);
@@ -295,8 +296,8 @@ mod tests {
         assert_eq!(expression.eval(&state, &registry), set);
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(0),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         assert_eq!(
             expression.eval(&state, &registry),
@@ -310,16 +311,16 @@ mod tests {
         let state = generate_state();
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(2),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         let mut set = Set::with_capacity(3);
         set.insert(0);
         assert_eq!(expression.eval(&state, &registry), set);
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(1),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         assert_eq!(
             expression.eval(&state, &registry),
@@ -330,7 +331,7 @@ mod tests {
     #[test]
     fn reference_simplify() {
         let registry = generate_registry();
-        let set = Set::with_capacity(3);
+        let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
         let expression = SetExpression::Reference(ReferenceExpression::Constant(set.clone()));
@@ -394,7 +395,6 @@ mod tests {
             Box::new(SetExpression::Reference(ReferenceExpression::Constant(x))),
             Box::new(SetExpression::Reference(ReferenceExpression::Constant(y))),
         );
-        assert_eq!(expression.simplify(&registry), expression);
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
@@ -417,7 +417,6 @@ mod tests {
     #[test]
     fn difference_simplify() {
         let registry = generate_registry();
-        let state = generate_state();
         let expression = SetExpression::SetOperation(
             SetOperator::Difference,
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
@@ -485,8 +484,8 @@ mod tests {
         let registry = generate_registry();
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(1),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         assert_eq!(expression.simplify(&registry), expression);
         let mut set = Set::with_capacity(3);
@@ -494,8 +493,8 @@ mod tests {
         set.insert(2);
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
-            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
             ElementExpression::Constant(1),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
         );
         let mut set = Set::with_capacity(3);
         set.insert(0);
@@ -512,8 +511,8 @@ mod tests {
         let registry = generate_registry();
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ElementExpression::Constant(2),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         assert_eq!(expression.simplify(&registry), expression);
         let mut set = Set::with_capacity(3);
@@ -521,8 +520,8 @@ mod tests {
         set.insert(2);
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
-            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
             ElementExpression::Constant(2),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(set))),
         );
         let mut set = Set::with_capacity(3);
         set.insert(0);

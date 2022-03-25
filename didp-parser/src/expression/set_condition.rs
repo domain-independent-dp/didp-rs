@@ -631,6 +631,8 @@ mod tests {
         );
         assert_eq!(expression.simplify(&registry), SetCondition::Constant(true));
 
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
         let expression = SetCondition::IsIn(
             ElementExpression::Constant(1),
             SetExpression::Reference(ReferenceExpression::Constant(set)),

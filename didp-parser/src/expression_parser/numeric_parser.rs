@@ -506,79 +506,56 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", "f4", "0", "e0", "s0", "p0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["(", "sum", "f4", "0", "e0", "s0", "p0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericExpression::IntegerTable(NumericTableExpression::TableSum(_, _))
-        ));
-        if let NumericExpression::IntegerTable(NumericTableExpression::TableSum(i, args)) =
-            expression
-        {
-            assert_eq!(i, 0);
-            assert_eq!(args.len(), 4);
-            assert_eq!(
-                args[0],
-                ArgumentExpression::Element(ElementExpression::Constant(0))
-            );
-            assert_eq!(
-                args[1],
-                ArgumentExpression::Element(ElementExpression::Variable(0))
-            );
-            assert_eq!(
-                args[2],
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0)))
-            );
-            assert_eq!(
-                args[3],
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Variable(0)
-                ))
-            );
-        }
-        assert_eq!(rest, &tokens[7..]);
+            NumericExpression::IntegerTable(NumericTableExpression::TableSum(
+                0,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    )),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    ))
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[8..]);
 
-        let tokens: Vec<String> = ["(", "cf4", "0", "e0", "s0", "p0", ")", "c0", ")"]
+        let tokens: Vec<String> = ["(", "sum", "cf4", "0", "e0", "s0", "p0", ")", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        println!("{:?}", result);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericExpression::ContinuousTable(NumericTableExpression::TableSum(_, _))
-        ));
-        if let NumericExpression::ContinuousTable(NumericTableExpression::TableSum(i, args)) =
-            expression
-        {
-            assert_eq!(i, 0);
-            assert_eq!(args.len(), 4);
-            assert_eq!(
-                args[0],
-                ArgumentExpression::Element(ElementExpression::Constant(0))
-            );
-            assert_eq!(
-                args[1],
-                ArgumentExpression::Element(ElementExpression::Variable(0))
-            );
-            assert_eq!(
-                args[2],
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0)))
-            );
-            assert_eq!(
-                args[3],
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Variable(0)
-                ))
-            );
-        }
-        assert_eq!(rest, &tokens[7..]);
+            NumericExpression::ContinuousTable(NumericTableExpression::TableSum(
+                0,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    )),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    ))
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[8..]);
     }
 
     #[test]

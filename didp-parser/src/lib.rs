@@ -719,7 +719,7 @@ transitions:
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
           effects:
-                unvisited: (- unvisited to)
+                unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
           cost: (+ cost (distance location to))
@@ -879,8 +879,8 @@ table_values:
                         0,
                         SetExpression::SetElementOperation(
                             SetElementOperator::Remove,
-                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                             ElementExpression::Constant(0),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                         ),
                     )],
                     element_effects: vec![(0, ElementExpression::Constant(0))],
@@ -930,8 +930,8 @@ table_values:
                         0,
                         SetExpression::SetElementOperation(
                             SetElementOperator::Remove,
-                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                             ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                         ),
                     )],
                     element_effects: vec![(0, ElementExpression::Constant(1))],
@@ -981,8 +981,8 @@ table_values:
                         0,
                         SetExpression::SetElementOperation(
                             SetElementOperator::Remove,
-                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                             ElementExpression::Constant(2),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
                         ),
                     )],
                     element_effects: vec![(0, ElementExpression::Constant(2))],
@@ -1094,7 +1094,7 @@ transitions:
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
           effects:
-                unvisited: (- unvisited to)
+                unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
           cost: (+ cost (distance location to))
@@ -1144,7 +1144,7 @@ transitions:
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
           effects:
-                unvisited: (- unvisited to)
+                unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
           cost: (+ cost (distance location to))
@@ -1185,7 +1185,7 @@ transitions:
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
           effects:
-                unvisited: (- unvisited to)
+                unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
           cost: (+ cost (distance location to))
@@ -1221,7 +1221,7 @@ transitions:
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
           effects:
-                unvisited: (- unvisited to)
+                unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
           cost: (+ cost (distance location to))
@@ -1313,7 +1313,7 @@ transitions:
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
           effects:
-                unvisited: (- unvisited to)
+                unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
           cost: (+ cost (distance location to))

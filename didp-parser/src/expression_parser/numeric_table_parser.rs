@@ -47,16 +47,12 @@ where
         let (name, rest) = tokens
             .split_first()
             .ok_or_else(|| ParseErr::new(String::from("could not get token")))?;
-        Ok(Some(parse_sum(
-            name, rest, metadata, registry, parameters, tables,
-        )?))
+        parse_sum(name, rest, metadata, registry, parameters, tables)
     } else if name == "zip-sum" {
         let (name, rest) = tokens
             .split_first()
             .ok_or_else(|| ParseErr::new(String::from("could not get token")))?;
-        Ok(Some(parse_zip_sum(
-            name, rest, metadata, registry, parameters, tables,
-        )?))
+        parse_zip_sum(name, rest, metadata, registry, parameters, tables)
     } else {
         Ok(None)
     }
@@ -92,15 +88,18 @@ fn parse_sum<'a, 'b, 'c, T: Numeric>(
     registry: &TableRegistry,
     parameters: &'c HashMap<String, usize>,
     tables: &'b TableData<T>,
-) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
+) -> Result<NumericTableParsingResult<'a, T>, ParseErr> {
     if let Some(i) = tables.name_to_table_1d.get(name) {
         let (x, rest) = parse_argument(tokens, metadata, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         match x {
-            ArgumentExpression::Set(x) => Ok((NumericTableExpression::Table1DSum(*i, x), rest)),
-            ArgumentExpression::Vector(x) => {
-                Ok((NumericTableExpression::Table1DVectorSum(*i, x), rest))
+            ArgumentExpression::Set(x) => {
+                Ok(Some((NumericTableExpression::Table1DSum(*i, x), rest)))
             }
+            ArgumentExpression::Vector(x) => Ok(Some((
+                NumericTableExpression::Table1DVectorSum(*i, x),
+                rest,
+            ))),
             _ => Err(ParseErr::new(format!(
                 "argument `{:?}` is invalid for sum",
                 name
@@ -112,21 +111,23 @@ fn parse_sum<'a, 'b, 'c, T: Numeric>(
         let rest = util::parse_closing(rest)?;
         match (x, y) {
             (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => {
-                Ok((NumericTableExpression::Table2DSum(*i, x, y), rest))
+                Ok(Some((NumericTableExpression::Table2DSum(*i, x, y), rest)))
             }
             (ArgumentExpression::Set(x), ArgumentExpression::Element(y)) => {
-                Ok((NumericTableExpression::Table2DSumX(*i, x, y), rest))
+                Ok(Some((NumericTableExpression::Table2DSumX(*i, x, y), rest)))
             }
             (ArgumentExpression::Element(x), ArgumentExpression::Set(y)) => {
-                Ok((NumericTableExpression::Table2DSumY(*i, x, y), rest))
+                Ok(Some((NumericTableExpression::Table2DSumY(*i, x, y), rest)))
             }
-            (ArgumentExpression::Vector(x), ArgumentExpression::Element(y)) => {
-                Ok((NumericTableExpression::Table2DVectorSumX(*i, x, y), rest))
-            }
-            (ArgumentExpression::Element(x), ArgumentExpression::Vector(y)) => {
-                Ok((NumericTableExpression::Table2DVectorSumY(*i, x, y), rest))
-            }
-            _ => Err(ParseErr::new(format!(
+            (ArgumentExpression::Vector(x), ArgumentExpression::Element(y)) => Ok(Some((
+                NumericTableExpression::Table2DVectorSumX(*i, x, y),
+                rest,
+            ))),
+            (ArgumentExpression::Element(x), ArgumentExpression::Vector(y)) => Ok(Some((
+                NumericTableExpression::Table2DVectorSumY(*i, x, y),
+                rest,
+            ))),
+            (x, y) => Err(ParseErr::new(format!(
                 "arguments `{:?}` `{:?}` are invalid for sum",
                 x, y
             ))),
@@ -141,61 +142,93 @@ fn parse_sum<'a, 'b, 'c, T: Numeric>(
                 ArgumentExpression::Set(x),
                 ArgumentExpression::Set(y),
                 ArgumentExpression::Set(z),
-            ) => Ok((NumericTableExpression::Table3DSum(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DSum(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Set(x),
                 ArgumentExpression::Element(y),
                 ArgumentExpression::Element(z),
-            ) => Ok((NumericTableExpression::Table3DSumX(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DSumX(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Element(x),
                 ArgumentExpression::Set(y),
                 ArgumentExpression::Element(z),
-            ) => Ok((NumericTableExpression::Table3DSumY(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DSumY(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Element(x),
                 ArgumentExpression::Element(y),
                 ArgumentExpression::Set(z),
-            ) => Ok((NumericTableExpression::Table3DSumZ(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DSumZ(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Set(x),
                 ArgumentExpression::Set(y),
                 ArgumentExpression::Element(z),
-            ) => Ok((NumericTableExpression::Table3DSumXY(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DSumXY(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Set(x),
                 ArgumentExpression::Element(y),
                 ArgumentExpression::Set(z),
-            ) => Ok((NumericTableExpression::Table3DSumXZ(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DSumXZ(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Element(x),
                 ArgumentExpression::Set(y),
                 ArgumentExpression::Set(z),
-            ) => Ok((NumericTableExpression::Table3DSumYZ(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DSumYZ(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Vector(x),
                 ArgumentExpression::Element(y),
                 ArgumentExpression::Element(z),
-            ) => Ok((NumericTableExpression::Table3DVectorSumX(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DVectorSumX(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Element(x),
                 ArgumentExpression::Vector(y),
                 ArgumentExpression::Element(z),
-            ) => Ok((NumericTableExpression::Table3DVectorSumY(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DVectorSumY(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Element(x),
                 ArgumentExpression::Element(y),
                 ArgumentExpression::Vector(z),
-            ) => Ok((NumericTableExpression::Table3DVectorSumZ(*i, x, y, z), rest)),
-            _ => Err(ParseErr::new(format!(
+            ) => Ok(Some((
+                NumericTableExpression::Table3DVectorSumZ(*i, x, y, z),
+                rest,
+            ))),
+            (x, y, z) => Err(ParseErr::new(format!(
                 "arguments `{:?}` `{:?}` `{:?}` are invalid for sum",
                 x, y, z
             ))),
         }
     } else if let Some(i) = tables.name_to_table.get(name) {
-        parse_table_sum(*i, tokens, metadata, registry, parameters)
+        Ok(Some(parse_table_sum(
+            *i, tokens, metadata, registry, parameters,
+        )?))
     } else {
-        Err(ParseErr::new(format!("no such function `{:?}`", name)))
+        Ok(None)
     }
 }
 
@@ -228,8 +261,8 @@ fn parse_zip_sum<'a, 'b, 'c, T: Numeric>(
     registry: &TableRegistry,
     parameters: &'c HashMap<String, usize>,
     tables: &'b TableData<T>,
-) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
-    if let Some(i) = tables.name_to_table_1d.get(name) {
+) -> Result<NumericTableParsingResult<'a, T>, ParseErr> {
+    if tables.name_to_table_1d.contains_key(name) {
         Err(ParseErr::new(format!(
             "function `{:?}` has only one argument ",
             name
@@ -238,7 +271,10 @@ fn parse_zip_sum<'a, 'b, 'c, T: Numeric>(
         let (x, rest) = vector_parser::parse_expression(tokens, metadata, registry, parameters)?;
         let (y, rest) = vector_parser::parse_expression(rest, metadata, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
-        Ok((NumericTableExpression::Table2DZipSum(*i, x, y), rest))
+        Ok(Some((
+            NumericTableExpression::Table2DZipSum(*i, x, y),
+            rest,
+        )))
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
         let (x, rest) = parse_argument(tokens, metadata, registry, parameters)?;
         let (y, rest) = parse_argument(rest, metadata, registry, parameters)?;
@@ -249,31 +285,45 @@ fn parse_zip_sum<'a, 'b, 'c, T: Numeric>(
                 ArgumentExpression::Vector(x),
                 ArgumentExpression::Vector(y),
                 ArgumentExpression::Vector(z),
-            ) => Ok((NumericTableExpression::Table3DZipSum(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DZipSum(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Vector(x),
                 ArgumentExpression::Vector(y),
                 ArgumentExpression::Element(z),
-            ) => Ok((NumericTableExpression::Table3DZipSumXY(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DZipSumXY(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Vector(x),
                 ArgumentExpression::Element(y),
                 ArgumentExpression::Vector(z),
-            ) => Ok((NumericTableExpression::Table3DZipSumXZ(*i, x, y, z), rest)),
+            ) => Ok(Some((
+                NumericTableExpression::Table3DZipSumXZ(*i, x, y, z),
+                rest,
+            ))),
             (
                 ArgumentExpression::Element(x),
                 ArgumentExpression::Vector(y),
                 ArgumentExpression::Vector(z),
-            ) => Ok((NumericTableExpression::Table3DZipSumYZ(*i, x, y, z), rest)),
-            _ => Err(ParseErr::new(format!(
+            ) => Ok(Some((
+                NumericTableExpression::Table3DZipSumYZ(*i, x, y, z),
+                rest,
+            ))),
+            (x, y, z) => Err(ParseErr::new(format!(
                 "arguments `{:?}` `{:?}` `{:?}` are invalid for zip-sum",
                 x, y, z
             ))),
         }
     } else if let Some(i) = tables.name_to_table.get(name) {
-        parse_table_zip_sum(*i, tokens, metadata, registry, parameters)
+        Ok(Some(parse_table_zip_sum(
+            *i, tokens, metadata, registry, parameters,
+        )?))
     } else {
-        Err(ParseErr::new(format!("no such function `{:?}`", name)))
+        Ok(None)
     }
 }
 
@@ -413,7 +463,7 @@ mod tests {
         parameters
     }
 
-    fn generate_tables() -> TableData<Integer> {
+    fn generate_registry() -> TableRegistry {
         let mut name_to_constant = HashMap::new();
         name_to_constant.insert(String::from("f0"), 0);
 
@@ -433,16 +483,19 @@ mod tests {
         let mut name_to_table = HashMap::new();
         name_to_table.insert(String::from("f4"), 0);
 
-        TableData {
-            name_to_constant,
-            tables_1d,
-            name_to_table_1d,
-            tables_2d,
-            name_to_table_2d,
-            tables_3d,
-            name_to_table_3d,
-            tables,
-            name_to_table,
+        TableRegistry {
+            integer_tables: TableData {
+                name_to_constant,
+                tables_1d,
+                name_to_table_1d,
+                tables_2d,
+                name_to_table_2d,
+                tables_3d,
+                name_to_table_3d,
+                tables,
+                name_to_table,
+            },
+            ..Default::default()
         }
     }
 
@@ -450,13 +503,20 @@ mod tests {
     fn parse_expression_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let tokens: Vec<String> = ["i0", "1", ")", "i1", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("max", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -466,44 +526,63 @@ mod tests {
     fn parse_table_1d_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let tokens: Vec<String> = ["e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f1",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, NumericTableExpression::Table1D(_, _)));
-        if let NumericTableExpression::Table1D(i, x) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, ElementExpression::Variable(0)));
-        }
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table1D(0, ElementExpression::Variable(0)),
+        );
         assert_eq!(rest, &tokens[2..]);
 
-        let tokens: Vec<String> = ["s0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f1", "s0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table1DSum(_, _)
-        ));
-        if let NumericTableExpression::Table1DSum(i, x) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, SetExpression::SetVariable(0)));
-        }
-        assert_eq!(rest, &tokens[2..]);
+            NumericTableExpression::Table1DSum(
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[3..]);
 
-        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f0",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -513,24 +592,48 @@ mod tests {
     fn parse_table_1d_err() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let tokens: Vec<String> = ["i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f1",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["e0", "0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f1", "e0", "0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_err());
 
-        let tokens: Vec<String> = [")", "i0", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression("f1", &tokens, &metadata, &tables, &parameters);
+        let tokens: Vec<String> = ["f1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_err());
     }
 
@@ -538,89 +641,120 @@ mod tests {
     fn parse_table_2d_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let tokens: Vec<String> = ["0", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f2",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table2D(_, _, _)
-        ));
-        if let NumericTableExpression::Table2D(i, x, y) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, ElementExpression::Constant(0)));
-            assert!(matches!(y, ElementExpression::Variable(0)));
-        }
+            NumericTableExpression::Table2D(
+                0,
+                ElementExpression::Constant(0),
+                ElementExpression::Variable(0)
+            )
+        );
         assert_eq!(rest, &tokens[3..]);
 
-        let tokens: Vec<String> = ["s0", "p0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f2", "s0", "s1", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table2DSum(_, _, _)
-        ));
-        if let NumericTableExpression::Table2DSum(i, x, y) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, SetExpression::SetVariable(0)));
-            assert!(matches!(y, SetExpression::VectorVariable(0)));
-        }
-        assert_eq!(rest, &tokens[3..]);
+            NumericTableExpression::Table2DSum(
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
 
-        let tokens: Vec<String> = ["s0", "e0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f2", "s0", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table2DSumX(_, _, _)
-        ));
-        if let NumericTableExpression::Table2DSumX(i, x, y) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, SetExpression::SetVariable(0)));
-            assert!(matches!(y, ElementExpression::Variable(0)));
-        }
-        assert_eq!(rest, &tokens[3..]);
+            NumericTableExpression::Table2DSumX(
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0)
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
 
-        let tokens: Vec<String> = ["0", "p0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f2", "0", "s0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table2DSumY(_, _, _)
-        ));
-        if let NumericTableExpression::Table2DSumY(i, x, y) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, ElementExpression::Constant(0)));
-            assert!(matches!(y, SetExpression::VectorVariable(0)));
-        }
-        assert_eq!(rest, &tokens[3..]);
+            NumericTableExpression::Table2DSumY(
+                0,
+                ElementExpression::Constant(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
 
-        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f0",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -630,27 +764,48 @@ mod tests {
     fn parse_table_2d_err() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let tokens: Vec<String> = ["0", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f2",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["0", "e0", "p0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f2", "0", "e0", "p0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f2", "0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f2", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_err());
     }
 
@@ -658,177 +813,232 @@ mod tests {
     fn parse_table_3d_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let tokens: Vec<String> = ["0", "1", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f3",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table3D(_, _, _, _)
-        ));
-        if let NumericTableExpression::Table3D(i, x, y, z) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, ElementExpression::Constant(0)));
-            assert!(matches!(y, ElementExpression::Constant(1)));
-            assert!(matches!(z, ElementExpression::Variable(0)));
-        }
+            NumericTableExpression::Table3D(
+                0,
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(1),
+                ElementExpression::Variable(0)
+            )
+        );
         assert_eq!(rest, &tokens[4..]);
 
-        let tokens: Vec<String> = ["s0", "s1", "p0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f3", "s0", "s1", "s0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table3DSum(_, _, _, _)
-        ));
-        if let NumericTableExpression::Table3DSum(i, x, y, z) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, SetExpression::SetVariable(0)));
-            assert!(matches!(y, SetExpression::SetVariable(1)));
-            assert!(matches!(z, SetExpression::VectorVariable(0)));
-        }
-        assert_eq!(rest, &tokens[4..]);
+            NumericTableExpression::Table3DSum(
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["s0", "1", "e0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f3", "s0", "1", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table3DSumX(_, _, _, _)
-        ));
-        if let NumericTableExpression::Table3DSumX(i, x, y, z) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, SetExpression::SetVariable(0)));
-            assert!(matches!(y, ElementExpression::Constant(1)));
-            assert!(matches!(z, ElementExpression::Variable(0)));
-        }
-        assert_eq!(rest, &tokens[4..]);
+            NumericTableExpression::Table3DSumX(
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Constant(1),
+                ElementExpression::Variable(0)
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["0", "s1", "e0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f3", "0", "s1", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table3DSumY(_, _, _, _)
-        ));
-        if let NumericTableExpression::Table3DSumY(i, x, y, z) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, ElementExpression::Constant(0)));
-            assert!(matches!(y, SetExpression::SetVariable(1)));
-            assert!(matches!(z, ElementExpression::Variable(0)));
-        }
-        assert_eq!(rest, &tokens[4..]);
+            NumericTableExpression::Table3DSumY(
+                0,
+                ElementExpression::Constant(0),
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+                ElementExpression::Variable(0)
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["0", "1", "p0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f3", "0", "1", "s0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table3DSumZ(_, _, _, _)
-        ));
-        if let NumericTableExpression::Table3DSumZ(i, x, y, z) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, ElementExpression::Constant(0)));
-            assert!(matches!(y, ElementExpression::Constant(1)));
-            assert!(matches!(z, SetExpression::VectorVariable(0)));
-        }
-        assert_eq!(rest, &tokens[4..]);
+            NumericTableExpression::Table3DSumZ(
+                0,
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(1),
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["s0", "s1", "e0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f3", "s0", "s1", "e0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table3DSumXY(_, _, _, _)
-        ));
-        if let NumericTableExpression::Table3DSumXY(i, x, y, z) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, SetExpression::SetVariable(0)));
-            assert!(matches!(y, SetExpression::SetVariable(1)));
-            assert!(matches!(z, ElementExpression::Variable(0)));
-        }
-        assert_eq!(rest, &tokens[4..]);
+            NumericTableExpression::Table3DSumXY(
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+                ElementExpression::Variable(0)
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["s0", "1", "p0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f3", "s0", "1", "s0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table3DSumXZ(_, _, _, _)
-        ));
-        if let NumericTableExpression::Table3DSumXZ(i, x, y, z) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, SetExpression::SetVariable(0)));
-            assert!(matches!(y, ElementExpression::Constant(1)));
-            assert!(matches!(z, SetExpression::VectorVariable(0)));
-        }
-        assert_eq!(rest, &tokens[4..]);
+            NumericTableExpression::Table3DSumXZ(
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Constant(1),
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["0", "s1", "p0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["f3", "0", "s1", "s0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(
+        assert_eq!(
             expression,
-            NumericTableExpression::Table3DSumYZ(_, _, _, _)
-        ));
-        if let NumericTableExpression::Table3DSumYZ(i, x, y, z) = expression {
-            assert_eq!(i, 0);
-            assert!(matches!(x, ElementExpression::Constant(0)));
-            assert!(matches!(y, SetExpression::SetVariable(1)));
-            assert!(matches!(z, SetExpression::VectorVariable(0)));
-        }
-        assert_eq!(rest, &tokens[4..]);
+            NumericTableExpression::Table3DSumYZ(
+                0,
+                ElementExpression::Constant(0),
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
 
-        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f0",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -838,27 +1048,48 @@ mod tests {
     fn parse_table_3d_err() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let tables = generate_tables();
+        let registry = generate_registry();
 
         let tokens: Vec<String> = ["0", "1", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f3",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "1", "e0", "2", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f3",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["0", "1", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f3", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f3",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_err());
     }
 
@@ -866,40 +1097,49 @@ mod tests {
     fn parse_table_ok() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let tables = generate_tables();
-        let tokens: Vec<String> = ["s2", "1", "e0", "p3", ")", "i0", ")"]
+        let registry = generate_registry();
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "p3", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f4", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_some());
         let (expression, rest) = result.unwrap();
-        assert!(matches!(expression, NumericTableExpression::TableSum(_, _)));
-        if let NumericTableExpression::TableSum(i, args) = expression {
-            assert_eq!(i, 0);
-            assert_eq!(args.len(), 4);
-            assert!(matches!(
-                args[0],
-                ArgumentExpression::Set(SetExpression::SetVariable(2))
-            ));
-            assert!(matches!(
-                args[1],
-                ArgumentExpression::Element(ElementExpression::Constant(1))
-            ));
-            assert!(matches!(
-                args[2],
-                ArgumentExpression::Element(ElementExpression::Variable(0))
-            ));
-            assert!(matches!(
-                args[3],
-                ArgumentExpression::Set(SetExpression::VectorVariable(3))
-            ));
-        }
-        assert_eq!(rest, &tokens[5..]);
+        assert_eq!(
+            expression,
+            NumericTableExpression::TableSum(
+                0,
+                vec![
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(2)
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Variable(3)
+                    )),
+                ]
+            )
+        );
+        assert_eq!(rest, &tokens[6..]);
 
-        let result = parse_expression("f0", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "f0",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_ok());
         let result = result.unwrap();
         assert!(result.is_none());
@@ -909,20 +1149,34 @@ mod tests {
     fn parse_table_err() {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
-        let tables = generate_tables();
+        let registry = generate_registry();
 
-        let tokens: Vec<String> = ["s2", "1", "e0", "p3", "i0", ")"]
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "p3", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f4", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["s2", "1", "e0", "p3", "i0"]
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "p3", "i0"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression("f4", &tokens, &metadata, &tables, &parameters);
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
         assert!(result.is_err());
     }
 }

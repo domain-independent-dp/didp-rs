@@ -270,7 +270,7 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let text = "(+ (- 5 (/ (f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(+ (intersection s0 (remove s2 (add s3 2))) (remove s1 1))|)))".to_string();
+        let text = "(+ (- 5 (/ (sum f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(union (intersection s0 (difference s2 (add 2 s3))) (remove 1 s1))|)))".to_string();
         let result = parse_numeric::<variable::Integer>(text, &metadata, &registry, &parameters);
         assert!(result.is_ok());
     }
@@ -290,7 +290,7 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let text = "(+ (intersection s0 (- s2 (+ s3 2))) (- s1 1))".to_string();
+        let text = "(union (intersection s0 (difference s2 (add 2 s3))) (remove 1 s1))".to_string();
         let result = parse_set(text, &metadata, &registry, &parameters);
         assert!(result.is_ok());
     }
@@ -330,7 +330,7 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let text = "(not (and (and (and (> n0 2) (is_subset s0 p0)) (is_empty s0)) (or (< 1 n1) (is_in 2 s0))))"
+        let text = "(not (and (and (and (> n0 2) (is_subset s0 s1)) (is_empty s0)) (or (< 1 n1) (is_in 2 s0))))"
             .to_string();
         let result = parse_condition(text, &metadata, &registry, &parameters);
         assert!(result.is_ok());
@@ -348,14 +348,69 @@ mod tests {
 
     #[test]
     fn tokenize_text() {
-        let text = "(+ (- 5 (/ (f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(+ (& s0 (- s2 (+ s3 2))) (- s1 1))|)))".to_string();
+        let text = "(+ (- 5 (/ (sum f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(union (intersection s0 (difference s2 (add 2 s3))) (remove 1 s1))|)))".to_string();
         assert_eq!(
             tokenize(text),
             [
-                "(", "+", "(", "-", "5", "(", "/", "(", "f4", "4", "!", "s2", "e0", "3", ")", "(",
-                "max", "(", "f2", "2", "e1", ")", "n0", ")", ")", ")", "(", "*", "r1", "(", "min",
-                "3", "|", "(", "+", "(", "&", "s0", "(", "-", "s2", "(", "+", "s3", "2", ")", ")",
-                ")", "(", "-", "s1", "1", ")", ")", "|", ")", ")", ")",
+                "(",
+                "+",
+                "(",
+                "-",
+                "5",
+                "(",
+                "/",
+                "(",
+                "sum",
+                "f4",
+                "4",
+                "!",
+                "s2",
+                "e0",
+                "3",
+                ")",
+                "(",
+                "max",
+                "(",
+                "f2",
+                "2",
+                "e1",
+                ")",
+                "n0",
+                ")",
+                ")",
+                ")",
+                "(",
+                "*",
+                "r1",
+                "(",
+                "min",
+                "3",
+                "|",
+                "(",
+                "union",
+                "(",
+                "intersection",
+                "s0",
+                "(",
+                "difference",
+                "s2",
+                "(",
+                "add",
+                "2",
+                "s3",
+                ")",
+                ")",
+                ")",
+                "(",
+                "remove",
+                "1",
+                "s1",
+                ")",
+                ")",
+                "|",
+                ")",
+                ")",
+                ")",
             ]
         );
     }

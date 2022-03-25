@@ -18,7 +18,7 @@ pub fn parse_expression<'a, 'b, 'c>(
         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     match &token[..] {
         "(" => {
-            let (name, rest) = tokens
+            let (name, rest) = rest
                 .split_first()
                 .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
             if let Some((expression, rest)) = element_parser::parse_table_expression(
