@@ -1,12 +1,12 @@
 use super::element_expression::{ElementExpression, VectorExpression};
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
+use super::util;
 use crate::state::State;
 use crate::table;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
-use crate::variable::{Element, Numeric, Set};
-use std::iter;
+use crate::variable::{Element, Numeric};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ArgumentExpression {
@@ -394,9 +394,9 @@ impl<T: Numeric> NumericTableExpression<T> {
                                 &state.signature_variables.set_variables,
                                 &registry.set_tables,
                             );
-                            Self::expand_args_with_set(result, set)
+                            util::expand_vector_with_set(result, set)
                         }
-                        _ => Self::expand_args_with_set(result, &set.eval(state, registry)),
+                        _ => util::expand_vector_with_set(result, &set.eval(state, registry)),
                     };
                 }
                 ArgumentExpression::Vector(vector) => {
@@ -408,9 +408,9 @@ impl<T: Numeric> NumericTableExpression<T> {
                                 &state.signature_variables.vector_variables,
                                 &registry.vector_tables,
                             );
-                            Self::expand_args_with_slice(result, vector)
+                            util::expand_vector_with_slice(result, vector)
                         }
-                        _ => Self::expand_args_with_slice(result, &vector.eval(state, registry)),
+                        _ => util::expand_vector_with_slice(result, &vector.eval(state, registry)),
                     };
                 }
                 ArgumentExpression::Element(element) => {
@@ -442,14 +442,14 @@ impl<T: Numeric> NumericTableExpression<T> {
                             );
                             result
                                 .into_iter()
-                                .map(|rr| Self::expand_args_with_set(rr, set))
+                                .map(|rr| util::expand_vector_with_set(rr, set))
                                 .collect::<Vec<Vec<Vec<Element>>>>()
                         }
                         _ => {
                             let set = &set.eval(state, registry);
                             result
                                 .into_iter()
-                                .map(|rr| Self::expand_args_with_set(rr, &set))
+                                .map(|rr| util::expand_vector_with_set(rr, &set))
                                 .collect::<Vec<Vec<Vec<Element>>>>()
                         }
                     };
@@ -487,40 +487,13 @@ impl<T: Numeric> NumericTableExpression<T> {
         }
         result.into_iter().flatten().map(|x| f.eval(&x)).sum()
     }
-
-    fn expand_args_with_set(args: Vec<Vec<Element>>, set: &Set) -> Vec<Vec<Element>> {
-        args.into_iter()
-            .flat_map(|r| {
-                iter::repeat(r)
-                    .zip(set.ones())
-                    .map(|(mut r, e)| {
-                        r.push(e);
-                        r
-                    })
-                    .collect::<Vec<Vec<Element>>>()
-            })
-            .collect()
-    }
-
-    fn expand_args_with_slice(args: Vec<Vec<Element>>, slice: &[Element]) -> Vec<Vec<Element>> {
-        args.into_iter()
-            .flat_map(|r| {
-                iter::repeat(r)
-                    .zip(slice.iter())
-                    .map(|(mut r, e)| {
-                        r.push(*e);
-                        r
-                    })
-                    .collect::<Vec<Vec<Element>>>()
-            })
-            .collect()
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::state::*;
+    use crate::variable::*;
     use std::collections::HashMap;
     use std::rc::Rc;
 
