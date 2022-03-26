@@ -1,7 +1,6 @@
-use super::element_expression::{ElementExpression, VectorExpression};
+use super::element_expression::{ElementExpression, SetExpression, VectorExpression};
 use super::numeric_table_expression::{ArgumentExpression, NumericTableExpression};
 use super::reference_expression::ReferenceExpression;
-use super::set_expression::SetExpression;
 use super::util;
 use crate::state::State;
 use crate::table_data::TableData;
@@ -1946,7 +1945,7 @@ mod tests {
         let tables = &registry.integer_tables;
         let expression = NumericVectorExpression::VectorOperation(
             NumericOperator::Add,
-            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1, 3])),
             Box::new(NumericVectorExpression::Constant(vec![2, 3])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![2, 4]);
@@ -1960,7 +1959,7 @@ mod tests {
         let expression = NumericVectorExpression::VectorOperation(
             NumericOperator::Subtract,
             Box::new(NumericVectorExpression::Constant(vec![0, 1])),
-            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3, 2])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![-2, -2]);
     }
@@ -1972,7 +1971,7 @@ mod tests {
         let tables = &registry.integer_tables;
         let expression = NumericVectorExpression::VectorOperation(
             NumericOperator::Multiply,
-            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1, 5])),
             Box::new(NumericVectorExpression::Constant(vec![2, 3])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![0, 3]);
@@ -1986,7 +1985,7 @@ mod tests {
         let expression = NumericVectorExpression::VectorOperation(
             NumericOperator::Divide,
             Box::new(NumericVectorExpression::Constant(vec![0, 6])),
-            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3, 0])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![0, 2]);
     }
@@ -1998,7 +1997,7 @@ mod tests {
         let tables = &registry.integer_tables;
         let expression = NumericVectorExpression::VectorOperation(
             NumericOperator::Max,
-            Box::new(NumericVectorExpression::Constant(vec![0, 6])),
+            Box::new(NumericVectorExpression::Constant(vec![0, 6, 9])),
             Box::new(NumericVectorExpression::Constant(vec![2, 3])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![2, 6]);
@@ -2012,7 +2011,7 @@ mod tests {
         let expression = NumericVectorExpression::VectorOperation(
             NumericOperator::Min,
             Box::new(NumericVectorExpression::Constant(vec![0, 6])),
-            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3, 2])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![0, 3]);
     }

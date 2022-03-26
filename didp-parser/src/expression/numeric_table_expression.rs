@@ -1,6 +1,5 @@
-use super::element_expression::{ElementExpression, VectorExpression};
+use super::element_expression::{ElementExpression, SetExpression, VectorExpression};
 use super::reference_expression::ReferenceExpression;
-use super::set_expression::SetExpression;
 use super::util;
 use crate::state::State;
 use crate::table;

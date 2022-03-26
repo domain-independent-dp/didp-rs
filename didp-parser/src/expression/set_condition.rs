@@ -1,6 +1,5 @@
-use super::element_expression::ElementExpression;
+use super::element_expression::{ElementExpression, SetExpression};
 use super::reference_expression::ReferenceExpression;
-use super::set_expression::SetExpression;
 use crate::state::State;
 use crate::table_registry::TableRegistry;
 
@@ -130,7 +129,7 @@ impl SetCondition {
 
 #[cfg(test)]
 mod tests {
-    use super::super::set_expression::SetOperator;
+    use super::super::element_expression::SetOperator;
     use super::*;
     use crate::state::*;
     use crate::variable::*;
