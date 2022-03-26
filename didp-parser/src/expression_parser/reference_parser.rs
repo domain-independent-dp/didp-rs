@@ -1,11 +1,11 @@
 use super::util::ParseErr;
 use crate::expression::ReferenceExpression;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 pub fn parse_atom<T: Clone>(
     token: &str,
-    name_to_constant: &HashMap<String, T>,
-    name_to_variable: &HashMap<String, usize>,
+    name_to_constant: &FxHashMap<String, T>,
+    name_to_variable: &FxHashMap<String, usize>,
 ) -> Result<ReferenceExpression<T>, ParseErr> {
     if let Some(v) = name_to_constant.get(token) {
         Ok(ReferenceExpression::Constant(v.clone()))

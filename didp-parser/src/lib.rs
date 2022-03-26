@@ -1,4 +1,4 @@
-use std::collections;
+use rustc_hash::FxHashMap;
 use std::error::Error;
 use std::fmt;
 use std::str;
@@ -197,7 +197,7 @@ impl<T: variable::Numeric> Model<T> {
         let mut constraints = Vec::new();
         if let Some(value) = domain.get(&Yaml::from_str("constraints")) {
             let array = yaml_util::get_array(value)?;
-            let parameters = collections::HashMap::new();
+            let parameters = FxHashMap::default();
             for constraint in array {
                 let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
                     &constraint,
@@ -291,7 +291,6 @@ impl<T: variable::Numeric> Model<T> {
 mod tests {
     use super::*;
     use expression::*;
-    use std::collections::HashMap;
     use std::rc::Rc;
 
     #[test]
@@ -493,7 +492,7 @@ base_cases:
         assert!(model.is_ok());
         let model = model.unwrap();
 
-        let mut name_to_integer_variable = HashMap::new();
+        let mut name_to_integer_variable = FxHashMap::default();
         name_to_integer_variable.insert(String::from("v"), 0);
         let expected = Model {
             domain_name: String::from("ADD"),
@@ -594,7 +593,7 @@ base_states:
         assert!(model.is_ok());
         let model = model.unwrap();
 
-        let mut name_to_integer_variable = HashMap::new();
+        let mut name_to_integer_variable = FxHashMap::default();
         name_to_integer_variable.insert(String::from("v"), 0);
         let expected = Model {
             domain_name: String::from("Fibonacci"),
@@ -757,24 +756,24 @@ table_values:
         assert!(model.is_ok());
         let model = model.unwrap();
 
-        let mut name_to_object = HashMap::new();
+        let mut name_to_object = FxHashMap::default();
         name_to_object.insert(String::from("cities"), 0);
-        let mut name_to_set_variable = HashMap::new();
+        let mut name_to_set_variable = FxHashMap::default();
         name_to_set_variable.insert(String::from("unvisited"), 0);
-        let mut name_to_element_variable = HashMap::new();
+        let mut name_to_element_variable = FxHashMap::default();
         name_to_element_variable.insert(String::from("location"), 0);
-        let mut name_to_integer_resource_variable = HashMap::new();
+        let mut name_to_integer_resource_variable = FxHashMap::default();
         name_to_integer_resource_variable.insert(String::from("time"), 0);
         let mut unvisited = variable::Set::with_capacity(3);
         unvisited.insert(0);
         unvisited.insert(1);
         unvisited.insert(2);
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("ready_time"), 0);
         name_to_table_1d.insert(String::from("due_date"), 1);
-        let mut numeric_name_to_table_2d = HashMap::new();
+        let mut numeric_name_to_table_2d = FxHashMap::default();
         numeric_name_to_table_2d.insert(String::from("distance"), 0);
-        let mut bool_name_to_table_2d = HashMap::new();
+        let mut bool_name_to_table_2d = FxHashMap::default();
         bool_name_to_table_2d.insert(String::from("connected"), 0);
         let expected = Model {
             domain_name: String::from("TSPTW"),

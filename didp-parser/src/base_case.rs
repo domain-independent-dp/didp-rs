@@ -7,7 +7,7 @@ use crate::util;
 use crate::variable::Numeric;
 use crate::yaml_util;
 use lazy_static::lazy_static;
-use std::collections;
+use rustc_hash::FxHashMap;
 use std::error::Error;
 use std::fmt;
 use std::str;
@@ -53,7 +53,7 @@ impl<T: Numeric> BaseCase<T> {
                 let cost = match map.get(&COST_KEY) {
                     Some(cost) => {
                         let cost = yaml_util::get_string(cost)?;
-                        let parameters = collections::HashMap::new();
+                        let parameters = FxHashMap::default();
                         let cost = expression_parser::parse_numeric(
                             cost,
                             metadata,
@@ -74,7 +74,7 @@ impl<T: Numeric> BaseCase<T> {
                 .into())
             }
         };
-        let parameters = collections::HashMap::new();
+        let parameters = FxHashMap::default();
         let mut conditions = Vec::new();
         for condition in array {
             let condition = GroundedCondition::load_grounded_conditions_from_yaml(
@@ -108,15 +108,15 @@ mod tests {
     use super::*;
     use crate::expression::*;
     use crate::variable;
-    use std::collections;
+    use rustc_hash::FxHashMap;
     use std::rc::Rc;
 
     fn generate_metadata() -> state::StateMetadata {
-        let mut name_to_object = collections::HashMap::new();
+        let mut name_to_object = FxHashMap::default();
         name_to_object.insert(String::from("object"), 0);
-        let mut name_to_set_variable = collections::HashMap::new();
+        let mut name_to_set_variable = FxHashMap::default();
         name_to_set_variable.insert(String::from("s0"), 0);
-        let mut name_to_integer_variable = collections::HashMap::new();
+        let mut name_to_integer_variable = FxHashMap::default();
         name_to_integer_variable.insert(String::from("i0"), 0);
         state::StateMetadata {
             object_names: vec![String::from("object")],

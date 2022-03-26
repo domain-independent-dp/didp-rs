@@ -7,7 +7,7 @@ use crate::expression::{NumericExpression, NumericOperator};
 use crate::state::StateMetadata;
 use crate::table_registry::TableRegistry;
 use crate::variable::{Integer, Numeric};
-use std::collections;
+use rustc_hash::FxHashMap;
 use std::fmt;
 use std::str;
 
@@ -15,7 +15,7 @@ pub fn parse_expression<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
     metadata: &'b StateMetadata,
     registry: &'b TableRegistry,
-    parameters: &'c collections::HashMap<String, usize>,
+    parameters: &'c FxHashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -30,7 +30,7 @@ pub fn parse_integer_expression<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
     metadata: &'b StateMetadata,
     registry: &'b TableRegistry,
-    parameters: &'c collections::HashMap<String, usize>,
+    parameters: &'c FxHashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -75,7 +75,7 @@ pub fn parse_continuous_expression<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
     metadata: &'b StateMetadata,
     registry: &'b TableRegistry,
-    parameters: &'c collections::HashMap<String, usize>,
+    parameters: &'c FxHashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -172,7 +172,7 @@ fn parse_cardinality<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
     metadata: &'b StateMetadata,
     registry: &'b TableRegistry,
-    parameters: &'c collections::HashMap<String, usize>,
+    parameters: &'c FxHashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr> {
     let (expression, rest) = set_parser::parse_expression(tokens, metadata, registry, parameters)?;
     let (token, rest) = rest
@@ -191,7 +191,7 @@ fn parse_length<'a, 'b, 'c, T: Numeric>(
     tokens: &'a [String],
     metadata: &'b StateMetadata,
     registry: &'b TableRegistry,
-    parameters: &'c collections::HashMap<String, usize>,
+    parameters: &'c FxHashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr> {
     let (expression, rest) =
         vector_parser::parse_expression(tokens, metadata, registry, parameters)?;
@@ -257,12 +257,11 @@ mod tests {
     use crate::table;
     use crate::table_data;
     use crate::variable::Continuous;
-    use std::collections::HashMap;
 
     fn generate_metadata() -> StateMetadata {
         let object_names = vec!["object".to_string()];
         let object_numbers = vec![10];
-        let mut name_to_object = HashMap::new();
+        let mut name_to_object = FxHashMap::default();
         name_to_object.insert("object".to_string(), 0);
 
         let set_variable_names = vec![
@@ -271,7 +270,7 @@ mod tests {
             "s2".to_string(),
             "s3".to_string(),
         ];
-        let mut name_to_set_variable = HashMap::new();
+        let mut name_to_set_variable = FxHashMap::default();
         name_to_set_variable.insert("s0".to_string(), 0);
         name_to_set_variable.insert("s1".to_string(), 1);
         name_to_set_variable.insert("s2".to_string(), 2);
@@ -284,7 +283,7 @@ mod tests {
             "p2".to_string(),
             "p3".to_string(),
         ];
-        let mut name_to_vector_variable = HashMap::new();
+        let mut name_to_vector_variable = FxHashMap::default();
         name_to_vector_variable.insert("p0".to_string(), 0);
         name_to_vector_variable.insert("p1".to_string(), 1);
         name_to_vector_variable.insert("p2".to_string(), 2);
@@ -297,7 +296,7 @@ mod tests {
             "e2".to_string(),
             "e3".to_string(),
         ];
-        let mut name_to_element_variable = HashMap::new();
+        let mut name_to_element_variable = FxHashMap::default();
         name_to_element_variable.insert("e0".to_string(), 0);
         name_to_element_variable.insert("e1".to_string(), 1);
         name_to_element_variable.insert("e2".to_string(), 2);
@@ -310,7 +309,7 @@ mod tests {
             "i2".to_string(),
             "i3".to_string(),
         ];
-        let mut name_to_integer_variable = HashMap::new();
+        let mut name_to_integer_variable = FxHashMap::default();
         name_to_integer_variable.insert("i0".to_string(), 0);
         name_to_integer_variable.insert("i1".to_string(), 1);
         name_to_integer_variable.insert("i2".to_string(), 2);
@@ -322,7 +321,7 @@ mod tests {
             "ir2".to_string(),
             "ir3".to_string(),
         ];
-        let mut name_to_integer_resource_variable = HashMap::new();
+        let mut name_to_integer_resource_variable = FxHashMap::default();
         name_to_integer_resource_variable.insert("ir0".to_string(), 0);
         name_to_integer_resource_variable.insert("ir1".to_string(), 1);
         name_to_integer_resource_variable.insert("ir2".to_string(), 2);
@@ -334,7 +333,7 @@ mod tests {
             "c2".to_string(),
             "c3".to_string(),
         ];
-        let mut name_to_continuous_variable = HashMap::new();
+        let mut name_to_continuous_variable = FxHashMap::default();
         name_to_continuous_variable.insert("c0".to_string(), 0);
         name_to_continuous_variable.insert("c1".to_string(), 1);
         name_to_continuous_variable.insert("c2".to_string(), 2);
@@ -346,7 +345,7 @@ mod tests {
             "cr2".to_string(),
             "cr3".to_string(),
         ];
-        let mut name_to_continuous_resource_variable = HashMap::new();
+        let mut name_to_continuous_resource_variable = FxHashMap::default();
         name_to_continuous_resource_variable.insert("cr0".to_string(), 0);
         name_to_continuous_resource_variable.insert("cr1".to_string(), 1);
         name_to_continuous_resource_variable.insert("cr2".to_string(), 2);
@@ -378,30 +377,30 @@ mod tests {
         }
     }
 
-    fn generate_parameters() -> collections::HashMap<String, usize> {
-        let mut parameters = collections::HashMap::new();
+    fn generate_parameters() -> FxHashMap<String, usize> {
+        let mut parameters = FxHashMap::default();
         parameters.insert("param".to_string(), 0);
         parameters
     }
 
     fn generate_registry() -> TableRegistry {
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("f0"), 0);
 
         let tables_1d = vec![table::Table1D::new(Vec::new())];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("f1"), 0);
 
         let tables_2d = vec![table::Table2D::new(Vec::new())];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("f2"), 0);
 
         let tables_3d = vec![table::Table3D::new(Vec::new())];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("f3"), 0);
 
-        let tables = vec![table::Table::new(HashMap::new(), 0)];
-        let mut name_to_table = HashMap::new();
+        let tables = vec![table::Table::new(FxHashMap::default(), 0)];
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("f4"), 0);
 
         let integer_tables = table_data::TableData {
@@ -416,23 +415,23 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("cf0"), 0.0);
 
         let tables_1d = vec![table::Table1D::new(Vec::new())];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("cf1"), 0);
 
         let tables_2d = vec![table::Table2D::new(Vec::new())];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("cf2"), 0);
 
         let tables_3d = vec![table::Table3D::new(Vec::new())];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("cf3"), 0);
 
-        let tables = vec![table::Table::new(HashMap::new(), 0.0)];
-        let mut name_to_table = HashMap::new();
+        let tables = vec![table::Table::new(FxHashMap::default(), 0.0)];
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("cf4"), 0);
 
         let continuous_tables = table_data::TableData {

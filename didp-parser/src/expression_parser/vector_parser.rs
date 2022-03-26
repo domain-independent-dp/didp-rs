@@ -5,13 +5,13 @@ use super::util::ParseErr;
 use crate::expression::{ReferenceExpression, VectorExpression};
 use crate::state::StateMetadata;
 use crate::table_registry::TableRegistry;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 pub fn parse_expression<'a, 'b, 'c>(
     tokens: &'a [String],
     metadata: &'b StateMetadata,
     registry: &'b TableRegistry,
-    parameters: &'c HashMap<String, usize>,
+    parameters: &'c FxHashMap<String, usize>,
 ) -> Result<(VectorExpression, &'a [String]), ParseErr> {
     let (token, rest) = tokens
         .split_first()
@@ -56,7 +56,7 @@ fn parse_operation<'a, 'b, 'c>(
     tokens: &'a [String],
     metadata: &'b StateMetadata,
     registry: &'b TableRegistry,
-    parameters: &'c HashMap<String, usize>,
+    parameters: &'c FxHashMap<String, usize>,
 ) -> Result<(VectorExpression, &'a [String]), ParseErr> {
     match name {
         "indices" => {

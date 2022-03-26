@@ -51,11 +51,11 @@ impl<T: Numeric> BaseState<T> {
 mod tests {
     use super::*;
     use crate::variable;
-    use std::collections;
+    use rustc_hash::FxHashMap;
     use std::rc::Rc;
 
     fn generate_metadata() -> state::StateMetadata {
-        let mut name_to_integer_variable = collections::HashMap::new();
+        let mut name_to_integer_variable = FxHashMap::default();
         name_to_integer_variable.insert(String::from("i0"), 0);
         state::StateMetadata {
             integer_variable_names: vec![String::from("i0")],

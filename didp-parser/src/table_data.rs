@@ -1,23 +1,23 @@
 use crate::table;
 use approx::{AbsDiffEq, RelativeEq};
-use std::collections;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct TableData<T> {
-    pub name_to_constant: collections::HashMap<String, T>,
+    pub name_to_constant: FxHashMap<String, T>,
     pub tables_1d: Vec<table::Table1D<T>>,
-    pub name_to_table_1d: collections::HashMap<String, usize>,
+    pub name_to_table_1d: FxHashMap<String, usize>,
     pub tables_2d: Vec<table::Table2D<T>>,
-    pub name_to_table_2d: collections::HashMap<String, usize>,
+    pub name_to_table_2d: FxHashMap<String, usize>,
     pub tables_3d: Vec<table::Table3D<T>>,
-    pub name_to_table_3d: collections::HashMap<String, usize>,
+    pub name_to_table_3d: FxHashMap<String, usize>,
     pub tables: Vec<table::Table<T>>,
-    pub name_to_table: collections::HashMap<String, usize>,
+    pub name_to_table: FxHashMap<String, usize>,
 }
 
 impl<T> TableData<T> {
-    pub fn get_name_set(&self) -> collections::HashSet<String> {
-        let mut name_set = collections::HashSet::new();
+    pub fn get_name_set(&self) -> FxHashSet<String> {
+        let mut name_set = FxHashSet::default();
         for name in self.name_to_constant.keys() {
             name_set.insert(name.clone());
         }
@@ -133,15 +133,14 @@ where
 mod tests {
     use super::*;
     use approx::{assert_relative_eq, assert_relative_ne};
-    use collections::HashMap;
 
     #[test]
     fn get_name_set() {
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("i0"), 0);
 
         let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("i1"), 0);
 
         let tables_2d = vec![table::Table2D::new(vec![
@@ -149,7 +148,7 @@ mod tests {
             vec![10, 10, 10],
             vec![10, 10, 10],
         ])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("i2"), 0);
 
         let tables_3d = vec![table::Table3D::new(vec![
@@ -157,10 +156,10 @@ mod tests {
             vec![vec![0, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
             vec![vec![0, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
         ])];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("i3"), 0);
 
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 100);
         let key = vec![0, 1, 0, 1];
@@ -170,7 +169,7 @@ mod tests {
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400);
         let tables = vec![table::Table::new(map, 0)];
-        let mut name_to_table = HashMap::new();
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("i4"), 0);
 
         let integer_tables = TableData {
@@ -184,7 +183,7 @@ mod tests {
             tables,
             name_to_table,
         };
-        let mut expected = collections::HashSet::new();
+        let mut expected = FxHashSet::default();
         expected.insert(String::from("i0"));
         expected.insert(String::from("i1"));
         expected.insert(String::from("i2"));
@@ -195,7 +194,7 @@ mod tests {
 
     #[test]
     fn relative_eq() {
-        let mut name_to_table_1d = collections::HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("t0"), 0);
         name_to_table_1d.insert(String::from("t1"), 1);
         let t1 = TableData {
@@ -224,7 +223,7 @@ mod tests {
             ..Default::default()
         };
         assert_relative_ne!(t1, t2);
-        let mut name_to_table_1d = collections::HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("t0"), 0);
         let t2 = TableData {
             tables_1d: vec![table::Table1D::new(vec![1.0, 2.0])],

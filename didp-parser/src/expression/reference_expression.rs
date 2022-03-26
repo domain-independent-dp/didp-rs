@@ -47,11 +47,11 @@ mod tests {
     use crate::state::*;
     use crate::table::*;
     use crate::table_data::TableData;
-    use std::collections::HashMap;
+    use rustc_hash::FxHashMap;
     use std::rc::Rc;
 
     fn generate_registry() -> TableRegistry {
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("t1"), 0);
         TableRegistry {
             vector_tables: TableData {

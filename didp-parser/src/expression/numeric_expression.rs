@@ -952,7 +952,7 @@ mod tests {
     use crate::variable::*;
     use approx::assert_relative_eq;
     use ordered_float::OrderedFloat;
-    use std::collections::HashMap;
+    use rustc_hash::FxHashMap;
     use std::rc::Rc;
 
     fn generate_state() -> state::State {
@@ -979,11 +979,11 @@ mod tests {
     }
 
     fn generate_registry() -> TableRegistry {
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("f0"), 0);
 
         let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("f1"), 0);
 
         let tables_2d = vec![table::Table2D::new(vec![
@@ -991,7 +991,7 @@ mod tests {
             vec![40, 50, 60],
             vec![70, 80, 90],
         ])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("f2"), 0);
 
         let tables_3d = vec![table::Table3D::new(vec![
@@ -999,10 +999,10 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ])];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("f3"), 0);
 
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 100);
         let key = vec![0, 1, 0, 1];
@@ -1012,7 +1012,7 @@ mod tests {
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400);
         let tables = vec![table::Table::new(map, 0)];
-        let mut name_to_table = HashMap::new();
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("f4"), 0);
 
         let integer_tables = table_data::TableData {
@@ -1027,11 +1027,11 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("cf0"), 0.0);
 
         let tables_1d = vec![table::Table1D::new(vec![10.0, 20.0, 30.0])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("cf1"), 0);
 
         let tables_2d = vec![table::Table2D::new(vec![
@@ -1039,7 +1039,7 @@ mod tests {
             vec![40.0, 50.0, 60.0],
             vec![70.0, 80.0, 90.0],
         ])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("cf2"), 0);
 
         let tables_3d = vec![table::Table3D::new(vec![
@@ -1059,10 +1059,10 @@ mod tests {
                 vec![70.0, 80.0, 90.0],
             ],
         ])];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("cf3"), 0);
 
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 100.0);
         let key = vec![0, 1, 0, 1];
@@ -1072,7 +1072,7 @@ mod tests {
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400.0);
         let tables = vec![table::Table::new(map, 0.0)];
-        let mut name_to_table = HashMap::new();
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("cf4"), 0);
 
         let continuous_tables = table_data::TableData {

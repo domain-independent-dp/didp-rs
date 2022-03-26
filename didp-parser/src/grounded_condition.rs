@@ -5,7 +5,7 @@ use crate::table_registry;
 use crate::variable::Element;
 use crate::yaml_util;
 use lazy_static::lazy_static;
-use std::collections;
+use rustc_hash::FxHashMap;
 use std::error::Error;
 use yaml_rust::Yaml;
 
@@ -39,7 +39,7 @@ impl GroundedCondition {
         value: &Yaml,
         metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
-        parameters: &collections::HashMap<String, Element>,
+        parameters: &FxHashMap<String, Element>,
     ) -> Result<Vec<GroundedCondition>, Box<dyn Error>> {
         lazy_static! {
             static ref CONDITION_KEY: Yaml = Yaml::from_str("condition");
@@ -122,27 +122,26 @@ mod tests {
     use crate::table;
     use crate::table_data;
     use crate::variable;
-    use std::collections::HashMap;
     use std::rc::Rc;
 
     fn generate_metadata() -> state::StateMetadata {
         let object_names = vec![String::from("object")];
-        let mut name_to_object = HashMap::new();
+        let mut name_to_object = FxHashMap::default();
         name_to_object.insert(String::from("object"), 0);
         let object_numbers = vec![2];
 
         let set_variable_names = vec![String::from("s0")];
-        let mut name_to_set_variable = HashMap::new();
+        let mut name_to_set_variable = FxHashMap::default();
         name_to_set_variable.insert(String::from("s0"), 0);
         let set_variable_to_object = vec![0];
 
         let vector_variable_names = vec![String::from("p0")];
-        let mut name_to_vector_variable = HashMap::new();
+        let mut name_to_vector_variable = FxHashMap::default();
         name_to_vector_variable.insert(String::from("p0"), 0);
         let vector_variable_to_object = vec![0];
 
         let element_variable_names = vec![String::from("e0")];
-        let mut name_to_element_variable = HashMap::new();
+        let mut name_to_element_variable = FxHashMap::default();
         name_to_element_variable.insert(String::from("e0"), 0);
         let element_variable_to_object = vec![0];
 
@@ -165,14 +164,14 @@ mod tests {
 
     fn generate_registry() -> table_registry::TableRegistry {
         let tables_1d = vec![table::Table1D::new(vec![true, false])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("b1"), 0);
 
         let tables_2d = vec![table::Table2D::new(vec![
             vec![false, true],
             vec![true, false],
         ])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("b2"), 0);
 
         table_registry::TableRegistry {
@@ -265,7 +264,7 @@ condition: (and (is_in e0 s0) true)
         let condition = condition.unwrap();
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
-        let parameters = collections::HashMap::new();
+        let parameters = FxHashMap::default();
 
         let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
             condition,
@@ -290,7 +289,7 @@ condition: (and (is_in e0 s0) true)
         let condition = condition.unwrap();
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
-        let parameters = collections::HashMap::new();
+        let parameters = FxHashMap::default();
         let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
             condition,
             &metadata,
@@ -306,7 +305,7 @@ condition: (and (is_in e0 s0) true)
         let condition = condition.unwrap();
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
-        let mut parameters = collections::HashMap::new();
+        let mut parameters = FxHashMap::default();
         parameters.insert(String::from("a"), 0);
         let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
             condition,
@@ -336,7 +335,7 @@ forall:
         let condition = condition.unwrap();
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
-        let parameters = collections::HashMap::new();
+        let parameters = FxHashMap::default();
 
         let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
             condition,
@@ -412,7 +411,7 @@ conddition: (is_in e0 s0)
         let condition = condition.unwrap();
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
-        let parameters = collections::HashMap::new();
+        let parameters = FxHashMap::default();
 
         let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
             condition,

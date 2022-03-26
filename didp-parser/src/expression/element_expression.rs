@@ -434,32 +434,32 @@ mod tests {
     use super::*;
     use crate::state::*;
     use crate::table::*;
-    use std::collections::HashMap;
+    use rustc_hash::FxHashMap;
     use std::rc::Rc;
 
     fn generate_registry() -> TableRegistry {
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("f0"), 1);
 
         let tables_1d = vec![Table1D::new(vec![1, 0])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("f1"), 0);
 
         let tables_2d = vec![Table2D::new(vec![vec![1, 0]])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("f2"), 0);
 
         let tables_3d = vec![Table3D::new(vec![vec![vec![1, 0]]])];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("f3"), 0);
 
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         let key = vec![0, 0, 0, 0];
         map.insert(key, 1);
         let key = vec![0, 0, 0, 1];
         map.insert(key, 0);
         let tables = vec![Table::new(map, 0)];
-        let mut name_to_table = HashMap::new();
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("f4"), 0);
 
         let element_tables = TableData {
@@ -474,7 +474,7 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("t1"), 0);
         let vector_tables = TableData {
             tables_1d: vec![Table1D::new(vec![vec![0, 1]])],
@@ -487,7 +487,7 @@ mod tests {
         set.insert(2);
         let default = Set::with_capacity(3);
         let tables_1d = vec![Table1D::new(vec![set, default.clone(), default])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("s1"), 0);
         let set_tables = TableData {
             tables_1d,

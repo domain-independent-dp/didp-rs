@@ -1,6 +1,7 @@
 use crate::priority_queue;
 use didp_parser::variable;
 use didp_parser::ReduceFunction;
+use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections;
@@ -40,7 +41,7 @@ impl<T: Ord> PartialOrd for SearchNode<T> {
 pub type OpenList<T> = priority_queue::PriorityQueue<Rc<SearchNode<T>>>;
 
 pub struct SearchNodeRegistry<'a, T: PartialOrd> {
-    registry: collections::HashMap<Rc<didp_parser::SignatureVariables>, Vec<Rc<SearchNode<T>>>>,
+    registry: FxHashMap<Rc<didp_parser::SignatureVariables>, Vec<Rc<SearchNode<T>>>>,
     metadata: &'a didp_parser::StateMetadata,
     reduce_function: &'a ReduceFunction,
 }
@@ -48,21 +49,13 @@ pub struct SearchNodeRegistry<'a, T: PartialOrd> {
 impl<'a, T: variable::Numeric + Ord> SearchNodeRegistry<'a, T> {
     pub fn new(model: &'a didp_parser::Model<T>) -> SearchNodeRegistry<T> {
         SearchNodeRegistry {
-            registry: collections::HashMap::new(),
+            registry: FxHashMap::default(),
             metadata: &model.state_metadata,
             reduce_function: &model.reduce_function,
         }
     }
-
-    pub fn with_capcaity(
-        capacity: usize,
-        model: &'a didp_parser::Model<T>,
-    ) -> SearchNodeRegistry<T> {
-        SearchNodeRegistry {
-            registry: collections::HashMap::with_capacity(capacity),
-            metadata: &model.state_metadata,
-            reduce_function: &model.reduce_function,
-        }
+    pub fn reserve(&mut self, capacity: usize) {
+        self.registry.reserve(capacity);
     }
 
     pub fn get_node(
@@ -149,12 +142,12 @@ mod tests {
     use didp_parser::variable;
 
     fn generate_model() -> didp_parser::Model<variable::Integer> {
-        let mut name_to_integer_variable = collections::HashMap::new();
+        let mut name_to_integer_variable = FxHashMap::default();
         name_to_integer_variable.insert("n1".to_string(), 0);
         name_to_integer_variable.insert("n2".to_string(), 1);
         name_to_integer_variable.insert("n3".to_string(), 2);
 
-        let mut name_to_integer_resource_variable = collections::HashMap::new();
+        let mut name_to_integer_resource_variable = FxHashMap::default();
         name_to_integer_resource_variable.insert("r1".to_string(), 0);
         name_to_integer_resource_variable.insert("r2".to_string(), 1);
         name_to_integer_resource_variable.insert("r3".to_string(), 2);

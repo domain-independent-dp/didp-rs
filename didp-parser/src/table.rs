@@ -1,6 +1,6 @@
 use crate::variable::{Element, Numeric};
 use approx::{AbsDiffEq, RelativeEq};
-use std::collections;
+use rustc_hash::FxHashMap;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Table1D<T>(Vec<T>);
@@ -260,12 +260,12 @@ where
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Table<T> {
-    map: collections::HashMap<Vec<Element>, T>,
+    map: FxHashMap<Vec<Element>, T>,
     default: T,
 }
 
 impl<T> Table<T> {
-    pub fn new(map: collections::HashMap<Vec<Element>, T>, default: T) -> Table<T> {
+    pub fn new(map: FxHashMap<Vec<Element>, T>, default: T) -> Table<T> {
         Table { map, default }
     }
 
@@ -531,7 +531,7 @@ mod tests {
 
     #[test]
     fn table_get() {
-        let mut map = collections::HashMap::<Vec<Element>, Integer>::new();
+        let mut map = FxHashMap::<Vec<Element>, Integer>::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 100);
         let key = vec![0, 1, 0, 1];
@@ -550,7 +550,7 @@ mod tests {
 
     #[test]
     fn table_eval() {
-        let mut map = collections::HashMap::<Vec<Element>, Integer>::new();
+        let mut map = FxHashMap::<Vec<Element>, Integer>::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 100);
         let key = vec![0, 1, 0, 1];
@@ -569,22 +569,22 @@ mod tests {
 
     #[test]
     fn table_relative_eq() {
-        let mut map = collections::HashMap::<Vec<Element>, Continuous>::new();
+        let mut map = FxHashMap::<Vec<Element>, Continuous>::default();
         map.insert(vec![0, 1, 0, 0], 10.0);
         let t1 = Table::new(map, 0.0);
-        let mut map = collections::HashMap::<Vec<Element>, Continuous>::new();
+        let mut map = FxHashMap::<Vec<Element>, Continuous>::default();
         map.insert(vec![0, 1, 0, 0], 10.0);
         let t2 = Table::new(map, 0.0);
         assert_relative_eq!(t1, t2);
-        let mut map = collections::HashMap::<Vec<Element>, Continuous>::new();
+        let mut map = FxHashMap::<Vec<Element>, Continuous>::default();
         map.insert(vec![0, 1, 0, 0], 11.0);
         let t2 = Table::new(map, 0.0);
         assert_relative_ne!(t1, t2);
-        let mut map = collections::HashMap::<Vec<Element>, Continuous>::new();
+        let mut map = FxHashMap::<Vec<Element>, Continuous>::default();
         map.insert(vec![0, 0, 0, 0], 10.0);
         let t2 = Table::new(map, 0.0);
         assert_relative_ne!(t1, t2);
-        let mut map = collections::HashMap::<Vec<Element>, Continuous>::new();
+        let mut map = FxHashMap::<Vec<Element>, Continuous>::default();
         map.insert(vec![0, 1, 0, 0], 10.0);
         let t2 = Table::new(map, 1.0);
         assert_relative_ne!(t1, t2);

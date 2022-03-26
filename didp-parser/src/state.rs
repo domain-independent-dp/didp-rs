@@ -2,8 +2,8 @@ use crate::variable::{Continuous, Element, Integer, Numeric, Set, Vector};
 use crate::yaml_util;
 use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Ordering;
-use std::collections;
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -100,33 +100,33 @@ impl State {
 #[derive(Debug, PartialEq, Clone, Eq, Default)]
 pub struct StateMetadata {
     pub object_names: Vec<String>,
-    pub name_to_object: collections::HashMap<String, usize>,
+    pub name_to_object: FxHashMap<String, usize>,
     pub object_numbers: Vec<usize>,
 
     pub set_variable_names: Vec<String>,
-    pub name_to_set_variable: collections::HashMap<String, usize>,
+    pub name_to_set_variable: FxHashMap<String, usize>,
     pub set_variable_to_object: Vec<usize>,
 
     pub vector_variable_names: Vec<String>,
-    pub name_to_vector_variable: collections::HashMap<String, usize>,
+    pub name_to_vector_variable: FxHashMap<String, usize>,
     pub vector_variable_to_object: Vec<usize>,
 
     pub element_variable_names: Vec<String>,
-    pub name_to_element_variable: collections::HashMap<String, usize>,
+    pub name_to_element_variable: FxHashMap<String, usize>,
     pub element_variable_to_object: Vec<usize>,
 
     pub integer_variable_names: Vec<String>,
-    pub name_to_integer_variable: collections::HashMap<String, usize>,
+    pub name_to_integer_variable: FxHashMap<String, usize>,
 
     pub continuous_variable_names: Vec<String>,
-    pub name_to_continuous_variable: collections::HashMap<String, usize>,
+    pub name_to_continuous_variable: FxHashMap<String, usize>,
 
     pub integer_resource_variable_names: Vec<String>,
-    pub name_to_integer_resource_variable: collections::HashMap<String, usize>,
+    pub name_to_integer_resource_variable: FxHashMap<String, usize>,
     pub integer_less_is_better: Vec<bool>,
 
     pub continuous_resource_variable_names: Vec<String>,
-    pub name_to_continuous_resource_variable: collections::HashMap<String, usize>,
+    pub name_to_continuous_resource_variable: FxHashMap<String, usize>,
     pub continuous_less_is_better: Vec<bool>,
 }
 
@@ -187,8 +187,8 @@ impl StateMetadata {
         self.object_numbers[self.element_variable_to_object[self.name_to_element_variable[name]]]
     }
 
-    pub fn get_name_set(&self) -> collections::HashSet<String> {
-        let mut name_set = collections::HashSet::new();
+    pub fn get_name_set(&self) -> FxHashSet<String> {
+        let mut name_set = FxHashSet::default();
         for name in &self.object_names {
             name_set.insert(name.clone());
         }
@@ -287,16 +287,15 @@ impl StateMetadata {
         value: &yaml_rust::Yaml,
     ) -> Result<GroundedParameterTriplet, yaml_util::YamlContentErr> {
         let array = yaml_util::get_array(value)?;
-        let mut parameters_array: Vec<collections::HashMap<String, usize>> =
-            Vec::with_capacity(array.len());
-        parameters_array.push(collections::HashMap::new());
+        let mut parameters_array: Vec<FxHashMap<String, usize>> = Vec::with_capacity(array.len());
+        parameters_array.push(FxHashMap::default());
         let mut elements_in_set_variable_array: Vec<Vec<(usize, usize)>> =
             Vec::with_capacity(array.len());
         elements_in_set_variable_array.push(vec![]);
         let mut elements_in_vector_variable_array: Vec<Vec<(usize, usize)>> =
             Vec::with_capacity(array.len());
         elements_in_vector_variable_array.push(vec![]);
-        let mut reserved_names = collections::HashSet::new();
+        let mut reserved_names = FxHashSet::default();
         for value in array {
             let map = yaml_util::get_map(value)?;
             let name = yaml_util::get_string_by_key(&map, "name")?;
@@ -364,9 +363,9 @@ impl StateMetadata {
         variables: &yaml_rust::Yaml,
         object_numbers_yaml: &yaml_rust::Yaml,
     ) -> Result<StateMetadata, yaml_util::YamlContentErr> {
-        let mut reserved_names = collections::HashSet::new();
+        let mut reserved_names = FxHashSet::default();
         let object_names = yaml_util::get_string_array(objects)?;
-        let mut name_to_object = collections::HashMap::new();
+        let mut name_to_object = FxHashMap::default();
         for (i, name) in object_names.iter().enumerate() {
             match reserved_names.get(name) {
                 Some(name) => {
@@ -388,23 +387,23 @@ impl StateMetadata {
         }
 
         let mut set_variable_names = Vec::new();
-        let mut name_to_set_variable = collections::HashMap::new();
+        let mut name_to_set_variable = FxHashMap::default();
         let mut set_variable_to_object = Vec::new();
         let mut vector_variable_names = Vec::new();
-        let mut name_to_vector_variable = collections::HashMap::new();
+        let mut name_to_vector_variable = FxHashMap::default();
         let mut vector_variable_to_object = Vec::new();
         let mut element_variable_names = Vec::new();
-        let mut name_to_element_variable = collections::HashMap::new();
+        let mut name_to_element_variable = FxHashMap::default();
         let mut element_variable_to_object = Vec::new();
         let mut integer_variable_names = Vec::new();
-        let mut name_to_integer_variable = collections::HashMap::new();
+        let mut name_to_integer_variable = FxHashMap::default();
         let mut continuous_variable_names = Vec::new();
-        let mut name_to_continuous_variable = collections::HashMap::new();
+        let mut name_to_continuous_variable = FxHashMap::default();
         let mut integer_resource_variable_names = Vec::new();
-        let mut name_to_integer_resource_variable = collections::HashMap::new();
+        let mut name_to_integer_resource_variable = FxHashMap::default();
         let mut integer_less_is_better = Vec::new();
         let mut continuous_resource_variable_names = Vec::new();
-        let mut name_to_continuous_resource_variable = collections::HashMap::new();
+        let mut name_to_continuous_resource_variable = FxHashMap::default();
         let mut continuous_less_is_better = Vec::new();
 
         let variables = yaml_util::get_array(variables)?;
@@ -500,7 +499,7 @@ impl StateMetadata {
 
     fn get_object_id(
         map: &linked_hash_map::LinkedHashMap<yaml_rust::Yaml, yaml_rust::Yaml>,
-        name_to_object: &collections::HashMap<String, usize>,
+        name_to_object: &FxHashMap<String, usize>,
     ) -> Result<usize, yaml_util::YamlContentErr> {
         let name = yaml_util::get_string_by_key(map, "object")?;
         match name_to_object.get(&name) {
@@ -531,7 +530,7 @@ impl StateMetadata {
 }
 
 type GroundedParameterTriplet = (
-    Vec<collections::HashMap<String, usize>>,
+    Vec<FxHashMap<String, usize>>,
     Vec<Vec<(usize, usize)>>,
     Vec<Vec<(usize, usize)>>,
 );
@@ -539,12 +538,11 @@ type GroundedParameterTriplet = (
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     fn generate_metadata() -> StateMetadata {
         let object_names = vec![String::from("object"), String::from("small")];
         let object_numbers = vec![10, 2];
-        let mut name_to_object = HashMap::new();
+        let mut name_to_object = FxHashMap::default();
         name_to_object.insert(String::from("object"), 0);
         name_to_object.insert(String::from("small"), 1);
 
@@ -554,7 +552,7 @@ mod tests {
             String::from("s2"),
             String::from("s3"),
         ];
-        let mut name_to_set_variable = HashMap::new();
+        let mut name_to_set_variable = FxHashMap::default();
         name_to_set_variable.insert(String::from("s0"), 0);
         name_to_set_variable.insert(String::from("s1"), 1);
         name_to_set_variable.insert(String::from("s2"), 2);
@@ -567,7 +565,7 @@ mod tests {
             String::from("p2"),
             String::from("p3"),
         ];
-        let mut name_to_vector_variable = HashMap::new();
+        let mut name_to_vector_variable = FxHashMap::default();
         name_to_vector_variable.insert(String::from("p0"), 0);
         name_to_vector_variable.insert(String::from("p1"), 1);
         name_to_vector_variable.insert(String::from("p2"), 2);
@@ -580,7 +578,7 @@ mod tests {
             String::from("e2"),
             String::from("e3"),
         ];
-        let mut name_to_element_variable = HashMap::new();
+        let mut name_to_element_variable = FxHashMap::default();
         name_to_element_variable.insert(String::from("e0"), 0);
         name_to_element_variable.insert(String::from("e1"), 1);
         name_to_element_variable.insert(String::from("e2"), 2);
@@ -593,7 +591,7 @@ mod tests {
             String::from("i2"),
             String::from("i3"),
         ];
-        let mut name_to_integer_variable = HashMap::new();
+        let mut name_to_integer_variable = FxHashMap::default();
         name_to_integer_variable.insert(String::from("i0"), 0);
         name_to_integer_variable.insert(String::from("i1"), 1);
         name_to_integer_variable.insert(String::from("i2"), 2);
@@ -605,7 +603,7 @@ mod tests {
             String::from("c2"),
             String::from("c3"),
         ];
-        let mut name_to_continuous_variable = HashMap::new();
+        let mut name_to_continuous_variable = FxHashMap::default();
         name_to_continuous_variable.insert(String::from("c0"), 0);
         name_to_continuous_variable.insert(String::from("c1"), 1);
         name_to_continuous_variable.insert(String::from("c2"), 2);
@@ -617,7 +615,7 @@ mod tests {
             String::from("ir2"),
             String::from("ir3"),
         ];
-        let mut name_to_integer_resource_variable = HashMap::new();
+        let mut name_to_integer_resource_variable = FxHashMap::default();
         name_to_integer_resource_variable.insert(String::from("ir0"), 0);
         name_to_integer_resource_variable.insert(String::from("ir1"), 1);
         name_to_integer_resource_variable.insert(String::from("ir2"), 2);
@@ -629,7 +627,7 @@ mod tests {
             String::from("cr2"),
             String::from("cr3"),
         ];
-        let mut name_to_continuous_resource_variable = HashMap::new();
+        let mut name_to_continuous_resource_variable = FxHashMap::default();
         name_to_continuous_resource_variable.insert(String::from("cr0"), 0);
         name_to_continuous_resource_variable.insert(String::from("cr1"), 1);
         name_to_continuous_resource_variable.insert(String::from("cr2"), 2);
@@ -923,7 +921,7 @@ cr3: 3
     #[test]
     fn get_name_set() {
         let metadata = generate_metadata();
-        let mut expected = collections::HashSet::new();
+        let mut expected = FxHashSet::default();
         expected.insert(String::from("object"));
         expected.insert(String::from("small"));
         expected.insert(String::from("s0"));
@@ -1068,16 +1066,16 @@ cr3: 3
     #[test]
     fn ground_parameters_from_yaml_ok() {
         let metadata = generate_metadata();
-        let mut map1 = HashMap::new();
+        let mut map1 = FxHashMap::default();
         map1.insert(String::from("v0"), 0);
         map1.insert(String::from("v1"), 0);
-        let mut map2 = HashMap::new();
+        let mut map2 = FxHashMap::default();
         map2.insert(String::from("v0"), 0);
         map2.insert(String::from("v1"), 1);
-        let mut map3 = HashMap::new();
+        let mut map3 = FxHashMap::default();
         map3.insert(String::from("v0"), 1);
         map3.insert(String::from("v1"), 0);
-        let mut map4 = HashMap::new();
+        let mut map4 = FxHashMap::default();
         map4.insert(String::from("v0"), 1);
         map4.insert(String::from("v1"), 1);
         let expected_parameters = vec![map1, map2, map3, map4];
@@ -1179,7 +1177,7 @@ cr3: 3
 
     #[test]
     fn state_metadata_load_from_yaml_ok() {
-        let mut name_to_integer_variable = HashMap::new();
+        let mut name_to_integer_variable = FxHashMap::default();
         name_to_integer_variable.insert(String::from("n0"), 0);
         let expected = StateMetadata {
             integer_variable_names: vec![String::from("n0")],
@@ -1187,7 +1185,7 @@ cr3: 3
             ..Default::default()
         };
         let objects = yaml_rust::Yaml::Array(Vec::new());
-        let object_numbers = yaml_rust::Yaml::Hash(linked_hash_map::LinkedHashMap::new());
+        let object_numbers = yaml_rust::Yaml::Hash(linked_hash_map::LinkedHashMap::default());
         let variables = r"
 - name: n0
   type: integer

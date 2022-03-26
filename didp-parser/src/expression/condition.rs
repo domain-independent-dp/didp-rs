@@ -211,32 +211,32 @@ mod tests {
     use crate::table;
     use crate::table_data;
     use ordered_float::OrderedFloat;
-    use std::collections::HashMap;
+    use rustc_hash::FxHashMap;
     use std::rc::Rc;
 
     fn generate_registry() -> TableRegistry {
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("f0"), true);
 
         let tables_1d = vec![table::Table1D::new(vec![true, false])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("f1"), 0);
 
         let tables_2d = vec![table::Table2D::new(vec![vec![true, false]])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("f2"), 0);
 
         let tables_3d = vec![table::Table3D::new(vec![vec![vec![true, false]]])];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("f3"), 0);
 
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         let key = vec![0, 0, 0, 0];
         map.insert(key, true);
         let key = vec![0, 0, 0, 1];
         map.insert(key, false);
         let tables = vec![table::Table::new(map, false)];
-        let mut name_to_table = HashMap::new();
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("f4"), 0);
 
         TableRegistry {

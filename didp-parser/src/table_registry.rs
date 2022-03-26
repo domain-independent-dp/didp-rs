@@ -4,7 +4,7 @@ use crate::table_data::TableData;
 use crate::variable;
 use crate::yaml_util;
 use lazy_static::lazy_static;
-use std::collections;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::fmt;
 use std::str;
 use yaml_rust::Yaml;
@@ -29,8 +29,8 @@ enum TableReturnType {
 }
 
 impl TableRegistry {
-    pub fn get_name_set(&self) -> collections::HashSet<String> {
-        let mut name_set = collections::HashSet::new();
+    pub fn get_name_set(&self) -> FxHashSet<String> {
+        let mut name_set = FxHashSet::default();
         name_set.extend(self.integer_tables.get_name_set());
         name_set.extend(self.continuous_tables.get_name_set());
         name_set.extend(self.set_tables.get_name_set());
@@ -50,7 +50,7 @@ impl TableRegistry {
         }
         let tables = yaml_util::get_array(tables)?;
         let mut table_names = Vec::with_capacity(tables.len());
-        let mut name_to_signature = collections::HashMap::new();
+        let mut name_to_signature = FxHashMap::default();
         let mut reserved_names = metadata.get_name_set();
         for value in tables {
             let map = yaml_util::get_map(value)?;
@@ -184,60 +184,60 @@ impl TableRegistry {
             }
             table_names.push(name);
         }
-        let mut name_to_integer_constant = collections::HashMap::new();
+        let mut name_to_integer_constant = FxHashMap::default();
         let mut integer_tables_1d = Vec::new();
-        let mut integer_name_to_table_1d = collections::HashMap::new();
+        let mut integer_name_to_table_1d = FxHashMap::default();
         let mut integer_tables_2d = Vec::new();
-        let mut integer_name_to_table_2d = collections::HashMap::new();
+        let mut integer_name_to_table_2d = FxHashMap::default();
         let mut integer_tables_3d = Vec::new();
-        let mut integer_name_to_table_3d = collections::HashMap::new();
+        let mut integer_name_to_table_3d = FxHashMap::default();
         let mut integer_tables = Vec::new();
-        let mut integer_name_to_table = collections::HashMap::new();
-        let mut name_to_continuous_constant = collections::HashMap::new();
+        let mut integer_name_to_table = FxHashMap::default();
+        let mut name_to_continuous_constant = FxHashMap::default();
         let mut continuous_tables_1d = Vec::new();
-        let mut continuous_name_to_table_1d = collections::HashMap::new();
+        let mut continuous_name_to_table_1d = FxHashMap::default();
         let mut continuous_tables_2d = Vec::new();
-        let mut continuous_name_to_table_2d = collections::HashMap::new();
+        let mut continuous_name_to_table_2d = FxHashMap::default();
         let mut continuous_tables_3d = Vec::new();
-        let mut continuous_name_to_table_3d = collections::HashMap::new();
+        let mut continuous_name_to_table_3d = FxHashMap::default();
         let mut continuous_tables = Vec::new();
-        let mut continuous_name_to_table = collections::HashMap::new();
-        let mut name_to_set_constant = collections::HashMap::new();
+        let mut continuous_name_to_table = FxHashMap::default();
+        let mut name_to_set_constant = FxHashMap::default();
         let mut set_tables_1d = Vec::new();
-        let mut set_name_to_table_1d = collections::HashMap::new();
+        let mut set_name_to_table_1d = FxHashMap::default();
         let mut set_tables_2d = Vec::new();
-        let mut set_name_to_table_2d = collections::HashMap::new();
+        let mut set_name_to_table_2d = FxHashMap::default();
         let mut set_tables_3d = Vec::new();
-        let mut set_name_to_table_3d = collections::HashMap::new();
+        let mut set_name_to_table_3d = FxHashMap::default();
         let mut set_tables = Vec::new();
-        let mut set_name_to_table = collections::HashMap::new();
-        let mut name_to_vector_constant = collections::HashMap::new();
+        let mut set_name_to_table = FxHashMap::default();
+        let mut name_to_vector_constant = FxHashMap::default();
         let mut vector_tables_1d = Vec::new();
-        let mut vector_name_to_table_1d = collections::HashMap::new();
+        let mut vector_name_to_table_1d = FxHashMap::default();
         let mut vector_tables_2d = Vec::new();
-        let mut vector_name_to_table_2d = collections::HashMap::new();
+        let mut vector_name_to_table_2d = FxHashMap::default();
         let mut vector_tables_3d = Vec::new();
-        let mut vector_name_to_table_3d = collections::HashMap::new();
+        let mut vector_name_to_table_3d = FxHashMap::default();
         let mut vector_tables = Vec::new();
-        let mut vector_name_to_table = collections::HashMap::new();
-        let mut name_to_element_constant = collections::HashMap::new();
+        let mut vector_name_to_table = FxHashMap::default();
+        let mut name_to_element_constant = FxHashMap::default();
         let mut element_tables_1d = Vec::new();
-        let mut element_name_to_table_1d = collections::HashMap::new();
+        let mut element_name_to_table_1d = FxHashMap::default();
         let mut element_tables_2d = Vec::new();
-        let mut element_name_to_table_2d = collections::HashMap::new();
+        let mut element_name_to_table_2d = FxHashMap::default();
         let mut element_tables_3d = Vec::new();
-        let mut element_name_to_table_3d = collections::HashMap::new();
+        let mut element_name_to_table_3d = FxHashMap::default();
         let mut element_tables = Vec::new();
-        let mut element_name_to_table = collections::HashMap::new();
-        let mut name_to_bool_constant = collections::HashMap::new();
+        let mut element_name_to_table = FxHashMap::default();
+        let mut name_to_bool_constant = FxHashMap::default();
         let mut bool_tables_1d = Vec::new();
-        let mut bool_name_to_table_1d = collections::HashMap::new();
+        let mut bool_name_to_table_1d = FxHashMap::default();
         let mut bool_tables_2d = Vec::new();
-        let mut bool_name_to_table_2d = collections::HashMap::new();
+        let mut bool_name_to_table_2d = FxHashMap::default();
         let mut bool_tables_3d = Vec::new();
-        let mut bool_name_to_table_3d = collections::HashMap::new();
+        let mut bool_name_to_table_3d = FxHashMap::default();
         let mut bool_tables = Vec::new();
-        let mut bool_name_to_table = collections::HashMap::new();
+        let mut bool_name_to_table = FxHashMap::default();
         let table_values = yaml_util::get_map(table_values)?;
         for name in table_names {
             let (arg_types, return_type) = name_to_signature.get(&name).unwrap();
@@ -600,7 +600,7 @@ impl TableRegistry {
         <T as str::FromStr>::Err: fmt::Debug,
     {
         let map = yaml_util::get_map(value)?;
-        let mut body = collections::HashMap::with_capacity(map.len());
+        let mut body = FxHashMap::default();
         for (args, value) in map {
             let args = yaml_util::get_usize_array(args)?;
             if args.len() != size.len() {
@@ -707,7 +707,7 @@ impl TableRegistry {
         default: bool,
     ) -> Result<table::Table<bool>, yaml_util::YamlContentErr> {
         let map = yaml_util::get_map(value)?;
-        let mut body = collections::HashMap::with_capacity(map.len());
+        let mut body = FxHashMap::default();
         for (args, value) in map {
             let args = yaml_util::get_usize_array(args)?;
             if args.len() != size.len() {
@@ -832,7 +832,7 @@ impl TableRegistry {
         default: variable::Set,
     ) -> Result<table::Table<variable::Set>, yaml_util::YamlContentErr> {
         let map = yaml_util::get_map(value)?;
-        let mut body = collections::HashMap::with_capacity(map.len());
+        let mut body = FxHashMap::default();
         for (args, value) in map {
             let args = yaml_util::get_usize_array(args)?;
             if args.len() != size.len() {
@@ -959,7 +959,7 @@ impl TableRegistry {
         capacity: usize,
     ) -> Result<table::Table<variable::Vector>, yaml_util::YamlContentErr> {
         let map = yaml_util::get_map(value)?;
-        let mut body = collections::HashMap::with_capacity(map.len());
+        let mut body = FxHashMap::default();
         for (args, value) in map {
             let args = yaml_util::get_usize_array(args)?;
             if args.len() != size.len() {
@@ -986,16 +986,15 @@ impl TableRegistry {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
-    use collections::HashMap;
 
     fn generate_metadata() -> state::StateMetadata {
         let object_names = vec![String::from("object")];
-        let mut name_to_object = HashMap::new();
+        let mut name_to_object = FxHashMap::default();
         name_to_object.insert(String::from("object"), 0);
         let object_numbers = vec![3];
 
         let element_variable_names = vec![String::from("e0")];
-        let mut name_to_element_variable = HashMap::new();
+        let mut name_to_element_variable = FxHashMap::default();
         name_to_element_variable.insert(String::from("e0"), 0);
         let element_variable_to_object = vec![0];
 
@@ -1011,11 +1010,11 @@ mod tests {
     }
 
     fn generate_registry() -> TableRegistry {
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("i0"), 0);
 
         let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("i1"), 0);
 
         let tables_2d = vec![table::Table2D::new(vec![
@@ -1023,7 +1022,7 @@ mod tests {
             vec![10, 10, 10],
             vec![10, 10, 10],
         ])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("i2"), 0);
 
         let tables_3d = vec![table::Table3D::new(vec![
@@ -1031,10 +1030,10 @@ mod tests {
             vec![vec![0, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
             vec![vec![0, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
         ])];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("i3"), 0);
 
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 100);
         let key = vec![0, 1, 0, 1];
@@ -1044,7 +1043,7 @@ mod tests {
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400);
         let tables = vec![table::Table::new(map, 0)];
-        let mut name_to_table = HashMap::new();
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("i4"), 0);
 
         let integer_tables = TableData {
@@ -1059,11 +1058,11 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("c0"), 0.0);
 
         let tables_1d = vec![table::Table1D::new(vec![10.0, 20.0, 30.0])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("c1"), 0);
 
         let tables_2d = vec![table::Table2D::new(vec![
@@ -1071,7 +1070,7 @@ mod tests {
             vec![10.0, 10.0, 10.0],
             vec![10.0, 10.0, 10.0],
         ])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("c2"), 0);
 
         let tables_3d = vec![table::Table3D::new(vec![
@@ -1091,10 +1090,10 @@ mod tests {
                 vec![0.0, 0.0, 0.0],
             ],
         ])];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("c3"), 0);
 
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 100.0);
         let key = vec![0, 1, 0, 1];
@@ -1104,7 +1103,7 @@ mod tests {
         let key = vec![0, 1, 2, 1];
         map.insert(key, 400.0);
         let tables = vec![table::Table::new(map, 0.0)];
-        let mut name_to_table = HashMap::new();
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("c4"), 0);
 
         let continuous_tables = TableData {
@@ -1119,11 +1118,11 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("b0"), true);
 
         let tables_1d = vec![table::Table1D::new(vec![true, false, false])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("b1"), 0);
 
         let tables_2d = vec![table::Table2D::new(vec![
@@ -1131,7 +1130,7 @@ mod tests {
             vec![false, false, false],
             vec![false, false, false],
         ])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("b2"), 0);
 
         let tables_3d = vec![table::Table3D::new(vec![
@@ -1151,10 +1150,10 @@ mod tests {
                 vec![false, false, false],
             ],
         ])];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("b3"), 0);
 
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, true);
         let key = vec![0, 1, 0, 1];
@@ -1164,7 +1163,7 @@ mod tests {
         let key = vec![0, 1, 2, 1];
         map.insert(key, false);
         let tables = vec![table::Table::new(map, false)];
-        let mut name_to_table = HashMap::new();
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("b4"), 0);
 
         let bool_tables = TableData {
@@ -1179,7 +1178,7 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         let mut set = variable::Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
@@ -1191,7 +1190,7 @@ mod tests {
             default.clone(),
             default.clone(),
         ])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("s1"), 0);
 
         let tables_2d = vec![table::Table2D::new(vec![
@@ -1199,7 +1198,7 @@ mod tests {
             vec![default.clone(), default.clone(), default.clone()],
             vec![default.clone(), default.clone(), default.clone()],
         ])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("s2"), 0);
 
         let tables_3d = vec![table::Table3D::new(vec![
@@ -1219,10 +1218,10 @@ mod tests {
                 vec![default.clone(), default.clone(), default.clone()],
             ],
         ])];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("s3"), 0);
 
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, set);
         let key = vec![0, 1, 0, 1];
@@ -1232,7 +1231,7 @@ mod tests {
         let key = vec![0, 1, 2, 1];
         map.insert(key, default.clone());
         let tables = vec![table::Table::new(map, default)];
-        let mut name_to_table = HashMap::new();
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("s4"), 0);
 
         let set_tables = TableData {
@@ -1247,7 +1246,7 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         let vector = vec![0, 2];
         let default = Vec::new();
         name_to_constant.insert(String::from("v0"), vector.clone());
@@ -1257,7 +1256,7 @@ mod tests {
             default.clone(),
             default.clone(),
         ])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("v1"), 0);
 
         let tables_2d = vec![table::Table2D::new(vec![
@@ -1265,7 +1264,7 @@ mod tests {
             vec![default.clone(), default.clone(), default.clone()],
             vec![default.clone(), default.clone(), default.clone()],
         ])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("v2"), 0);
 
         let tables_3d = vec![table::Table3D::new(vec![
@@ -1285,10 +1284,10 @@ mod tests {
                 vec![default.clone(), default.clone(), default.clone()],
             ],
         ])];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("v3"), 0);
 
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, vector);
         let key = vec![0, 1, 0, 1];
@@ -1298,7 +1297,7 @@ mod tests {
         let key = vec![0, 1, 2, 1];
         map.insert(key, default.clone());
         let tables = vec![table::Table::new(map, default)];
-        let mut name_to_table = HashMap::new();
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("v4"), 0);
 
         let vector_tables = TableData {
@@ -1313,11 +1312,11 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_constant = HashMap::new();
+        let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("t0"), 1);
 
         let tables_1d = vec![table::Table1D::new(vec![1, 0, 0])];
-        let mut name_to_table_1d = HashMap::new();
+        let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("t1"), 0);
 
         let tables_2d = vec![table::Table2D::new(vec![
@@ -1325,7 +1324,7 @@ mod tests {
             vec![0, 0, 0],
             vec![0, 0, 0],
         ])];
-        let mut name_to_table_2d = HashMap::new();
+        let mut name_to_table_2d = FxHashMap::default();
         name_to_table_2d.insert(String::from("t2"), 0);
 
         let tables_3d = vec![table::Table3D::new(vec![
@@ -1333,10 +1332,10 @@ mod tests {
             vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
             vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
         ])];
-        let mut name_to_table_3d = HashMap::new();
+        let mut name_to_table_3d = FxHashMap::default();
         name_to_table_3d.insert(String::from("t3"), 0);
 
-        let mut map = HashMap::new();
+        let mut map = FxHashMap::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 1);
         let key = vec![0, 1, 0, 1];
@@ -1346,7 +1345,7 @@ mod tests {
         let key = vec![0, 1, 2, 1];
         map.insert(key, 0);
         let tables = vec![table::Table::new(map, 0)];
-        let mut name_to_table = HashMap::new();
+        let mut name_to_table = FxHashMap::default();
         name_to_table.insert(String::from("t4"), 0);
 
         let element_tables = TableData {
@@ -1374,7 +1373,7 @@ mod tests {
     #[test]
     fn table_registry_get_name_set() {
         let registry = generate_registry();
-        let mut expected = collections::HashSet::new();
+        let mut expected = FxHashSet::default();
         expected.insert(String::from("i0"));
         expected.insert(String::from("i1"));
         expected.insert(String::from("i2"));
