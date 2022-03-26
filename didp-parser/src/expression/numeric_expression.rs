@@ -6,7 +6,7 @@ use super::util;
 use crate::state::State;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
-use crate::variable::{Continuous, FromNumeric, Integer, Numeric, ToNumeric};
+use crate::variable::{Continuous, FromNumeric, Integer, Numeric};
 use std::boxed::Box;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -34,22 +34,6 @@ pub enum NumericExpression<T: Numeric> {
     ContinuousReduceSum(Box<NumericVectorExpression<Continuous>>),
     IntegerReduceProduct(Box<NumericVectorExpression<Integer>>),
     ContinuousReduceProduct(Box<NumericVectorExpression<Continuous>>),
-    InnerProductII(
-        Box<NumericVectorExpression<Integer>>,
-        Box<NumericVectorExpression<Integer>>,
-    ),
-    InnerProductIC(
-        Box<NumericVectorExpression<Integer>>,
-        Box<NumericVectorExpression<Continuous>>,
-    ),
-    InnerProductCI(
-        Box<NumericVectorExpression<Continuous>>,
-        Box<NumericVectorExpression<Integer>>,
-    ),
-    InnerProductCC(
-        Box<NumericVectorExpression<Continuous>>,
-        Box<NumericVectorExpression<Continuous>>,
-    ),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -70,6 +54,14 @@ impl<T: Numeric> Default for NumericExpression<T> {
 
 impl<T: Numeric> NumericExpression<T> {
     pub fn eval(&self, state: &State, registry: &TableRegistry) -> T {
+        self.eval_inner(None, state, registry)
+    }
+
+    pub fn eval_cost(&self, cost: T, state: &State, registry: &TableRegistry) -> T {
+        self.eval_inner(Some(cost), state, registry)
+    }
+
+    fn eval_inner(&self, cost: Option<T>, state: &State, registry: &TableRegistry) -> T {
         match self {
             Self::Constant(x) => *x,
             Self::IntegerVariable(i) => {
@@ -84,10 +76,10 @@ impl<T: Numeric> NumericExpression<T> {
             Self::ContinuousResourceVariable(i) => {
                 T::from_continuous(state.resource_variables.continuous_variables[*i])
             }
-            Self::Cost => panic!(String::from("cost cannot be accessd from eval function")),
+            Self::Cost => cost.unwrap(),
             Self::NumericOperation(op, a, b) => {
-                let a = a.eval(state, registry);
-                let b = b.eval(state, registry);
+                let a = a.eval_inner(cost, state, registry);
+                let b = b.eval_inner(cost, state, registry);
                 Self::eval_operation(op, a, b)
             }
             Self::Cardinality(SetExpression::Reference(expression)) => {
@@ -121,156 +113,93 @@ impl<T: Numeric> NumericExpression<T> {
             Self::IntegerLast(vector) => T::from_integer(match vector.as_ref() {
                 NumericVectorExpression::Constant(vector) => *vector.last().unwrap(),
                 vector => *vector
-                    .eval(state, registry, &registry.integer_tables)
+                    .eval_inner(
+                        cost.map(|x| x.to_integer()),
+                        state,
+                        registry,
+                        &registry.integer_tables,
+                    )
                     .last()
                     .unwrap(),
             }),
             Self::ContinuousLast(vector) => T::from_continuous(match vector.as_ref() {
                 NumericVectorExpression::Constant(vector) => *vector.last().unwrap(),
                 vector => *vector
-                    .eval(state, registry, &registry.continuous_tables)
+                    .eval_inner(
+                        cost.map(|x| x.to_continuous()),
+                        state,
+                        registry,
+                        &registry.continuous_tables,
+                    )
                     .last()
                     .unwrap(),
             }),
             Self::IntegerAt(vector, i) => T::from_integer(match vector.as_ref() {
                 NumericVectorExpression::Constant(vector) => vector[i.eval(state, registry)],
-                vector => {
-                    vector.eval(state, registry, &registry.integer_tables)[i.eval(state, registry)]
-                }
+                vector => vector.eval_inner(
+                    cost.map(|x| x.to_integer()),
+                    state,
+                    registry,
+                    &registry.integer_tables,
+                )[i.eval(state, registry)],
             }),
             Self::ContinuousAt(vector, i) => T::from_continuous(match vector.as_ref() {
                 NumericVectorExpression::Constant(vector) => vector[i.eval(state, registry)],
-                vector => vector.eval(state, registry, &registry.continuous_tables)
-                    [i.eval(state, registry)],
+                vector => vector.eval_inner(
+                    cost.map(|x| x.to_continuous()),
+                    state,
+                    registry,
+                    &registry.continuous_tables,
+                )[i.eval(state, registry)],
             }),
             Self::IntegerReduceSum(vector) => T::from_integer(match vector.as_ref() {
                 NumericVectorExpression::Constant(vector) => vector.iter().copied().sum(),
                 vector => vector
-                    .eval(state, registry, &registry.integer_tables)
+                    .eval_inner(
+                        cost.map(|x| x.to_integer()),
+                        state,
+                        registry,
+                        &registry.integer_tables,
+                    )
                     .into_iter()
                     .sum(),
             }),
             Self::ContinuousReduceSum(vector) => T::from_continuous(match vector.as_ref() {
                 NumericVectorExpression::Constant(vector) => vector.iter().copied().sum(),
                 vector => vector
-                    .eval(state, registry, &registry.continuous_tables)
+                    .eval_inner(
+                        cost.map(|x| x.to_continuous()),
+                        state,
+                        registry,
+                        &registry.continuous_tables,
+                    )
                     .into_iter()
                     .sum(),
             }),
             Self::IntegerReduceProduct(vector) => T::from_integer(match vector.as_ref() {
                 NumericVectorExpression::Constant(vector) => vector.iter().copied().product(),
                 vector => vector
-                    .eval(state, registry, &registry.integer_tables)
+                    .eval_inner(
+                        cost.map(|x| x.to_integer()),
+                        state,
+                        registry,
+                        &registry.integer_tables,
+                    )
                     .into_iter()
                     .product(),
             }),
             Self::ContinuousReduceProduct(vector) => T::from_continuous(match vector.as_ref() {
                 NumericVectorExpression::Constant(vector) => vector.iter().copied().product(),
                 vector => vector
-                    .eval(state, registry, &registry.continuous_tables)
+                    .eval_inner(
+                        cost.map(|x| x.to_continuous()),
+                        state,
+                        registry,
+                        &registry.continuous_tables,
+                    )
                     .into_iter()
                     .product(),
             }),
-            Self::InnerProductII(x, y) => T::from_integer(match (x.as_ref(), y.as_ref()) {
-                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    x.iter().zip(y).map(|(x, y)| *x * *y).sum()
-                }
-                (NumericVectorExpression::Constant(x), y) => x
-                    .iter()
-                    .zip(y.eval(state, registry, &registry.integer_tables))
-                    .map(|(x, y)| *x * y)
-                    .sum(),
-                (x, NumericVectorExpression::Constant(y)) => x
-                    .eval(state, registry, &registry.integer_tables)
-                    .into_iter()
-                    .zip(y)
-                    .map(|(x, y)| x * *y)
-                    .sum(),
-                (x, y) => x
-                    .eval(state, registry, &registry.integer_tables)
-                    .into_iter()
-                    .zip(y.eval(state, registry, &registry.integer_tables))
-                    .map(|(x, y)| x * y)
-                    .sum(),
-            }),
-            Self::InnerProductIC(x, y) => T::from_continuous(match (x.as_ref(), y.as_ref()) {
-                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    x.iter().zip(y).map(|(x, y)| x.to_continuous() * *y).sum()
-                }
-                (NumericVectorExpression::Constant(x), y) => x
-                    .iter()
-                    .zip(y.eval(state, registry, &registry.continuous_tables))
-                    .map(|(x, y)| x.to_continuous() * y)
-                    .sum(),
-                (x, NumericVectorExpression::Constant(y)) => x
-                    .eval(state, registry, &registry.integer_tables)
-                    .into_iter()
-                    .zip(y)
-                    .map(|(x, y)| x.to_continuous() * *y)
-                    .sum(),
-                (x, y) => x
-                    .eval(state, registry, &registry.integer_tables)
-                    .into_iter()
-                    .zip(y.eval(state, registry, &registry.continuous_tables))
-                    .map(|(x, y)| x.to_continuous() * y)
-                    .sum(),
-            }),
-            Self::InnerProductCI(x, y) => T::from_continuous(match (x.as_ref(), y.as_ref()) {
-                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    x.iter().zip(y).map(|(x, y)| *x * y.to_continuous()).sum()
-                }
-                (NumericVectorExpression::Constant(x), y) => x
-                    .iter()
-                    .zip(y.eval(state, registry, &registry.integer_tables))
-                    .map(|(x, y)| *x * y.to_continuous())
-                    .sum(),
-                (x, NumericVectorExpression::Constant(y)) => x
-                    .eval(state, registry, &registry.continuous_tables)
-                    .into_iter()
-                    .zip(y)
-                    .map(|(x, y)| x * y.to_continuous())
-                    .sum(),
-                (x, y) => x
-                    .eval(state, registry, &registry.continuous_tables)
-                    .into_iter()
-                    .zip(y.eval(state, registry, &registry.integer_tables))
-                    .map(|(x, y)| x * y.to_continuous())
-                    .sum(),
-            }),
-            Self::InnerProductCC(x, y) => T::from_continuous(match (x.as_ref(), y.as_ref()) {
-                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    x.iter().zip(y).map(|(x, y)| *x * *y).sum()
-                }
-                (NumericVectorExpression::Constant(x), y) => x
-                    .iter()
-                    .zip(y.eval(state, registry, &registry.continuous_tables))
-                    .map(|(x, y)| *x * y)
-                    .sum(),
-                (x, NumericVectorExpression::Constant(y)) => x
-                    .eval(state, registry, &registry.continuous_tables)
-                    .into_iter()
-                    .zip(y)
-                    .map(|(x, y)| x * *y)
-                    .sum(),
-                (x, y) => x
-                    .eval(state, registry, &registry.continuous_tables)
-                    .into_iter()
-                    .zip(y.eval(state, registry, &registry.continuous_tables))
-                    .map(|(x, y)| x * y)
-                    .sum(),
-            }),
-        }
-    }
-
-    pub fn eval_cost(&self, cost: T, state: &State, registry: &TableRegistry) -> T {
-        match self {
-            Self::Cost => cost,
-            Self::NumericOperation(op, a, b) => {
-                let a = a.eval_cost(cost, state, registry);
-                let b = b.eval_cost(cost, state, registry);
-                Self::eval_operation(op, a, b)
-            }
-            _ => self.eval(state, registry),
         }
     }
 
@@ -382,56 +311,6 @@ impl<T: Numeric> NumericExpression<T> {
                     vector => Self::ContinuousReduceProduct(Box::new(vector)),
                 }
             }
-            Self::InnerProductII(x, y) => match (
-                x.simplify(registry, &registry.integer_tables),
-                y.simplify(registry, &registry.integer_tables),
-            ) {
-                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    Self::Constant(T::from_integer(
-                        x.into_iter().zip(y).map(|(x, y)| x * y).sum(),
-                    ))
-                }
-                (x, y) => Self::InnerProductII(Box::new(x), Box::new(y)),
-            },
-            Self::InnerProductIC(x, y) => match (
-                x.simplify(registry, &registry.integer_tables),
-                y.simplify(registry, &registry.continuous_tables),
-            ) {
-                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    Self::Constant(T::from_continuous(
-                        x.into_iter()
-                            .zip(y)
-                            .map(|(x, y)| x.to_continuous() * y)
-                            .sum(),
-                    ))
-                }
-                (x, y) => Self::InnerProductIC(Box::new(x), Box::new(y)),
-            },
-            Self::InnerProductCI(x, y) => match (
-                x.simplify(registry, &registry.continuous_tables),
-                y.simplify(registry, &registry.integer_tables),
-            ) {
-                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    Self::Constant(T::from_continuous(
-                        x.into_iter()
-                            .zip(y)
-                            .map(|(x, y)| x * y.to_continuous())
-                            .sum(),
-                    ))
-                }
-                (x, y) => Self::InnerProductCI(Box::new(x), Box::new(y)),
-            },
-            Self::InnerProductCC(x, y) => match (
-                x.simplify(registry, &registry.continuous_tables),
-                y.simplify(registry, &registry.continuous_tables),
-            ) {
-                (NumericVectorExpression::Constant(x), NumericVectorExpression::Constant(y)) => {
-                    Self::Constant(T::from_continuous(
-                        x.into_iter().zip(y).map(|(x, y)| x * y).sum(),
-                    ))
-                }
-                (x, y) => Self::InnerProductCC(Box::new(x), Box::new(y)),
-            },
             _ => self.clone(),
         }
     }
@@ -492,6 +371,26 @@ pub enum NumericVectorExpression<T: Numeric> {
 
 impl<T: Numeric> NumericVectorExpression<T> {
     pub fn eval(&self, state: &State, registry: &TableRegistry, tables: &TableData<T>) -> Vec<T> {
+        self.eval_inner(None, state, registry, tables)
+    }
+
+    pub fn eval_cost(
+        &self,
+        cost: T,
+        state: &State,
+        registry: &TableRegistry,
+        tables: &TableData<T>,
+    ) -> Vec<T> {
+        self.eval_inner(Some(cost), state, registry, tables)
+    }
+
+    fn eval_inner(
+        &self,
+        cost: Option<T>,
+        state: &State,
+        registry: &TableRegistry,
+        tables: &TableData<T>,
+    ) -> Vec<T> {
         let vector_variables = &state.signature_variables.vector_variables;
         let vector_tables = &registry.vector_tables;
         let set_variables = &state.signature_variables.set_variables;
@@ -499,39 +398,38 @@ impl<T: Numeric> NumericVectorExpression<T> {
         match self {
             Self::Constant(vector) => vector.clone(),
             Self::Reverse(vector) => {
-                let mut vector = vector.eval(state, registry, tables);
+                let mut vector = vector.eval_inner(cost, state, registry, tables);
                 vector.reverse();
                 vector
             }
             Self::Push(value, vector) => {
-                let mut vector = vector.eval(state, registry, tables);
+                let mut vector = vector.eval_inner(cost, state, registry, tables);
                 vector.push(value.eval(state, registry));
                 vector
             }
             Self::Pop(vector) => {
-                let mut vector = vector.eval(state, registry, tables);
+                let mut vector = vector.eval_inner(cost, state, registry, tables);
                 vector.pop();
                 vector
             }
             Self::Set(value, vector, i) => {
-                let mut vector = vector.eval(state, registry, tables);
+                let mut vector = vector.eval_inner(cost, state, registry, tables);
                 vector[i.eval(state, registry)] = value.eval(state, registry);
                 vector
             }
-            Self::NumericOperation(op, x, y) => {
-                Self::eval_operation(op, x.eval(state, registry), y.eval(state, registry, tables))
-            }
+            Self::NumericOperation(op, x, y) => Self::eval_operation(
+                op,
+                x.eval_inner(cost, state, registry),
+                y.eval_inner(cost, state, registry, tables),
+            ),
             Self::VectorOperation(op, x, y) => match (x.as_ref(), y.as_ref()) {
                 (Self::Constant(x), y) => {
-                    Self::eval_vector_operation(op, x, y.eval(state, registry, tables))
-                }
-                (x, Self::Constant(y)) => {
-                    Self::eval_vector_operation(op, y, x.eval(state, registry, tables))
+                    Self::eval_vector_operation(op, x, y.eval_inner(cost, state, registry, tables))
                 }
                 (x, y) => Self::eval_vector_operation(
                     op,
-                    &x.eval(state, registry, tables),
-                    y.eval(state, registry, tables),
+                    &x.eval_inner(cost, state, registry, tables),
+                    y.eval_inner(cost, state, registry, tables),
                 ),
             },
             Self::Table(i, args) => Self::eval_table(*i, args, state, registry, tables),
@@ -716,6 +614,7 @@ impl<T: Numeric> NumericVectorExpression<T> {
                     (x, y) => Self::VectorOperation(op.clone(), Box::new(x), Box::new(y)),
                 }
             }
+            Self::Table(i, args) => Self::simplify_table(*i, args, registry, tables),
             Self::Table1D(i, x) => match x.simplify(registry) {
                 VectorExpression::Reference(ReferenceExpression::Constant(x)) => {
                     Self::Constant(x.iter().map(|x| tables.tables_1d[*i].eval(*x)).collect())
@@ -876,6 +775,61 @@ impl<T: Numeric> NumericVectorExpression<T> {
             .collect()
     }
 
+    fn simplify_table(
+        i: usize,
+        args: &[ArgumentExpression],
+        registry: &TableRegistry,
+        tables: &TableData<T>,
+    ) -> NumericVectorExpression<T> {
+        let args: Vec<ArgumentExpression> = args.iter().map(|x| x.simplify(registry)).collect();
+        let mut simplified_args = vec![vec![vec![]]];
+        let mut vector_mode = false;
+        for arg in &args {
+            match arg {
+                ArgumentExpression::Element(ElementExpression::Constant(element)) => {
+                    simplified_args
+                        .iter_mut()
+                        .for_each(|rr| rr.iter_mut().for_each(|r| r.push(*element)));
+                }
+                ArgumentExpression::Set(SetExpression::Reference(
+                    ReferenceExpression::Constant(set),
+                )) => {
+                    simplified_args = simplified_args
+                        .into_iter()
+                        .map(|rr| util::expand_vector_with_set(rr, set))
+                        .collect();
+                }
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vector),
+                )) => {
+                    if vector_mode {
+                        simplified_args
+                            .iter_mut()
+                            .zip(vector)
+                            .for_each(|(rr, v)| rr.iter_mut().for_each(|r| r.push(*v)));
+                    } else {
+                        simplified_args = vector
+                            .iter()
+                            .map(|v| {
+                                let mut rr = simplified_args[0].clone();
+                                rr.iter_mut().for_each(|r| r.push(*v));
+                                rr
+                            })
+                            .collect();
+                        vector_mode = true;
+                    }
+                }
+                _ => return Self::Table(i, args),
+            }
+        }
+        Self::Constant(
+            simplified_args
+                .into_iter()
+                .map(|rr| rr.into_iter().map(|r| tables.tables[i].eval(&r)).sum())
+                .collect(),
+        )
+    }
+
     fn eval_operation(op: &NumericOperator, x: T, mut y: Vec<T>) -> Vec<T> {
         match op {
             NumericOperator::Add => y.iter_mut().for_each(|y| *y = *y + x),
@@ -898,10 +852,10 @@ impl<T: Numeric> NumericVectorExpression<T> {
     fn eval_vector_operation(op: &NumericOperator, x: &[T], mut y: Vec<T>) -> Vec<T> {
         y.truncate(x.len());
         match op {
-            NumericOperator::Add => y.iter_mut().zip(x).for_each(|(y, x)| *y = *y + *x),
-            NumericOperator::Subtract => y.iter_mut().zip(x).for_each(|(y, x)| *y = *y - *x),
-            NumericOperator::Multiply => y.iter_mut().zip(x).for_each(|(y, x)| *y = *y * *x),
-            NumericOperator::Divide => y.iter_mut().zip(x).for_each(|(y, x)| *y = *y / *x),
+            NumericOperator::Add => y.iter_mut().zip(x).for_each(|(y, x)| *y = *x + *y),
+            NumericOperator::Subtract => y.iter_mut().zip(x).for_each(|(y, x)| *y = *x - *y),
+            NumericOperator::Multiply => y.iter_mut().zip(x).for_each(|(y, x)| *y = *x * *y),
+            NumericOperator::Divide => y.iter_mut().zip(x).for_each(|(y, x)| *y = *x / *y),
             NumericOperator::Max => y.iter_mut().zip(x).for_each(|(y, x)| {
                 if *x > *y {
                     *y = *x
@@ -926,6 +880,7 @@ mod tests {
     use crate::table;
     use crate::table_data;
     use crate::variable::*;
+    use approx::assert_relative_eq;
     use ordered_float::OrderedFloat;
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -1070,7 +1025,7 @@ mod tests {
     }
 
     #[test]
-    fn number_eval() {
+    fn constant_eval() {
         let registry = generate_registry();
         let state = generate_state();
         let expression = NumericExpression::Constant(2);
@@ -1106,11 +1061,11 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
         let expression = NumericExpression::<Continuous>::ContinuousVariable(0);
-        assert_eq!(expression.eval(&state, &registry), 1.0);
+        assert_relative_eq!(expression.eval(&state, &registry), 1.0);
         let expression = NumericExpression::<Continuous>::ContinuousVariable(1);
-        assert_eq!(expression.eval(&state, &registry), 2.0);
+        assert_relative_eq!(expression.eval(&state, &registry), 2.0);
         let expression = NumericExpression::<Continuous>::ContinuousVariable(2);
-        assert_eq!(expression.eval(&state, &registry), 3.0);
+        assert_relative_eq!(expression.eval(&state, &registry), 3.0);
     }
 
     #[test]
@@ -1118,19 +1073,25 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
         let expression = NumericExpression::<Continuous>::ContinuousResourceVariable(0);
-        assert_eq!(expression.eval(&state, &registry), 4.0);
+        assert_relative_eq!(expression.eval(&state, &registry), 4.0);
         let expression = NumericExpression::<Continuous>::ContinuousResourceVariable(1);
-        assert_eq!(expression.eval(&state, &registry), 5.0);
+        assert_relative_eq!(expression.eval(&state, &registry), 5.0);
         let expression = NumericExpression::<Continuous>::ContinuousResourceVariable(2);
-        assert_eq!(expression.eval(&state, &registry), 6.0);
+        assert_relative_eq!(expression.eval(&state, &registry), 6.0);
     }
 
     #[test]
     fn cost_eval() {
         let registry = generate_registry();
         let state = generate_state();
-        let expression: NumericExpression<Integer> = NumericExpression::Cost {};
+        let expression: NumericExpression<Integer> = NumericExpression::Cost;
         assert_eq!(expression.eval_cost(0, &state, &registry), 0);
+        let expression: NumericExpression<Integer> = NumericExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(NumericExpression::Cost),
+            Box::new(NumericExpression::Constant(1)),
+        );
+        assert_eq!(expression.eval_cost(0, &state, &registry), 1);
     }
 
     #[test]
@@ -1138,7 +1099,7 @@ mod tests {
     fn cost_eval_panic() {
         let registry = generate_registry();
         let state = generate_state();
-        let expression: NumericExpression<Integer> = NumericExpression::Cost {};
+        let expression: NumericExpression<Integer> = NumericExpression::Cost;
         assert_eq!(expression.eval(&state, &registry), 0);
     }
 
@@ -1236,10 +1197,14 @@ mod tests {
             ReferenceExpression::Variable(0),
         ));
         assert_eq!(expression.eval(&state, &registry), 2);
+        let expression = NumericExpression::<Integer>::Length(VectorExpression::Reverse(Box::new(
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
+        )));
+        assert_eq!(expression.eval(&state, &registry), 2);
     }
 
     #[test]
-    fn table_eval() {
+    fn integer_table_eval() {
         let registry = generate_registry();
         let state = generate_state();
 
@@ -1283,55 +1248,192 @@ mod tests {
             ],
         ));
         assert_eq!(expression.eval(&state, &registry), 400);
-
-        let expression =
-            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
-                0,
-                vec![
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(1),
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(0),
-                ],
-            ));
-        assert_eq!(expression.eval(&state, &registry), 100.0);
-        let expression =
-            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
-                0,
-                vec![
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(1),
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(1),
-                ],
-            ));
-        assert_eq!(expression.eval(&state, &registry), 200.0);
-        let expression =
-            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
-                0,
-                vec![
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(1),
-                    element_expression::ElementExpression::Constant(2),
-                    element_expression::ElementExpression::Constant(0),
-                ],
-            ));
-        assert_eq!(expression.eval(&state, &registry), 300.0);
-        let expression =
-            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
-                0,
-                vec![
-                    element_expression::ElementExpression::Constant(0),
-                    element_expression::ElementExpression::Constant(1),
-                    element_expression::ElementExpression::Constant(2),
-                    element_expression::ElementExpression::Constant(1),
-                ],
-            ));
-        assert_eq!(expression.eval(&state, &registry), 400.0);
     }
 
     #[test]
-    fn number_simplify() {
+    fn continuous_table_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+
+        let expression =
+            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
+                0,
+                vec![
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(0),
+                ],
+            ));
+        assert_relative_eq!(expression.eval(&state, &registry), 100.0);
+        let expression =
+            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
+                0,
+                vec![
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                ],
+            ));
+        assert_relative_eq!(expression.eval(&state, &registry), 200.0);
+        let expression =
+            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
+                0,
+                vec![
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(2),
+                    element_expression::ElementExpression::Constant(0),
+                ],
+            ));
+        assert_relative_eq!(expression.eval(&state, &registry), 300.0);
+        let expression =
+            NumericExpression::<Continuous>::ContinuousTable(NumericTableExpression::Table(
+                0,
+                vec![
+                    element_expression::ElementExpression::Constant(0),
+                    element_expression::ElementExpression::Constant(1),
+                    element_expression::ElementExpression::Constant(2),
+                    element_expression::ElementExpression::Constant(1),
+                ],
+            ));
+        assert_relative_eq!(expression.eval(&state, &registry), 400.0);
+    }
+
+    #[test]
+    fn integer_last_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = NumericExpression::<Integer>::IntegerLast(Box::new(
+            NumericVectorExpression::Constant(vec![0, 1]),
+        ));
+        assert_eq!(expression.eval(&state, &registry), 1);
+        let expression =
+            NumericExpression::<Integer>::IntegerLast(Box::new(NumericVectorExpression::Reverse(
+                Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            )));
+        assert_eq!(expression.eval(&state, &registry), 0);
+    }
+
+    #[test]
+    fn continuous_last_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = NumericExpression::<Continuous>::ContinuousLast(Box::new(
+            NumericVectorExpression::Constant(vec![0.0, 1.0]),
+        ));
+        assert_relative_eq!(expression.eval(&state, &registry), 1.0);
+        let expression = NumericExpression::<Continuous>::ContinuousLast(Box::new(
+            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
+                0.0, 1.0,
+            ]))),
+        ));
+        assert_relative_eq!(expression.eval(&state, &registry), 0.0);
+    }
+
+    #[test]
+    fn integer_at_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = NumericExpression::<Integer>::IntegerAt(
+            Box::new(NumericVectorExpression::Constant(vec![2, 1])),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(expression.eval(&state, &registry), 2);
+        let expression = NumericExpression::<Integer>::IntegerAt(
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 1]),
+            ))),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(expression.eval(&state, &registry), 1);
+    }
+
+    #[test]
+    fn continuous_at_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = NumericExpression::<Continuous>::ContinuousAt(
+            Box::new(NumericVectorExpression::Constant(vec![2.0, 1.0])),
+            ElementExpression::Constant(0),
+        );
+        assert_relative_eq!(expression.eval(&state, &registry), 2.0);
+        let expression = NumericExpression::<Continuous>::ContinuousAt(
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2.0, 1.0]),
+            ))),
+            ElementExpression::Constant(0),
+        );
+        assert_relative_eq!(expression.eval(&state, &registry), 1.0);
+    }
+
+    #[test]
+    fn integer_reduce_sum_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = NumericExpression::<Integer>::IntegerReduceSum(Box::new(
+            NumericVectorExpression::Constant(vec![2, 1]),
+        ));
+        assert_eq!(expression.eval(&state, &registry), 3);
+        let expression = NumericExpression::<Integer>::IntegerReduceSum(Box::new(
+            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
+                2, 1,
+            ]))),
+        ));
+        assert_eq!(expression.eval(&state, &registry), 3);
+    }
+
+    #[test]
+    fn continuous_reduce_sum_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = NumericExpression::<Continuous>::ContinuousReduceSum(Box::new(
+            NumericVectorExpression::Constant(vec![2.0, 1.0]),
+        ));
+        assert_relative_eq!(expression.eval(&state, &registry), 3.0);
+        let expression = NumericExpression::<Continuous>::ContinuousReduceSum(Box::new(
+            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
+                2.0, 1.0,
+            ]))),
+        ));
+        assert_relative_eq!(expression.eval(&state, &registry), 3.0);
+    }
+
+    #[test]
+    fn integer_reduce_product_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = NumericExpression::<Integer>::IntegerReduceProduct(Box::new(
+            NumericVectorExpression::Constant(vec![2, 1]),
+        ));
+        assert_eq!(expression.eval(&state, &registry), 2);
+        let expression = NumericExpression::<Integer>::IntegerReduceProduct(Box::new(
+            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
+                2, 1,
+            ]))),
+        ));
+        assert_eq!(expression.eval(&state, &registry), 2);
+    }
+
+    #[test]
+    fn continuous_reduce_product_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = NumericExpression::<Continuous>::ContinuousReduceProduct(Box::new(
+            NumericVectorExpression::Constant(vec![2.0, 1.0]),
+        ));
+        assert_relative_eq!(expression.eval(&state, &registry), 2.0);
+        let expression = NumericExpression::<Continuous>::ContinuousReduceProduct(Box::new(
+            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
+                2.0, 1.0,
+            ]))),
+        ));
+        assert_relative_eq!(expression.eval(&state, &registry), 2.0);
+    }
+
+    #[test]
+    fn constant_simplify() {
         let registry = generate_registry();
         let expression = NumericExpression::Constant(2);
         assert_eq!(expression.simplify(&registry), expression);
@@ -1545,5 +1647,1157 @@ mod tests {
             NumericTableExpression::Table1D(0, element_expression::ElementExpression::Variable(0)),
         );
         assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+
+    fn integer_last_simplify() {
+        let registry = generate_registry();
+        let expression = NumericExpression::<Integer>::IntegerLast(Box::new(
+            NumericVectorExpression::Constant(vec![0, 1]),
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericExpression::Constant(1)
+        );
+        let expression =
+            NumericExpression::<Integer>::IntegerLast(Box::new(NumericVectorExpression::Table2DX(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0),
+            )));
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn continuous_last_simplify() {
+        let registry = generate_registry();
+        let expression = NumericExpression::<Continuous>::ContinuousLast(Box::new(
+            NumericVectorExpression::Constant(vec![0.0, 1.0]),
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericExpression::Constant(1.0)
+        );
+        let expression = NumericExpression::<Continuous>::ContinuousLast(Box::new(
+            NumericVectorExpression::Table2DX(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0),
+            ),
+        ));
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn integer_at_simplify() {
+        let registry = generate_registry();
+        let expression = NumericExpression::<Integer>::IntegerAt(
+            Box::new(NumericVectorExpression::Constant(vec![2, 1])),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericExpression::Constant(2)
+        );
+        let expression = NumericExpression::<Integer>::IntegerAt(
+            Box::new(NumericVectorExpression::Constant(vec![2, 1])),
+            ElementExpression::Variable(0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn continuous_at_simplify() {
+        let registry = generate_registry();
+        let expression = NumericExpression::<Continuous>::ContinuousAt(
+            Box::new(NumericVectorExpression::Constant(vec![2.0, 1.0])),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericExpression::Constant(2.0)
+        );
+        let expression = NumericExpression::<Continuous>::ContinuousAt(
+            Box::new(NumericVectorExpression::Constant(vec![2.0, 1.0])),
+            ElementExpression::Variable(0),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn integer_reduce_sum_simplify() {
+        let registry = generate_registry();
+        let expression = NumericExpression::<Integer>::IntegerReduceSum(Box::new(
+            NumericVectorExpression::Constant(vec![2, 1]),
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericExpression::Constant(3)
+        );
+        let expression = NumericExpression::<Integer>::IntegerReduceSum(Box::new(
+            NumericVectorExpression::Table2DX(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0),
+            ),
+        ));
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn continuous_reduce_sum_simplify() {
+        let registry = generate_registry();
+        let expression = NumericExpression::<Continuous>::ContinuousReduceSum(Box::new(
+            NumericVectorExpression::Constant(vec![2.0, 1.0]),
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericExpression::Constant(3.0)
+        );
+        let expression = NumericExpression::<Continuous>::ContinuousReduceSum(Box::new(
+            NumericVectorExpression::Table2DX(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0),
+            ),
+        ));
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn integer_reduce_product_simplify() {
+        let registry = generate_registry();
+        let expression = NumericExpression::<Integer>::IntegerReduceProduct(Box::new(
+            NumericVectorExpression::Constant(vec![2, 1]),
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericExpression::Constant(2)
+        );
+        let expression = NumericExpression::<Integer>::IntegerReduceProduct(Box::new(
+            NumericVectorExpression::Table2DX(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0),
+            ),
+        ));
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn continuous_reduce_product_simplify() {
+        let registry = generate_registry();
+        let expression = NumericExpression::<Continuous>::ContinuousReduceProduct(Box::new(
+            NumericVectorExpression::Constant(vec![2.0, 1.0]),
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericExpression::Constant(2.0)
+        );
+        let expression = NumericExpression::<Continuous>::ContinuousReduceProduct(Box::new(
+            NumericVectorExpression::Table2DX(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0),
+            ),
+        ));
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn vector_constant_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Constant(vec![0, 1]);
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 1]);
+    }
+
+    #[test]
+    fn vector_reverse_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression =
+            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
+                0, 1,
+            ])));
+        assert_eq!(expression.eval(&state, &registry, tables), vec![1, 0]);
+    }
+
+    #[test]
+    fn vector_push_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Push(
+            NumericExpression::Constant(0),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 1, 0]);
+    }
+
+    #[test]
+    fn vector_pop_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression =
+            NumericVectorExpression::Pop(Box::new(NumericVectorExpression::Constant(vec![0, 1])));
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0]);
+    }
+
+    #[test]
+    fn vector_set_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Set(
+            NumericExpression::Constant(0),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            ElementExpression::Constant(1),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 0]);
+    }
+
+    #[test]
+    fn vector_numeric_add_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Add,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![2, 3]);
+    }
+
+    #[test]
+    fn vector_numeric_subtract_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Subtract,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![-2, -1]);
+    }
+
+    #[test]
+    fn vector_numeric_multiply_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Multiply,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 2]);
+    }
+
+    #[test]
+    fn vector_numeric_divide_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Divide,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 4])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 2]);
+    }
+
+    #[test]
+    fn vector_numeric_max_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Max,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 4])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![2, 4]);
+    }
+
+    #[test]
+    fn vector_numeric_min_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Min,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 4])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 2]);
+    }
+
+    #[test]
+    fn vector_add_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Add,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![2, 4]);
+    }
+
+    #[test]
+    fn vector_subtract_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![-2, -2]);
+    }
+
+    #[test]
+    fn vector_multiply_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 3]);
+    }
+
+    #[test]
+    fn vector_divide_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Divide,
+            Box::new(NumericVectorExpression::Constant(vec![0, 6])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 2]);
+    }
+
+    #[test]
+    fn vector_max_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Max,
+            Box::new(NumericVectorExpression::Constant(vec![0, 6])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![2, 6]);
+    }
+
+    #[test]
+    fn vector_min_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Min,
+            Box::new(NumericVectorExpression::Constant(vec![0, 6])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 3]);
+    }
+
+    #[test]
+    fn vector_eval_cost() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Add,
+            NumericExpression::Cost,
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(
+            expression.eval_cost(1, &state, &registry, tables),
+            vec![3, 4]
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn vector_eval_cost_panic() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Add,
+            NumericExpression::Cost,
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        expression.eval(&state, &registry, tables);
+    }
+
+    #[test]
+    fn vector_table_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericVectorExpression::Table(
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 2]),
+                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                    set,
+                ))),
+            ],
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![300, 700]);
+        let mut set = Set::with_capacity(3);
+        set.insert(2);
+        let expression = NumericVectorExpression::Table(
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Vector(VectorExpression::Reverse(Box::new(
+                    VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 2])),
+                ))),
+                ArgumentExpression::Set(SetExpression::Complement(Box::new(
+                    SetExpression::Reference(ReferenceExpression::Constant(set)),
+                ))),
+            ],
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![700, 300]);
+    }
+
+    #[test]
+    fn vector_table_1d_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Table1D(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![10, 20]);
+        let expression = NumericVectorExpression::Table1D(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Constant(vec![0, 1]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![20, 10]);
+    }
+
+    #[test]
+    fn vector_table_2d_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Table2D(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![10, 50]);
+        let expression = NumericVectorExpression::Table2D(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Constant(vec![0, 1]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![20, 40]);
+        let expression = NumericVectorExpression::Table2D(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Constant(vec![0, 1]),
+            ))),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![40, 20]);
+        let expression = NumericVectorExpression::Table2D(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Constant(vec![0, 1]),
+            ))),
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Constant(vec![0, 1]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![50, 10]);
+    }
+
+    #[test]
+    fn vector_table_2d_x_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Table2DX(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![10, 40]);
+        let expression = NumericVectorExpression::Table2DX(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Constant(vec![0, 1]),
+            ))),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![40, 10]);
+    }
+
+    #[test]
+    fn vector_table_2d_y_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Table2DY(
+            0,
+            ElementExpression::Constant(0),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![10, 20]);
+        let expression = NumericVectorExpression::Table2DY(
+            0,
+            ElementExpression::Constant(0),
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Constant(vec![0, 1]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![20, 10]);
+    }
+
+    #[test]
+    fn vector_table_2d_x_sum_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericVectorExpression::Table2DXSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            SetExpression::Reference(ReferenceExpression::Constant(set.clone())),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![30, 90]);
+        let expression = NumericVectorExpression::Table2DXSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            SetExpression::Complement(Box::new(SetExpression::Reference(
+                ReferenceExpression::Constant(set.clone()),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![30, 60]);
+        let expression = NumericVectorExpression::Table2DXSum(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Constant(vec![0, 1]),
+            ))),
+            SetExpression::Reference(ReferenceExpression::Constant(set.clone())),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![90, 30]);
+        let expression = NumericVectorExpression::Table2DXSum(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Constant(vec![0, 1]),
+            ))),
+            SetExpression::Complement(Box::new(SetExpression::Reference(
+                ReferenceExpression::Constant(set),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![60, 30]);
+    }
+
+    #[test]
+    fn vector_table_2d_y_sum_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericVectorExpression::Table2DYSum(
+            0,
+            SetExpression::Reference(ReferenceExpression::Constant(set.clone())),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![50, 70]);
+        let expression = NumericVectorExpression::Table2DYSum(
+            0,
+            SetExpression::Complement(Box::new(SetExpression::Reference(
+                ReferenceExpression::Constant(set.clone()),
+            ))),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![70, 80]);
+        let expression = NumericVectorExpression::Table2DYSum(
+            0,
+            SetExpression::Reference(ReferenceExpression::Constant(set.clone())),
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Constant(vec![0, 1]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![70, 50]);
+        let expression = NumericVectorExpression::Table2DYSum(
+            0,
+            SetExpression::Complement(Box::new(SetExpression::Reference(
+                ReferenceExpression::Constant(set),
+            ))),
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Constant(vec![0, 1]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![80, 70]);
+    }
+
+    #[test]
+    fn vector_constant_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Constant(vec![0, 1]);
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_reverse_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression =
+            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
+                0, 1,
+            ])));
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![1, 0])
+        );
+        let expression =
+            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Table1D(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            )));
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_push_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Push(
+            NumericExpression::Constant(0),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![0, 1, 0])
+        );
+        let expression = NumericVectorExpression::Push(
+            NumericExpression::Constant(0),
+            Box::new(NumericVectorExpression::Table1D(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            )),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_pop_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression =
+            NumericVectorExpression::Pop(Box::new(NumericVectorExpression::Constant(vec![0, 1])));
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![0])
+        );
+        let expression = NumericVectorExpression::Pop(Box::new(NumericVectorExpression::Table1D(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
+        )));
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_set_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Set(
+            NumericExpression::Constant(0),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            ElementExpression::Constant(1),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![0, 0])
+        );
+        let expression = NumericVectorExpression::Set(
+            NumericExpression::Constant(0),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            ElementExpression::Variable(1),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_numeric_add_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Add,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![2, 3])
+        );
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Add,
+            NumericExpression::IntegerVariable(0),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_numeric_subtract_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Subtract,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![-2, -1])
+        );
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Subtract,
+            NumericExpression::IntegerVariable(0),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_numeric_multiply_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Multiply,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![0, 2])
+        );
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Multiply,
+            NumericExpression::IntegerVariable(0),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_numeric_divide_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Divide,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 4])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![0, 2])
+        );
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Divide,
+            NumericExpression::IntegerVariable(0),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_numeric_max_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Max,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 4])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![2, 4])
+        );
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Max,
+            NumericExpression::IntegerVariable(0),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_numeric_min_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Min,
+            NumericExpression::Constant(2),
+            Box::new(NumericVectorExpression::Constant(vec![0, 4])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![0, 2])
+        );
+        let expression = NumericVectorExpression::NumericOperation(
+            NumericOperator::Min,
+            NumericExpression::IntegerVariable(0),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_add_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Add,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![2, 4])
+        );
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Add,
+            Box::new(NumericVectorExpression::Table1D(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            )),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_subtract_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![-2, -2])
+        );
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericVectorExpression::Table1D(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            )),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_multiply_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![0, 3])
+        );
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericVectorExpression::Table1D(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            )),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_divide_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Divide,
+            Box::new(NumericVectorExpression::Constant(vec![0, 6])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![0, 2])
+        );
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Divide,
+            Box::new(NumericVectorExpression::Table1D(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            )),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_max_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Max,
+            Box::new(NumericVectorExpression::Constant(vec![0, 6])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![2, 6])
+        );
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Max,
+            Box::new(NumericVectorExpression::Table1D(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            )),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_min_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Min,
+            Box::new(NumericVectorExpression::Constant(vec![0, 6])),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![0, 3])
+        );
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Min,
+            Box::new(NumericVectorExpression::Table1D(
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            )),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_table_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericVectorExpression::Table(
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 2]),
+                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                    set,
+                ))),
+            ],
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![300, 700])
+        );
+        let mut set = Set::with_capacity(3);
+        set.insert(2);
+        let expression = NumericVectorExpression::Table(
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Variable(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 2]),
+                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                    set,
+                ))),
+            ],
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_table_1d_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Table1D(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![10, 20])
+        );
+        let expression = NumericVectorExpression::Table1D(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_table_2d_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Table2D(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![10, 50])
+        );
+        let expression = NumericVectorExpression::Table2D(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_table_2d_x_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Table2DX(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![10, 40])
+        );
+        let expression = NumericVectorExpression::Table2DX(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            ElementExpression::Variable(0),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_table_2d_y_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Table2DY(
+            0,
+            ElementExpression::Constant(0),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![10, 20])
+        );
+        let expression = NumericVectorExpression::Table2DY(
+            0,
+            ElementExpression::Variable(0),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_table_2d_x_sum_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericVectorExpression::Table2DXSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            SetExpression::Reference(ReferenceExpression::Constant(set)),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![30, 90])
+        );
+        let expression = NumericVectorExpression::Table2DXSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_table_2d_y_sum_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericVectorExpression::Table2DYSum(
+            0,
+            SetExpression::Reference(ReferenceExpression::Constant(set)),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![50, 70])
+        );
+        let expression = NumericVectorExpression::Table2DYSum(
+            0,
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
     }
 }
