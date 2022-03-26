@@ -164,28 +164,34 @@ impl<T: Numeric> NumericTableExpression<T> {
                 i,
                 VectorExpression::Reference(x),
                 SetExpression::Reference(y),
-            ) => tables.tables_2d[*i].sum(
-                y.eval(state, registry, set_variables, set_tables).ones(),
-                x.eval(state, registry, vector_variables, vector_tables)
-                    .iter()
-                    .copied(),
-            ),
-            Self::Table2DVectorSetSum(i, x, SetExpression::Reference(y)) => tables.tables_2d[*i]
-                .sum(
-                    y.eval(state, registry, set_variables, set_tables).ones(),
-                    x.eval(state, registry).into_iter(),
-                ),
-            Self::Table2DVectorSetSum(i, VectorExpression::Reference(x), y) => tables.tables_2d[*i]
-                .sum(
-                    y.eval(state, registry).ones(),
-                    x.eval(state, registry, vector_variables, vector_tables)
-                        .iter()
-                        .copied(),
-                ),
-            Self::Table2DVectorSetSum(i, x, y) => tables.tables_2d[*i].sum(
-                y.eval(state, registry).ones(),
-                x.eval(state, registry).into_iter(),
-            ),
+            ) => {
+                let x = x.eval(state, registry, vector_variables, vector_tables);
+                y.eval(state, registry, set_variables, set_tables)
+                    .ones()
+                    .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
+                    .sum()
+            }
+            Self::Table2DVectorSetSum(i, x, SetExpression::Reference(y)) => {
+                let x = x.eval(state, registry);
+                y.eval(state, registry, set_variables, set_tables)
+                    .ones()
+                    .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
+                    .sum()
+            }
+            Self::Table2DVectorSetSum(i, VectorExpression::Reference(x), y) => {
+                let x = x.eval(state, registry, vector_variables, vector_tables);
+                y.eval(state, registry)
+                    .ones()
+                    .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
+                    .sum()
+            }
+            Self::Table2DVectorSetSum(i, x, y) => {
+                let x = x.eval(state, registry);
+                y.eval(state, registry)
+                    .ones()
+                    .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
+                    .sum()
+            }
             Self::Table2DSumX(i, SetExpression::Reference(x), y) => tables.tables_2d[*i].sum_x(
                 x.eval(state, registry, set_variables, set_tables).ones(),
                 y.eval(state, registry),
@@ -305,7 +311,11 @@ impl<T: Numeric> NumericTableExpression<T> {
                     (
                         VectorExpression::Reference(ReferenceExpression::Constant(x)),
                         SetExpression::Reference(ReferenceExpression::Constant(y)),
-                    ) => Self::Constant(tables.tables_2d[*i].sum(y.ones(), x.into_iter())),
+                    ) => Self::Constant(
+                        y.ones()
+                            .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
+                            .sum(),
+                    ),
                     (x, y) => Self::Table2DVectorSetSum(*i, x, y),
                 }
             }
@@ -608,6 +618,16 @@ mod tests {
             expression.eval(&state, &registry, &registry.integer_tables),
             40
         );
+        let expression = NumericTableExpression::Table1DVectorSum(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Variable(0),
+            ))),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            40
+        );
     }
 
     #[test]
@@ -657,6 +677,18 @@ mod tests {
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
             )))),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+
+        let expression = NumericTableExpression::Table2DSum(
+            0,
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
                 SetExpression::Reference(ReferenceExpression::Variable(1)),
             )))),
@@ -668,7 +700,166 @@ mod tests {
     }
 
     #[test]
-    fn table_2d_zip_sum_eval() {}
+    fn table_2d_vector_sum_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+
+        let expression = NumericTableExpression::Table2DVectorSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            VectorExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+
+        let expression = NumericTableExpression::Table2DVectorSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Variable(1),
+            ))),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+
+        let expression = NumericTableExpression::Table2DVectorSum(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Variable(0),
+            ))),
+            VectorExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+
+        let expression = NumericTableExpression::Table2DVectorSum(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Variable(0),
+            ))),
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Variable(1),
+            ))),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+    }
+
+    #[test]
+    fn table_2d_set_vector_sum_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+
+        let expression = NumericTableExpression::Table2DSetVectorSum(
+            0,
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            VectorExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+
+        let expression = NumericTableExpression::Table2DSetVectorSum(
+            0,
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Variable(1),
+            ))),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+
+        let expression = NumericTableExpression::Table2DSetVectorSum(
+            0,
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            VectorExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+
+        let expression = NumericTableExpression::Table2DSetVectorSum(
+            0,
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Variable(1),
+            ))),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+    }
+
+    #[test]
+    fn table_2d_vector_set_sum_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+
+        let expression = NumericTableExpression::Table2DVectorSetSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+
+        let expression = NumericTableExpression::Table2DVectorSetSum(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Variable(0),
+            ))),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+
+        let expression = NumericTableExpression::Table2DVectorSetSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+
+        let expression = NumericTableExpression::Table2DVectorSetSum(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Variable(0),
+            ))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+    }
 
     #[test]
     fn table_2d_sum_x_eval() {
@@ -706,6 +897,18 @@ mod tests {
         let expression = NumericTableExpression::Table2DVectorSumX(
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            80
+        );
+
+        let expression = NumericTableExpression::Table2DVectorSumX(
+            0,
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Variable(0),
+            ))),
             ElementExpression::Constant(0),
         );
         assert_eq!(
@@ -756,12 +959,36 @@ mod tests {
             expression.eval(&state, &registry, &registry.integer_tables),
             40
         );
+
+        let expression = NumericTableExpression::Table2DVectorSumY(
+            0,
+            ElementExpression::Constant(0),
+            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
+                ReferenceExpression::Variable(0),
+            ))),
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            40
+        );
     }
 
     #[test]
     fn table_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let expression = NumericTableExpression::Table(
+            0,
+            vec![
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(0),
+                ElementExpression::Constant(0),
+            ],
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            10
+        );
         let expression = NumericTableExpression::Table(
             0,
             vec![
@@ -824,11 +1051,29 @@ mod tests {
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Element(ElementExpression::Constant(1)),
                 ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
                 ArgumentExpression::Vector(VectorExpression::Reference(
                     ReferenceExpression::Variable(1),
                 )),
+            ],
+        );
+        assert_eq!(
+            expression.eval(&state, &registry, &registry.integer_tables),
+            180
+        );
+        let expression = NumericTableExpression::TableSum(
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Set(SetExpression::Complement(Box::new(
+                    SetExpression::Complement(Box::new(SetExpression::Reference(
+                        ReferenceExpression::Variable(0),
+                    ))),
+                ))),
+                ArgumentExpression::Vector(VectorExpression::Reverse(Box::new(
+                    VectorExpression::Reference(ReferenceExpression::Variable(1)),
+                ))),
             ],
         );
         assert_eq!(
@@ -868,9 +1113,44 @@ mod tests {
     fn table_1d_sum_simplify() {
         let registry = generate_registry();
 
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericTableExpression::Table1DSum(
+            0,
+            SetExpression::Reference(ReferenceExpression::Constant(set)),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(30)
+        );
+
         let expression = NumericTableExpression::Table1DSum(
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
+    }
+
+    #[test]
+    fn table_1d_vector_sum_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table1DVectorSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(30)
+        );
+
+        let expression = NumericTableExpression::Table1DVectorSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
         );
         assert_eq!(
             expression.simplify(&registry, &registry.integer_tables),
@@ -907,6 +1187,19 @@ mod tests {
     fn table_2d_sum_simplify() {
         let registry = generate_registry();
 
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericTableExpression::Table2DSum(
+            0,
+            SetExpression::Reference(ReferenceExpression::Constant(set.clone())),
+            SetExpression::Reference(ReferenceExpression::Constant(set)),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(120)
+        );
+
         let expression = NumericTableExpression::Table2DSum(
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -919,8 +1212,102 @@ mod tests {
     }
 
     #[test]
+    fn table_2d_vector_sum_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table2DVectorSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(120)
+        );
+
+        let expression = NumericTableExpression::Table2DVectorSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            VectorExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
+    }
+
+    #[test]
+    fn table_2d_set_vector_sum_simplify() {
+        let registry = generate_registry();
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericTableExpression::Table2DSetVectorSum(
+            0,
+            SetExpression::Reference(ReferenceExpression::Constant(set)),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(120)
+        );
+
+        let expression = NumericTableExpression::Table2DSetVectorSum(
+            0,
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            VectorExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
+    }
+
+    #[test]
+    fn table_2d_vector_set_sum_simplify() {
+        let registry = generate_registry();
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericTableExpression::Table2DVectorSetSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            SetExpression::Reference(ReferenceExpression::Constant(set)),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(120)
+        );
+
+        let expression = NumericTableExpression::Table2DVectorSetSum(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Variable(1)),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
+    }
+
+    #[test]
     fn table_2d_sum_x_simplify() {
         let registry = generate_registry();
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericTableExpression::Table2DSumX(
+            0,
+            SetExpression::Reference(ReferenceExpression::Constant(set)),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(50)
+        );
 
         let expression = NumericTableExpression::Table2DSumX(
             0,
@@ -937,10 +1324,73 @@ mod tests {
     fn table_2d_sum_y_simplify() {
         let registry = generate_registry();
 
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericTableExpression::Table2DSumY(
+            0,
+            ElementExpression::Constant(0),
+            SetExpression::Reference(ReferenceExpression::Constant(set)),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(30)
+        );
+
         let expression = NumericTableExpression::Table2DSumY(
             0,
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
+    }
+
+    #[test]
+    fn table_2d_vector_sum_x_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table2DVectorSumX(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(50)
+        );
+
+        let expression = NumericTableExpression::Table2DVectorSumX(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            ElementExpression::Constant(0),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
+    }
+
+    #[test]
+    fn table_2d_vector_sum_y_simplify() {
+        let registry = generate_registry();
+
+        let expression = NumericTableExpression::Table2DVectorSumY(
+            0,
+            ElementExpression::Constant(0),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(30)
+        );
+
+        let expression = NumericTableExpression::Table2DVectorSumY(
+            0,
+            ElementExpression::Constant(0),
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
         );
         assert_eq!(
             expression.simplify(&registry, &registry.integer_tables),
@@ -980,9 +1430,30 @@ mod tests {
             expression
         );
     }
+
     #[test]
     fn table_sum_simplify() {
         let registry = generate_registry();
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericTableExpression::TableSum(
+            0,
+            vec![
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 1]),
+                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                    set,
+                ))),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ],
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(100)
+        );
 
         let expression = NumericTableExpression::TableSum(
             0,
@@ -990,7 +1461,9 @@ mod tests {
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
                 ArgumentExpression::Element(ElementExpression::Constant(1)),
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Element(ElementExpression::Variable(0)),
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Variable(0),
+                )),
             ],
         );
         assert_eq!(
