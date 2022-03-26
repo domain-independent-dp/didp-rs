@@ -1,4 +1,4 @@
-use crate::variable::{Element, Numeric, Set};
+use crate::variable::{Element, Numeric};
 use approx::{AbsDiffEq, RelativeEq};
 use std::collections;
 
@@ -22,8 +22,11 @@ impl<T: Copy> Table1D<T> {
 }
 
 impl<T: Numeric> Table1D<T> {
-    pub fn sum(&self, x: &Set) -> T {
-        x.ones().map(|x| self.eval(x)).sum()
+    pub fn sum<I>(&self, x: I) -> T
+    where
+        I: Iterator<Item = Element>,
+    {
+        x.map(|x| self.eval(x)).sum()
     }
 }
 
@@ -81,28 +84,26 @@ impl<T: Copy> Table2D<T> {
 }
 
 impl<T: Numeric> Table2D<T> {
-    pub fn sum(&self, x: &Set, y: &Set) -> T {
-        x.ones().map(|x| self.sum_y(x, y)).sum()
+    pub fn sum<I, J>(&self, x: I, y: J) -> T
+    where
+        I: Iterator<Item = Element>,
+        J: Iterator<Item = Element> + Clone,
+    {
+        x.map(|x| self.sum_y(x, y.clone())).sum()
     }
 
-    pub fn sum_x(&self, x: &Set, y: Element) -> T {
-        x.ones().map(|x| self.eval(x, y)).sum()
+    pub fn sum_x<I>(&self, x: I, y: Element) -> T
+    where
+        I: Iterator<Item = Element>,
+    {
+        x.map(|x| self.eval(x, y)).sum()
     }
 
-    pub fn sum_y(&self, x: Element, y: &Set) -> T {
-        y.ones().map(|y| self.eval(x, y)).sum()
-    }
-
-    pub fn zip_sum(&self, x: &[Element], y: &[Element]) -> T {
-        x.iter().zip(y.iter()).map(|(x, y)| self.eval(*x, *y)).sum()
-    }
-
-    pub fn vector_sum_x(&self, x: &[Element], y: Element) -> T {
-        x.iter().map(|x| self.eval(*x, y)).sum()
-    }
-
-    pub fn vector_sum_y(&self, x: Element, y: &[Element]) -> T {
-        y.iter().map(|y| self.eval(x, *y)).sum()
+    pub fn sum_y<I>(&self, x: Element, y: I) -> T
+    where
+        I: Iterator<Item = Element>,
+    {
+        y.map(|y| self.eval(x, y)).sum()
     }
 }
 
@@ -162,32 +163,58 @@ impl<T: Copy> Table3D<T> {
 }
 
 impl<T: Numeric> Table3D<T> {
-    pub fn sum(&self, x: &Set, y: &Set, z: &Set) -> T {
-        x.ones().map(|x| self.sum_yz(x, y, z)).sum()
+    pub fn sum<I, J, K>(&self, x: I, y: J, z: K) -> T
+    where
+        I: Iterator<Item = Element>,
+        J: Iterator<Item = Element> + Clone,
+        K: Iterator<Item = Element> + Clone,
+    {
+        x.map(|x| self.sum_yz(x, y.clone(), z.clone())).sum()
     }
 
-    pub fn sum_x(&self, x: &Set, y: Element, z: Element) -> T {
-        x.ones().map(|x| self.eval(x, y, z)).sum()
+    pub fn sum_x<I>(&self, x: I, y: Element, z: Element) -> T
+    where
+        I: Iterator<Item = Element>,
+    {
+        x.map(|x| self.eval(x, y, z)).sum()
     }
 
-    pub fn sum_y(&self, x: Element, y: &Set, z: Element) -> T {
-        y.ones().map(|y| self.eval(x, y, z)).sum()
+    pub fn sum_y<I>(&self, x: Element, y: I, z: Element) -> T
+    where
+        I: Iterator<Item = Element>,
+    {
+        y.map(|y| self.eval(x, y, z)).sum()
     }
 
-    pub fn sum_z(&self, x: Element, y: Element, z: &Set) -> T {
-        z.ones().map(|z| self.eval(x, y, z)).sum()
+    pub fn sum_z<I>(&self, x: Element, y: Element, z: I) -> T
+    where
+        I: Iterator<Item = Element>,
+    {
+        z.map(|z| self.eval(x, y, z)).sum()
     }
 
-    pub fn sum_xy(&self, x: &Set, y: &Set, z: Element) -> T {
-        x.ones().map(|x| self.sum_y(x, y, z)).sum()
+    pub fn sum_xy<I, J>(&self, x: I, y: J, z: Element) -> T
+    where
+        I: Iterator<Item = Element>,
+        J: Iterator<Item = Element> + Clone,
+    {
+        x.map(|x| self.sum_y(x, y.clone(), z)).sum()
     }
 
-    pub fn sum_xz(&self, x: &Set, y: Element, z: &Set) -> T {
-        x.ones().map(|x| self.sum_z(x, y, z)).sum()
+    pub fn sum_xz<I, J>(&self, x: I, y: Element, z: J) -> T
+    where
+        I: Iterator<Item = Element>,
+        J: Iterator<Item = Element> + Clone,
+    {
+        x.map(|x| self.sum_z(x, y, z.clone())).sum()
     }
 
-    pub fn sum_yz(&self, x: Element, y: &Set, z: &Set) -> T {
-        y.ones().map(|y| self.sum_z(x, y, z)).sum()
+    pub fn sum_yz<I, J>(&self, x: Element, y: I, z: J) -> T
+    where
+        I: Iterator<Item = Element>,
+        J: Iterator<Item = Element> + Clone,
+    {
+        y.map(|y| self.sum_z(x, y, z.clone())).sum()
     }
 }
 
@@ -334,10 +361,8 @@ mod tests {
     #[test]
     fn table_1d_sum_eval() {
         let f = Table1D::new(vec![10, 20, 30]);
-        let mut x = Set::with_capacity(3);
-        x.insert(0);
-        x.insert(2);
-        assert_eq!(f.sum(&x), 40);
+        let x = vec![0, 2];
+        assert_eq!(f.sum(x.into_iter()), 40);
     }
 
     #[test]
@@ -364,31 +389,23 @@ mod tests {
     #[test]
     fn table_2d_sum_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
-        let mut x = Set::with_capacity(3);
-        x.insert(0);
-        x.insert(2);
-        let mut y = Set::with_capacity(3);
-        y.insert(0);
-        y.insert(1);
-        assert_eq!(f.sum(&x, &y), 180);
+        let x = vec![0, 2];
+        let y = vec![0, 1];
+        assert_eq!(f.sum(x.into_iter(), y.into_iter()), 180);
     }
 
     #[test]
     fn table_2d_sum_x_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
-        let mut x = Set::with_capacity(3);
-        x.insert(0);
-        x.insert(2);
-        assert_eq!(f.sum_x(&x, 0), 80);
+        let x = vec![0, 2];
+        assert_eq!(f.sum_x(x.into_iter(), 0), 80);
     }
 
     #[test]
     fn table_2d_sum_y_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
-        let mut y = Set::with_capacity(3);
-        y.insert(0);
-        y.insert(2);
-        assert_eq!(f.sum_y(0, &y), 40);
+        let y = vec![0, 2];
+        assert_eq!(f.sum_y(0, y.into_iter()), 40);
     }
 
     #[test]
@@ -427,16 +444,10 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut x = Set::with_capacity(3);
-        x.insert(0);
-        x.insert(2);
-        let mut y = Set::with_capacity(3);
-        y.insert(0);
-        y.insert(1);
-        let mut z = Set::with_capacity(3);
-        z.insert(0);
-        z.insert(1);
-        assert_eq!(f.sum(&x, &y, &z), 240);
+        let x = vec![0, 2];
+        let y = vec![0, 1];
+        let z = vec![0, 1];
+        assert_eq!(f.sum(x.into_iter(), y.into_iter(), z.into_iter()), 240);
     }
 
     #[test]
@@ -446,10 +457,8 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut x = Set::with_capacity(3);
-        x.insert(0);
-        x.insert(2);
-        assert_eq!(f.sum_x(&x, 1, 2), 120);
+        let x = vec![0, 2];
+        assert_eq!(f.sum_x(x.into_iter(), 1, 2), 120);
     }
 
     #[test]
@@ -459,10 +468,8 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut y = Set::with_capacity(3);
-        y.insert(0);
-        y.insert(2);
-        assert_eq!(f.sum_y(1, &y, 2), 120);
+        let y = vec![0, 2];
+        assert_eq!(f.sum_y(1, y.into_iter(), 2), 120);
     }
 
     #[test]
@@ -473,10 +480,8 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut z = Set::with_capacity(3);
-        z.insert(0);
-        z.insert(2);
-        assert_eq!(f.sum_z(1, 2, &z), 160);
+        let z = vec![0, 2];
+        assert_eq!(f.sum_z(1, 2, z.into_iter()), 160);
     }
 
     #[test]
@@ -486,13 +491,9 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut x = Set::with_capacity(3);
-        x.insert(0);
-        x.insert(2);
-        let mut y = Set::with_capacity(3);
-        y.insert(0);
-        y.insert(1);
-        assert_eq!(f.sum_xy(&x, &y, 2), 180);
+        let x = vec![0, 2];
+        let y = vec![0, 1];
+        assert_eq!(f.sum_xy(x.into_iter(), y.into_iter(), 2), 180);
     }
 
     #[test]
@@ -502,13 +503,9 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut x = Set::with_capacity(3);
-        x.insert(0);
-        x.insert(2);
-        let mut z = Set::with_capacity(3);
-        z.insert(0);
-        z.insert(1);
-        assert_eq!(f.sum_xz(&x, 2, &z), 300);
+        let x = vec![0, 2];
+        let z = vec![0, 1];
+        assert_eq!(f.sum_xz(x.into_iter(), 2, z.into_iter()), 300);
     }
 
     #[test]
@@ -518,13 +515,9 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
-        let mut y = Set::with_capacity(3);
-        y.insert(0);
-        y.insert(2);
-        let mut z = Set::with_capacity(3);
-        z.insert(0);
-        z.insert(1);
-        assert_eq!(f.sum_yz(2, &y, &z), 180);
+        let y = vec![0, 2];
+        let z = vec![0, 1];
+        assert_eq!(f.sum_yz(2, y.into_iter(), z.into_iter()), 180);
     }
 
     #[test]

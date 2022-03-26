@@ -505,56 +505,56 @@ impl<T: Numeric> NumericVectorExpression<T> {
                 let y = y.eval(state, registry, set_variables, set_tables);
                 x.eval(state, registry, vector_variables, vector_tables)
                     .iter()
-                    .map(|x| y.ones().map(|y| tables.tables_2d[*i].eval(*x, y)).sum())
+                    .map(|x| tables.tables_2d[*i].sum_y(*x, y.ones()))
                     .collect()
             }
             Self::Table2DXSum(i, VectorExpression::Reference(x), y) => {
                 let y = y.eval(state, registry);
                 x.eval(state, registry, vector_variables, vector_tables)
                     .iter()
-                    .map(|x| y.ones().map(|y| tables.tables_2d[*i].eval(*x, y)).sum())
+                    .map(|x| tables.tables_2d[*i].sum_y(*x, y.ones()))
                     .collect()
             }
             Self::Table2DXSum(i, x, SetExpression::Reference(y)) => {
                 let y = y.eval(state, registry, set_variables, set_tables);
                 x.eval(state, registry)
                     .into_iter()
-                    .map(|x| y.ones().map(|y| tables.tables_2d[*i].eval(x, y)).sum())
+                    .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
                     .collect()
             }
             Self::Table2DXSum(i, x, y) => {
                 let y = y.eval(state, registry);
                 x.eval(state, registry)
                     .into_iter()
-                    .map(|x| y.ones().map(|y| tables.tables_2d[*i].eval(x, y)).sum())
+                    .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
                     .collect()
             }
             Self::Table2DYSum(i, SetExpression::Reference(x), VectorExpression::Reference(y)) => {
                 let x = x.eval(state, registry, set_variables, set_tables);
                 y.eval(state, registry, vector_variables, vector_tables)
                     .iter()
-                    .map(|y| x.ones().map(|x| tables.tables_2d[*i].eval(x, *y)).sum())
+                    .map(|y| tables.tables_2d[*i].sum_x(x.ones(), *y))
                     .collect()
             }
             Self::Table2DYSum(i, SetExpression::Reference(x), y) => {
                 let x = x.eval(state, registry, set_variables, set_tables);
                 y.eval(state, registry)
                     .into_iter()
-                    .map(|y| x.ones().map(|x| tables.tables_2d[*i].eval(x, y)).sum())
+                    .map(|y| tables.tables_2d[*i].sum_x(x.ones(), y))
                     .collect()
             }
             Self::Table2DYSum(i, x, VectorExpression::Reference(y)) => {
                 let x = x.eval(state, registry);
                 y.eval(state, registry, vector_variables, vector_tables)
                     .iter()
-                    .map(|y| x.ones().map(|x| tables.tables_2d[*i].eval(x, *y)).sum())
+                    .map(|y| tables.tables_2d[*i].sum_x(x.ones(), *y))
                     .collect()
             }
             Self::Table2DYSum(i, x, y) => {
                 let x = x.eval(state, registry);
                 y.eval(state, registry)
                     .into_iter()
-                    .map(|y| x.ones().map(|x| tables.tables_2d[*i].eval(x, y)).sum())
+                    .map(|y| tables.tables_2d[*i].sum_x(x.ones(), y))
                     .collect()
             }
         }
@@ -667,7 +667,7 @@ impl<T: Numeric> NumericVectorExpression<T> {
                     SetExpression::Reference(ReferenceExpression::Constant(y)),
                 ) => Self::Constant(
                     x.into_iter()
-                        .map(|x| y.ones().map(|y| tables.tables_2d[*i].eval(x, y)).sum())
+                        .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
                         .collect(),
                 ),
                 (x, y) => Self::Table2DXSum(*i, x, y),
@@ -678,7 +678,7 @@ impl<T: Numeric> NumericVectorExpression<T> {
                     VectorExpression::Reference(ReferenceExpression::Constant(y)),
                 ) => Self::Constant(
                     y.into_iter()
-                        .map(|y| x.ones().map(|x| tables.tables_2d[*i].eval(x, y)).sum())
+                        .map(|y| tables.tables_2d[*i].sum_x(x.ones(), y))
                         .collect(),
                 ),
                 (x, y) => Self::Table2DYSum(*i, x, y),
@@ -775,10 +775,32 @@ impl<T: Numeric> NumericVectorExpression<T> {
                 }
             }
         }
-        result
-            .into_iter()
-            .map(|rr| rr.into_iter().map(|r| tables.tables[i].eval(&r)).sum())
-            .collect()
+        match args.len() {
+            1 => result
+                .into_iter()
+                .map(|rr| rr.into_iter().map(|r| tables.tables_1d[i].eval(r[0])).sum())
+                .collect(),
+            2 => result
+                .into_iter()
+                .map(|rr| {
+                    rr.into_iter()
+                        .map(|r| tables.tables_2d[i].eval(r[0], r[1]))
+                        .sum()
+                })
+                .collect(),
+            3 => result
+                .into_iter()
+                .map(|rr| {
+                    rr.into_iter()
+                        .map(|r| tables.tables_3d[i].eval(r[0], r[1], r[2]))
+                        .sum()
+                })
+                .collect(),
+            _ => result
+                .into_iter()
+                .map(|rr| rr.into_iter().map(|r| tables.tables[i].eval(&r)).sum())
+                .collect(),
+        }
     }
 
     fn simplify_table(
@@ -828,12 +850,32 @@ impl<T: Numeric> NumericVectorExpression<T> {
                 _ => return Self::Table(i, args),
             }
         }
-        Self::Constant(
-            simplified_args
+        Self::Constant(match args.len() {
+            1 => simplified_args
+                .into_iter()
+                .map(|rr| rr.into_iter().map(|r| tables.tables_1d[i].eval(r[0])).sum())
+                .collect(),
+            2 => simplified_args
+                .into_iter()
+                .map(|rr| {
+                    rr.into_iter()
+                        .map(|r| tables.tables_2d[i].eval(r[0], r[1]))
+                        .sum()
+                })
+                .collect(),
+            3 => simplified_args
+                .into_iter()
+                .map(|rr| {
+                    rr.into_iter()
+                        .map(|r| tables.tables_3d[i].eval(r[0], r[1], r[2]))
+                        .sum()
+                })
+                .collect(),
+            _ => simplified_args
                 .into_iter()
                 .map(|rr| rr.into_iter().map(|r| tables.tables[i].eval(&r)).sum())
                 .collect(),
-        )
+        })
     }
 
     fn eval_operation(op: &NumericOperator, x: T, mut y: Vec<T>) -> Vec<T> {

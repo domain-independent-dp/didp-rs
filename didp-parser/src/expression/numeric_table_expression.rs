@@ -2,7 +2,6 @@ use super::element_expression::{ElementExpression, SetExpression, VectorExpressi
 use super::reference_expression::ReferenceExpression;
 use super::util;
 use crate::state::State;
-use crate::table;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 use crate::variable::{Element, Numeric};
@@ -29,261 +28,196 @@ pub enum NumericTableExpression<T: Numeric> {
     Constant(T),
     Table(usize, Vec<ElementExpression>),
     TableSum(usize, Vec<ArgumentExpression>),
-    TableZipSum(usize, Vec<ArgumentExpression>),
     Table1D(usize, ElementExpression),
     Table2D(usize, ElementExpression, ElementExpression),
-    Table3D(
-        usize,
-        ElementExpression,
-        ElementExpression,
-        ElementExpression,
-    ),
     Table1DSum(usize, SetExpression),
     Table1DVectorSum(usize, VectorExpression),
     Table2DSum(usize, SetExpression, SetExpression),
-    Table2DZipSum(usize, VectorExpression, VectorExpression),
+    Table2DVectorSum(usize, VectorExpression, VectorExpression),
+    Table2DSetVectorSum(usize, SetExpression, VectorExpression),
+    Table2DVectorSetSum(usize, VectorExpression, SetExpression),
     Table2DSumX(usize, SetExpression, ElementExpression),
     Table2DSumY(usize, ElementExpression, SetExpression),
     Table2DVectorSumX(usize, VectorExpression, ElementExpression),
     Table2DVectorSumY(usize, ElementExpression, VectorExpression),
-    Table3DSum(usize, SetExpression, SetExpression, SetExpression),
-    Table3DZipSum(usize, VectorExpression, VectorExpression, VectorExpression),
-    Table3DSumX(usize, SetExpression, ElementExpression, ElementExpression),
-    Table3DSumY(usize, ElementExpression, SetExpression, ElementExpression),
-    Table3DSumZ(usize, ElementExpression, ElementExpression, SetExpression),
-    Table3DVectorSumX(
-        usize,
-        VectorExpression,
-        ElementExpression,
-        ElementExpression,
-    ),
-    Table3DVectorSumY(
-        usize,
-        ElementExpression,
-        VectorExpression,
-        ElementExpression,
-    ),
-    Table3DVectorSumZ(
-        usize,
-        ElementExpression,
-        ElementExpression,
-        VectorExpression,
-    ),
-    Table3DSumXY(usize, SetExpression, SetExpression, ElementExpression),
-    Table3DSumXZ(usize, SetExpression, ElementExpression, SetExpression),
-    Table3DSumYZ(usize, ElementExpression, SetExpression, SetExpression),
-    Table3DZipSumXY(usize, VectorExpression, VectorExpression, ElementExpression),
-    Table3DZipSumXZ(usize, VectorExpression, ElementExpression, VectorExpression),
-    Table3DZipSumYZ(usize, ElementExpression, VectorExpression, VectorExpression),
 }
 
 impl<T: Numeric> NumericTableExpression<T> {
     pub fn eval(&self, state: &State, registry: &TableRegistry, tables: &TableData<T>) -> T {
+        let set_variables = &state.signature_variables.set_variables;
+        let set_tables = &registry.set_tables;
+        let vector_variables = &state.signature_variables.vector_variables;
+        let vector_tables = &registry.vector_tables;
         match self {
             Self::Constant(value) => *value,
             Self::Table(i, args) => {
                 let args: Vec<Element> = args.iter().map(|x| x.eval(state, registry)).collect();
-                tables.tables[*i].eval(&args)
+                match args.len() {
+                    1 => tables.tables_1d[*i].eval(args[0]),
+                    2 => tables.tables_2d[*i].eval(args[0], args[1]),
+                    3 => tables.tables_3d[*i].eval(args[0], args[1], args[2]),
+                    _ => tables.tables[*i].eval(&args),
+                }
             }
-            Self::TableSum(i, args) => Self::sum_table(&tables.tables[*i], args, state, registry),
-            Self::TableZipSum(i, args) => {
-                Self::zip_sum_table(&tables.tables[*i], args, state, registry)
-            }
+            Self::TableSum(i, args) => Self::sum_table(*i, args, state, registry, tables),
             Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(state, registry)),
             Self::Table2D(i, x, y) => {
                 tables.tables_2d[*i].eval(x.eval(state, registry), y.eval(state, registry))
             }
-            Self::Table3D(i, x, y, z) => tables.tables_3d[*i].eval(
-                x.eval(state, registry),
-                y.eval(state, registry),
-                z.eval(state, registry),
+            Self::Table1DSum(i, SetExpression::Reference(x)) => {
+                tables.tables_1d[*i].sum(x.eval(state, registry, set_variables, set_tables).ones())
+            }
+            Self::Table1DSum(i, x) => tables.tables_1d[*i].sum(x.eval(state, registry).ones()),
+            Self::Table1DVectorSum(i, VectorExpression::Reference(x)) => tables.tables_1d[*i].sum(
+                x.eval(state, registry, vector_variables, vector_tables)
+                    .iter()
+                    .copied(),
             ),
-            Self::Table1DSum(i, SetExpression::Reference(x)) => x
-                .eval(
-                    state,
-                    registry,
-                    &state.signature_variables.set_variables,
-                    &registry.set_tables,
-                )
-                .ones()
-                .map(|x| tables.tables_1d[*i].eval(x))
-                .sum(),
-            Self::Table1DSum(i, x) => x
-                .eval(state, registry)
-                .ones()
-                .map(|x| tables.tables_1d[*i].eval(x))
-                .sum(),
-            Self::Table1DVectorSum(i, VectorExpression::Reference(x)) => x
-                .eval(
-                    state,
-                    registry,
-                    &state.signature_variables.vector_variables,
-                    &registry.vector_tables,
-                )
-                .iter()
-                .map(|x| tables.tables_1d[*i].eval(*x))
-                .sum(),
-            Self::Table1DVectorSum(i, x) => x
-                .eval(state, registry)
-                .into_iter()
-                .map(|x| tables.tables_1d[*i].eval(x))
-                .sum(),
+            Self::Table1DVectorSum(i, x) => {
+                tables.tables_1d[*i].sum(x.eval(state, registry).into_iter())
+            }
+            Self::Table2DSum(i, SetExpression::Reference(x), SetExpression::Reference(y)) => {
+                let y = y.eval(state, registry, set_variables, set_tables);
+                x.eval(state, registry, set_variables, set_tables)
+                    .ones()
+                    .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
+                    .sum()
+            }
+            Self::Table2DSum(i, SetExpression::Reference(x), y) => {
+                let y = y.eval(state, registry);
+                x.eval(state, registry, set_variables, set_tables)
+                    .ones()
+                    .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
+                    .sum()
+            }
+            Self::Table2DSum(i, x, SetExpression::Reference(y)) => {
+                let y = y.eval(state, registry, set_variables, set_tables);
+                x.eval(state, registry)
+                    .ones()
+                    .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
+                    .sum()
+            }
             Self::Table2DSum(i, x, y) => {
-                let x = x.eval(state, registry);
                 let y = y.eval(state, registry);
-                x.ones()
-                    .map(|x| y.ones().map(|y| tables.tables_2d[*i].eval(x, y)).sum())
+                x.eval(state, registry)
+                    .ones()
+                    .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
                     .sum()
             }
-            Self::Table2DZipSum(i, x, y) => x
-                .eval(state, registry)
-                .into_iter()
-                .zip(y.eval(state, registry).into_iter())
-                .map(|(x, y)| tables.tables_2d[*i].eval(x, y))
-                .sum(),
+            Self::Table2DVectorSum(
+                i,
+                VectorExpression::Reference(x),
+                VectorExpression::Reference(y),
+            ) => tables.tables_2d[*i].sum(
+                x.eval(state, registry, vector_variables, vector_tables)
+                    .iter()
+                    .copied(),
+                y.eval(state, registry, vector_variables, vector_tables)
+                    .iter()
+                    .copied(),
+            ),
+            Self::Table2DVectorSum(i, VectorExpression::Reference(x), y) => tables.tables_2d[*i]
+                .sum(
+                    x.eval(state, registry, vector_variables, vector_tables)
+                        .iter()
+                        .copied(),
+                    y.eval(state, registry).into_iter(),
+                ),
+            Self::Table2DVectorSum(i, x, VectorExpression::Reference(y)) => tables.tables_2d[*i]
+                .sum(
+                    x.eval(state, registry).into_iter(),
+                    y.eval(state, registry, vector_variables, vector_tables)
+                        .iter()
+                        .copied(),
+                ),
+            Self::Table2DVectorSum(i, x, y) => tables.tables_2d[*i].sum(
+                x.eval(state, registry).into_iter(),
+                y.eval(state, registry).into_iter(),
+            ),
+            Self::Table2DSetVectorSum(
+                i,
+                SetExpression::Reference(x),
+                VectorExpression::Reference(y),
+            ) => tables.tables_2d[*i].sum(
+                x.eval(state, registry, set_variables, set_tables).ones(),
+                y.eval(state, registry, vector_variables, vector_tables)
+                    .iter()
+                    .copied(),
+            ),
+            Self::Table2DSetVectorSum(i, SetExpression::Reference(x), y) => tables.tables_2d[*i]
+                .sum(
+                    x.eval(state, registry, set_variables, set_tables).ones(),
+                    y.eval(state, registry).into_iter(),
+                ),
+            Self::Table2DSetVectorSum(i, x, VectorExpression::Reference(y)) => tables.tables_2d[*i]
+                .sum(
+                    x.eval(state, registry).ones(),
+                    y.eval(state, registry, vector_variables, vector_tables)
+                        .iter()
+                        .copied(),
+                ),
+            Self::Table2DSetVectorSum(i, x, y) => tables.tables_2d[*i].sum(
+                x.eval(state, registry).ones(),
+                y.eval(state, registry).into_iter(),
+            ),
+            Self::Table2DVectorSetSum(
+                i,
+                VectorExpression::Reference(x),
+                SetExpression::Reference(y),
+            ) => tables.tables_2d[*i].sum(
+                y.eval(state, registry, set_variables, set_tables).ones(),
+                x.eval(state, registry, vector_variables, vector_tables)
+                    .iter()
+                    .copied(),
+            ),
+            Self::Table2DVectorSetSum(i, x, SetExpression::Reference(y)) => tables.tables_2d[*i]
+                .sum(
+                    y.eval(state, registry, set_variables, set_tables).ones(),
+                    x.eval(state, registry).into_iter(),
+                ),
+            Self::Table2DVectorSetSum(i, VectorExpression::Reference(x), y) => tables.tables_2d[*i]
+                .sum(
+                    y.eval(state, registry).ones(),
+                    x.eval(state, registry, vector_variables, vector_tables)
+                        .iter()
+                        .copied(),
+                ),
+            Self::Table2DVectorSetSum(i, x, y) => tables.tables_2d[*i].sum(
+                y.eval(state, registry).ones(),
+                x.eval(state, registry).into_iter(),
+            ),
+            Self::Table2DSumX(i, SetExpression::Reference(x), y) => tables.tables_2d[*i].sum_x(
+                x.eval(state, registry, set_variables, set_tables).ones(),
+                y.eval(state, registry),
+            ),
             Self::Table2DSumX(i, x, y) => {
-                let y = y.eval(state, registry);
-                x.eval(state, registry)
-                    .ones()
-                    .map(|x| tables.tables_2d[*i].eval(x, y))
-                    .sum()
+                tables.tables_2d[*i].sum_x(x.eval(state, registry).ones(), y.eval(state, registry))
             }
+            Self::Table2DSumY(i, x, SetExpression::Reference(y)) => tables.tables_2d[*i].sum_y(
+                x.eval(state, registry),
+                y.eval(state, registry, set_variables, set_tables).ones(),
+            ),
             Self::Table2DSumY(i, x, y) => {
-                let x = x.eval(state, registry);
-                y.eval(state, registry)
-                    .ones()
-                    .map(|y| tables.tables_2d[*i].eval(x, y))
-                    .sum()
+                tables.tables_2d[*i].sum_y(x.eval(state, registry), y.eval(state, registry).ones())
             }
-            Self::Table2DVectorSumX(i, x, y) => {
-                let y = y.eval(state, registry);
-                x.eval(state, registry)
-                    .into_iter()
-                    .map(|x| tables.tables_2d[*i].eval(x, y))
-                    .sum()
-            }
-            Self::Table2DVectorSumY(i, x, y) => {
-                let x = x.eval(state, registry);
-                y.eval(state, registry)
-                    .into_iter()
-                    .map(|y| tables.tables_2d[*i].eval(x, y))
-                    .sum()
-            }
-            Self::Table3DSum(i, x, y, z) => {
-                let y = y.eval(state, registry);
-                let z = z.eval(state, registry);
-                x.eval(state, registry)
-                    .ones()
-                    .map(|x| {
-                        y.ones()
-                            .map(|y| z.ones().map(|z| tables.tables_3d[*i].eval(x, y, z)).sum())
-                            .sum()
-                    })
-                    .sum()
-            }
-            Self::Table3DZipSum(i, x, y, z) => x
-                .eval(state, registry)
-                .into_iter()
-                .zip(y.eval(state, registry).into_iter())
-                .zip(z.eval(state, registry).into_iter())
-                .map(|((x, y), z)| tables.tables_3d[*i].eval(x, y, z))
-                .sum(),
-            Self::Table3DSumX(i, x, y, z) => {
-                let y = y.eval(state, registry);
-                let z = z.eval(state, registry);
-                x.eval(state, registry)
-                    .ones()
-                    .map(|x| tables.tables_3d[*i].eval(x, y, z))
-                    .sum()
-            }
-            Self::Table3DSumY(i, x, y, z) => {
-                let x = x.eval(state, registry);
-                let z = z.eval(state, registry);
-                y.eval(state, registry)
-                    .ones()
-                    .map(|y| tables.tables_3d[*i].eval(x, y, z))
-                    .sum()
-            }
-            Self::Table3DSumZ(i, x, y, z) => {
-                let x = x.eval(state, registry);
-                let y = y.eval(state, registry);
-                z.eval(state, registry)
-                    .ones()
-                    .map(|z| tables.tables_3d[*i].eval(x, y, z))
-                    .sum()
-            }
-            Self::Table3DVectorSumX(i, x, y, z) => {
-                let y = y.eval(state, registry);
-                let z = z.eval(state, registry);
-                x.eval(state, registry)
-                    .into_iter()
-                    .map(|x| tables.tables_3d[*i].eval(x, y, z))
-                    .sum()
-            }
-            Self::Table3DVectorSumY(i, x, y, z) => {
-                let x = x.eval(state, registry);
-                let z = z.eval(state, registry);
-                y.eval(state, registry)
-                    .into_iter()
-                    .map(|y| tables.tables_3d[*i].eval(x, y, z))
-                    .sum()
-            }
-            Self::Table3DVectorSumZ(i, x, y, z) => {
-                let x = x.eval(state, registry);
-                let y = y.eval(state, registry);
-                z.eval(state, registry)
-                    .into_iter()
-                    .map(|z| tables.tables_3d[*i].eval(x, y, z))
-                    .sum()
-            }
-            Self::Table3DSumXY(i, x, y, z) => {
-                let y = y.eval(state, registry);
-                let z = z.eval(state, registry);
-                x.eval(state, registry)
-                    .ones()
-                    .map(|x| y.ones().map(|y| tables.tables_3d[*i].eval(x, y, z)).sum())
-                    .sum()
-            }
-            Self::Table3DSumXZ(i, x, y, z) => {
-                let y = y.eval(state, registry);
-                let z = z.eval(state, registry);
-                x.eval(state, registry)
-                    .ones()
-                    .map(|x| z.ones().map(|z| tables.tables_3d[*i].eval(x, y, z)).sum())
-                    .sum()
-            }
-            Self::Table3DSumYZ(i, x, y, z) => {
-                let x = x.eval(state, registry);
-                let z = z.eval(state, registry);
-                y.eval(state, registry)
-                    .ones()
-                    .map(|y| z.ones().map(|z| tables.tables_3d[*i].eval(x, y, z)).sum())
-                    .sum()
-            }
-            Self::Table3DZipSumXY(i, x, y, z) => {
-                let z = z.eval(state, registry);
-                x.eval(state, registry)
-                    .into_iter()
-                    .zip(y.eval(state, registry).into_iter())
-                    .map(|(x, y)| tables.tables_3d[*i].eval(x, y, z))
-                    .sum()
-            }
-            Self::Table3DZipSumXZ(i, x, y, z) => {
-                let y = y.eval(state, registry);
-                x.eval(state, registry)
-                    .into_iter()
-                    .zip(z.eval(state, registry).into_iter())
-                    .map(|(x, z)| tables.tables_3d[*i].eval(x, y, z))
-                    .sum()
-            }
-            Self::Table3DZipSumYZ(i, x, y, z) => {
-                let x = x.eval(state, registry);
-                y.eval(state, registry)
-                    .into_iter()
-                    .zip(z.eval(state, registry).into_iter())
-                    .map(|(y, z)| tables.tables_3d[*i].eval(x, y, z))
-                    .sum()
-            }
+            Self::Table2DVectorSumX(i, VectorExpression::Reference(x), y) => tables.tables_2d[*i]
+                .sum_x(
+                    x.eval(state, registry, vector_variables, vector_tables)
+                        .iter()
+                        .copied(),
+                    y.eval(state, registry),
+                ),
+            Self::Table2DVectorSumX(i, x, y) => tables.tables_2d[*i]
+                .sum_x(x.eval(state, registry).into_iter(), y.eval(state, registry)),
+            Self::Table2DVectorSumY(i, x, VectorExpression::Reference(y)) => tables.tables_2d[*i]
+                .sum_y(
+                    x.eval(state, registry),
+                    y.eval(state, registry, vector_variables, vector_tables)
+                        .iter()
+                        .copied(),
+                ),
+            Self::Table2DVectorSumY(i, x, y) => tables.tables_2d[*i]
+                .sum_y(x.eval(state, registry), y.eval(state, registry).into_iter()),
         }
     }
 
@@ -305,81 +239,118 @@ impl<T: Numeric> NumericTableExpression<T> {
                         _ => return Self::Table(*i, args),
                     }
                 }
-                Self::Constant(tables.tables[*i].eval(&simplified_args))
+                Self::Constant(match args.len() {
+                    1 => tables.tables_1d[*i].eval(simplified_args[0]),
+                    2 => tables.tables_2d[*i].eval(simplified_args[0], simplified_args[1]),
+                    3 => tables.tables_3d[*i].eval(
+                        simplified_args[0],
+                        simplified_args[1],
+                        simplified_args[2],
+                    ),
+                    _ => tables.tables[*i].eval(&simplified_args),
+                })
             }
-            Self::Table1D(i, ElementExpression::Constant(x)) => {
-                Self::Constant(tables.tables_1d[*i].eval(*x))
+            Self::TableSum(i, args) => Self::simplify_sum_table(*i, args, registry, tables),
+            Self::Table1D(i, x) => match x.simplify(registry) {
+                ElementExpression::Constant(x) => Self::Constant(tables.tables_1d[*i].eval(x)),
+                x => Self::Table1D(*i, x),
+            },
+            Self::Table2D(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (ElementExpression::Constant(x), ElementExpression::Constant(y)) => {
+                    Self::Constant(tables.tables_2d[*i].eval(x, y))
+                }
+                (x, y) => Self::Table2D(*i, x, y),
+            },
+            Self::Table1DSum(i, x) => match x.simplify(registry) {
+                SetExpression::Reference(ReferenceExpression::Constant(x)) => {
+                    Self::Constant(tables.tables_1d[*i].sum(x.ones()))
+                }
+                x => Self::Table1DSum(*i, x),
+            },
+            Self::Table1DVectorSum(i, x) => match x.simplify(registry) {
+                VectorExpression::Reference(ReferenceExpression::Constant(x)) => {
+                    Self::Constant(tables.tables_1d[*i].sum(x.into_iter()))
+                }
+                x => Self::Table1DVectorSum(*i, x),
+            },
+            Self::Table2DSum(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (
+                    SetExpression::Reference(ReferenceExpression::Constant(x)),
+                    SetExpression::Reference(ReferenceExpression::Constant(y)),
+                ) => Self::Constant(
+                    x.ones()
+                        .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
+                        .sum(),
+                ),
+                (x, y) => Self::Table2DSum(*i, x, y),
+            },
+            Self::Table2DVectorSum(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (
+                    VectorExpression::Reference(ReferenceExpression::Constant(x)),
+                    VectorExpression::Reference(ReferenceExpression::Constant(y)),
+                ) => Self::Constant(tables.tables_2d[*i].sum(x.into_iter(), y.into_iter())),
+                (x, y) => Self::Table2DVectorSum(*i, x, y),
+            },
+            Self::Table2DSetVectorSum(i, x, y) => {
+                match (x.simplify(registry), y.simplify(registry)) {
+                    (
+                        SetExpression::Reference(ReferenceExpression::Constant(x)),
+                        VectorExpression::Reference(ReferenceExpression::Constant(y)),
+                    ) => Self::Constant(tables.tables_2d[*i].sum(x.ones(), y.into_iter())),
+                    (x, y) => Self::Table2DSetVectorSum(*i, x, y),
+                }
             }
-            Self::Table2D(i, ElementExpression::Constant(x), ElementExpression::Constant(y)) => {
-                Self::Constant(tables.tables_2d[*i].eval(*x, *y))
+            Self::Table2DVectorSetSum(i, x, y) => {
+                match (x.simplify(registry), y.simplify(registry)) {
+                    (
+                        VectorExpression::Reference(ReferenceExpression::Constant(x)),
+                        SetExpression::Reference(ReferenceExpression::Constant(y)),
+                    ) => Self::Constant(tables.tables_2d[*i].sum(y.ones(), x.into_iter())),
+                    (x, y) => Self::Table2DVectorSetSum(*i, x, y),
+                }
             }
-            Self::Table3D(
-                i,
-                ElementExpression::Constant(x),
-                ElementExpression::Constant(y),
-                ElementExpression::Constant(z),
-            ) => Self::Constant(tables.tables_3d[*i].eval(*x, *y, *z)),
-            Self::Table1DSum(i, SetExpression::Reference(ReferenceExpression::Constant(x))) => {
-                Self::Constant(x.ones().map(|x| tables.tables_1d[*i].eval(x)).sum())
+            Self::Table2DSumX(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (
+                    SetExpression::Reference(ReferenceExpression::Constant(x)),
+                    ElementExpression::Constant(y),
+                ) => Self::Constant(tables.tables_2d[*i].sum_x(x.ones(), y)),
+                (x, y) => Self::Table2DSumX(*i, x, y),
+            },
+            Self::Table2DSumY(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (
+                    ElementExpression::Constant(x),
+                    SetExpression::Reference(ReferenceExpression::Constant(y)),
+                ) => Self::Constant(tables.tables_2d[*i].sum_y(x, y.ones())),
+                (x, y) => Self::Table2DSumY(*i, x, y),
+            },
+            Self::Table2DVectorSumX(i, x, y) => {
+                match (x.simplify(registry), y.simplify(registry)) {
+                    (
+                        VectorExpression::Reference(ReferenceExpression::Constant(x)),
+                        ElementExpression::Constant(y),
+                    ) => Self::Constant(tables.tables_2d[*i].sum_x(x.into_iter(), y)),
+                    (x, y) => Self::Table2DVectorSumX(*i, x, y),
+                }
             }
-            Self::Table1DVectorSum(
-                i,
-                VectorExpression::Reference(ReferenceExpression::Constant(x)),
-            ) => Self::Constant(x.iter().map(|x| tables.tables_1d[*i].eval(*x)).sum()),
-            Self::Table2DSum(
-                i,
-                SetExpression::Reference(ReferenceExpression::Constant(x)),
-                SetExpression::Reference(ReferenceExpression::Constant(y)),
-            ) => Self::Constant(
-                x.ones()
-                    .map(|x| y.ones().map(|y| tables.tables_2d[*i].eval(x, y)).sum())
-                    .sum(),
-            ),
-            Self::Table2DZipSum(
-                i,
-                VectorExpression::Reference(ReferenceExpression::Constant(x)),
-                VectorExpression::Reference(ReferenceExpression::Constant(y)),
-            ) => Self::Constant(
-                x.iter()
-                    .zip(y.iter())
-                    .map(|(x, y)| tables.tables_2d[*i].eval(*x, *y))
-                    .sum(),
-            ),
-            Self::Table3DSum(
-                i,
-                SetExpression::Reference(ReferenceExpression::Constant(x)),
-                SetExpression::Reference(ReferenceExpression::Constant(y)),
-                SetExpression::Reference(ReferenceExpression::Constant(z)),
-            ) => Self::Constant(
-                x.ones()
-                    .map(|x| {
-                        y.ones()
-                            .map(|y| z.ones().map(|z| tables.tables_3d[*i].eval(x, y, z)).sum())
-                            .sum()
-                    })
-                    .sum(),
-            ),
-            Self::Table3DZipSum(
-                i,
-                VectorExpression::Reference(ReferenceExpression::Constant(x)),
-                VectorExpression::Reference(ReferenceExpression::Constant(y)),
-                VectorExpression::Reference(ReferenceExpression::Constant(z)),
-            ) => Self::Constant(
-                x.iter()
-                    .zip(y.iter())
-                    .zip(z.iter())
-                    .map(|((x, y), z)| tables.tables_3d[*i].eval(*x, *y, *z))
-                    .sum(),
-            ),
+            Self::Table2DVectorSumY(i, x, y) => {
+                match (x.simplify(registry), y.simplify(registry)) {
+                    (
+                        ElementExpression::Constant(x),
+                        VectorExpression::Reference(ReferenceExpression::Constant(y)),
+                    ) => Self::Constant(tables.tables_2d[*i].sum_y(x, y.into_iter())),
+                    (x, y) => Self::Table2DVectorSumY(*i, x, y),
+                }
+            }
             _ => self.clone(),
         }
     }
 
     fn sum_table(
-        f: &table::Table<T>,
+        i: usize,
         args: &[ArgumentExpression],
         state: &State,
         registry: &TableRegistry,
+        tables: &TableData<T>,
     ) -> T {
         let mut result = vec![vec![]];
         for v in args {
@@ -418,73 +389,67 @@ impl<T: Numeric> NumericTableExpression<T> {
                 }
             }
         }
-        result.into_iter().map(|x| f.eval(&x)).sum()
+        match args.len() {
+            1 => result
+                .into_iter()
+                .map(|r| tables.tables_1d[i].eval(r[0]))
+                .sum(),
+            2 => result
+                .into_iter()
+                .map(|r| tables.tables_2d[i].eval(r[0], r[1]))
+                .sum(),
+            3 => result
+                .into_iter()
+                .map(|r| tables.tables_3d[i].eval(r[0], r[1], r[2]))
+                .sum(),
+            _ => result.into_iter().map(|r| tables.tables[i].eval(&r)).sum(),
+        }
     }
 
-    fn zip_sum_table(
-        f: &table::Table<T>,
+    fn simplify_sum_table(
+        i: usize,
         args: &[ArgumentExpression],
-        state: &State,
         registry: &TableRegistry,
-    ) -> T {
-        let mut result = vec![vec![vec![]]];
-        for v in args {
-            match v {
-                ArgumentExpression::Set(set) => {
-                    result = match set {
-                        SetExpression::Reference(set) => {
-                            let set = set.eval(
-                                state,
-                                registry,
-                                &state.signature_variables.set_variables,
-                                &registry.set_tables,
-                            );
-                            result
-                                .into_iter()
-                                .map(|rr| util::expand_vector_with_set(rr, set))
-                                .collect::<Vec<Vec<Vec<Element>>>>()
-                        }
-                        _ => {
-                            let set = &set.eval(state, registry);
-                            result
-                                .into_iter()
-                                .map(|rr| util::expand_vector_with_set(rr, &set))
-                                .collect::<Vec<Vec<Vec<Element>>>>()
-                        }
-                    };
+        tables: &TableData<T>,
+    ) -> NumericTableExpression<T> {
+        let args: Vec<ArgumentExpression> = args.iter().map(|x| x.simplify(registry)).collect();
+        let mut simplified_args = vec![vec![]];
+        for arg in &args {
+            match arg {
+                ArgumentExpression::Element(ElementExpression::Constant(element)) => {
+                    simplified_args.iter_mut().for_each(|r| r.push(*element));
                 }
-                ArgumentExpression::Vector(vector) => {
-                    match vector {
-                        VectorExpression::Reference(vector) => {
-                            let vector = vector.eval(
-                                state,
-                                registry,
-                                &state.signature_variables.vector_variables,
-                                &registry.vector_tables,
-                            );
-                            result
-                                .iter_mut()
-                                .zip(vector.iter())
-                                .for_each(|(rr, e)| rr.iter_mut().for_each(|r| r.push(*e)));
-                        }
-                        _ => {
-                            let vector = vector.eval(state, registry);
-                            result
-                                .iter_mut()
-                                .zip(vector.into_iter())
-                                .for_each(|(rr, e)| rr.iter_mut().for_each(|r| r.push(e)));
-                        }
-                    };
+                ArgumentExpression::Set(SetExpression::Reference(
+                    ReferenceExpression::Constant(set),
+                )) => {
+                    simplified_args = util::expand_vector_with_set(simplified_args, set);
                 }
-                ArgumentExpression::Element(element) => {
-                    let element = element.eval(state, registry);
-                    result
-                        .iter_mut()
-                        .for_each(|rr| rr.iter_mut().for_each(|r| r.push(element)));
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vector),
+                )) => {
+                    simplified_args = util::expand_vector_with_slice(simplified_args, vector);
                 }
+                _ => return Self::TableSum(i, args),
             }
         }
-        result.into_iter().flatten().map(|x| f.eval(&x)).sum()
+        Self::Constant(match args.len() {
+            1 => simplified_args
+                .into_iter()
+                .map(|r| tables.tables_1d[i].eval(r[0]))
+                .sum(),
+            2 => simplified_args
+                .into_iter()
+                .map(|r| tables.tables_2d[i].eval(r[0], r[1]))
+                .sum(),
+            3 => simplified_args
+                .into_iter()
+                .map(|r| tables.tables_3d[i].eval(r[0], r[1], r[2]))
+                .sum(),
+            _ => simplified_args
+                .into_iter()
+                .map(|r| tables.tables[i].eval(&r))
+                .sum(),
+        })
     }
 }
 
@@ -492,6 +457,7 @@ impl<T: Numeric> NumericTableExpression<T> {
 mod tests {
     use super::*;
     use crate::state::*;
+    use crate::table;
     use crate::variable::*;
     use std::collections::HashMap;
     use std::rc::Rc;
@@ -793,230 +759,6 @@ mod tests {
     }
 
     #[test]
-    fn table_3d_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-        let expression = NumericTableExpression::Table3D(
-            0,
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(1),
-            ElementExpression::Constant(2),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            60
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-        let expression = NumericTableExpression::Table3DSum(
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Variable(1)),
-            SetExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            240
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_x_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-
-        let expression = NumericTableExpression::Table3DSumX(
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(1),
-            ElementExpression::Constant(2),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            120
-        );
-
-        let expression = NumericTableExpression::Table3DSumX(
-            0,
-            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )))),
-            ElementExpression::Constant(1),
-            ElementExpression::Constant(2),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            120
-        );
-    }
-
-    #[test]
-    fn table_3d_vector_sum_x_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-
-        let expression = NumericTableExpression::Table3DVectorSumX(
-            0,
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(1),
-            ElementExpression::Constant(2),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            120
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_y_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-
-        let expression = NumericTableExpression::Table3DSumY(
-            0,
-            ElementExpression::Constant(1),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(2),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            120
-        );
-
-        let expression = NumericTableExpression::Table3DSumY(
-            0,
-            ElementExpression::Constant(1),
-            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )))),
-            ElementExpression::Constant(2),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            120
-        );
-    }
-
-    #[test]
-    fn table_3d_vector_sum_y_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-
-        let expression = NumericTableExpression::Table3DVectorSumY(
-            0,
-            ElementExpression::Constant(1),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(2),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            120
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_z_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-
-        let expression = NumericTableExpression::Table3DSumZ(
-            0,
-            ElementExpression::Constant(1),
-            ElementExpression::Constant(2),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            160
-        );
-
-        let expression = NumericTableExpression::Table3DSumZ(
-            0,
-            ElementExpression::Constant(1),
-            ElementExpression::Constant(2),
-            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )))),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            160
-        );
-    }
-
-    #[test]
-    fn table_3d_vector_sum_z_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-
-        let expression = NumericTableExpression::Table3DVectorSumZ(
-            0,
-            ElementExpression::Constant(1),
-            ElementExpression::Constant(2),
-            VectorExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            160
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_xy_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-
-        let expression = NumericTableExpression::Table3DSumXY(
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Variable(1)),
-            ElementExpression::Constant(2),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            180
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_xz_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-
-        let expression = NumericTableExpression::Table3DSumXZ(
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(2),
-            SetExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            300
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_yz_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-
-        let expression = NumericTableExpression::Table3DSumYZ(
-            0,
-            ElementExpression::Constant(2),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Variable(1)),
-        );
-        assert_eq!(
-            expression.eval(&state, &registry, &registry.integer_tables),
-            180
-        );
-    }
-
-    #[test]
     fn table_eval() {
         let registry = generate_registry();
         let state = generate_state();
@@ -1198,145 +940,6 @@ mod tests {
         let expression = NumericTableExpression::Table2DSumY(
             0,
             ElementExpression::Constant(0),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
-    fn table_3d_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table3D(
-            0,
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            NumericTableExpression::Constant(10)
-        );
-
-        let expression = NumericTableExpression::Table3D(
-            0,
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-            ElementExpression::Variable(0),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table3DSum(
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Variable(1)),
-            SetExpression::Reference(ReferenceExpression::Variable(2)),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_x_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table3DSumX(
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_y_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table3DSumY(
-            0,
-            ElementExpression::Constant(0),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_z_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table3DSumZ(
-            0,
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(0),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_xy_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table3DSumXY(
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression,
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_xz_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table3DSumXZ(
-            0,
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-            ElementExpression::Constant(0),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
-        );
-        assert_eq!(
-            expression.simplify(&registry, &registry.integer_tables),
-            expression
-        );
-    }
-
-    #[test]
-    fn table_3d_sum_yz_simplify() {
-        let registry = generate_registry();
-
-        let expression = NumericTableExpression::Table3DSumYZ(
-            0,
-            ElementExpression::Constant(0),
-            SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
         assert_eq!(
