@@ -25,6 +25,7 @@ dependencies = [
  "linked-hash-map",
  "num-traits",
  "ordered-float",
+ "rustc-hash",
  "yaml-rust",
 ]
 
@@ -34,6 +35,7 @@ version = "0.1.0"
 dependencies = [
  "didp-parser",
  "fixedbitset",
+ "rustc-hash",
 ]
 
 [[package]]
@@ -71,6 +73,12 @@ checksum = "7940cf2ca942593318d07fcf2596cdca60a85c9e7fab408a5e21a4f9dcd40d87"
 dependencies = [
  "num-traits",
 ]
+
+[[package]]
+name = "rustc-hash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "yaml-rust"
