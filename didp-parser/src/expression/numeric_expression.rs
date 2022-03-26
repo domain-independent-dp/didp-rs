@@ -422,10 +422,17 @@ impl<T: Numeric> NumericVectorExpression<T> {
                 y.eval_inner(cost, state, registry, tables),
             ),
             Self::VectorOperation(op, x, y) => match (x.as_ref(), y.as_ref()) {
-                (Self::Constant(x), y) => {
-                    Self::eval_vector_operation(op, x, y.eval_inner(cost, state, registry, tables))
-                }
-                (x, y) => Self::eval_vector_operation(
+                (Self::Constant(x), y) => Self::eval_vector_operation_in_y(
+                    op,
+                    x,
+                    y.eval_inner(cost, state, registry, tables),
+                ),
+                (x, Self::Constant(y)) => Self::eval_vector_operation_in_x(
+                    op,
+                    x.eval_inner(cost, state, registry, tables),
+                    y,
+                ),
+                (x, y) => Self::eval_vector_operation_in_y(
                     op,
                     &x.eval_inner(cost, state, registry, tables),
                     y.eval_inner(cost, state, registry, tables),
@@ -608,7 +615,7 @@ impl<T: Numeric> NumericVectorExpression<T> {
             Self::VectorOperation(op, x, y) => {
                 match (x.simplify(registry, tables), y.simplify(registry, tables)) {
                     (Self::Constant(x), Self::Constant(y)) => {
-                        Self::Constant(Self::eval_vector_operation(op, &x, y))
+                        Self::Constant(Self::eval_vector_operation_in_y(op, &x, y))
                     }
                     (x, y) => Self::VectorOperation(op.clone(), Box::new(x), Box::new(y)),
                 }
@@ -848,7 +855,29 @@ impl<T: Numeric> NumericVectorExpression<T> {
         }
         y
     }
-    fn eval_vector_operation(op: &NumericOperator, x: &[T], mut y: Vec<T>) -> Vec<T> {
+
+    fn eval_vector_operation_in_x(op: &NumericOperator, mut x: Vec<T>, y: &[T]) -> Vec<T> {
+        x.truncate(y.len());
+        match op {
+            NumericOperator::Add => x.iter_mut().zip(y).for_each(|(x, y)| *x = *x + *y),
+            NumericOperator::Subtract => x.iter_mut().zip(y).for_each(|(x, y)| *x = *x - *y),
+            NumericOperator::Multiply => x.iter_mut().zip(y).for_each(|(x, y)| *x = *x * *y),
+            NumericOperator::Divide => x.iter_mut().zip(y).for_each(|(x, y)| *x = *x / *y),
+            NumericOperator::Max => x.iter_mut().zip(y).for_each(|(x, y)| {
+                if *y > *x {
+                    *x = *y
+                }
+            }),
+            NumericOperator::Min => x.iter_mut().zip(y).for_each(|(x, y)| {
+                if *y < *x {
+                    *x = *y
+                }
+            }),
+        }
+        x
+    }
+
+    fn eval_vector_operation_in_y(op: &NumericOperator, x: &[T], mut y: Vec<T>) -> Vec<T> {
         y.truncate(x.len());
         match op {
             NumericOperator::Add => y.iter_mut().zip(x).for_each(|(y, x)| *y = *x + *y),
@@ -1949,6 +1978,32 @@ mod tests {
             Box::new(NumericVectorExpression::Constant(vec![2, 3])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![2, 4]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Add,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![5, 4]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Add,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1, 3])),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![3, 3]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Add,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![6, 3]);
     }
 
     #[test]
@@ -1962,6 +2017,32 @@ mod tests {
             Box::new(NumericVectorExpression::Constant(vec![2, 3, 2])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![-2, -2]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![1, -2]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1, 3])),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![-3, -1]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, -1]);
     }
 
     #[test]
@@ -1975,6 +2056,32 @@ mod tests {
             Box::new(NumericVectorExpression::Constant(vec![2, 3])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![0, 3]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![6, 3]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1, 3])),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 2]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![9, 2]);
     }
 
     #[test]
@@ -1988,6 +2095,32 @@ mod tests {
             Box::new(NumericVectorExpression::Constant(vec![2, 3, 0])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![0, 2]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Divide,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![1, 0]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Divide,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1, 3])),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 0]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Divide,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![1, 0]);
     }
 
     #[test]
@@ -2001,6 +2134,32 @@ mod tests {
             Box::new(NumericVectorExpression::Constant(vec![2, 3])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![2, 6]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Max,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![3, 3]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Max,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1, 3])),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![3, 2]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Max,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![3, 2]);
     }
 
     #[test]
@@ -2014,6 +2173,32 @@ mod tests {
             Box::new(NumericVectorExpression::Constant(vec![2, 3, 2])),
         );
         assert_eq!(expression.eval(&state, &registry, tables), vec![0, 3]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Min,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Constant(vec![2, 3])),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![2, 1]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Min,
+            Box::new(NumericVectorExpression::Constant(vec![0, 1, 3])),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![0, 1]);
+        let expression = NumericVectorExpression::VectorOperation(
+            NumericOperator::Min,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![0, 1, 3]),
+            ))),
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 3]),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![3, 1]);
     }
 
     #[test]
