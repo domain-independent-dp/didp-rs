@@ -1,8 +1,6 @@
 use super::element_parser;
-use super::set_parser;
 use super::util;
 use super::util::ParseErr;
-use super::vector_parser;
 use crate::expression::{ArgumentExpression, NumericTableExpression};
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
@@ -175,11 +173,11 @@ fn parse_argument<'a>(
     {
         Ok((ArgumentExpression::Element(element), rest))
     } else if let Ok((set, rest)) =
-        set_parser::parse_expression(tokens, metadata, registry, parameters)
+        element_parser::parse_set_expression(tokens, metadata, registry, parameters)
     {
         Ok((ArgumentExpression::Set(set), rest))
     } else if let Ok((vector, rest)) =
-        vector_parser::parse_expression(tokens, metadata, registry, parameters)
+        element_parser::parse_vector_expression(tokens, metadata, registry, parameters)
     {
         Ok((ArgumentExpression::Vector(vector), rest))
     } else {

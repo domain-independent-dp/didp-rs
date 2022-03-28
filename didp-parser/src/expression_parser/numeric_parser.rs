@@ -1,8 +1,7 @@
+use super::element_parser;
 use super::numeric_table_parser;
-use super::set_parser;
 use super::util;
 use super::util::ParseErr;
-use super::vector_parser;
 use crate::expression::{NumericExpression, NumericOperator};
 use crate::state::StateMetadata;
 use crate::table_registry::TableRegistry;
@@ -174,7 +173,8 @@ fn parse_cardinality<'a, 'b, 'c, T: Numeric>(
     registry: &'b TableRegistry,
     parameters: &'c FxHashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr> {
-    let (expression, rest) = set_parser::parse_expression(tokens, metadata, registry, parameters)?;
+    let (expression, rest) =
+        element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
     let (token, rest) = rest
         .split_first()
         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
@@ -194,7 +194,7 @@ fn parse_length<'a, 'b, 'c, T: Numeric>(
     parameters: &'c FxHashMap<String, usize>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr> {
     let (expression, rest) =
-        vector_parser::parse_expression(tokens, metadata, registry, parameters)?;
+        element_parser::parse_vector_expression(tokens, metadata, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     Ok((NumericExpression::Length(expression), rest))
 }

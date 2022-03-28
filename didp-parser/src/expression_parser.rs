@@ -10,10 +10,7 @@ mod condition_parser;
 mod element_parser;
 mod numeric_parser;
 mod numeric_table_parser;
-mod reference_parser;
-mod set_parser;
 mod util;
-mod vector_parser;
 
 pub use util::ParseErr;
 
@@ -65,7 +62,8 @@ pub fn parse_set(
     parameters: &FxHashMap<String, usize>,
 ) -> Result<expression::SetExpression, ParseErr> {
     let tokens = tokenize(text);
-    let (expression, rest) = set_parser::parse_expression(&tokens, metadata, registry, parameters)?;
+    let (expression, rest) =
+        element_parser::parse_set_expression(&tokens, metadata, registry, parameters)?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -84,7 +82,7 @@ pub fn parse_vector(
 ) -> Result<expression::VectorExpression, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
-        vector_parser::parse_expression(&tokens, metadata, registry, parameters)?;
+        element_parser::parse_vector_expression(&tokens, metadata, registry, parameters)?;
     if rest.is_empty() {
         Ok(expression)
     } else {

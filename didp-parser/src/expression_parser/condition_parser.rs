@@ -1,6 +1,5 @@
 use super::element_parser;
 use super::numeric_parser;
-use super::set_parser;
 use super::util;
 use super::util::ParseErr;
 use crate::expression::{Comparison, ComparisonOperator, Condition, SetCondition};
@@ -90,18 +89,22 @@ fn parse_operation<'a, 'b, 'c>(
         "is_in" => {
             let (element, rest) =
                 element_parser::parse_expression(tokens, metadata, registry, parameters)?;
-            let (set, rest) = set_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let (set, rest) =
+                element_parser::parse_set_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(SetCondition::IsIn(element, set)), rest))
         }
         "is_subset" => {
-            let (x, rest) = set_parser::parse_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) = set_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let (x, rest) =
+                element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
+            let (y, rest) =
+                element_parser::parse_set_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(SetCondition::IsSubset(x, y)), rest))
         }
         "is_empty" => {
-            let (set, rest) = set_parser::parse_expression(tokens, metadata, registry, parameters)?;
+            let (set, rest) =
+                element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(SetCondition::IsEmpty(set)), rest))
         }
