@@ -25,14 +25,8 @@ pub enum NumericExpression<T: Numeric> {
     Length(VectorExpression),
     IntegerTable(NumericTableExpression<Integer>),
     ContinuousTable(NumericTableExpression<Continuous>),
-    IntegerLast(Box<NumericVectorExpression<Integer>>),
-    ContinuousLast(Box<NumericVectorExpression<Continuous>>),
-    IntegerAt(Box<NumericVectorExpression<Integer>>, ElementExpression),
-    ContinuousAt(Box<NumericVectorExpression<Continuous>>, ElementExpression),
-    IntegerReduceSum(Box<NumericVectorExpression<Integer>>),
-    ContinuousReduceSum(Box<NumericVectorExpression<Continuous>>),
-    IntegerReduceProduct(Box<NumericVectorExpression<Integer>>),
-    ContinuousReduceProduct(Box<NumericVectorExpression<Continuous>>),
+    IntegerFromVector(FromVector<Integer>),
+    ContinuousFromVector(FromVector<Continuous>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -109,96 +103,18 @@ impl<T: Numeric> NumericExpression<T> {
             Self::ContinuousTable(t) => {
                 T::from_continuous(t.eval(state, registry, &registry.continuous_tables))
             }
-            Self::IntegerLast(vector) => T::from_integer(match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => *vector.last().unwrap(),
-                vector => *vector
-                    .eval_inner(
-                        cost.map(|x| x.to_integer()),
-                        state,
-                        registry,
-                        &registry.integer_tables,
-                    )
-                    .last()
-                    .unwrap(),
-            }),
-            Self::ContinuousLast(vector) => T::from_continuous(match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => *vector.last().unwrap(),
-                vector => *vector
-                    .eval_inner(
-                        cost.map(|x| x.to_continuous()),
-                        state,
-                        registry,
-                        &registry.continuous_tables,
-                    )
-                    .last()
-                    .unwrap(),
-            }),
-            Self::IntegerAt(vector, i) => T::from_integer(match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => vector[i.eval(state, registry)],
-                vector => vector.eval_inner(
-                    cost.map(|x| x.to_integer()),
-                    state,
-                    registry,
-                    &registry.integer_tables,
-                )[i.eval(state, registry)],
-            }),
-            Self::ContinuousAt(vector, i) => T::from_continuous(match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => vector[i.eval(state, registry)],
-                vector => vector.eval_inner(
-                    cost.map(|x| x.to_continuous()),
-                    state,
-                    registry,
-                    &registry.continuous_tables,
-                )[i.eval(state, registry)],
-            }),
-            Self::IntegerReduceSum(vector) => T::from_integer(match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => vector.iter().copied().sum(),
-                vector => vector
-                    .eval_inner(
-                        cost.map(|x| x.to_integer()),
-                        state,
-                        registry,
-                        &registry.integer_tables,
-                    )
-                    .into_iter()
-                    .sum(),
-            }),
-            Self::ContinuousReduceSum(vector) => T::from_continuous(match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => vector.iter().copied().sum(),
-                vector => vector
-                    .eval_inner(
-                        cost.map(|x| x.to_continuous()),
-                        state,
-                        registry,
-                        &registry.continuous_tables,
-                    )
-                    .into_iter()
-                    .sum(),
-            }),
-            Self::IntegerReduceProduct(vector) => T::from_integer(match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => vector.iter().copied().product(),
-                vector => vector
-                    .eval_inner(
-                        cost.map(|x| x.to_integer()),
-                        state,
-                        registry,
-                        &registry.integer_tables,
-                    )
-                    .into_iter()
-                    .product(),
-            }),
-            Self::ContinuousReduceProduct(vector) => T::from_continuous(match vector.as_ref() {
-                NumericVectorExpression::Constant(vector) => vector.iter().copied().product(),
-                vector => vector
-                    .eval_inner(
-                        cost.map(|x| x.to_continuous()),
-                        state,
-                        registry,
-                        &registry.continuous_tables,
-                    )
-                    .into_iter()
-                    .product(),
-            }),
+            Self::IntegerFromVector(expression) => T::from_integer(expression.eval(
+                cost.map(|cost| cost.to_integer()),
+                state,
+                registry,
+                &registry.integer_tables,
+            )),
+            Self::ContinuousFromVector(expression) => T::from_continuous(expression.eval(
+                cost.map(|cost| cost.to_continuous()),
+                state,
+                registry,
+                &registry.continuous_tables,
+            )),
         }
     }
 
@@ -240,74 +156,16 @@ impl<T: Numeric> NumericExpression<T> {
                     expression => Self::ContinuousTable(expression),
                 }
             }
-            Self::IntegerLast(vector) => {
-                match vector.simplify(registry, &registry.integer_tables) {
-                    NumericVectorExpression::Constant(vector) => {
-                        Self::Constant(T::from_integer(*vector.last().unwrap()))
-                    }
-                    vector => Self::IntegerLast(Box::new(vector)),
+            Self::IntegerFromVector(expression) => {
+                match expression.simplify(registry, &registry.integer_tables) {
+                    FromVector::Constant(value) => Self::Constant(T::from_integer(value)),
+                    expression => Self::IntegerFromVector(expression),
                 }
             }
-            Self::ContinuousLast(vector) => {
-                match vector.simplify(registry, &registry.continuous_tables) {
-                    NumericVectorExpression::Constant(vector) => {
-                        Self::Constant(T::from_continuous(*vector.last().unwrap()))
-                    }
-                    vector => Self::ContinuousLast(Box::new(vector)),
-                }
-            }
-            Self::IntegerAt(vector, i) => {
-                match (
-                    vector.simplify(registry, &registry.integer_tables),
-                    i.simplify(registry),
-                ) {
-                    (NumericVectorExpression::Constant(vector), ElementExpression::Constant(i)) => {
-                        Self::Constant(T::from_integer(vector[i]))
-                    }
-                    (vector, i) => Self::IntegerAt(Box::new(vector), i),
-                }
-            }
-            Self::ContinuousAt(vector, i) => {
-                match (
-                    vector.simplify(registry, &registry.continuous_tables),
-                    i.simplify(registry),
-                ) {
-                    (NumericVectorExpression::Constant(vector), ElementExpression::Constant(i)) => {
-                        Self::Constant(T::from_continuous(vector[i]))
-                    }
-                    (vector, i) => Self::ContinuousAt(Box::new(vector), i),
-                }
-            }
-            Self::IntegerReduceSum(vector) => {
-                match vector.simplify(registry, &registry.integer_tables) {
-                    NumericVectorExpression::Constant(vector) => {
-                        Self::Constant(T::from_integer(vector.into_iter().sum()))
-                    }
-                    vector => Self::IntegerReduceSum(Box::new(vector)),
-                }
-            }
-            Self::ContinuousReduceSum(vector) => {
-                match vector.simplify(registry, &registry.continuous_tables) {
-                    NumericVectorExpression::Constant(vector) => {
-                        Self::Constant(T::from_continuous(vector.into_iter().sum()))
-                    }
-                    vector => Self::ContinuousReduceSum(Box::new(vector)),
-                }
-            }
-            Self::IntegerReduceProduct(vector) => {
-                match vector.simplify(registry, &registry.integer_tables) {
-                    NumericVectorExpression::Constant(vector) => {
-                        Self::Constant(T::from_integer(vector.into_iter().product()))
-                    }
-                    vector => Self::IntegerReduceProduct(Box::new(vector)),
-                }
-            }
-            Self::ContinuousReduceProduct(vector) => {
-                match vector.simplify(registry, &registry.continuous_tables) {
-                    NumericVectorExpression::Constant(vector) => {
-                        Self::Constant(T::from_continuous(vector.into_iter().product()))
-                    }
-                    vector => Self::ContinuousReduceProduct(Box::new(vector)),
+            Self::ContinuousFromVector(expression) => {
+                match expression.simplify(registry, &registry.continuous_tables) {
+                    FromVector::Constant(value) => Self::Constant(T::from_continuous(value)),
+                    expression => Self::ContinuousFromVector(expression),
                 }
             }
             _ => self.clone(),
@@ -334,6 +192,90 @@ impl<T: Numeric> NumericExpression<T> {
                     b
                 }
             }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum FromVector<T: Numeric> {
+    Constant(T),
+    Last(Box<NumericVectorExpression<T>>),
+    At(Box<NumericVectorExpression<T>>, ElementExpression),
+    Reduce(ReduceOperator, Box<NumericVectorExpression<T>>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ReduceOperator {
+    Sum,
+    Product,
+    Max,
+    Min,
+}
+
+impl<T: Numeric> FromVector<T> {
+    fn eval(
+        &self,
+        cost: Option<T>,
+        state: &State,
+        registry: &TableRegistry,
+        tables: &TableData<T>,
+    ) -> T {
+        match self {
+            Self::Constant(value) => *value,
+            Self::Last(vector) => match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => *vector.last().unwrap(),
+                vector => *vector
+                    .eval_inner(cost, state, registry, tables)
+                    .last()
+                    .unwrap(),
+            },
+            Self::At(vector, i) => match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => vector[i.eval(state, registry)],
+                vector => vector.eval_inner(cost, state, registry, tables)[i.eval(state, registry)],
+            },
+            Self::Reduce(op, vector) => match vector.as_ref() {
+                NumericVectorExpression::Constant(vector) => Self::eval_reduce(op, vector),
+                vector => Self::eval_reduce(op, &vector.eval_inner(cost, state, registry, tables)),
+            },
+        }
+    }
+
+    fn simplify(&self, registry: &TableRegistry, tables: &TableData<T>) -> FromVector<T> {
+        match self {
+            Self::Last(vector) => match vector.simplify(registry, tables) {
+                NumericVectorExpression::Constant(vector) => {
+                    Self::Constant(*vector.last().unwrap())
+                }
+                vector => Self::Last(Box::new(vector)),
+            },
+            Self::At(vector, i) => {
+                match (vector.simplify(registry, tables), i.simplify(registry)) {
+                    (NumericVectorExpression::Constant(vector), ElementExpression::Constant(i)) => {
+                        Self::Constant(vector[i])
+                    }
+                    (vector, i) => Self::At(Box::new(vector), i),
+                }
+            }
+            Self::Reduce(op, vector) => match vector.simplify(registry, tables) {
+                NumericVectorExpression::Constant(vector) => {
+                    Self::Constant(Self::eval_reduce(op, &vector))
+                }
+                vector => Self::Reduce(op.clone(), Box::new(vector)),
+            },
+            _ => self.clone(),
+        }
+    }
+
+    fn eval_reduce(op: &ReduceOperator, vector: &[T]) -> T {
+        match op {
+            ReduceOperator::Sum => vector.iter().copied().sum(),
+            ReduceOperator::Product => vector.iter().copied().product(),
+            ReduceOperator::Max => vector
+                .iter()
+                .fold(vector[0], |x, y| if *y > x { *y } else { x }),
+            ReduceOperator::Min => vector
+                .iter()
+                .fold(vector[0], |x, y| if *y < x { *y } else { x }),
         }
     }
 }
@@ -1528,134 +1470,161 @@ mod tests {
     }
 
     #[test]
-    fn integer_last_eval() {
+    fn integer_from_vector_eval() {
         let state = generate_state();
         let registry = generate_registry();
-        let expression = NumericExpression::<Integer>::IntegerLast(Box::new(
-            NumericVectorExpression::Constant(vec![0, 1]),
+        let expression = NumericExpression::<Integer>::IntegerFromVector(FromVector::Last(
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
         ));
         assert_eq!(expression.eval(&state, &registry), 1);
-        let expression =
-            NumericExpression::<Integer>::IntegerLast(Box::new(NumericVectorExpression::Reverse(
-                Box::new(NumericVectorExpression::Constant(vec![0, 1])),
-            )));
-        assert_eq!(expression.eval(&state, &registry), 0);
     }
 
     #[test]
-    fn continuous_last_eval() {
+    fn continuous_from_vector_eval() {
         let state = generate_state();
         let registry = generate_registry();
-        let expression = NumericExpression::<Continuous>::ContinuousLast(Box::new(
-            NumericVectorExpression::Constant(vec![0.0, 1.0]),
+        let expression = NumericExpression::<Continuous>::ContinuousFromVector(FromVector::Last(
+            Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0])),
         ));
-        assert_relative_eq!(expression.eval(&state, &registry), 1.0);
-        let expression = NumericExpression::<Continuous>::ContinuousLast(Box::new(
-            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
-                0.0, 1.0,
-            ]))),
-        ));
-        assert_relative_eq!(expression.eval(&state, &registry), 0.0);
+        assert_eq!(expression.eval(&state, &registry), 1.0);
     }
 
     #[test]
-    fn integer_at_eval() {
+    fn from_vector_last_eval() {
         let state = generate_state();
         let registry = generate_registry();
-        let expression = NumericExpression::<Integer>::IntegerAt(
+        let expression = FromVector::Last(Box::new(NumericVectorExpression::Constant(vec![0, 1])));
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            1
+        );
+        let expression = FromVector::Last(Box::new(NumericVectorExpression::Reverse(Box::new(
+            NumericVectorExpression::Constant(vec![0, 1]),
+        ))));
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            0
+        );
+    }
+
+    #[test]
+    fn from_vector_at_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = FromVector::At(
             Box::new(NumericVectorExpression::Constant(vec![2, 1])),
             ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &registry), 2);
-        let expression = NumericExpression::<Integer>::IntegerAt(
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            2
+        );
+        let expression = FromVector::At(
             Box::new(NumericVectorExpression::Reverse(Box::new(
                 NumericVectorExpression::Constant(vec![2, 1]),
             ))),
             ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &registry), 1);
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            1
+        );
     }
 
     #[test]
-    fn continuous_at_eval() {
+    fn from_vector_reduce_sum_eval() {
         let state = generate_state();
         let registry = generate_registry();
-        let expression = NumericExpression::<Continuous>::ContinuousAt(
-            Box::new(NumericVectorExpression::Constant(vec![2.0, 1.0])),
-            ElementExpression::Constant(0),
+        let expression = FromVector::Reduce(
+            ReduceOperator::Sum,
+            Box::new(NumericVectorExpression::Constant(vec![2, 1])),
         );
-        assert_relative_eq!(expression.eval(&state, &registry), 2.0);
-        let expression = NumericExpression::<Continuous>::ContinuousAt(
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            3
+        );
+        let expression = FromVector::Reduce(
+            ReduceOperator::Sum,
             Box::new(NumericVectorExpression::Reverse(Box::new(
-                NumericVectorExpression::Constant(vec![2.0, 1.0]),
+                NumericVectorExpression::Constant(vec![2, 1]),
             ))),
-            ElementExpression::Constant(0),
         );
-        assert_relative_eq!(expression.eval(&state, &registry), 1.0);
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            3
+        );
     }
 
     #[test]
-    fn integer_reduce_sum_eval() {
+    fn from_vector_reduce_product_eval() {
         let state = generate_state();
         let registry = generate_registry();
-        let expression = NumericExpression::<Integer>::IntegerReduceSum(Box::new(
-            NumericVectorExpression::Constant(vec![2, 1]),
-        ));
-        assert_eq!(expression.eval(&state, &registry), 3);
-        let expression = NumericExpression::<Integer>::IntegerReduceSum(Box::new(
-            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
-                2, 1,
-            ]))),
-        ));
-        assert_eq!(expression.eval(&state, &registry), 3);
+        let expression = FromVector::Reduce(
+            ReduceOperator::Product,
+            Box::new(NumericVectorExpression::Constant(vec![2, 1])),
+        );
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            2
+        );
+        let expression = FromVector::Reduce(
+            ReduceOperator::Product,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 1]),
+            ))),
+        );
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            2
+        );
     }
 
     #[test]
-    fn continuous_reduce_sum_eval() {
+    fn from_vector_reduce_max_eval() {
         let state = generate_state();
         let registry = generate_registry();
-        let expression = NumericExpression::<Continuous>::ContinuousReduceSum(Box::new(
-            NumericVectorExpression::Constant(vec![2.0, 1.0]),
-        ));
-        assert_relative_eq!(expression.eval(&state, &registry), 3.0);
-        let expression = NumericExpression::<Continuous>::ContinuousReduceSum(Box::new(
-            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
-                2.0, 1.0,
-            ]))),
-        ));
-        assert_relative_eq!(expression.eval(&state, &registry), 3.0);
+        let expression = FromVector::Reduce(
+            ReduceOperator::Max,
+            Box::new(NumericVectorExpression::Constant(vec![2, 1])),
+        );
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            2
+        );
+        let expression = FromVector::Reduce(
+            ReduceOperator::Max,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 1]),
+            ))),
+        );
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            2
+        );
     }
 
     #[test]
-    fn integer_reduce_product_eval() {
+    fn from_vector_reduce_min_eval() {
         let state = generate_state();
         let registry = generate_registry();
-        let expression = NumericExpression::<Integer>::IntegerReduceProduct(Box::new(
-            NumericVectorExpression::Constant(vec![2, 1]),
-        ));
-        assert_eq!(expression.eval(&state, &registry), 2);
-        let expression = NumericExpression::<Integer>::IntegerReduceProduct(Box::new(
-            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
-                2, 1,
-            ]))),
-        ));
-        assert_eq!(expression.eval(&state, &registry), 2);
-    }
-
-    #[test]
-    fn continuous_reduce_product_eval() {
-        let state = generate_state();
-        let registry = generate_registry();
-        let expression = NumericExpression::<Continuous>::ContinuousReduceProduct(Box::new(
-            NumericVectorExpression::Constant(vec![2.0, 1.0]),
-        ));
-        assert_relative_eq!(expression.eval(&state, &registry), 2.0);
-        let expression = NumericExpression::<Continuous>::ContinuousReduceProduct(Box::new(
-            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
-                2.0, 1.0,
-            ]))),
-        ));
-        assert_relative_eq!(expression.eval(&state, &registry), 2.0);
+        let expression = FromVector::Reduce(
+            ReduceOperator::Min,
+            Box::new(NumericVectorExpression::Constant(vec![2, 1])),
+        );
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            1
+        );
+        let expression = FromVector::Reduce(
+            ReduceOperator::Min,
+            Box::new(NumericVectorExpression::Reverse(Box::new(
+                NumericVectorExpression::Constant(vec![2, 1]),
+            ))),
+        );
+        assert_eq!(
+            expression.eval(None, &state, &registry, &registry.integer_tables),
+            1
+        );
     }
 
     #[test]
@@ -1876,159 +1845,183 @@ mod tests {
     }
 
     #[test]
-
-    fn integer_last_simplify() {
+    fn integer_from_vector_simplify() {
         let registry = generate_registry();
-        let expression = NumericExpression::<Integer>::IntegerLast(Box::new(
-            NumericVectorExpression::Constant(vec![0, 1]),
+        let expression = NumericExpression::<Integer>::IntegerFromVector(FromVector::Last(
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
         ));
         assert_eq!(
             expression.simplify(&registry),
             NumericExpression::Constant(1)
         );
-        let expression =
-            NumericExpression::<Integer>::IntegerLast(Box::new(NumericVectorExpression::Table2DX(
+        let expression = NumericExpression::<Integer>::IntegerFromVector(FromVector::Last(
+            Box::new(NumericVectorExpression::Table2DX(
                 0,
                 VectorExpression::Reference(ReferenceExpression::Variable(0)),
                 ElementExpression::Variable(0),
-            )));
+            )),
+        ));
         assert_eq!(expression.simplify(&registry), expression);
     }
 
     #[test]
-    fn continuous_last_simplify() {
+    fn continuous_from_vector_simplify() {
         let registry = generate_registry();
-        let expression = NumericExpression::<Continuous>::ContinuousLast(Box::new(
-            NumericVectorExpression::Constant(vec![0.0, 1.0]),
+        let expression = NumericExpression::<Continuous>::ContinuousFromVector(FromVector::Last(
+            Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0])),
         ));
         assert_eq!(
             expression.simplify(&registry),
             NumericExpression::Constant(1.0)
         );
-        let expression = NumericExpression::<Continuous>::ContinuousLast(Box::new(
-            NumericVectorExpression::Table2DX(
+        let expression = NumericExpression::<Continuous>::ContinuousFromVector(FromVector::Last(
+            Box::new(NumericVectorExpression::Table2DX(
                 0,
                 VectorExpression::Reference(ReferenceExpression::Variable(0)),
                 ElementExpression::Variable(0),
-            ),
+            )),
         ));
         assert_eq!(expression.simplify(&registry), expression);
     }
 
     #[test]
-    fn integer_at_simplify() {
+    fn from_vector_last_simplify() {
         let registry = generate_registry();
-        let expression = NumericExpression::<Integer>::IntegerAt(
+        let expression = FromVector::Last(Box::new(NumericVectorExpression::Constant(vec![0, 1])));
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            FromVector::Constant(1)
+        );
+        let expression = FromVector::Last(Box::new(NumericVectorExpression::Table2DX(
+            0,
+            VectorExpression::Reference(ReferenceExpression::Variable(0)),
+            ElementExpression::Variable(0),
+        )));
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
+    }
+
+    #[test]
+    fn from_vector_at_simplify() {
+        let registry = generate_registry();
+        let expression = FromVector::At(
             Box::new(NumericVectorExpression::Constant(vec![2, 1])),
             ElementExpression::Constant(0),
         );
         assert_eq!(
-            expression.simplify(&registry),
-            NumericExpression::Constant(2)
+            expression.simplify(&registry, &registry.integer_tables),
+            FromVector::Constant(2)
         );
-        let expression = NumericExpression::<Integer>::IntegerAt(
+        let expression = FromVector::At(
             Box::new(NumericVectorExpression::Constant(vec![2, 1])),
             ElementExpression::Variable(0),
         );
-        assert_eq!(expression.simplify(&registry), expression);
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
     }
 
     #[test]
-    fn continuous_at_simplify() {
+    fn from_vector_reduce_sum_simplify() {
         let registry = generate_registry();
-        let expression = NumericExpression::<Continuous>::ContinuousAt(
-            Box::new(NumericVectorExpression::Constant(vec![2.0, 1.0])),
-            ElementExpression::Constant(0),
+        let expression = FromVector::Reduce(
+            ReduceOperator::Sum,
+            Box::new(NumericVectorExpression::Constant(vec![2, 1])),
         );
         assert_eq!(
-            expression.simplify(&registry),
-            NumericExpression::Constant(2.0)
+            expression.simplify(&registry, &registry.integer_tables),
+            FromVector::Constant(3)
         );
-        let expression = NumericExpression::<Continuous>::ContinuousAt(
-            Box::new(NumericVectorExpression::Constant(vec![2.0, 1.0])),
-            ElementExpression::Variable(0),
-        );
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
-    fn integer_reduce_sum_simplify() {
-        let registry = generate_registry();
-        let expression = NumericExpression::<Integer>::IntegerReduceSum(Box::new(
-            NumericVectorExpression::Constant(vec![2, 1]),
-        ));
-        assert_eq!(
-            expression.simplify(&registry),
-            NumericExpression::Constant(3)
-        );
-        let expression = NumericExpression::<Integer>::IntegerReduceSum(Box::new(
-            NumericVectorExpression::Table2DX(
+        let expression = FromVector::Reduce(
+            ReduceOperator::Sum,
+            Box::new(NumericVectorExpression::Table2DX(
                 0,
                 VectorExpression::Reference(ReferenceExpression::Variable(0)),
                 ElementExpression::Variable(0),
-            ),
-        ));
-        assert_eq!(expression.simplify(&registry), expression);
+            )),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
     }
 
     #[test]
-    fn continuous_reduce_sum_simplify() {
+    fn from_vector_reduce_product_simplify() {
         let registry = generate_registry();
-        let expression = NumericExpression::<Continuous>::ContinuousReduceSum(Box::new(
-            NumericVectorExpression::Constant(vec![2.0, 1.0]),
-        ));
-        assert_eq!(
-            expression.simplify(&registry),
-            NumericExpression::Constant(3.0)
+        let expression = FromVector::Reduce(
+            ReduceOperator::Product,
+            Box::new(NumericVectorExpression::Constant(vec![2, 1])),
         );
-        let expression = NumericExpression::<Continuous>::ContinuousReduceSum(Box::new(
-            NumericVectorExpression::Table2DX(
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            FromVector::Constant(2)
+        );
+        let expression = FromVector::Reduce(
+            ReduceOperator::Product,
+            Box::new(NumericVectorExpression::Table2DX(
                 0,
                 VectorExpression::Reference(ReferenceExpression::Variable(0)),
                 ElementExpression::Variable(0),
-            ),
-        ));
-        assert_eq!(expression.simplify(&registry), expression);
+            )),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
     }
 
     #[test]
-    fn integer_reduce_product_simplify() {
+    fn from_vector_reduce_max_simplify() {
         let registry = generate_registry();
-        let expression = NumericExpression::<Integer>::IntegerReduceProduct(Box::new(
-            NumericVectorExpression::Constant(vec![2, 1]),
-        ));
-        assert_eq!(
-            expression.simplify(&registry),
-            NumericExpression::Constant(2)
+        let expression = FromVector::Reduce(
+            ReduceOperator::Max,
+            Box::new(NumericVectorExpression::Constant(vec![2, 1])),
         );
-        let expression = NumericExpression::<Integer>::IntegerReduceProduct(Box::new(
-            NumericVectorExpression::Table2DX(
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            FromVector::Constant(2)
+        );
+        let expression = FromVector::Reduce(
+            ReduceOperator::Max,
+            Box::new(NumericVectorExpression::Table2DX(
                 0,
                 VectorExpression::Reference(ReferenceExpression::Variable(0)),
                 ElementExpression::Variable(0),
-            ),
-        ));
-        assert_eq!(expression.simplify(&registry), expression);
+            )),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
     }
 
     #[test]
-    fn continuous_reduce_product_simplify() {
+    fn from_vector_reduce_min_simplify() {
         let registry = generate_registry();
-        let expression = NumericExpression::<Continuous>::ContinuousReduceProduct(Box::new(
-            NumericVectorExpression::Constant(vec![2.0, 1.0]),
-        ));
-        assert_eq!(
-            expression.simplify(&registry),
-            NumericExpression::Constant(2.0)
+        let expression = FromVector::Reduce(
+            ReduceOperator::Min,
+            Box::new(NumericVectorExpression::Constant(vec![2, 1])),
         );
-        let expression = NumericExpression::<Continuous>::ContinuousReduceProduct(Box::new(
-            NumericVectorExpression::Table2DX(
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            FromVector::Constant(1)
+        );
+        let expression = FromVector::Reduce(
+            ReduceOperator::Min,
+            Box::new(NumericVectorExpression::Table2DX(
                 0,
                 VectorExpression::Reference(ReferenceExpression::Variable(0)),
                 ElementExpression::Variable(0),
-            ),
-        ));
-        assert_eq!(expression.simplify(&registry), expression);
+            )),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
     }
 
     #[test]

@@ -3,13 +3,13 @@ use super::numeric_table_parser;
 use super::util;
 use super::util::ParseErr;
 use crate::expression::{
-    ArgumentExpression, NumericExpression, NumericOperator, NumericVectorExpression,
-    VectorOrElementExpression,
+    ArgumentExpression, FromVector, NumericExpression, NumericOperator, NumericVectorExpression,
+    ReduceOperator, VectorOrElementExpression,
 };
 use crate::state::StateMetadata;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
-use crate::variable::{Element, Integer, Numeric};
+use crate::variable::{Continuous, Element, Integer, Numeric};
 use rustc_hash::FxHashMap;
 use std::fmt;
 use std::str;
@@ -61,27 +61,26 @@ where
                 let (vector, rest) =
                     parse_integer_vector_expression(rest, metadata, registry, parameters)?;
                 let rest = util::parse_closing(rest)?;
-                Ok((NumericExpression::IntegerLast(Box::new(vector)), rest))
+                Ok((
+                    NumericExpression::IntegerFromVector(FromVector::Last(Box::new(vector))),
+                    rest,
+                ))
             } else if name == "at" {
                 let (vector, rest) =
                     parse_integer_vector_expression(rest, metadata, registry, parameters)?;
                 let (i, rest) =
                     element_parser::parse_expression(rest, metadata, registry, parameters)?;
                 let rest = util::parse_closing(rest)?;
-                Ok((NumericExpression::IntegerAt(Box::new(vector), i), rest))
-            } else if name == "reduce-sum" {
-                let (vector, rest) =
-                    parse_integer_vector_expression(rest, metadata, registry, parameters)?;
-                let rest = util::parse_closing(rest)?;
-                Ok((NumericExpression::IntegerReduceSum(Box::new(vector)), rest))
-            } else if name == "reduce-product" {
-                let (vector, rest) =
-                    parse_integer_vector_expression(rest, metadata, registry, parameters)?;
-                let rest = util::parse_closing(rest)?;
                 Ok((
-                    NumericExpression::IntegerReduceProduct(Box::new(vector)),
+                    NumericExpression::IntegerFromVector(FromVector::At(Box::new(vector), i)),
                     rest,
                 ))
+            } else if let Ok((vector, rest)) =
+                parse_integer_vector_expression(rest, metadata, registry, parameters)
+            {
+                let rest = util::parse_closing(rest)?;
+                let expression = parse_reduce(name, vector)?;
+                Ok((NumericExpression::IntegerFromVector(expression), rest))
             } else {
                 let (x, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
                 let (y, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
@@ -141,12 +140,18 @@ where
                     parse_integer_vector_expression(rest, metadata, registry, parameters)
                 {
                     let rest = util::parse_closing(rest)?;
-                    Ok((NumericExpression::IntegerLast(Box::new(vector)), rest))
+                    Ok((
+                        NumericExpression::IntegerFromVector(FromVector::Last(Box::new(vector))),
+                        rest,
+                    ))
                 } else {
                     let (vector, rest) =
                         parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
                     let rest = util::parse_closing(rest)?;
-                    Ok((NumericExpression::ContinuousLast(Box::new(vector)), rest))
+                    Ok((
+                        NumericExpression::ContinuousFromVector(FromVector::Last(Box::new(vector))),
+                        rest,
+                    ))
                 }
             } else if name == "at" {
                 if let Ok((vector, rest)) =
@@ -155,48 +160,36 @@ where
                     let (i, rest) =
                         element_parser::parse_expression(rest, metadata, registry, parameters)?;
                     let rest = util::parse_closing(rest)?;
-                    Ok((NumericExpression::IntegerAt(Box::new(vector), i), rest))
+                    Ok((
+                        NumericExpression::IntegerFromVector(FromVector::At(Box::new(vector), i)),
+                        rest,
+                    ))
                 } else {
                     let (vector, rest) =
                         parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
                     let (i, rest) =
                         element_parser::parse_expression(rest, metadata, registry, parameters)?;
                     let rest = util::parse_closing(rest)?;
-                    Ok((NumericExpression::ContinuousAt(Box::new(vector), i), rest))
-                }
-            } else if name == "reduce-sum" {
-                if let Ok((vector, rest)) =
-                    parse_integer_vector_expression(rest, metadata, registry, parameters)
-                {
-                    let rest = util::parse_closing(rest)?;
-                    Ok((NumericExpression::IntegerReduceSum(Box::new(vector)), rest))
-                } else {
-                    let (vector, rest) =
-                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
-                    let rest = util::parse_closing(rest)?;
                     Ok((
-                        NumericExpression::ContinuousReduceSum(Box::new(vector)),
+                        NumericExpression::ContinuousFromVector(FromVector::At(
+                            Box::new(vector),
+                            i,
+                        )),
                         rest,
                     ))
                 }
-            } else if name == "reduce-product" {
-                if let Ok((vector, rest)) =
-                    parse_integer_vector_expression(rest, metadata, registry, parameters)
-                {
-                    let rest = util::parse_closing(rest)?;
-                    Ok((
-                        NumericExpression::IntegerReduceProduct(Box::new(vector)),
-                        rest,
-                    ))
-                } else {
-                    let (vector, rest) =
-                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
-                    let rest = util::parse_closing(rest)?;
-                    Ok((
-                        NumericExpression::ContinuousReduceProduct(Box::new(vector)),
-                        rest,
-                    ))
-                }
+            } else if let Ok((vector, rest)) =
+                parse_integer_vector_expression(rest, metadata, registry, parameters)
+            {
+                let rest = util::parse_closing(rest)?;
+                let expression = parse_reduce(name, vector)?;
+                Ok((NumericExpression::IntegerFromVector(expression), rest))
+            } else if let Ok((vector, rest)) =
+                parse_continuous_vector_expression(rest, metadata, registry, parameters)
+            {
+                let rest = util::parse_closing(rest)?;
+                let expression = parse_reduce(name, vector)?;
+                Ok((NumericExpression::ContinuousFromVector(expression), rest))
             } else {
                 let (x, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
                 let (y, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
@@ -214,6 +207,25 @@ where
     }
 }
 
+fn parse_reduce<T: Numeric>(
+    name: &str,
+    vector: NumericVectorExpression<T>,
+) -> Result<FromVector<T>, ParseErr> {
+    match name {
+        "reduce-sum" => Ok(FromVector::Reduce(ReduceOperator::Sum, Box::new(vector))),
+        "reduce-product" => Ok(FromVector::Reduce(
+            ReduceOperator::Product,
+            Box::new(vector),
+        )),
+        "reduce-max" => Ok(FromVector::Reduce(ReduceOperator::Max, Box::new(vector))),
+        "reduce-min" => Ok(FromVector::Reduce(ReduceOperator::Min, Box::new(vector))),
+        _ => Err(ParseErr::new(format!(
+            "no such reduction operator `{}`",
+            name
+        ))),
+    }
+}
+
 fn parse_operation<T: Numeric>(
     name: &str,
     x: NumericExpression<T>,
@@ -222,7 +234,7 @@ fn parse_operation<T: Numeric>(
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    match &name[..] {
+    match name {
         "+" => Ok(NumericExpression::NumericOperation(
             NumericOperator::Add,
             Box::new(x),
@@ -294,14 +306,14 @@ fn parse_integer_atom<T: Numeric>(
     metadata: &StateMetadata,
     registry: &TableRegistry,
 ) -> Result<NumericExpression<T>, ParseErr> {
-    if token == "cost" {
-        Ok(NumericExpression::Cost)
-    } else if let Some(v) = registry.integer_tables.name_to_constant.get(token) {
+    if let Some(v) = registry.integer_tables.name_to_constant.get(token) {
         Ok(NumericExpression::Constant(T::from(*v)))
     } else if let Some(i) = metadata.name_to_integer_variable.get(token) {
         Ok(NumericExpression::IntegerVariable(*i))
     } else if let Some(i) = metadata.name_to_integer_resource_variable.get(token) {
         Ok(NumericExpression::IntegerResourceVariable(*i))
+    } else if token == "cost" {
+        Ok(NumericExpression::Cost)
     } else {
         let n: Integer = token.parse().map_err(|e| {
             ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
@@ -333,10 +345,10 @@ where
     } else if token == "cost" {
         Ok(NumericExpression::Cost)
     } else {
-        let n: T = token.parse().map_err(|e| {
+        let n: Continuous = token.parse().map_err(|e| {
             ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
         })?;
-        Ok(NumericExpression::Constant(n))
+        Ok(NumericExpression::Constant(T::from(n)))
     }
 }
 
@@ -404,7 +416,7 @@ where
                         Err(ParseErr::new(format!("no such table `{}`", name)))
                     }
                 }
-                "sum-table-vector" => {
+                "table-sum-vector" => {
                     let (name, rest) = rest
                         .split_first()
                         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
@@ -1096,35 +1108,251 @@ mod tests {
     }
 
     #[test]
-    fn parse_expression_err() {
+    fn parse_expression_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens = Vec::new();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = [")", "(", "+", "cost", "1", ")", "2", ")"]
+        let tokens: Vec<String> = ["(", "f1", "1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::IntegerTable(NumericTableExpression::Table1D(
+                0,
+                ElementExpression::Constant(1)
+            ))
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["(", "+", "(", "cf1", "1", ")", "i0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::NumericOperation(
+                NumericOperator::Add,
+                Box::new(NumericExpression::ContinuousTable(
+                    NumericTableExpression::Table1D(0, ElementExpression::Constant(1))
+                )),
+                Box::new(NumericExpression::IntegerVariable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
+
+    #[test]
+    fn parse_integer_atom_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["cost", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::Cost);
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["f0", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::Constant(0));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["i1", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::IntegerVariable(1));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["ir1", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::IntegerResourceVariable(1));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["11", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::Constant(11));
+        assert_eq!(rest, &tokens[1..]);
+    }
+
+    #[test]
+    fn parse_integer_atom_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["c0", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["cr0", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["cf0", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["1.2", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
-    fn parse_integer_expression_err() {
+    fn parse_continuous_atom_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens = Vec::new();
+        let tokens: Vec<String> = ["cost", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::Cost);
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["f0", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::Constant(0.0));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["cf0", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::Constant(0.0));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["i1", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::IntegerVariable(1));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["c1", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::ContinuousVariable(1));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["ir1", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::IntegerResourceVariable(1));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["cr1", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result = parse_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::ContinuousResourceVariable(1));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["11", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::Constant(11.0));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["1.5", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericExpression::Constant(1.5));
+        assert_eq!(rest, &tokens[1..]);
+    }
+
+    #[test]
+    fn parse_continuous_atom_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["e0", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result =
+            parse_continuous_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_table_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "sum", "f4", "0", "e0", "s0", "v0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
         let result =
             parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::IntegerTable(NumericTableExpression::TableSum(
+                0,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    )),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    ))
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
 
-        let tokens: Vec<String> = ["(", "+", "cost", "n0", ")", "2", ")"]
+    #[test]
+    fn parse_integer_table_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "sum", "cf4", "0", "e0", "s0", "v0", ")", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -1132,7 +1360,7 @@ mod tests {
             parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", "+", "cf1", "e0", ")", "2", ")"]
+        let tokens: Vec<String> = ["(", "f4", "0", "e0", "s0", "v0", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -1142,16 +1370,17 @@ mod tests {
     }
 
     #[test]
-    fn parse_table_ok() {
+    fn parse_continuous_table_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", "sum", "f4", "0", "e0", "s0", "p0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["(", "sum", "f4", "0", "e0", "s0", "v0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1172,12 +1401,12 @@ mod tests {
         );
         assert_eq!(rest, &tokens[8..]);
 
-        let tokens: Vec<String> = ["(", "sum", "cf4", "0", "e0", "s0", "p0", ")", "c0", ")"]
+        let tokens: Vec<String> = ["(", "sum", "cf4", "0", "e0", "s0", "v0", ")", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
-        println!("{:?}", result);
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1200,20 +1429,22 @@ mod tests {
     }
 
     #[test]
-    fn parse_table_err() {
+    fn parse_continuous_table_err() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "f4", "0", "e0", "s0", "p0", "i0", ")", "i0", ")"]
+
+        let tokens: Vec<String> = ["(", "f4", "0", "e0", "s0", "v0", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
-    fn parse_operation_ok() {
+    fn parse_integer_operation_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
@@ -1222,7 +1453,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_integer_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1239,7 +1470,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_integer_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1256,7 +1487,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_integer_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1269,18 +1500,18 @@ mod tests {
         );
         assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["(", "/", "0.0", "i0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["(", "/", "0", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_integer_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
             NumericExpression::NumericOperation(
                 NumericOperator::Divide,
-                Box::new(NumericExpression::Constant(0.0)),
+                Box::new(NumericExpression::Constant(0)),
                 Box::new(NumericExpression::IntegerVariable(0))
             )
         );
@@ -1290,7 +1521,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_integer_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1303,11 +1534,11 @@ mod tests {
         );
         assert_eq!(rest, &tokens[5..]);
 
-        let tokens: Vec<String> = ["(", "max", "0", "c0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["(", "max", "0", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_integer_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1315,6 +1546,151 @@ mod tests {
             NumericExpression::NumericOperation(
                 NumericOperator::Max,
                 Box::new(NumericExpression::Constant(0)),
+                Box::new(NumericExpression::IntegerVariable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn parse_integer_operation_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens = Vec::new();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "+", "0", "i0", "i1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "+", "0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "^", "0", "i0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_operatin_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "+", "0.0", "i0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::NumericOperation(
+                NumericOperator::Add,
+                Box::new(NumericExpression::Constant(0.0)),
+                Box::new(NumericExpression::IntegerVariable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "-", "0.0", "i0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::NumericOperation(
+                NumericOperator::Subtract,
+                Box::new(NumericExpression::Constant(0.0)),
+                Box::new(NumericExpression::IntegerVariable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "*", "0.0", "i0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::NumericOperation(
+                NumericOperator::Multiply,
+                Box::new(NumericExpression::Constant(0.0)),
+                Box::new(NumericExpression::IntegerVariable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "/", "0.0", "i0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::NumericOperation(
+                NumericOperator::Divide,
+                Box::new(NumericExpression::Constant(0.0)),
+                Box::new(NumericExpression::IntegerVariable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "min", "0.0", "i0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::NumericOperation(
+                NumericOperator::Min,
+                Box::new(NumericExpression::Constant(0.0)),
+                Box::new(NumericExpression::IntegerVariable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "max", "0", "c0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::NumericOperation(
+                NumericOperator::Max,
+                Box::new(NumericExpression::Constant(0.0)),
                 Box::new(NumericExpression::ContinuousVariable(0))
             )
         );
@@ -1322,39 +1698,43 @@ mod tests {
     }
 
     #[test]
-    fn parse_operation_err() {
+    fn parse_continuous_operatin_err() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
         let tokens = Vec::new();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "+", "0", "i0", "i1", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "+", "0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "^", "0", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
-    fn parse_cardinality_ok() {
+    fn parse_integer_cardinality_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
@@ -1362,7 +1742,8 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1375,7 +1756,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_cardinality_err() {
+    fn parse_integer_cardinality_err() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
@@ -1383,92 +1764,132 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["|", "s2", "s0", "|", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
-    fn parse_atom_ok() {
+    fn parse_continuous_cardinality_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["cost", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let tokens: Vec<String> = ["|", "s2", "|", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
-        assert_eq!(expression, NumericExpression::Cost);
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["f0", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(expression, NumericExpression::Constant(0));
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["cf0", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(expression, NumericExpression::Constant(0.0));
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["i1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(expression, NumericExpression::IntegerVariable(1));
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["c1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(expression, NumericExpression::ContinuousVariable(1));
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["ir1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(expression, NumericExpression::IntegerResourceVariable(1));
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["cr1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(expression, NumericExpression::ContinuousResourceVariable(1));
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["11", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(expression, NumericExpression::Constant(11));
-        assert_eq!(rest, &tokens[1..]);
+        assert_eq!(
+            expression,
+            NumericExpression::Cardinality(SetExpression::Reference(
+                ReferenceExpression::Variable(2)
+            ))
+        );
+        assert_eq!(rest, &tokens[3..]);
     }
 
     #[test]
-    fn parse_atom_err() {
+    fn parse_continuous_cardinality_err() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["h", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let tokens: Vec<String> = ["|", "e2", "|", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["e1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        let tokens: Vec<String> = ["|", "s2", "s0", "|", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_length_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["(", "length", "v0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Length(VectorExpression::Reference(ReferenceExpression::Variable(
+                0
+            )))
+        );
+        assert_eq!(rest, &tokens[4..]);
+    }
+
+    #[test]
+    fn parse_integer_length_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["(", "length", "s0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_length_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["(", "length", "v0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Length(VectorExpression::Reference(ReferenceExpression::Variable(
+                0
+            )))
+        );
+        assert_eq!(rest, &tokens[4..]);
+    }
+
+    #[test]
+    fn parse_continuous_length_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["(", "length", "s0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 }

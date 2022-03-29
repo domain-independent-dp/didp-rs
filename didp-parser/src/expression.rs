@@ -12,7 +12,8 @@ pub use element_expression::{
     VectorExpression,
 };
 pub use numeric_expression::{
-    NumericExpression, NumericOperator, NumericVectorExpression, VectorOrElementExpression,
+    FromVector, NumericExpression, NumericOperator, NumericVectorExpression, ReduceOperator,
+    VectorOrElementExpression,
 };
 pub use numeric_table_expression::{ArgumentExpression, NumericTableExpression};
 pub use reference_expression::ReferenceExpression;

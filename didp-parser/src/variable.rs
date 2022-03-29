@@ -1,6 +1,6 @@
 use std::default;
 use std::fmt;
-use std::iter::Sum;
+use std::iter::{Product, Sum};
 use std::str;
 
 pub type Set = fixedbitset::FixedBitSet;
@@ -16,6 +16,7 @@ pub trait Numeric:
     + num_traits::FromPrimitive
     + Copy
     + Sum
+    + Product
     + PartialOrd
     + str::FromStr
     + fmt::Debug
