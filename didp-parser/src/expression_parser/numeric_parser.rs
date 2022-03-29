@@ -2,19 +2,23 @@ use super::element_parser;
 use super::numeric_table_parser;
 use super::util;
 use super::util::ParseErr;
-use crate::expression::{NumericExpression, NumericOperator};
+use crate::expression::{
+    ArgumentExpression, NumericExpression, NumericOperator, NumericVectorExpression,
+    VectorOrElementExpression,
+};
 use crate::state::StateMetadata;
+use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
-use crate::variable::{Integer, Numeric};
+use crate::variable::{Element, Integer, Numeric};
 use rustc_hash::FxHashMap;
 use std::fmt;
 use std::str;
 
-pub fn parse_expression<'a, 'b, 'c, T: Numeric>(
+pub fn parse_expression<'a, T: Numeric>(
     tokens: &'a [String],
-    metadata: &'b StateMetadata,
-    registry: &'b TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, Element>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -25,11 +29,11 @@ where
     }
 }
 
-pub fn parse_integer_expression<'a, 'b, 'c, T: Numeric>(
+pub fn parse_integer_expression<'a, T: Numeric>(
     tokens: &'a [String],
-    metadata: &'b StateMetadata,
-    registry: &'b TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, Element>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -53,6 +57,31 @@ where
                 Ok((NumericExpression::IntegerTable(expression), rest))
             } else if name == "length" {
                 parse_length(rest, metadata, registry, parameters)
+            } else if name == "last" {
+                let (vector, rest) =
+                    parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                Ok((NumericExpression::IntegerLast(Box::new(vector)), rest))
+            } else if name == "at" {
+                let (vector, rest) =
+                    parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                let (i, rest) =
+                    element_parser::parse_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                Ok((NumericExpression::IntegerAt(Box::new(vector), i), rest))
+            } else if name == "reduce-sum" {
+                let (vector, rest) =
+                    parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                Ok((NumericExpression::IntegerReduceSum(Box::new(vector)), rest))
+            } else if name == "reduce-product" {
+                let (vector, rest) =
+                    parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                Ok((
+                    NumericExpression::IntegerReduceProduct(Box::new(vector)),
+                    rest,
+                ))
             } else {
                 let (x, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
                 let (y, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
@@ -70,11 +99,11 @@ where
     }
 }
 
-pub fn parse_continuous_expression<'a, 'b, 'c, T: Numeric>(
+pub fn parse_continuous_expression<'a, T: Numeric>(
     tokens: &'a [String],
-    metadata: &'b StateMetadata,
-    registry: &'b TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, Element>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -107,6 +136,67 @@ where
                 Ok((NumericExpression::ContinuousTable(expression), rest))
             } else if name == "length" {
                 parse_length(rest, metadata, registry, parameters)
+            } else if name == "last" {
+                if let Ok((vector, rest)) =
+                    parse_integer_vector_expression(rest, metadata, registry, parameters)
+                {
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericExpression::IntegerLast(Box::new(vector)), rest))
+                } else {
+                    let (vector, rest) =
+                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericExpression::ContinuousLast(Box::new(vector)), rest))
+                }
+            } else if name == "at" {
+                if let Ok((vector, rest)) =
+                    parse_integer_vector_expression(rest, metadata, registry, parameters)
+                {
+                    let (i, rest) =
+                        element_parser::parse_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericExpression::IntegerAt(Box::new(vector), i), rest))
+                } else {
+                    let (vector, rest) =
+                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
+                    let (i, rest) =
+                        element_parser::parse_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericExpression::ContinuousAt(Box::new(vector), i), rest))
+                }
+            } else if name == "reduce-sum" {
+                if let Ok((vector, rest)) =
+                    parse_integer_vector_expression(rest, metadata, registry, parameters)
+                {
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericExpression::IntegerReduceSum(Box::new(vector)), rest))
+                } else {
+                    let (vector, rest) =
+                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((
+                        NumericExpression::ContinuousReduceSum(Box::new(vector)),
+                        rest,
+                    ))
+                }
+            } else if name == "reduce-product" {
+                if let Ok((vector, rest)) =
+                    parse_integer_vector_expression(rest, metadata, registry, parameters)
+                {
+                    let rest = util::parse_closing(rest)?;
+                    Ok((
+                        NumericExpression::IntegerReduceProduct(Box::new(vector)),
+                        rest,
+                    ))
+                } else {
+                    let (vector, rest) =
+                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((
+                        NumericExpression::ContinuousReduceProduct(Box::new(vector)),
+                        rest,
+                    ))
+                }
             } else {
                 let (x, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
                 let (y, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
@@ -167,11 +257,11 @@ where
     }
 }
 
-fn parse_cardinality<'a, 'b, 'c, T: Numeric>(
+fn parse_cardinality<'a, T: Numeric>(
     tokens: &'a [String],
-    metadata: &'b StateMetadata,
-    registry: &'b TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, Element>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr> {
     let (expression, rest) =
         element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
@@ -187,11 +277,11 @@ fn parse_cardinality<'a, 'b, 'c, T: Numeric>(
     Ok((NumericExpression::Cardinality(expression), rest))
 }
 
-fn parse_length<'a, 'b, 'c, T: Numeric>(
+fn parse_length<'a, T: Numeric>(
     tokens: &'a [String],
-    metadata: &'b StateMetadata,
-    registry: &'b TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, Element>,
 ) -> Result<(NumericExpression<T>, &'a [String]), ParseErr> {
     let (expression, rest) =
         element_parser::parse_vector_expression(tokens, metadata, registry, parameters)?;
@@ -250,6 +340,558 @@ where
     }
 }
 
+fn parse_integer_vector_expression<'a, T: Numeric>(
+    tokens: &'a [String],
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, usize>,
+) -> Result<(NumericVectorExpression<T>, &'a [String]), ParseErr>
+where
+    <T as str::FromStr>::Err: fmt::Debug,
+{
+    let (token, rest) = tokens
+        .split_first()
+        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+    match &token[..] {
+        "(" => {
+            let (name, rest) = rest
+                .split_first()
+                .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+            match &name[..] {
+                "numeric-vector" => parse_integer_vector_constant(tokens, registry),
+                "reverse" => {
+                    let (vector, rest) =
+                        parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericVectorExpression::Reverse(Box::new(vector)), rest))
+                }
+                "push" => {
+                    let (v, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
+                    let (vector, rest) =
+                        parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericVectorExpression::Push(v, Box::new(vector)), rest))
+                }
+                "pop" => {
+                    let (vector, rest) =
+                        parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericVectorExpression::Pop(Box::new(vector)), rest))
+                }
+                "set" => {
+                    let (v, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
+                    let (vector, rest) =
+                        parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                    let (i, rest) =
+                        element_parser::parse_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericVectorExpression::Set(v, Box::new(vector), i), rest))
+                }
+                "table-vector" => {
+                    let (name, rest) = rest
+                        .split_first()
+                        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+                    if let Some((expression, rest)) = parse_vector_table(
+                        name,
+                        rest,
+                        metadata,
+                        registry,
+                        parameters,
+                        &registry.integer_tables,
+                    )? {
+                        Ok((expression, rest))
+                    } else {
+                        Err(ParseErr::new(format!("no such table `{}`", name)))
+                    }
+                }
+                "sum-table-vector" => {
+                    let (name, rest) = rest
+                        .split_first()
+                        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+                    if let Some((expression, rest)) = parse_vector_table_sum(
+                        name,
+                        rest,
+                        metadata,
+                        registry,
+                        parameters,
+                        &registry.integer_tables,
+                    )? {
+                        Ok((expression, rest))
+                    } else {
+                        Err(ParseErr::new(format!("no such table `{}`", name)))
+                    }
+                }
+                name => {
+                    if let Ok((v, rest)) =
+                        parse_integer_expression(rest, metadata, registry, parameters)
+                    {
+                        let (vector, rest) =
+                            parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                        let rest = util::parse_closing(rest)?;
+                        if let Some(expression) = parse_vector_numeric_operation(name, v, vector) {
+                            Ok((expression, rest))
+                        } else {
+                            Err(ParseErr::new(format!(
+                                "no such table or operation `{}`",
+                                name
+                            )))
+                        }
+                    } else {
+                        let (x, rest) =
+                            parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                        let (y, rest) =
+                            parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                        let rest = util::parse_closing(rest)?;
+                        if let Some(expression) = parse_vector_operation(name, x, y) {
+                            Ok((expression, rest))
+                        } else {
+                            Err(ParseErr::new(format!(
+                                "no such table or operation `{}`",
+                                name
+                            )))
+                        }
+                    }
+                }
+            }
+        }
+        _ => Err(ParseErr::new(format!("unexpected  token `{}`", token))),
+    }
+}
+
+fn parse_integer_vector_constant<'a, T: Numeric>(
+    tokens: &'a [String],
+    registry: &TableRegistry,
+) -> Result<(NumericVectorExpression<T>, &'a [String]), ParseErr>
+where
+    <T as str::FromStr>::Err: fmt::Debug,
+{
+    let mut result = Vec::new();
+    let mut xs = tokens;
+    loop {
+        let (next_token, rest) = xs
+            .split_first()
+            .ok_or_else(|| ParseErr::new("could not find closing `)`".to_string()))?;
+        if next_token == ")" {
+            return Ok((NumericVectorExpression::Constant(result), rest));
+        }
+        let v = if let Some(v) = registry.integer_tables.name_to_constant.get(next_token) {
+            T::from(*v)
+        } else {
+            let v: T = next_token.parse().map_err(|e| {
+                ParseErr::new(format!(
+                    "could not parse {} as a number: {:?}",
+                    next_token, e
+                ))
+            })?;
+            v
+        };
+        result.push(v);
+        xs = rest;
+    }
+}
+
+fn parse_continuous_vector_expression<'a, T: Numeric>(
+    tokens: &'a [String],
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, usize>,
+) -> Result<(NumericVectorExpression<T>, &'a [String]), ParseErr>
+where
+    <T as str::FromStr>::Err: fmt::Debug,
+{
+    let (token, rest) = tokens
+        .split_first()
+        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+    match &token[..] {
+        "(" => {
+            let (name, rest) = rest
+                .split_first()
+                .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+            match &name[..] {
+                "numeric-vector" => parse_continuous_vector_constant(tokens, registry),
+                "reverse" => {
+                    let (vector, rest) =
+                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericVectorExpression::Reverse(Box::new(vector)), rest))
+                }
+                "push" => {
+                    let (v, rest) =
+                        parse_continuous_expression(rest, metadata, registry, parameters)?;
+                    let (vector, rest) =
+                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericVectorExpression::Push(v, Box::new(vector)), rest))
+                }
+                "pop" => {
+                    let (vector, rest) =
+                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericVectorExpression::Pop(Box::new(vector)), rest))
+                }
+                "set" => {
+                    let (v, rest) =
+                        parse_continuous_expression(rest, metadata, registry, parameters)?;
+                    let (vector, rest) =
+                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
+                    let (i, rest) =
+                        element_parser::parse_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((NumericVectorExpression::Set(v, Box::new(vector), i), rest))
+                }
+                "table-vector" => {
+                    let (name, rest) = rest
+                        .split_first()
+                        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+                    if let Some((expression, rest)) = parse_vector_table(
+                        name,
+                        rest,
+                        metadata,
+                        registry,
+                        parameters,
+                        &registry.integer_tables,
+                    )? {
+                        Ok((expression, rest))
+                    } else if let Some((expression, rest)) = parse_vector_table(
+                        name,
+                        rest,
+                        metadata,
+                        registry,
+                        parameters,
+                        &registry.continuous_tables,
+                    )? {
+                        Ok((expression, rest))
+                    } else {
+                        Err(ParseErr::new(format!("no such table `{}`", name)))
+                    }
+                }
+                "sum-table-vector" => {
+                    let (name, rest) = rest
+                        .split_first()
+                        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+                    if let Some((expression, rest)) = parse_vector_table_sum(
+                        name,
+                        rest,
+                        metadata,
+                        registry,
+                        parameters,
+                        &registry.integer_tables,
+                    )? {
+                        Ok((expression, rest))
+                    } else if let Some((expression, rest)) = parse_vector_table_sum(
+                        name,
+                        rest,
+                        metadata,
+                        registry,
+                        parameters,
+                        &registry.continuous_tables,
+                    )? {
+                        Ok((expression, rest))
+                    } else {
+                        Err(ParseErr::new(format!("no such table `{}`", name)))
+                    }
+                }
+                name => {
+                    if let Ok((v, rest)) =
+                        parse_continuous_expression(rest, metadata, registry, parameters)
+                    {
+                        let (vector, rest) = parse_continuous_vector_expression(
+                            rest, metadata, registry, parameters,
+                        )?;
+                        let rest = util::parse_closing(rest)?;
+                        if let Some(expression) = parse_vector_numeric_operation(name, v, vector) {
+                            Ok((expression, rest))
+                        } else {
+                            Err(ParseErr::new(format!(
+                                "no such table or operation `{}`",
+                                name
+                            )))
+                        }
+                    } else {
+                        let (x, rest) = parse_continuous_vector_expression(
+                            rest, metadata, registry, parameters,
+                        )?;
+                        let (y, rest) = parse_continuous_vector_expression(
+                            rest, metadata, registry, parameters,
+                        )?;
+                        let rest = util::parse_closing(rest)?;
+                        if let Some(expression) = parse_vector_operation(name, x, y) {
+                            Ok((expression, rest))
+                        } else {
+                            Err(ParseErr::new(format!(
+                                "no such table or operation `{}`",
+                                name
+                            )))
+                        }
+                    }
+                }
+            }
+        }
+        _ => Err(ParseErr::new(format!("unexpected  token `{}`", token))),
+    }
+}
+
+fn parse_continuous_vector_constant<'a, T: Numeric>(
+    tokens: &'a [String],
+    registry: &TableRegistry,
+) -> Result<(NumericVectorExpression<T>, &'a [String]), ParseErr>
+where
+    <T as str::FromStr>::Err: fmt::Debug,
+{
+    let mut result = Vec::new();
+    let mut xs = tokens;
+    loop {
+        let (next_token, rest) = xs
+            .split_first()
+            .ok_or_else(|| ParseErr::new("could not find closing `)`".to_string()))?;
+        if next_token == ")" {
+            return Ok((NumericVectorExpression::Constant(result), rest));
+        }
+        let v = if let Some(v) = registry.integer_tables.name_to_constant.get(next_token) {
+            T::from(*v)
+        } else if let Some(v) = registry.continuous_tables.name_to_constant.get(next_token) {
+            T::from(*v)
+        } else {
+            let v: T = next_token.parse().map_err(|e| {
+                ParseErr::new(format!(
+                    "could not parse {} as a number: {:?}",
+                    next_token, e
+                ))
+            })?;
+            v
+        };
+        result.push(v);
+        xs = rest;
+    }
+}
+
+type NumericVectorTableReturnType<'a, T> = Option<(NumericVectorExpression<T>, &'a [String])>;
+
+fn parse_vector_table<'a, T: Numeric, U: Numeric>(
+    name: &str,
+    tokens: &'a [String],
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, Element>,
+    tables: &TableData<U>,
+) -> Result<NumericVectorTableReturnType<'a, T>, ParseErr> {
+    if let Some(i) = tables.name_to_table_1d.get(name) {
+        let (x, rest) =
+            element_parser::parse_vector_expression(tokens, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        Ok(Some((NumericVectorExpression::Table1D(*i, x), rest)))
+    } else if let Some(i) = tables.name_to_table_2d.get(name) {
+        let (x, rest) = parse_vector_or_element(tokens, metadata, registry, parameters)?;
+        let (y, rest) = parse_vector_or_element(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        match (x, y) {
+            (VectorOrElementExpression::Vector(x), VectorOrElementExpression::Vector(y)) => {
+                Ok(Some((NumericVectorExpression::Table2D(*i, x, y), rest)))
+            }
+            (VectorOrElementExpression::Vector(x), VectorOrElementExpression::Element(y)) => {
+                Ok(Some((NumericVectorExpression::Table2DX(*i, x, y), rest)))
+            }
+            (VectorOrElementExpression::Element(x), VectorOrElementExpression::Vector(y)) => {
+                Ok(Some((NumericVectorExpression::Table2DY(*i, x, y), rest)))
+            }
+            (x, y) => Err(ParseErr::new(format!(
+                "arguments `{:?}` `{:?}` are invalid for `{}`",
+                x, y, name
+            ))),
+        }
+    } else if let Some(i) = tables.name_to_table_3d.get(name) {
+        let (expression, rest) = parse_table(*i, tokens, metadata, registry, parameters)?;
+        Ok(Some((expression, rest)))
+    } else if let Some(i) = tables.name_to_table.get(name) {
+        let (expression, rest) = parse_table(*i, tokens, metadata, registry, parameters)?;
+        Ok(Some((expression, rest)))
+    } else {
+        Ok(None)
+    }
+}
+
+fn parse_table<'a, T: Numeric>(
+    i: usize,
+    tokens: &'a [String],
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, usize>,
+) -> Result<(NumericVectorExpression<T>, &'a [String]), ParseErr> {
+    let mut args = Vec::new();
+    let mut xs = tokens;
+    loop {
+        let (next_token, rest) = xs
+            .split_first()
+            .ok_or_else(|| ParseErr::new("could not find closing `)`".to_string()))?;
+        if next_token == ")" {
+            return Ok((NumericVectorExpression::Table(i, args), rest));
+        }
+        let (expression, new_xs) = parse_vector_or_element(xs, metadata, registry, parameters)?;
+        args.push(expression);
+        xs = new_xs;
+    }
+}
+
+fn parse_vector_or_element<'a>(
+    tokens: &'a [String],
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, usize>,
+) -> Result<(VectorOrElementExpression, &'a [String]), ParseErr> {
+    if let Ok((element, rest)) =
+        element_parser::parse_expression(tokens, metadata, registry, parameters)
+    {
+        Ok((VectorOrElementExpression::Element(element), rest))
+    } else if let Ok((vector, rest)) =
+        element_parser::parse_vector_expression(tokens, metadata, registry, parameters)
+    {
+        Ok((VectorOrElementExpression::Vector(vector), rest))
+    } else {
+        Err(ParseErr::new(format!(
+            "could not parse tokens `{:?}`",
+            tokens
+        )))
+    }
+}
+
+fn parse_vector_table_sum<'a, T: Numeric, U: Numeric>(
+    name: &str,
+    tokens: &'a [String],
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, Element>,
+    tables: &TableData<U>,
+) -> Result<NumericVectorTableReturnType<'a, T>, ParseErr> {
+    if let Some(i) = tables.name_to_table_2d.get(name) {
+        let (x, rest) =
+            numeric_table_parser::parse_argument(tokens, metadata, registry, parameters)?;
+        let (y, rest) = numeric_table_parser::parse_argument(rest, metadata, registry, parameters)?;
+        match (x, y) {
+            (ArgumentExpression::Vector(x), ArgumentExpression::Set(y)) => {
+                Ok(Some((NumericVectorExpression::Table2DXSum(*i, x, y), rest)))
+            }
+            (ArgumentExpression::Set(x), ArgumentExpression::Vector(y)) => {
+                Ok(Some((NumericVectorExpression::Table2DYSum(*i, x, y), rest)))
+            }
+            (x, y) => Err(ParseErr::new(format!(
+                "arguments `{:?}` `{:?}` are invalid for `{}`",
+                x, y, name
+            ))),
+        }
+    } else if let Some(i) = tables.name_to_table_3d.get(name) {
+        let (expression, rest) = parse_table_sum(*i, tokens, metadata, registry, parameters)?;
+        Ok(Some((expression, rest)))
+    } else if let Some(i) = tables.name_to_table.get(name) {
+        let (expression, rest) = parse_table_sum(*i, tokens, metadata, registry, parameters)?;
+        Ok(Some((expression, rest)))
+    } else {
+        Ok(None)
+    }
+}
+
+fn parse_table_sum<'a, T: Numeric>(
+    i: usize,
+    tokens: &'a [String],
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, usize>,
+) -> Result<(NumericVectorExpression<T>, &'a [String]), ParseErr> {
+    let mut args = Vec::new();
+    let mut xs = tokens;
+    loop {
+        let (next_token, rest) = xs
+            .split_first()
+            .ok_or_else(|| ParseErr::new("could not find closing `)`".to_string()))?;
+        if next_token == ")" {
+            return Ok((NumericVectorExpression::TableSum(i, args), rest));
+        }
+        let (expression, new_xs) =
+            numeric_table_parser::parse_argument(xs, metadata, registry, parameters)?;
+        args.push(expression);
+        xs = new_xs;
+    }
+}
+
+fn parse_vector_numeric_operation<T: Numeric>(
+    op: &str,
+    v: NumericExpression<T>,
+    vector: NumericVectorExpression<T>,
+) -> Option<NumericVectorExpression<T>> {
+    match op {
+        "+" => Some(NumericVectorExpression::NumericOperation(
+            NumericOperator::Add,
+            v,
+            Box::new(vector),
+        )),
+        "-" => Some(NumericVectorExpression::NumericOperation(
+            NumericOperator::Subtract,
+            v,
+            Box::new(vector),
+        )),
+        "*" => Some(NumericVectorExpression::NumericOperation(
+            NumericOperator::Multiply,
+            v,
+            Box::new(vector),
+        )),
+        "/" => Some(NumericVectorExpression::NumericOperation(
+            NumericOperator::Divide,
+            v,
+            Box::new(vector),
+        )),
+        "max" => Some(NumericVectorExpression::NumericOperation(
+            NumericOperator::Max,
+            v,
+            Box::new(vector),
+        )),
+        "min" => Some(NumericVectorExpression::NumericOperation(
+            NumericOperator::Min,
+            v,
+            Box::new(vector),
+        )),
+        _ => None,
+    }
+}
+
+fn parse_vector_operation<T: Numeric>(
+    op: &str,
+    x: NumericVectorExpression<T>,
+    y: NumericVectorExpression<T>,
+) -> Option<NumericVectorExpression<T>> {
+    match op {
+        "+" => Some(NumericVectorExpression::VectorOperation(
+            NumericOperator::Add,
+            Box::new(x),
+            Box::new(y),
+        )),
+        "-" => Some(NumericVectorExpression::VectorOperation(
+            NumericOperator::Subtract,
+            Box::new(x),
+            Box::new(y),
+        )),
+        "*" => Some(NumericVectorExpression::VectorOperation(
+            NumericOperator::Multiply,
+            Box::new(x),
+            Box::new(y),
+        )),
+        "/" => Some(NumericVectorExpression::VectorOperation(
+            NumericOperator::Divide,
+            Box::new(x),
+            Box::new(y),
+        )),
+        "max" => Some(NumericVectorExpression::VectorOperation(
+            NumericOperator::Max,
+            Box::new(x),
+            Box::new(y),
+        )),
+        "min" => Some(NumericVectorExpression::VectorOperation(
+            NumericOperator::Min,
+            Box::new(x),
+            Box::new(y),
+        )),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -259,97 +901,97 @@ mod tests {
     use crate::variable::Continuous;
 
     fn generate_metadata() -> StateMetadata {
-        let object_names = vec!["object".to_string()];
+        let object_names = vec![String::from("something")];
         let object_numbers = vec![10];
         let mut name_to_object = FxHashMap::default();
-        name_to_object.insert("object".to_string(), 0);
+        name_to_object.insert(String::from("something"), 0);
 
         let set_variable_names = vec![
-            "s0".to_string(),
-            "s1".to_string(),
-            "s2".to_string(),
-            "s3".to_string(),
+            String::from("s0"),
+            String::from("s1"),
+            String::from("s2"),
+            String::from("s3"),
         ];
         let mut name_to_set_variable = FxHashMap::default();
-        name_to_set_variable.insert("s0".to_string(), 0);
-        name_to_set_variable.insert("s1".to_string(), 1);
-        name_to_set_variable.insert("s2".to_string(), 2);
-        name_to_set_variable.insert("s3".to_string(), 3);
+        name_to_set_variable.insert(String::from("s0"), 0);
+        name_to_set_variable.insert(String::from("s1"), 1);
+        name_to_set_variable.insert(String::from("s2"), 2);
+        name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
 
         let vector_variable_names = vec![
-            "p0".to_string(),
-            "p1".to_string(),
-            "p2".to_string(),
-            "p3".to_string(),
+            String::from("v0"),
+            String::from("v1"),
+            String::from("v2"),
+            String::from("v3"),
         ];
         let mut name_to_vector_variable = FxHashMap::default();
-        name_to_vector_variable.insert("p0".to_string(), 0);
-        name_to_vector_variable.insert("p1".to_string(), 1);
-        name_to_vector_variable.insert("p2".to_string(), 2);
-        name_to_vector_variable.insert("p3".to_string(), 3);
+        name_to_vector_variable.insert(String::from("v0"), 0);
+        name_to_vector_variable.insert(String::from("v1"), 1);
+        name_to_vector_variable.insert(String::from("v2"), 2);
+        name_to_vector_variable.insert(String::from("v3"), 3);
         let vector_variable_to_object = vec![0, 0, 0, 0];
 
         let element_variable_names = vec![
-            "e0".to_string(),
-            "e1".to_string(),
-            "e2".to_string(),
-            "e3".to_string(),
+            String::from("e0"),
+            String::from("e1"),
+            String::from("e2"),
+            String::from("e3"),
         ];
         let mut name_to_element_variable = FxHashMap::default();
-        name_to_element_variable.insert("e0".to_string(), 0);
-        name_to_element_variable.insert("e1".to_string(), 1);
-        name_to_element_variable.insert("e2".to_string(), 2);
-        name_to_element_variable.insert("e3".to_string(), 3);
+        name_to_element_variable.insert(String::from("e0"), 0);
+        name_to_element_variable.insert(String::from("e1"), 1);
+        name_to_element_variable.insert(String::from("e2"), 2);
+        name_to_element_variable.insert(String::from("e3"), 3);
         let element_variable_to_object = vec![0, 0, 0, 0];
 
         let integer_variable_names = vec![
-            "i0".to_string(),
-            "i1".to_string(),
-            "i2".to_string(),
-            "i3".to_string(),
+            String::from("i0"),
+            String::from("i1"),
+            String::from("i2"),
+            String::from("i3"),
         ];
         let mut name_to_integer_variable = FxHashMap::default();
-        name_to_integer_variable.insert("i0".to_string(), 0);
-        name_to_integer_variable.insert("i1".to_string(), 1);
-        name_to_integer_variable.insert("i2".to_string(), 2);
-        name_to_integer_variable.insert("i3".to_string(), 3);
+        name_to_integer_variable.insert(String::from("i0"), 0);
+        name_to_integer_variable.insert(String::from("i1"), 1);
+        name_to_integer_variable.insert(String::from("i2"), 2);
+        name_to_integer_variable.insert(String::from("i3"), 3);
 
         let integer_resource_variable_names = vec![
-            "ir0".to_string(),
-            "ir1".to_string(),
-            "ir2".to_string(),
-            "ir3".to_string(),
+            String::from("ir0"),
+            String::from("ir1"),
+            String::from("ir2"),
+            String::from("ir3"),
         ];
         let mut name_to_integer_resource_variable = FxHashMap::default();
-        name_to_integer_resource_variable.insert("ir0".to_string(), 0);
-        name_to_integer_resource_variable.insert("ir1".to_string(), 1);
-        name_to_integer_resource_variable.insert("ir2".to_string(), 2);
-        name_to_integer_resource_variable.insert("ir3".to_string(), 3);
+        name_to_integer_resource_variable.insert(String::from("ir0"), 0);
+        name_to_integer_resource_variable.insert(String::from("ir1"), 1);
+        name_to_integer_resource_variable.insert(String::from("ir2"), 2);
+        name_to_integer_resource_variable.insert(String::from("ir3"), 3);
 
         let continuous_variable_names = vec![
-            "c0".to_string(),
-            "c1".to_string(),
-            "c2".to_string(),
-            "c3".to_string(),
+            String::from("c0"),
+            String::from("c1"),
+            String::from("c2"),
+            String::from("c3"),
         ];
         let mut name_to_continuous_variable = FxHashMap::default();
-        name_to_continuous_variable.insert("c0".to_string(), 0);
-        name_to_continuous_variable.insert("c1".to_string(), 1);
-        name_to_continuous_variable.insert("c2".to_string(), 2);
-        name_to_continuous_variable.insert("c3".to_string(), 3);
+        name_to_continuous_variable.insert(String::from("c0"), 0);
+        name_to_continuous_variable.insert(String::from("c1"), 1);
+        name_to_continuous_variable.insert(String::from("c2"), 2);
+        name_to_continuous_variable.insert(String::from("c3"), 3);
 
         let continuous_resource_variable_names = vec![
-            "cr0".to_string(),
-            "cr1".to_string(),
-            "cr2".to_string(),
-            "cr3".to_string(),
+            String::from("cr0"),
+            String::from("cr1"),
+            String::from("cr2"),
+            String::from("cr3"),
         ];
         let mut name_to_continuous_resource_variable = FxHashMap::default();
-        name_to_continuous_resource_variable.insert("cr0".to_string(), 0);
-        name_to_continuous_resource_variable.insert("cr1".to_string(), 1);
-        name_to_continuous_resource_variable.insert("cr2".to_string(), 2);
-        name_to_continuous_resource_variable.insert("cr3".to_string(), 3);
+        name_to_continuous_resource_variable.insert(String::from("cr0"), 0);
+        name_to_continuous_resource_variable.insert(String::from("cr1"), 1);
+        name_to_continuous_resource_variable.insert(String::from("cr2"), 2);
+        name_to_continuous_resource_variable.insert(String::from("cr3"), 3);
 
         StateMetadata {
             object_names,
@@ -377,9 +1019,9 @@ mod tests {
         }
     }
 
-    fn generate_parameters() -> FxHashMap<String, usize> {
+    fn generate_parameters() -> FxHashMap<String, Element> {
         let mut parameters = FxHashMap::default();
-        parameters.insert("param".to_string(), 0);
+        parameters.insert(String::from("param"), 0);
         parameters
     }
 

@@ -359,7 +359,8 @@ pub enum NumericVectorExpression<T: Numeric> {
         Box<NumericVectorExpression<T>>,
         Box<NumericVectorExpression<T>>,
     ),
-    Table(usize, Vec<ArgumentExpression>),
+    Table(usize, Vec<VectorOrElementExpression>),
+    TableSum(usize, Vec<ArgumentExpression>),
     Table1D(usize, VectorExpression),
     Table2D(usize, VectorExpression, VectorExpression),
     Table2DX(usize, VectorExpression, ElementExpression),
@@ -439,6 +440,7 @@ impl<T: Numeric> NumericVectorExpression<T> {
                 ),
             },
             Self::Table(i, args) => Self::eval_table(*i, args, state, registry, tables),
+            Self::TableSum(i, args) => Self::eval_table_sum(*i, args, state, registry, tables),
             Self::Table1D(i, VectorExpression::Reference(x)) => x
                 .eval(state, registry, vector_variables, vector_tables)
                 .iter()
@@ -621,6 +623,7 @@ impl<T: Numeric> NumericVectorExpression<T> {
                 }
             }
             Self::Table(i, args) => Self::simplify_table(*i, args, registry, tables),
+            Self::TableSum(i, args) => Self::simplify_table_sum(*i, args, registry, tables),
             Self::Table1D(i, x) => match x.simplify(registry) {
                 VectorExpression::Reference(ReferenceExpression::Constant(x)) => {
                     Self::Constant(x.iter().map(|x| tables.tables_1d[*i].eval(*x)).collect())
@@ -688,6 +691,140 @@ impl<T: Numeric> NumericVectorExpression<T> {
     }
 
     fn eval_table(
+        i: usize,
+        args: &[VectorOrElementExpression],
+        state: &State,
+        registry: &TableRegistry,
+        tables: &TableData<T>,
+    ) -> Vec<T> {
+        let mut result = vec![vec![]];
+        let mut vector_mode = false;
+        for arg in args {
+            match arg {
+                VectorOrElementExpression::Element(element) => {
+                    let element = element.eval(state, registry);
+                    result.iter_mut().for_each(|r| r.push(element));
+                }
+                VectorOrElementExpression::Vector(vector) => match vector {
+                    VectorExpression::Reference(vector) => {
+                        let vector = vector.eval(
+                            state,
+                            registry,
+                            &state.signature_variables.vector_variables,
+                            &registry.vector_tables,
+                        );
+                        if vector_mode {
+                            result.iter_mut().zip(vector).for_each(|(r, v)| r.push(*v));
+                        } else {
+                            result = vector
+                                .iter()
+                                .map(|v| {
+                                    let mut r = result[0].clone();
+                                    r.push(*v);
+                                    r
+                                })
+                                .collect();
+                            vector_mode = true;
+                        }
+                    }
+                    vector => {
+                        let vector = vector.eval(state, registry);
+                        if vector_mode {
+                            result.iter_mut().zip(vector).for_each(|(r, v)| r.push(v));
+                        } else {
+                            result = vector
+                                .into_iter()
+                                .map(|v| {
+                                    let mut r = result[0].clone();
+                                    r.push(v);
+                                    r
+                                })
+                                .collect();
+                            vector_mode = true;
+                        }
+                    }
+                },
+            }
+        }
+        match args.len() {
+            1 => result
+                .into_iter()
+                .map(|r| tables.tables_1d[i].eval(r[0]))
+                .collect(),
+            2 => result
+                .into_iter()
+                .map(|r| tables.tables_2d[i].eval(r[0], r[1]))
+                .collect(),
+            3 => result
+                .into_iter()
+                .map(|r| tables.tables_3d[i].eval(r[0], r[1], r[2]))
+                .collect(),
+            _ => result
+                .into_iter()
+                .map(|r| tables.tables[i].eval(&r))
+                .collect(),
+        }
+    }
+
+    fn simplify_table(
+        i: usize,
+        args: &[VectorOrElementExpression],
+        registry: &TableRegistry,
+        tables: &TableData<T>,
+    ) -> NumericVectorExpression<T> {
+        let args: Vec<VectorOrElementExpression> =
+            args.iter().map(|x| x.simplify(registry)).collect();
+        let mut simplified_args = vec![vec![]];
+        let mut vector_mode = false;
+        for arg in &args {
+            match arg {
+                VectorOrElementExpression::Element(ElementExpression::Constant(element)) => {
+                    simplified_args.iter_mut().for_each(|r| r.push(*element));
+                }
+                VectorOrElementExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vector),
+                )) => {
+                    if vector_mode {
+                        simplified_args
+                            .iter_mut()
+                            .zip(vector)
+                            .for_each(|(r, v)| r.push(*v));
+                    } else {
+                        simplified_args = vector
+                            .iter()
+                            .map(|v| {
+                                let mut r = simplified_args[0].clone();
+                                r.push(*v);
+                                r
+                            })
+                            .collect();
+                        vector_mode = true;
+                    }
+                }
+                _ => return NumericVectorExpression::Table(i, args),
+            }
+        }
+        Self::Constant(match args.len() {
+            1 => simplified_args
+                .into_iter()
+                .map(|r| tables.tables_1d[i].eval(r[0]))
+                .collect(),
+            2 => simplified_args
+                .into_iter()
+                .map(|r| tables.tables_2d[i].eval(r[0], r[1]))
+                .collect(),
+            3 => simplified_args
+                .into_iter()
+                .map(|r| tables.tables_3d[i].eval(r[0], r[1], r[2]))
+                .collect(),
+            _ => simplified_args
+                .into_iter()
+                .map(|r| tables.tables[i].eval(&r))
+                .collect(),
+        })
+    }
+
+    fn eval_table_sum(
         i: usize,
         args: &[ArgumentExpression],
         state: &State,
@@ -803,7 +940,7 @@ impl<T: Numeric> NumericVectorExpression<T> {
         }
     }
 
-    fn simplify_table(
+    fn simplify_table_sum(
         i: usize,
         args: &[ArgumentExpression],
         registry: &TableRegistry,
@@ -847,7 +984,7 @@ impl<T: Numeric> NumericVectorExpression<T> {
                         vector_mode = true;
                     }
                 }
-                _ => return Self::Table(i, args),
+                _ => return Self::TableSum(i, args),
             }
         }
         Self::Constant(match args.len() {
@@ -938,6 +1075,25 @@ impl<T: Numeric> NumericVectorExpression<T> {
             }),
         }
         y
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum VectorOrElementExpression {
+    Vector(VectorExpression),
+    Element(ElementExpression),
+}
+
+impl VectorOrElementExpression {
+    pub fn simplify(&self, registry: &TableRegistry) -> VectorOrElementExpression {
+        match self {
+            VectorOrElementExpression::Vector(vector) => {
+                VectorOrElementExpression::Vector(vector.simplify(registry))
+            }
+            VectorOrElementExpression::Element(element) => {
+                VectorOrElementExpression::Element(element.simplify(registry))
+            }
+        }
     }
 }
 
@@ -2278,10 +2434,29 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
         let tables = &registry.integer_tables;
+        let expression = NumericVectorExpression::Table(
+            0,
+            vec![
+                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
+                VectorOrElementExpression::Element(ElementExpression::Constant(1)),
+                VectorOrElementExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 2]),
+                )),
+                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
+            ],
+        );
+        assert_eq!(expression.eval(&state, &registry, tables), vec![100, 300]);
+    }
+
+    #[test]
+    fn vector_table_sum_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let tables = &registry.integer_tables;
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
-        let expression = NumericVectorExpression::Table(
+        let expression = NumericVectorExpression::TableSum(
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -2297,7 +2472,7 @@ mod tests {
         assert_eq!(expression.eval(&state, &registry, tables), vec![300, 700]);
         let mut set = Set::with_capacity(3);
         set.insert(2);
-        let expression = NumericVectorExpression::Table(
+        let expression = NumericVectorExpression::TableSum(
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -2865,6 +3040,44 @@ mod tests {
         let expression = NumericVectorExpression::Table(
             0,
             vec![
+                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
+                VectorOrElementExpression::Element(ElementExpression::Constant(1)),
+                VectorOrElementExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 2]),
+                )),
+                VectorOrElementExpression::Element(ElementExpression::Constant(0)),
+            ],
+        );
+        assert_eq!(
+            expression.simplify(&registry, tables),
+            NumericVectorExpression::Constant(vec![100, 300])
+        );
+        let mut set = Set::with_capacity(3);
+        set.insert(2);
+        let expression = NumericVectorExpression::Table(
+            0,
+            vec![
+                VectorOrElementExpression::Element(ElementExpression::Variable(0)),
+                VectorOrElementExpression::Element(ElementExpression::Constant(1)),
+                VectorOrElementExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 2]),
+                )),
+                VectorOrElementExpression::Element(ElementExpression::Variable(0)),
+            ],
+        );
+        assert_eq!(expression.simplify(&registry, tables), expression);
+    }
+
+    #[test]
+    fn vector_table_sum_simplify() {
+        let registry = generate_registry();
+        let tables = &registry.integer_tables;
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(1);
+        let expression = NumericVectorExpression::TableSum(
+            0,
+            vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
                 ArgumentExpression::Element(ElementExpression::Constant(1)),
                 ArgumentExpression::Vector(VectorExpression::Reference(
@@ -2881,7 +3094,7 @@ mod tests {
         );
         let mut set = Set::with_capacity(3);
         set.insert(2);
-        let expression = NumericVectorExpression::Table(
+        let expression = NumericVectorExpression::TableSum(
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Variable(0)),

@@ -11,7 +11,9 @@ pub use element_expression::{
     ElementExpression, SetElementOperator, SetExpression, SetOperator, TableExpression,
     VectorExpression,
 };
-pub use numeric_expression::{NumericExpression, NumericOperator, NumericVectorExpression};
+pub use numeric_expression::{
+    NumericExpression, NumericOperator, NumericVectorExpression, VectorOrElementExpression,
+};
 pub use numeric_table_expression::{ArgumentExpression, NumericTableExpression};
 pub use reference_expression::ReferenceExpression;
 pub use set_condition::SetCondition;

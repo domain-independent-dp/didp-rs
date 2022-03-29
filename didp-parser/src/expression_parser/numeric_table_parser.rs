@@ -12,13 +12,13 @@ use std::str;
 
 type NumericTableParsingResult<'a, T> = Option<(NumericTableExpression<T>, &'a [String])>;
 
-pub fn parse_expression<'a, 'b, 'c, T: Numeric>(
-    name: &'a str,
+pub fn parse_expression<'a, T: Numeric>(
+    name: &str,
     tokens: &'a [String],
-    metadata: &'b StateMetadata,
+    metadata: &StateMetadata,
     registry: &TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
-    tables: &'b TableData<T>,
+    parameters: &FxHashMap<String, usize>,
+    tables: &TableData<T>,
 ) -> Result<NumericTableParsingResult<'a, T>, ParseErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
@@ -32,6 +32,9 @@ where
         let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((NumericTableExpression::Table2D(*i, x, y), rest)))
+    } else if let Some(i) = tables.name_to_table_3d.get(name) {
+        let result = parse_table(*i, tokens, metadata, registry, parameters)?;
+        Ok(Some(result))
     } else if let Some(i) = tables.name_to_table.get(name) {
         let result = parse_table(*i, tokens, metadata, registry, parameters)?;
         Ok(Some(result))
@@ -45,12 +48,12 @@ where
     }
 }
 
-fn parse_table<'a, 'b, 'c, T: Numeric>(
+fn parse_table<'a, T: Numeric>(
     i: usize,
     tokens: &'a [String],
-    metadata: &'b StateMetadata,
-    registry: &'b TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
     let mut args = Vec::new();
     let mut xs = tokens;
@@ -68,13 +71,13 @@ fn parse_table<'a, 'b, 'c, T: Numeric>(
     }
 }
 
-fn parse_sum<'a, 'b, 'c, T: Numeric>(
-    name: &'a str,
+fn parse_sum<'a, T: Numeric>(
+    name: &str,
     tokens: &'a [String],
-    metadata: &'b StateMetadata,
+    metadata: &StateMetadata,
     registry: &TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
-    tables: &'b TableData<T>,
+    parameters: &FxHashMap<String, usize>,
+    tables: &TableData<T>,
 ) -> Result<NumericTableParsingResult<'a, T>, ParseErr> {
     if let Some(i) = tables.name_to_table_1d.get(name) {
         let (x, rest) = parse_argument(tokens, metadata, registry, parameters)?;
@@ -131,6 +134,10 @@ fn parse_sum<'a, 'b, 'c, T: Numeric>(
                 x, y
             ))),
         }
+    } else if let Some(i) = tables.name_to_table_3d.get(name) {
+        Ok(Some(parse_table_sum(
+            *i, tokens, metadata, registry, parameters,
+        )?))
     } else if let Some(i) = tables.name_to_table.get(name) {
         Ok(Some(parse_table_sum(
             *i, tokens, metadata, registry, parameters,
@@ -140,12 +147,12 @@ fn parse_sum<'a, 'b, 'c, T: Numeric>(
     }
 }
 
-fn parse_table_sum<'a, 'b, 'c, T: Numeric>(
+fn parse_table_sum<'a, T: Numeric>(
     i: usize,
     tokens: &'a [String],
-    metadata: &'b StateMetadata,
-    registry: &'b TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<(NumericTableExpression<T>, &'a [String]), ParseErr> {
     let mut args = Vec::new();
     let mut xs = tokens;
@@ -162,7 +169,7 @@ fn parse_table_sum<'a, 'b, 'c, T: Numeric>(
     }
 }
 
-fn parse_argument<'a>(
+pub fn parse_argument<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
     registry: &TableRegistry,
@@ -825,6 +832,36 @@ mod tests {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
         let registry = generate_registry();
+
+        let tokens: Vec<String> = ["0", "1", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "f3",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table(
+                0,
+                vec![
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(1),
+                    ElementExpression::Variable(0),
+                ]
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
         let tokens: Vec<String> = ["0", "1", "e0", "e1", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
@@ -881,6 +918,38 @@ mod tests {
         let metadata = generate_metadata();
         let parameters = generate_parameters();
         let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f3", "s2", "1", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::TableSum(
+                0,
+                vec![
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(2)
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                ]
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+
         let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
@@ -948,6 +1017,68 @@ mod tests {
             &parameters,
             &registry.integer_tables,
         );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_argument_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["e0", "v3", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ArgumentExpression::Element(ElementExpression::Variable(0))
+        );
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["s0", "v3", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0)))
+        );
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["v0", "v3", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
+                0
+            )))
+        );
+        assert_eq!(rest, &tokens[1..]);
+    }
+
+    #[test]
+    fn parse_argument_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["n0", "v3", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 }
