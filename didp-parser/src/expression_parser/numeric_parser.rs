@@ -1,13 +1,12 @@
 use super::element_parser;
 use super::numeric_table_parser;
+use super::table_vector_parser;
 use super::util;
 use super::util::ParseErr;
 use crate::expression::{
-    ArgumentExpression, FromVector, NumericExpression, NumericOperator, NumericVectorExpression,
-    ReduceOperator, VectorOrElementExpression,
+    NumericExpression, NumericOperator, NumericVectorExpression, ReduceOperator,
 };
 use crate::state::StateMetadata;
-use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 use crate::variable::{Continuous, Element, Integer, Numeric};
 use rustc_hash::FxHashMap;
@@ -61,26 +60,19 @@ where
                 let (vector, rest) =
                     parse_integer_vector_expression(rest, metadata, registry, parameters)?;
                 let rest = util::parse_closing(rest)?;
-                Ok((
-                    NumericExpression::IntegerFromVector(FromVector::Last(Box::new(vector))),
-                    rest,
-                ))
+                Ok((NumericExpression::Last(Box::new(vector)), rest))
             } else if name == "at" {
                 let (vector, rest) =
                     parse_integer_vector_expression(rest, metadata, registry, parameters)?;
                 let (i, rest) =
                     element_parser::parse_expression(rest, metadata, registry, parameters)?;
                 let rest = util::parse_closing(rest)?;
-                Ok((
-                    NumericExpression::IntegerFromVector(FromVector::At(Box::new(vector), i)),
-                    rest,
-                ))
+                Ok((NumericExpression::At(Box::new(vector), i), rest))
             } else if let Ok((vector, rest)) =
                 parse_integer_vector_expression(rest, metadata, registry, parameters)
             {
                 let rest = util::parse_closing(rest)?;
-                let expression = parse_reduce(name, vector)?;
-                Ok((NumericExpression::IntegerFromVector(expression), rest))
+                Ok((parse_reduce(name, vector)?, rest))
             } else {
                 let (x, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
                 let (y, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
@@ -136,60 +128,22 @@ where
             } else if name == "length" {
                 parse_length(rest, metadata, registry, parameters)
             } else if name == "last" {
-                if let Ok((vector, rest)) =
-                    parse_integer_vector_expression(rest, metadata, registry, parameters)
-                {
-                    let rest = util::parse_closing(rest)?;
-                    Ok((
-                        NumericExpression::IntegerFromVector(FromVector::Last(Box::new(vector))),
-                        rest,
-                    ))
-                } else {
-                    let (vector, rest) =
-                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
-                    let rest = util::parse_closing(rest)?;
-                    Ok((
-                        NumericExpression::ContinuousFromVector(FromVector::Last(Box::new(vector))),
-                        rest,
-                    ))
-                }
-            } else if name == "at" {
-                if let Ok((vector, rest)) =
-                    parse_integer_vector_expression(rest, metadata, registry, parameters)
-                {
-                    let (i, rest) =
-                        element_parser::parse_expression(rest, metadata, registry, parameters)?;
-                    let rest = util::parse_closing(rest)?;
-                    Ok((
-                        NumericExpression::IntegerFromVector(FromVector::At(Box::new(vector), i)),
-                        rest,
-                    ))
-                } else {
-                    let (vector, rest) =
-                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
-                    let (i, rest) =
-                        element_parser::parse_expression(rest, metadata, registry, parameters)?;
-                    let rest = util::parse_closing(rest)?;
-                    Ok((
-                        NumericExpression::ContinuousFromVector(FromVector::At(
-                            Box::new(vector),
-                            i,
-                        )),
-                        rest,
-                    ))
-                }
-            } else if let Ok((vector, rest)) =
-                parse_integer_vector_expression(rest, metadata, registry, parameters)
-            {
+                let (vector, rest) =
+                    parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
                 let rest = util::parse_closing(rest)?;
-                let expression = parse_reduce(name, vector)?;
-                Ok((NumericExpression::IntegerFromVector(expression), rest))
+                Ok((NumericExpression::Last(Box::new(vector)), rest))
+            } else if name == "at" {
+                let (vector, rest) =
+                    parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
+                let (i, rest) =
+                    element_parser::parse_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                Ok((NumericExpression::At(Box::new(vector), i), rest))
             } else if let Ok((vector, rest)) =
                 parse_continuous_vector_expression(rest, metadata, registry, parameters)
             {
                 let rest = util::parse_closing(rest)?;
-                let expression = parse_reduce(name, vector)?;
-                Ok((NumericExpression::ContinuousFromVector(expression), rest))
+                Ok((parse_reduce(name, vector)?, rest))
             } else {
                 let (x, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
                 let (y, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
@@ -210,15 +164,24 @@ where
 fn parse_reduce<T: Numeric>(
     name: &str,
     vector: NumericVectorExpression<T>,
-) -> Result<FromVector<T>, ParseErr> {
+) -> Result<NumericExpression<T>, ParseErr> {
     match name {
-        "reduce-sum" => Ok(FromVector::Reduce(ReduceOperator::Sum, Box::new(vector))),
-        "reduce-product" => Ok(FromVector::Reduce(
+        "reduce-sum" => Ok(NumericExpression::Reduce(
+            ReduceOperator::Sum,
+            Box::new(vector),
+        )),
+        "reduce-product" => Ok(NumericExpression::Reduce(
             ReduceOperator::Product,
             Box::new(vector),
         )),
-        "reduce-max" => Ok(FromVector::Reduce(ReduceOperator::Max, Box::new(vector))),
-        "reduce-min" => Ok(FromVector::Reduce(ReduceOperator::Min, Box::new(vector))),
+        "reduce-max" => Ok(NumericExpression::Reduce(
+            ReduceOperator::Max,
+            Box::new(vector),
+        )),
+        "reduce-min" => Ok(NumericExpression::Reduce(
+            ReduceOperator::Min,
+            Box::new(vector),
+        )),
         _ => Err(ParseErr::new(format!(
             "no such reduction operator `{}`",
             name
@@ -370,7 +333,7 @@ where
                 .split_first()
                 .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
             match &name[..] {
-                "numeric-vector" => parse_integer_vector_constant(tokens, registry),
+                "numeric-vector" => parse_integer_vector_constant(rest, registry),
                 "reverse" => {
                     let (vector, rest) =
                         parse_integer_vector_expression(rest, metadata, registry, parameters)?;
@@ -403,7 +366,7 @@ where
                     let (name, rest) = rest
                         .split_first()
                         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
-                    if let Some((expression, rest)) = parse_vector_table(
+                    if let Some((expression, rest)) = table_vector_parser::parse_expression(
                         name,
                         rest,
                         metadata,
@@ -411,7 +374,7 @@ where
                         parameters,
                         &registry.integer_tables,
                     )? {
-                        Ok((expression, rest))
+                        Ok((NumericVectorExpression::IntegerTable(expression), rest))
                     } else {
                         Err(ParseErr::new(format!("no such table `{}`", name)))
                     }
@@ -420,7 +383,7 @@ where
                     let (name, rest) = rest
                         .split_first()
                         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
-                    if let Some((expression, rest)) = parse_vector_table_sum(
+                    if let Some((expression, rest)) = table_vector_parser::parse_sum_expression(
                         name,
                         rest,
                         metadata,
@@ -428,7 +391,7 @@ where
                         parameters,
                         &registry.integer_tables,
                     )? {
-                        Ok((expression, rest))
+                        Ok((NumericVectorExpression::IntegerTable(expression), rest))
                     } else {
                         Err(ParseErr::new(format!("no such table `{}`", name)))
                     }
@@ -520,7 +483,7 @@ where
                 .split_first()
                 .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
             match &name[..] {
-                "numeric-vector" => parse_continuous_vector_constant(tokens, registry),
+                "numeric-vector" => parse_continuous_vector_constant(rest, registry),
                 "reverse" => {
                     let (vector, rest) =
                         parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
@@ -555,7 +518,7 @@ where
                     let (name, rest) = rest
                         .split_first()
                         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
-                    if let Some((expression, rest)) = parse_vector_table(
+                    if let Some((expression, rest)) = table_vector_parser::parse_expression(
                         name,
                         rest,
                         metadata,
@@ -563,8 +526,8 @@ where
                         parameters,
                         &registry.integer_tables,
                     )? {
-                        Ok((expression, rest))
-                    } else if let Some((expression, rest)) = parse_vector_table(
+                        Ok((NumericVectorExpression::IntegerTable(expression), rest))
+                    } else if let Some((expression, rest)) = table_vector_parser::parse_expression(
                         name,
                         rest,
                         metadata,
@@ -572,16 +535,16 @@ where
                         parameters,
                         &registry.continuous_tables,
                     )? {
-                        Ok((expression, rest))
+                        Ok((NumericVectorExpression::ContinuousTable(expression), rest))
                     } else {
                         Err(ParseErr::new(format!("no such table `{}`", name)))
                     }
                 }
-                "sum-table-vector" => {
+                "table-sum-vector" => {
                     let (name, rest) = rest
                         .split_first()
                         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
-                    if let Some((expression, rest)) = parse_vector_table_sum(
+                    if let Some((expression, rest)) = table_vector_parser::parse_sum_expression(
                         name,
                         rest,
                         metadata,
@@ -589,16 +552,18 @@ where
                         parameters,
                         &registry.integer_tables,
                     )? {
-                        Ok((expression, rest))
-                    } else if let Some((expression, rest)) = parse_vector_table_sum(
-                        name,
-                        rest,
-                        metadata,
-                        registry,
-                        parameters,
-                        &registry.continuous_tables,
-                    )? {
-                        Ok((expression, rest))
+                        Ok((NumericVectorExpression::IntegerTable(expression), rest))
+                    } else if let Some((expression, rest)) =
+                        table_vector_parser::parse_sum_expression(
+                            name,
+                            rest,
+                            metadata,
+                            registry,
+                            parameters,
+                            &registry.continuous_tables,
+                        )?
+                    {
+                        Ok((NumericVectorExpression::ContinuousTable(expression), rest))
                     } else {
                         Err(ParseErr::new(format!("no such table `{}`", name)))
                     }
@@ -674,153 +639,6 @@ where
         };
         result.push(v);
         xs = rest;
-    }
-}
-
-type NumericVectorTableReturnType<'a, T> = Option<(NumericVectorExpression<T>, &'a [String])>;
-
-fn parse_vector_table<'a, T: Numeric, U: Numeric>(
-    name: &str,
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, Element>,
-    tables: &TableData<U>,
-) -> Result<NumericVectorTableReturnType<'a, T>, ParseErr> {
-    if let Some(i) = tables.name_to_table_1d.get(name) {
-        let (x, rest) =
-            element_parser::parse_vector_expression(tokens, metadata, registry, parameters)?;
-        let rest = util::parse_closing(rest)?;
-        Ok(Some((NumericVectorExpression::Table1D(*i, x), rest)))
-    } else if let Some(i) = tables.name_to_table_2d.get(name) {
-        let (x, rest) = parse_vector_or_element(tokens, metadata, registry, parameters)?;
-        let (y, rest) = parse_vector_or_element(rest, metadata, registry, parameters)?;
-        let rest = util::parse_closing(rest)?;
-        match (x, y) {
-            (VectorOrElementExpression::Vector(x), VectorOrElementExpression::Vector(y)) => {
-                Ok(Some((NumericVectorExpression::Table2D(*i, x, y), rest)))
-            }
-            (VectorOrElementExpression::Vector(x), VectorOrElementExpression::Element(y)) => {
-                Ok(Some((NumericVectorExpression::Table2DX(*i, x, y), rest)))
-            }
-            (VectorOrElementExpression::Element(x), VectorOrElementExpression::Vector(y)) => {
-                Ok(Some((NumericVectorExpression::Table2DY(*i, x, y), rest)))
-            }
-            (x, y) => Err(ParseErr::new(format!(
-                "arguments `{:?}` `{:?}` are invalid for `{}`",
-                x, y, name
-            ))),
-        }
-    } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let (expression, rest) = parse_table(*i, tokens, metadata, registry, parameters)?;
-        Ok(Some((expression, rest)))
-    } else if let Some(i) = tables.name_to_table.get(name) {
-        let (expression, rest) = parse_table(*i, tokens, metadata, registry, parameters)?;
-        Ok(Some((expression, rest)))
-    } else {
-        Ok(None)
-    }
-}
-
-fn parse_table<'a, T: Numeric>(
-    i: usize,
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
-) -> Result<(NumericVectorExpression<T>, &'a [String]), ParseErr> {
-    let mut args = Vec::new();
-    let mut xs = tokens;
-    loop {
-        let (next_token, rest) = xs
-            .split_first()
-            .ok_or_else(|| ParseErr::new("could not find closing `)`".to_string()))?;
-        if next_token == ")" {
-            return Ok((NumericVectorExpression::Table(i, args), rest));
-        }
-        let (expression, new_xs) = parse_vector_or_element(xs, metadata, registry, parameters)?;
-        args.push(expression);
-        xs = new_xs;
-    }
-}
-
-fn parse_vector_or_element<'a>(
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
-) -> Result<(VectorOrElementExpression, &'a [String]), ParseErr> {
-    if let Ok((element, rest)) =
-        element_parser::parse_expression(tokens, metadata, registry, parameters)
-    {
-        Ok((VectorOrElementExpression::Element(element), rest))
-    } else if let Ok((vector, rest)) =
-        element_parser::parse_vector_expression(tokens, metadata, registry, parameters)
-    {
-        Ok((VectorOrElementExpression::Vector(vector), rest))
-    } else {
-        Err(ParseErr::new(format!(
-            "could not parse tokens `{:?}`",
-            tokens
-        )))
-    }
-}
-
-fn parse_vector_table_sum<'a, T: Numeric, U: Numeric>(
-    name: &str,
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, Element>,
-    tables: &TableData<U>,
-) -> Result<NumericVectorTableReturnType<'a, T>, ParseErr> {
-    if let Some(i) = tables.name_to_table_2d.get(name) {
-        let (x, rest) =
-            numeric_table_parser::parse_argument(tokens, metadata, registry, parameters)?;
-        let (y, rest) = numeric_table_parser::parse_argument(rest, metadata, registry, parameters)?;
-        match (x, y) {
-            (ArgumentExpression::Vector(x), ArgumentExpression::Set(y)) => {
-                Ok(Some((NumericVectorExpression::Table2DXSum(*i, x, y), rest)))
-            }
-            (ArgumentExpression::Set(x), ArgumentExpression::Vector(y)) => {
-                Ok(Some((NumericVectorExpression::Table2DYSum(*i, x, y), rest)))
-            }
-            (x, y) => Err(ParseErr::new(format!(
-                "arguments `{:?}` `{:?}` are invalid for `{}`",
-                x, y, name
-            ))),
-        }
-    } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let (expression, rest) = parse_table_sum(*i, tokens, metadata, registry, parameters)?;
-        Ok(Some((expression, rest)))
-    } else if let Some(i) = tables.name_to_table.get(name) {
-        let (expression, rest) = parse_table_sum(*i, tokens, metadata, registry, parameters)?;
-        Ok(Some((expression, rest)))
-    } else {
-        Ok(None)
-    }
-}
-
-fn parse_table_sum<'a, T: Numeric>(
-    i: usize,
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
-) -> Result<(NumericVectorExpression<T>, &'a [String]), ParseErr> {
-    let mut args = Vec::new();
-    let mut xs = tokens;
-    loop {
-        let (next_token, rest) = xs
-            .split_first()
-            .ok_or_else(|| ParseErr::new("could not find closing `)`".to_string()))?;
-        if next_token == ")" {
-            return Ok((NumericVectorExpression::TableSum(i, args), rest));
-        }
-        let (expression, new_xs) =
-            numeric_table_parser::parse_argument(xs, metadata, registry, parameters)?;
-        args.push(expression);
-        xs = new_xs;
     }
 }
 
@@ -1891,5 +1709,2580 @@ mod tests {
         let result =
             parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_last_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["(", "last", "(", "numeric-vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Last(Box::new(NumericVectorExpression::Constant(vec![0, 1])))
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
+
+    #[test]
+    fn parse_integer_last_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["(", "last", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_last_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = [
+            "(",
+            "last",
+            "(",
+            "numeric-vector",
+            "0.0",
+            "1.0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Last(Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0])))
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
+
+    #[test]
+    fn parse_continuous_last_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["(", "last", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_at() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = [
+            "(",
+            "at",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "0",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::At(
+                Box::new(NumericVectorExpression::Constant(vec![0, 1]),),
+                ElementExpression::Constant(0),
+            )
+        );
+        assert_eq!(rest, &tokens[9..]);
+    }
+
+    #[test]
+    fn parse_integer_at_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "at", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "at", "(", "numeric-vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "at", "(", "vector", "0", "1", ")", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_at() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = [
+            "(",
+            "at",
+            "(",
+            "numeric-vector",
+            "0.0",
+            "1.0",
+            ")",
+            "0",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::At(
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0]),),
+                ElementExpression::Constant(0),
+            )
+        );
+        assert_eq!(rest, &tokens[9..]);
+    }
+
+    #[test]
+    fn parse_continuous_at_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "at", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "at", "(", "numeric-vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "at", "(", "vector", "0", "1", ")", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_reduce_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-sum",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Reduce(
+                ReduceOperator::Sum,
+                Box::new(NumericVectorExpression::Constant(vec![0, 1]))
+            )
+        );
+        assert_eq!(rest, &tokens[8..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-product",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Reduce(
+                ReduceOperator::Product,
+                Box::new(NumericVectorExpression::Constant(vec![0, 1]))
+            )
+        );
+        assert_eq!(rest, &tokens[8..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-max",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Reduce(
+                ReduceOperator::Max,
+                Box::new(NumericVectorExpression::Constant(vec![0, 1]))
+            )
+        );
+        assert_eq!(rest, &tokens[8..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-min",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Reduce(
+                ReduceOperator::Min,
+                Box::new(NumericVectorExpression::Constant(vec![0, 1]))
+            )
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
+
+    #[test]
+    fn parse_integer_reduce_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "reduce-sum", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-product",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "reduce-max", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "reduce-min", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-null",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_reduce_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-sum",
+            "(",
+            "numeric-vector",
+            "0.0",
+            "1.0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Reduce(
+                ReduceOperator::Sum,
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[8..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-product",
+            "(",
+            "numeric-vector",
+            "0.0",
+            "1.0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Reduce(
+                ReduceOperator::Product,
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[8..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-max",
+            "(",
+            "numeric-vector",
+            "0.0",
+            "1.0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Reduce(
+                ReduceOperator::Max,
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[8..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-min",
+            "(",
+            "numeric-vector",
+            "0.0",
+            "1.0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Reduce(
+                ReduceOperator::Min,
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
+
+    #[test]
+    fn parse_continuous_reduce_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "reduce-sum", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-product",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "reduce-max", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "reduce-min", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "reduce-null",
+            "(",
+            "numeric-vector",
+            "0.0",
+            "1.0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_vector_constant_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "numeric-vector", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericVectorExpression::Constant(vec![]));
+        assert_eq!(rest, &tokens[3..]);
+
+        let tokens: Vec<String> = ["(", "numeric-vector", "0", "1", "f0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericVectorExpression::Constant(vec![0, 1, 0]));
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_integer_vector_constant_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "numeric-vector", "1"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "numeric-vector", "0.0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "numeric-vector", "cf0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_vector_constant_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "numeric-vector", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, NumericVectorExpression::Constant(vec![]));
+        assert_eq!(rest, &tokens[3..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            "0.1",
+            "cf0",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::Constant(vec![0.0, 1.0, 0.0, 0.1, 0.0])
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
+
+    #[test]
+    fn parse_continuous_vector_constant_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "numeric-vector", "1"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_vector_reverse_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "reverse",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
+                0, 1, 0
+            ])))
+        );
+        assert_eq!(rest, &tokens[9..]);
+    }
+
+    #[test]
+    fn parse_integer_vector_reverse_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "reverse", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_vector_reverse_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "reverse",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::Reverse(Box::new(NumericVectorExpression::Constant(vec![
+                0.0, 1.0, 0.0
+            ])))
+        );
+        assert_eq!(rest, &tokens[9..]);
+    }
+
+    #[test]
+    fn parse_continuous_vector_reverse_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "reverse", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_vector_push_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "push",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::Push(
+                NumericExpression::Constant(1),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1, 0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+    }
+
+    #[test]
+    fn parse_integer_vector_push_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "push",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "push", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(", "push", "1", "(", "vector", "0", "1", "f0", ")", ")", ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "push",
+            "1.0",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "push",
+            "1",
+            "(",
+            "numeric-vector",
+            "0.0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_vector_push_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "push",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::Push(
+                NumericExpression::Constant(1.0),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0, 0.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+    }
+
+    #[test]
+    fn parse_continuous_vector_push_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "push",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "push", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(", "push", "1", "(", "vector", "0", "1", "f0", ")", ")", ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_vector_pop_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "pop",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::Pop(Box::new(NumericVectorExpression::Constant(vec![
+                0, 1, 0
+            ])))
+        );
+        assert_eq!(rest, &tokens[9..]);
+    }
+
+    #[test]
+    fn parse_integer_vector_pop_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "pop", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_vector_pop_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "pop",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::Pop(Box::new(NumericVectorExpression::Constant(vec![
+                0.0, 1.0, 0.0
+            ])))
+        );
+        assert_eq!(rest, &tokens[9..]);
+    }
+
+    #[test]
+    fn parse_continuous_vector_pop_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "pop", "(", "vector", "0", "1", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_vector_set_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "set",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::Set(
+                NumericExpression::Constant(1),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1, 0])),
+                ElementExpression::Constant(1),
+            )
+        );
+        assert_eq!(rest, &tokens[11..]);
+    }
+
+    #[test]
+    fn parse_integer_vector_set_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "set",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "set", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(", "set", "1", "(", "vector", "0", "1", "f0", ")", "1", ")", ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "set",
+            "1.0",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "set",
+            "1",
+            "(",
+            "numeric-vector",
+            "0.0",
+            "1",
+            "f0",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_vector_set_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "set",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::Set(
+                NumericExpression::Constant(1.0),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0, 0.0])),
+                ElementExpression::Constant(1)
+            )
+        );
+        assert_eq!(rest, &tokens[11..]);
+    }
+
+    #[test]
+    fn parse_continuous_vector_set_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "set",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "set", "1", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(", "set", "1", "(", "vector", "0", "1", "f0", ")", "1", ")", ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_vector_numeric_operation_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "+",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Add,
+                NumericExpression::Constant(1),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1, 0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "-",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Subtract,
+                NumericExpression::Constant(1),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1, 0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "*",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Multiply,
+                NumericExpression::Constant(1),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1, 0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "/",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Divide,
+                NumericExpression::Constant(1),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1, 0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "max",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Max,
+                NumericExpression::Constant(1),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1, 0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "min",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Min,
+                NumericExpression::Constant(1),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1, 0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+    }
+
+    #[test]
+    fn parse_integer_vector_numeric_operation_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "+",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "-", "1", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "+",
+            "1.0",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "+",
+            "1",
+            "(",
+            "numeric-vector",
+            "0.0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_vector_numeric_operation_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "+",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Add,
+                NumericExpression::Constant(1.0),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0, 0.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "-",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Subtract,
+                NumericExpression::Constant(1.0),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0, 0.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "*",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Multiply,
+                NumericExpression::Constant(1.0),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0, 0.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "/",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Divide,
+                NumericExpression::Constant(1.0),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0, 0.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "max",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Max,
+                NumericExpression::Constant(1.0),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0, 0.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "min",
+            "1",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::NumericOperation(
+                NumericOperator::Min,
+                NumericExpression::Constant(1.0),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0, 0.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[10..]);
+    }
+
+    #[test]
+    fn parse_continuous_vector_numeric_operation_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "+",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            "f0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "-", "1", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_vector_operation_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "+",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Add,
+                Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "-",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Subtract,
+                Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "*",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Multiply,
+                Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "/",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Divide,
+                Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "max",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Max,
+                Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "min",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Min,
+                Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+                Box::new(NumericVectorExpression::Constant(vec![0, 1]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+    }
+
+    #[test]
+    fn parse_integer_vector_operation_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "+",
+            "(",
+            "numeric-vector",
+            "1.0",
+            "0",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "+",
+            "(",
+            "numeric-vector",
+            "1",
+            "0",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1.0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_vector_operation_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "+",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Add,
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0])),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "-",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Subtract,
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0])),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "*",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Multiply,
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0])),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "/",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Divide,
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0])),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "max",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Max,
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0])),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "min",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            "(",
+            "numeric-vector",
+            "0",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::VectorOperation(
+                NumericOperator::Min,
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0])),
+                Box::new(NumericVectorExpression::Constant(vec![0.0, 1.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[13..]);
+    }
+
+    #[test]
+    fn parse_integer_vector_table_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-vector",
+            "f3",
+            "0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::IntegerTable(TableVectorExpression::Table(
+                0,
+                vec![
+                    VectorOrElementExpression::Element(ElementExpression::Constant(0)),
+                    VectorOrElementExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Constant(vec![0, 1])
+                    )),
+                    VectorOrElementExpression::Element(ElementExpression::Constant(1)),
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[11..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-sum-vector",
+            "f3",
+            "s0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::IntegerTable(TableVectorExpression::TableSum(
+                0,
+                vec![
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    )),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Constant(vec![0, 1])
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[11..]);
+    }
+
+    #[test]
+    fn parse_integer_vector_table_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "table-vector", "cf1", "v0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "table-vector", "cf2", "v0", "v0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "table-vector", "cf2", "v0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "table-vector", "cf2", "0", "v0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "table-sum-vector", "cf2", "v0", "s0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "table-sum-vector", "cf2", "s0", "v0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "table-vector", "cf2", "0", "v0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "table-sum-vector", "cf2", "s0", "v0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_vector_table_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-vector",
+            "f3",
+            "0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::IntegerTable(TableVectorExpression::Table(
+                0,
+                vec![
+                    VectorOrElementExpression::Element(ElementExpression::Constant(0)),
+                    VectorOrElementExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Constant(vec![0, 1])
+                    )),
+                    VectorOrElementExpression::Element(ElementExpression::Constant(1)),
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[11..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-sum-vector",
+            "f3",
+            "s0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::IntegerTable(TableVectorExpression::TableSum(
+                0,
+                vec![
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    )),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Constant(vec![0, 1])
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[11..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-vector",
+            "cf3",
+            "0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::ContinuousTable(TableVectorExpression::Table(
+                0,
+                vec![
+                    VectorOrElementExpression::Element(ElementExpression::Constant(0)),
+                    VectorOrElementExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Constant(vec![0, 1])
+                    )),
+                    VectorOrElementExpression::Element(ElementExpression::Constant(1)),
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[11..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-sum-vector",
+            "cf3",
+            "s0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::ContinuousTable(TableVectorExpression::TableSum(
+                0,
+                vec![
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    )),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Constant(vec![0, 1])
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[11..]);
     }
 }

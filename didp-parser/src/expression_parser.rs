@@ -10,6 +10,7 @@ mod condition_parser;
 mod element_parser;
 mod numeric_parser;
 mod numeric_table_parser;
+mod table_vector_parser;
 mod util;
 
 pub use util::ParseErr;
