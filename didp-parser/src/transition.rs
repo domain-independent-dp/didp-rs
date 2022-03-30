@@ -937,7 +937,7 @@ preconditions:
 effects:
         e0: e
         s0: (add e s0)
-        p0: e
+        p0: (push e p0)
         i0: '1'
         ir0: '2'
 ";
@@ -956,7 +956,7 @@ preconditions:
 effects:
         e0: e
         s0: (add e s0)
-        p0: e
+        p0: (push e p0)
         i0: '1'
         ir0: '2'
 cost: (+ cost (f1 e))
@@ -978,7 +978,7 @@ preconditions:
 effects:
         e0: e
         s0: (add e s0)
-        p0: e
+        p0: (push e p0)
         i0: '1'
         ir0: '2'
         ir5: '5'
