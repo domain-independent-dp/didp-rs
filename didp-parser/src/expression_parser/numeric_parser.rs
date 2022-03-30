@@ -452,13 +452,13 @@ where
         let v = if let Some(v) = registry.integer_tables.name_to_constant.get(next_token) {
             T::from(*v)
         } else {
-            let v: T = next_token.parse().map_err(|e| {
+            let v: Integer = next_token.parse().map_err(|e| {
                 ParseErr::new(format!(
                     "could not parse {} as a number: {:?}",
                     next_token, e
                 ))
             })?;
-            v
+            T::from(v)
         };
         result.push(v);
         xs = rest;
@@ -629,13 +629,13 @@ where
         } else if let Some(v) = registry.continuous_tables.name_to_constant.get(next_token) {
             T::from(*v)
         } else {
-            let v: T = next_token.parse().map_err(|e| {
+            let v: Continuous = next_token.parse().map_err(|e| {
                 ParseErr::new(format!(
                     "could not parse {} as a number: {:?}",
                     next_token, e
                 ))
             })?;
-            v
+            T::from(v)
         };
         result.push(v);
         xs = rest;
