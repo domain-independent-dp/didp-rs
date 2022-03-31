@@ -8,6 +8,7 @@ pub type Vector = Vec<usize>;
 pub type Element = usize;
 pub type Integer = i32;
 pub type Continuous = f64;
+pub type OrderedContinuous = ordered_float::OrderedFloat<Continuous>;
 
 pub trait Numeric:
     num_traits::Num
@@ -26,6 +27,7 @@ pub trait Numeric:
 
 impl Numeric for Integer {}
 impl Numeric for Continuous {}
+impl Numeric for OrderedContinuous {}
 
 pub trait ToNumeric {
     fn to_integer(self) -> Integer;
@@ -104,5 +106,39 @@ impl FromNumeric for Continuous {
     #[inline]
     fn from<T: ToNumeric>(n: T) -> Continuous {
         n.to_continuous()
+    }
+}
+
+impl ToNumeric for OrderedContinuous {
+    #[inline]
+    fn to_integer(self) -> Integer {
+        self.to_continuous() as Integer
+    }
+
+    #[inline]
+    fn to_continuous(self) -> Continuous {
+        self.into_inner()
+    }
+}
+
+impl FromNumeric for OrderedContinuous {
+    #[inline]
+    fn from_integer(n: Integer) -> OrderedContinuous {
+        ordered_float::OrderedFloat(n as Continuous)
+    }
+
+    #[inline]
+    fn from_continuous(n: Continuous) -> OrderedContinuous {
+        ordered_float::OrderedFloat(n)
+    }
+
+    #[inline]
+    fn from_usize(n: usize) -> OrderedContinuous {
+        ordered_float::OrderedFloat(n as Continuous)
+    }
+
+    #[inline]
+    fn from<T: ToNumeric>(n: T) -> OrderedContinuous {
+        ordered_float::OrderedFloat(n.to_continuous())
     }
 }

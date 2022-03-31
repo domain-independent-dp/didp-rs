@@ -1,4 +1,4 @@
-use crate::variable::{Continuous, Element, Integer, Numeric, Set, Vector};
+use crate::variable::{Continuous, Element, Integer, Numeric, OrderedContinuous, Set, Vector};
 use crate::yaml_util;
 use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
@@ -19,7 +19,7 @@ pub struct SignatureVariables {
     pub vector_variables: Vec<Vector>,
     pub element_variables: Vec<Element>,
     pub integer_variables: Vec<Integer>,
-    pub continuous_variables: Vec<OrderedFloat<Continuous>>,
+    pub continuous_variables: Vec<OrderedContinuous>,
 }
 
 #[derive(Debug, PartialEq, Clone, Default)]

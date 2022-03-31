@@ -8,9 +8,9 @@ use std::collections;
 use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct SearchNode<T> {
+pub struct SearchNode<T: variable::Numeric> {
     pub state: didp_parser::State,
-    pub operator: Option<usize>,
+    pub operator: Option<Rc<didp_parser::Transition<T>>>,
     pub parent: Option<Rc<SearchNode<T>>>,
     pub g: T,
     pub h: RefCell<Option<T>>,
@@ -18,29 +18,46 @@ pub struct SearchNode<T> {
     pub closed: RefCell<bool>,
 }
 
-impl<T: Ord> PartialEq for SearchNode<T> {
+impl<T: variable::Numeric + PartialOrd> PartialEq for SearchNode<T> {
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f
     }
 }
 
-impl<T: Ord> Eq for SearchNode<T> {}
+impl<T: variable::Numeric + Ord> Eq for SearchNode<T> {}
 
-impl<T: Ord> Ord for SearchNode<T> {
+impl<T: variable::Numeric + Ord> Ord for SearchNode<T> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.f.cmp(&other.f)
     }
 }
 
-impl<T: Ord> PartialOrd for SearchNode<T> {
+impl<T: variable::Numeric + Ord> PartialOrd for SearchNode<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
+impl<T: variable::Numeric> SearchNode<T> {
+    pub fn trace_transitions(&self) -> Vec<didp_parser::Transition<T>> {
+        let mut result = Vec::new();
+        if let (Some(mut node), Some(operator)) = (self.parent.as_ref(), self.operator.as_ref()) {
+            result.push(operator.as_ref().clone());
+            while let (Some(parent), Some(operator)) =
+                (node.parent.as_ref(), node.operator.as_ref())
+            {
+                result.push(operator.as_ref().clone());
+                node = parent;
+            }
+            result.reverse();
+        }
+        result
+    }
+}
+
 pub type OpenList<T> = priority_queue::PriorityQueue<Rc<SearchNode<T>>>;
 
-pub struct SearchNodeRegistry<'a, T: PartialOrd> {
+pub struct SearchNodeRegistry<'a, T: variable::Numeric> {
     registry: FxHashMap<Rc<didp_parser::SignatureVariables>, Vec<Rc<SearchNode<T>>>>,
     metadata: &'a didp_parser::StateMetadata,
     reduce_function: &'a ReduceFunction,
@@ -54,15 +71,20 @@ impl<'a, T: variable::Numeric + Ord> SearchNodeRegistry<'a, T> {
             reduce_function: &model.reduce_function,
         }
     }
+
     pub fn reserve(&mut self, capacity: usize) {
         self.registry.reserve(capacity);
+    }
+
+    pub fn clear(&mut self) {
+        self.registry.clear();
     }
 
     pub fn get_node(
         &mut self,
         mut state: didp_parser::State,
         g: T,
-        operator: Option<usize>,
+        operator: Option<Rc<didp_parser::Transition<T>>>,
         parent: Option<Rc<SearchNode<T>>>,
     ) -> Option<Rc<SearchNode<T>>> {
         let entry = self.registry.entry(state.signature_variables.clone());
@@ -192,6 +214,8 @@ mod tests {
     fn generate_node(
         signature_variables: Rc<didp_parser::SignatureVariables>,
         integer_resource_variables: Vec<variable::Integer>,
+        parent: Option<Rc<SearchNode<variable::Integer>>>,
+        operator: Option<Rc<didp_parser::Transition<variable::Integer>>>,
         g: variable::Integer,
         h: variable::Integer,
         f: variable::Integer,
@@ -205,8 +229,8 @@ mod tests {
                 },
                 stage: 0,
             },
-            operator: None,
-            parent: None,
+            operator,
+            parent,
             g,
             h: RefCell::new(Some(h)),
             f: RefCell::new(Some(f)),
@@ -217,19 +241,88 @@ mod tests {
     #[test]
     fn search_node_eq() {
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let node1 = generate_node(signature_variables, vec![0, 0, 0], 1, 1, 2);
+        let node1 = generate_node(signature_variables, vec![0, 0, 0], None, None, 1, 1, 2);
         let signature_variables = generate_signature_variables(vec![1, 2, 3]);
-        let node2 = generate_node(signature_variables, vec![0, 0, 0], 1, 1, 2);
+        let node2 = generate_node(signature_variables, vec![0, 0, 0], None, None, 1, 1, 2);
         assert_eq!(node1, node2);
     }
 
     #[test]
     fn search_node_neq() {
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let node1 = generate_node(signature_variables, vec![0, 0, 0], 1, 1, 2);
+        let node1 = generate_node(signature_variables, vec![0, 0, 0], None, None, 1, 1, 2);
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let node2 = generate_node(signature_variables, vec![0, 0, 0], 1, 2, 3);
+        let node2 = generate_node(signature_variables, vec![0, 0, 0], None, None, 1, 2, 3);
         assert!(node1 < node2);
+    }
+
+    #[test]
+    fn trace_transitions() {
+        let signature_variables = generate_signature_variables(vec![0, 1, 2]);
+        let node1 = Rc::new(generate_node(
+            signature_variables,
+            vec![0, 0, 0],
+            None,
+            None,
+            0,
+            0,
+            0,
+        ));
+        assert_eq!(node1.trace_transitions(), Vec::new());
+        let signature_variables = generate_signature_variables(vec![0, 1, 2]);
+        let op1 = Rc::new(didp_parser::Transition {
+            name: String::from("op1"),
+            ..Default::default()
+        });
+        let node2 = Rc::new(generate_node(
+            signature_variables,
+            vec![0, 0, 0],
+            None,
+            Some(op1.clone()),
+            0,
+            0,
+            0,
+        ));
+        assert_eq!(node2.trace_transitions(), Vec::new());
+        let signature_variables = generate_signature_variables(vec![0, 1, 2]);
+        let node2 = Rc::new(generate_node(
+            signature_variables,
+            vec![0, 0, 0],
+            Some(node1.clone()),
+            None,
+            0,
+            0,
+            0,
+        ));
+        assert_eq!(node2.trace_transitions(), Vec::new());
+        let signature_variables = generate_signature_variables(vec![0, 1, 2]);
+        let node2 = Rc::new(generate_node(
+            signature_variables,
+            vec![0, 0, 0],
+            Some(node1),
+            Some(op1.clone()),
+            0,
+            0,
+            0,
+        ));
+        let signature_variables = generate_signature_variables(vec![0, 1, 2]);
+        let op2 = Rc::new(didp_parser::Transition {
+            name: String::from("op2"),
+            ..Default::default()
+        });
+        let node3 = Rc::new(generate_node(
+            signature_variables,
+            vec![0, 0, 0],
+            Some(node2),
+            Some(op2.clone()),
+            0,
+            0,
+            0,
+        ));
+        assert_eq!(
+            node3.trace_transitions(),
+            vec![op1.as_ref().clone(), op2.as_ref().clone()]
+        );
     }
 
     #[test]
@@ -395,7 +488,8 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
             stage: 1,
         };
-        let node2 = registry.get_node(state, 1, Some(0), Some(node1.clone()));
+        let op = Rc::new(didp_parser::Transition::default());
+        let node2 = registry.get_node(state, 1, Some(op), Some(node1.clone()));
         assert!(node2.is_some());
         let node2 = node2.unwrap();
         assert_eq!(
@@ -435,5 +529,51 @@ mod tests {
         assert!(*node2.closed.borrow());
         assert!(!*node3.closed.borrow());
         assert!(node3.parent.is_none());
+    }
+
+    #[test]
+    fn clear() {
+        let model = generate_model();
+        let mut registry = SearchNodeRegistry::new(&model);
+
+        let state = didp_parser::State {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
+            stage: 0,
+        };
+        let node = registry.get_node(state, 1, None, None);
+        assert!(node.is_some());
+        let node = node.unwrap();
+        let state = didp_parser::State {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
+            stage: 0,
+        };
+        assert_eq!(node.state, state);
+        assert!(node.h.borrow().is_none());
+        assert!(node.f.borrow().is_none());
+        assert!(node.parent.is_none());
+        assert_eq!(*node.closed.borrow(), false);
+
+        registry.clear();
+
+        let state = didp_parser::State {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
+            stage: 0,
+        };
+        let node = registry.get_node(state, 1, None, None);
+        assert!(node.is_some());
+        let node = node.unwrap();
+        let state = didp_parser::State {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
+            stage: 0,
+        };
+        assert_eq!(node.state, state);
+        assert!(node.h.borrow().is_none());
+        assert!(node.f.borrow().is_none());
+        assert!(node.parent.is_none());
+        assert_eq!(*node.closed.borrow(), false);
     }
 }

@@ -1,3 +1,4 @@
-mod priority_queue;
+pub mod forward_bfs;
+pub mod priority_queue;
 pub mod search_node;
 pub mod successor_generator;
