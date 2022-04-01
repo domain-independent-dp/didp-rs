@@ -1,5 +1,5 @@
 use didp_parser::variable;
-use didp_search::forward_bfs;
+use didp_search::astar;
 use std::env;
 use std::fs;
 use std::process;
@@ -60,7 +60,7 @@ fn main() {
                     eprintln!("Coundn't load a model: {:?}", e);
                     process::exit(1);
                 });
-            let solution = forward_bfs::forward_bfs(&model, config).unwrap_or_else(|e| {
+            let solution = astar::astar(&model, config).unwrap_or_else(|e| {
                 eprintln!("Error: {:?}", e);
                 process::exit(1);
             });
@@ -83,7 +83,7 @@ fn main() {
                         eprintln!("Coundn't load a model: {:?}", e);
                         process::exit(1);
                     });
-            let solution = forward_bfs::forward_bfs(&model, config).unwrap_or_else(|e| {
+            let solution = astar::astar(&model, config).unwrap_or_else(|e| {
                 eprintln!("Error: {:?}", e);
                 process::exit(1);
             });
