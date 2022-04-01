@@ -1,8 +1,57 @@
 use didp_parser::variable;
 use didp_search::astar;
 use std::env;
+use std::fmt;
 use std::fs;
 use std::process;
+use std::str;
+
+fn solve<T: variable::Numeric + Ord + fmt::Display>(
+    model: &didp_parser::Model<T>,
+    config: &yaml_rust::Yaml,
+) where
+    <T as str::FromStr>::Err: fmt::Debug,
+{
+    let map = match config {
+        yaml_rust::Yaml::Hash(map) => map,
+        _ => {
+            eprintln!("expected Hash, but found {:?}", config);
+            process::exit(1);
+        }
+    };
+    let config = match map.get(&yaml_rust::Yaml::from_str("config")) {
+        Some(value) => value.clone(),
+        None => yaml_rust::Yaml::Null,
+    };
+    let solution = match map.get(&yaml_rust::Yaml::from_str("solver")) {
+        Some(yaml_rust::Yaml::String(string)) => match &string[..] {
+            "astar" => astar::astar(&model, &config).unwrap_or_else(|e| {
+                eprintln!("Error: {:?}", e);
+                process::exit(1);
+            }),
+            value => {
+                eprintln!("no such solver {:?}", value);
+                process::exit(1);
+            }
+        },
+        value => {
+            eprintln!("expected String, but found {:?}", value);
+            process::exit(1);
+        }
+    };
+    match solution {
+        Some((cost, transitions)) => {
+            println!("cost: {}", cost);
+            println!("transitions:");
+            for transition in transitions {
+                println!("{}", transition.name);
+            }
+        }
+        None => {
+            println!("no solution");
+        }
+    }
+}
 
 fn main() {
     let mut args = env::args();
@@ -60,21 +109,7 @@ fn main() {
                     eprintln!("Coundn't load a model: {:?}", e);
                     process::exit(1);
                 });
-            let solution = astar::astar(&model, config).unwrap_or_else(|e| {
-                eprintln!("Error: {:?}", e);
-                process::exit(1);
-            });
-            match solution {
-                Some((cost, transitions)) => {
-                    println!("cost: {}", cost);
-                    for transition in transitions {
-                        println!("{}", transition.name);
-                    }
-                }
-                None => {
-                    println!("no solution");
-                }
-            }
+            solve(&model, config)
         }
         didp_parser::CostType::Continuous => {
             let model =
@@ -83,21 +118,7 @@ fn main() {
                         eprintln!("Coundn't load a model: {:?}", e);
                         process::exit(1);
                     });
-            let solution = astar::astar(&model, config).unwrap_or_else(|e| {
-                eprintln!("Error: {:?}", e);
-                process::exit(1);
-            });
-            match solution {
-                Some((cost, transitions)) => {
-                    println!("cost: {}", cost);
-                    for transition in transitions {
-                        println!("{}", transition.name);
-                    }
-                }
-                None => {
-                    println!("no solution");
-                }
-            }
+            solve(&model, config)
         }
     }
 }

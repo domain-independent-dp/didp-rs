@@ -39,9 +39,12 @@ where
         for transition in generator.applicable_transitions(&node.state) {
             let state = transition.apply_effects(&node.state, &model.table_registry);
             let g = transition.eval_cost(node.g, &node.state, &model.table_registry);
-            if let Some(successor) = registry.get_node(state, g, None, Some(node.clone())) {
+            if let Some(successor) =
+                registry.get_node(state, g, Some(transition), Some(node.clone()))
+            {
                 if model.check_constraints(&successor.state) {
-                    let h = match *successor.h.borrow() {
+                    let h = *successor.h.borrow();
+                    let h = match h {
                         Some(h) => Some(h),
                         None => {
                             let h = h_function(&node.state, model);
