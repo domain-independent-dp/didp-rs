@@ -5,6 +5,7 @@ use std::fmt;
 use std::fs;
 use std::process;
 use std::str;
+use std::time::Instant;
 
 fn solve<T: variable::Numeric + Ord + fmt::Display>(
     model: &didp_parser::Model<T>,
@@ -41,11 +42,11 @@ fn solve<T: variable::Numeric + Ord + fmt::Display>(
     };
     match solution {
         Some((cost, transitions)) => {
-            println!("cost: {}", cost);
             println!("transitions:");
             for transition in transitions {
                 println!("{}", transition.name);
             }
+            println!("cost: {}", cost);
         }
         None => {
             println!("no solution");
@@ -54,6 +55,7 @@ fn solve<T: variable::Numeric + Ord + fmt::Display>(
 }
 
 fn main() {
+    let start = Instant::now();
     let mut args = env::args();
     args.next();
     let domain = args.next().unwrap_or_else(|| {
@@ -121,4 +123,6 @@ fn main() {
             solve(&model, config)
         }
     }
+    let stop = Instant::now();
+    println!("Time: {:?}", stop.duration_since(start));
 }
