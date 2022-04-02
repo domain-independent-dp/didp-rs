@@ -9,6 +9,7 @@ pub fn forward_bfs<T: variable::Numeric + Ord + fmt::Display, H, F>(
     model: &didp_parser::Model<T>,
     h_function: H,
     f_function: F,
+    ub: Option<T>,
     registry_capacity: Option<usize>,
 ) -> util::Solution<T>
 where
@@ -53,6 +54,9 @@ where
         for transition in generator.applicable_transitions(&node.state) {
             let state = transition.apply_effects(&node.state, &model.table_registry);
             let g = transition.eval_cost(node.g, &node.state, &model.table_registry);
+            if ub.is_some() && g > ub.unwrap() {
+                continue;
+            }
             if let Some(successor) =
                 registry.get_node(state, g, Some(transition), Some(node.clone()))
             {
@@ -69,7 +73,9 @@ where
                     if let Some(h) = h {
                         let f = f_function(g, h, &node.state, model);
                         *successor.f.borrow_mut() = Some(f);
-                        open.push(successor);
+                        if ub.is_none() || f <= ub.unwrap() {
+                            open.push(successor);
+                        }
                     }
                 }
             }

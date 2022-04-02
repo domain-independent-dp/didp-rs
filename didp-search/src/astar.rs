@@ -51,6 +51,18 @@ where
             )
         }
     };
+    let ub = match map.get(&yaml_rust::Yaml::from_str("ub")) {
+        Some(yaml_rust::Yaml::Integer(value)) => Some(T::from_integer(*value as variable::Integer)),
+        Some(yaml_rust::Yaml::Real(value)) => Some(value.parse().map_err(|e| {
+            util::ConfigErr::new(format!("could not parse {} as a number: {:?}", value, e))
+        })?),
+        None => None,
+        value => {
+            return Err(
+                util::ConfigErr::new(format!("expected Integer, but found `{:?}`", value)).into(),
+            )
+        }
+    };
     match map.get(&yaml_rust::Yaml::from_str("f")) {
         Some(yaml_rust::Yaml::String(string)) => match &string[..] {
             "+" => {
@@ -59,6 +71,7 @@ where
                     model,
                     h_function,
                     f_function,
+                    ub,
                     registry_capacity,
                 ))
             }
@@ -69,6 +82,7 @@ where
                     model,
                     h_function,
                     f_function,
+                    ub,
                     registry_capacity,
                 ))
             }
@@ -79,6 +93,7 @@ where
                     model,
                     h_function,
                     f_function,
+                    ub,
                     registry_capacity,
                 ))
             }
@@ -92,6 +107,7 @@ where
                 model,
                 h_function,
                 f_function,
+                ub,
                 registry_capacity,
             ))
         }
