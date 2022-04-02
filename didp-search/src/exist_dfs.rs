@@ -88,10 +88,12 @@ pub fn exist_dfs<T: variable::Numeric>(
         let cost = transition.eval_cost(cost, &state, &model.table_registry);
         if ub.is_none() || cost <= ub.unwrap() {
             let successor = transition.apply_effects(&state, &model.table_registry);
-            let result = exist_dfs(successor, cost, model, generator, prob, ub, nodes);
-            if let Some((cost, mut transitions)) = result {
-                transitions.push(transition);
-                return Some((cost, transitions));
+            if model.check_constraints(&successor) {
+                let result = exist_dfs(successor, cost, model, generator, prob, ub, nodes);
+                if let Some((cost, mut transitions)) = result {
+                    transitions.push(transition);
+                    return Some((cost, transitions));
+                }
             }
         }
     }
