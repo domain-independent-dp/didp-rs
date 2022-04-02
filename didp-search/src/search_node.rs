@@ -93,7 +93,7 @@ impl<'a, T: variable::Numeric + Ord> SearchNodeRegistry<'a, T> {
                 // use signature variables already stored
                 state.signature_variables = entry.key().clone();
                 let v = entry.into_mut();
-                for (i, other) in v.iter_mut().enumerate() {
+                for other in v.iter_mut() {
                     let result = self.metadata.dominance(&state, &other.state);
                     match result {
                         Some(Ordering::Equal) | Some(Ordering::Less)
@@ -134,7 +134,7 @@ impl<'a, T: variable::Numeric + Ord> SearchNodeRegistry<'a, T> {
                                 f: RefCell::new(None),
                                 closed: RefCell::new(false),
                             });
-                            v[i] = node.clone();
+                            *other = node.clone();
                             return Some(node);
                         }
                         _ => {}

@@ -1,7 +1,7 @@
 use crate::successor_generator;
 use crate::util;
 use didp_parser::variable;
-use rustc_hash::FxHashSet;
+use rustc_hash::FxHashMap;
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
@@ -40,7 +40,7 @@ pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
 ) -> util::Solution<T> {
     let mut nodes = 0;
     let generator = successor_generator::SuccessorGenerator::new(model, false);
-    let mut prob = FxHashSet::default();
+    let mut prob = FxHashMap::default();
     if let Some(capacity) = capacity {
         prob.reserve(capacity);
     };
@@ -73,7 +73,7 @@ pub fn exist_dfs<T: variable::Numeric>(
     cost: T,
     model: &didp_parser::Model<T>,
     generator: &successor_generator::SuccessorGenerator<T>,
-    prob: &mut FxHashSet<didp_parser::State>,
+    prob: &mut FxHashMap<didp_parser::State, T>,
     ub: Option<T>,
     nodes: &mut u32,
 ) -> Option<(T, Vec<Rc<didp_parser::Transition<T>>>)> {
@@ -81,8 +81,12 @@ pub fn exist_dfs<T: variable::Numeric>(
     if model.get_base_cost(&state).is_some() {
         return Some((cost, Vec::new()));
     }
-    if prob.contains(&state) {
-        return None;
+    if let Some(other_cost) = prob.get(&state) {
+        if cost >= *other_cost {
+            return None;
+        } else {
+            prob.remove(&state);
+        }
     }
     for transition in generator.applicable_transitions(&state) {
         let cost = transition.eval_cost(cost, &state, &model.table_registry);
@@ -97,6 +101,6 @@ pub fn exist_dfs<T: variable::Numeric>(
             }
         }
     }
-    prob.insert(state);
+    prob.insert(state, cost);
     None
 }
