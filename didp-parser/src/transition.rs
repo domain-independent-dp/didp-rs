@@ -109,7 +109,7 @@ impl<T: Numeric> Transition<T> {
         let mut continuous_resource_variables =
             state.resource_variables.continuous_variables.clone();
         for e in &self.continuous_resource_effects {
-            continuous_resource_variables[e.0] = e.1.eval(state, registry);
+            continuous_resource_variables[e.0] = OrderedFloat(e.1.eval(state, registry));
         }
 
         let stage = state.stage + 1;
@@ -500,7 +500,7 @@ mod tests {
             }),
             resource_variables: state::ResourceVariables {
                 integer_variables: vec![4, 5, 6],
-                continuous_variables: vec![4.0, 5.0, 6.0],
+                continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
             },
             stage: 0,
         }
@@ -698,7 +698,7 @@ mod tests {
             }),
             resource_variables: state::ResourceVariables {
                 integer_variables: vec![5, 2, 6],
-                continuous_variables: vec![5.0, 2.5, 6.0],
+                continuous_variables: vec![OrderedFloat(5.0), OrderedFloat(2.5), OrderedFloat(6.0)],
             },
             stage: 1,
         };

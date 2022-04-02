@@ -1,5 +1,6 @@
 use didp_parser::variable;
 use didp_search::astar;
+use didp_search::exist_dfs;
 use std::env;
 use std::fmt;
 use std::fs;
@@ -30,6 +31,11 @@ fn solve<T: variable::Numeric + Ord + fmt::Display>(
                 eprintln!("Error: {:?}", e);
                 process::exit(1);
             }),
+            "exist_dfs" => exist_dfs::run_forward_iterative_exist_dfs(&model, &config)
+                .unwrap_or_else(|e| {
+                    eprintln!("Error: {:?}", e);
+                    process::exit(1);
+                }),
             value => {
                 eprintln!("no such solver {:?}", value);
                 process::exit(1);

@@ -75,7 +75,7 @@ impl<T: Numeric> NumericExpression<T> {
                 T::from_continuous(state.signature_variables.continuous_variables[*i].into_inner())
             }
             Self::ContinuousResourceVariable(i) => {
-                T::from_continuous(state.resource_variables.continuous_variables[*i])
+                T::from_continuous(state.resource_variables.continuous_variables[*i].into_inner())
             }
             Self::Cost => cost.unwrap(),
             Self::NumericOperation(op, a, b) => {
@@ -479,7 +479,7 @@ mod tests {
             }),
             resource_variables: state::ResourceVariables {
                 integer_variables: vec![4, 5, 6],
-                continuous_variables: vec![4.0, 5.0, 6.0],
+                continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
             },
             stage: 0,
         }

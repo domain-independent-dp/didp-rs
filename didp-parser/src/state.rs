@@ -1,4 +1,4 @@
-use crate::variable::{Continuous, Element, Integer, Numeric, OrderedContinuous, Set, Vector};
+use crate::variable::{Element, Integer, Numeric, OrderedContinuous, Set, Vector};
 use crate::yaml_util;
 use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
@@ -6,7 +6,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Ordering;
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Clone, Default)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
 pub struct State {
     pub signature_variables: Rc<SignatureVariables>,
     pub resource_variables: ResourceVariables,
@@ -22,10 +22,10 @@ pub struct SignatureVariables {
     pub continuous_variables: Vec<OrderedContinuous>,
 }
 
-#[derive(Debug, PartialEq, Clone, Default)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
 pub struct ResourceVariables {
     pub integer_variables: Vec<Integer>,
-    pub continuous_variables: Vec<Continuous>,
+    pub continuous_variables: Vec<OrderedContinuous>,
 }
 
 impl State {
@@ -725,7 +725,12 @@ cr3: 3
             }),
             resource_variables: ResourceVariables {
                 integer_variables: vec![0, 1, 2, 3],
-                continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
+                continuous_variables: vec![
+                    OrderedFloat(0.0),
+                    OrderedFloat(1.0),
+                    OrderedFloat(2.0),
+                    OrderedFloat(3.0),
+                ],
             },
             stage: 0,
         };
@@ -997,14 +1002,24 @@ cr3: 3
         let a = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
+                continuous_variables: vec![
+                    OrderedFloat(1.0),
+                    OrderedFloat(2.0),
+                    OrderedFloat(2.0),
+                    OrderedFloat(0.0),
+                ],
             },
             ..Default::default()
         };
         let b = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![1.0, 1.0, 3.0, 0.0],
+                continuous_variables: vec![
+                    OrderedFloat(1.0),
+                    OrderedFloat(1.0),
+                    OrderedFloat(3.0),
+                    OrderedFloat(0.0),
+                ],
             },
             ..Default::default()
         };
@@ -1014,7 +1029,12 @@ cr3: 3
         let b = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![1.0, 3.0, 4.0, 0.0],
+                continuous_variables: vec![
+                    OrderedFloat(1.0),
+                    OrderedFloat(3.0),
+                    OrderedFloat(4.0),
+                    OrderedFloat(0.0),
+                ],
             },
             ..Default::default()
         };
@@ -1049,14 +1069,19 @@ cr3: 3
         let a = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
+                continuous_variables: vec![
+                    OrderedFloat(1.0),
+                    OrderedFloat(2.0),
+                    OrderedFloat(2.0),
+                    OrderedFloat(0.0),
+                ],
             },
             ..Default::default()
         };
         let b = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![1.0, 1.0, 3.0],
+                continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(1.0), OrderedFloat(3.0)],
             },
             ..Default::default()
         };
