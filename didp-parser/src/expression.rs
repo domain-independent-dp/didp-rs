@@ -1,6 +1,7 @@
 mod condition;
 mod element_expression;
 mod numeric_expression;
+mod numeric_operator;
 mod numeric_table_expression;
 mod reference_expression;
 mod set_condition;
@@ -12,9 +13,8 @@ pub use element_expression::{
     ElementExpression, SetElementOperator, SetExpression, SetOperator, TableExpression,
     VectorExpression,
 };
-pub use numeric_expression::{
-    NumericExpression, NumericOperator, NumericVectorExpression, ReduceOperator,
-};
+pub use numeric_expression::{NumericExpression, NumericVectorExpression, ReduceOperator};
+pub use numeric_operator::NumericOperator;
 pub use table_vector_expression::{TableVectorExpression, VectorOrElementExpression};
 
 pub use numeric_table_expression::{ArgumentExpression, NumericTableExpression};

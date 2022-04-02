@@ -274,7 +274,6 @@ mod tests {
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
             },
-            stage: 0,
         }
     }
 

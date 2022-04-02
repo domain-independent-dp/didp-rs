@@ -112,8 +112,6 @@ impl<T: Numeric> Transition<T> {
             continuous_resource_variables[e.0] = OrderedFloat(e.1.eval(state, registry));
         }
 
-        let stage = state.stage + 1;
-
         state::State {
             signature_variables: {
                 Rc::new(state::SignatureVariables {
@@ -128,7 +126,6 @@ impl<T: Numeric> Transition<T> {
                 integer_variables: integer_resource_variables,
                 continuous_variables: continuous_resource_variables,
             },
-            stage,
         }
     }
 
@@ -502,7 +499,6 @@ mod tests {
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
             },
-            stage: 0,
         }
     }
 
@@ -700,7 +696,6 @@ mod tests {
                 integer_variables: vec![5, 2, 6],
                 continuous_variables: vec![OrderedFloat(5.0), OrderedFloat(2.5), OrderedFloat(6.0)],
             },
-            stage: 1,
         };
         let successor = transition.apply_effects(&state, &registry);
         assert_eq!(successor, expected);

@@ -1,4 +1,5 @@
 use super::element_expression::{ElementExpression, SetExpression, VectorExpression};
+use super::numeric_operator::NumericOperator;
 use super::numeric_table_expression::NumericTableExpression;
 use super::reference_expression::ReferenceExpression;
 use super::table_vector_expression::TableVectorExpression;
@@ -27,16 +28,6 @@ pub enum NumericExpression<T: Numeric> {
     Last(Box<NumericVectorExpression<T>>),
     At(Box<NumericVectorExpression<T>>, ElementExpression),
     Reduce(ReduceOperator, Box<NumericVectorExpression<T>>),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum NumericOperator {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Max,
-    Min,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -81,7 +72,7 @@ impl<T: Numeric> NumericExpression<T> {
             Self::NumericOperation(op, a, b) => {
                 let a = a.eval_inner(cost, state, registry);
                 let b = b.eval_inner(cost, state, registry);
-                Self::eval_operation(op, a, b)
+                op.eval(a, b)
             }
             Self::Cardinality(SetExpression::Reference(expression)) => {
                 let set = expression.eval(
@@ -130,9 +121,7 @@ impl<T: Numeric> NumericExpression<T> {
         match self {
             Self::NumericOperation(op, a, b) => {
                 match (a.simplify(registry), b.simplify(registry)) {
-                    (Self::Constant(a), Self::Constant(b)) => {
-                        Self::Constant(Self::eval_operation(op, a, b))
-                    }
+                    (Self::Constant(a), Self::Constant(b)) => Self::Constant(op.eval(a, b)),
                     (a, b) => Self::NumericOperation(op.clone(), Box::new(a), Box::new(b)),
                 }
             }
@@ -183,29 +172,6 @@ impl<T: Numeric> NumericExpression<T> {
                 vector => Self::Reduce(op.clone(), Box::new(vector)),
             },
             _ => self.clone(),
-        }
-    }
-
-    fn eval_operation(op: &NumericOperator, a: T, b: T) -> T {
-        match op {
-            NumericOperator::Add => a + b,
-            NumericOperator::Subtract => a - b,
-            NumericOperator::Multiply => a * b,
-            NumericOperator::Divide => a / b,
-            NumericOperator::Max => {
-                if a > b {
-                    a
-                } else {
-                    b
-                }
-            }
-            NumericOperator::Min => {
-                if a < b {
-                    a
-                } else {
-                    b
-                }
-            }
         }
     }
 
@@ -481,7 +447,6 @@ mod tests {
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
             },
-            stage: 0,
         }
     }
 

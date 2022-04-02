@@ -507,7 +507,6 @@ base_cases:
                     integer_variables: vec![0],
                     ..Default::default()
                 }),
-                stage: 0,
                 ..Default::default()
             },
             base_cases: vec![BaseCase {
@@ -608,7 +607,6 @@ base_states:
                     integer_variables: vec![10],
                     ..Default::default()
                 }),
-                stage: 0,
                 ..Default::default()
             },
             base_states: vec![
@@ -618,7 +616,6 @@ base_states:
                             integer_variables: vec![0],
                             ..Default::default()
                         }),
-                        stage: 0,
                         ..Default::default()
                     },
                     cost: 0,
@@ -629,7 +626,6 @@ base_states:
                             integer_variables: vec![1],
                             ..Default::default()
                         }),
-                        stage: 0,
                         ..Default::default()
                     },
                     cost: 0,
@@ -803,7 +799,6 @@ table_values:
                     integer_variables: vec![0],
                     ..Default::default()
                 },
-                stage: 0,
             },
             table_registry: table_registry::TableRegistry {
                 integer_tables: table_data::TableData {

@@ -1,8 +1,8 @@
 use super::util;
 use super::util::ParseErr;
 use crate::expression::{
-    ElementExpression, ReferenceExpression, SetElementOperator, SetExpression, SetOperator,
-    TableExpression, VectorExpression,
+    ElementExpression, NumericOperator, ReferenceExpression, SetElementOperator, SetExpression,
+    SetOperator, TableExpression, VectorExpression,
 };
 use crate::state::StateMetadata;
 use crate::table_data::TableData;
@@ -34,6 +34,10 @@ pub fn parse_expression<'a>(
             )? {
                 Ok((ElementExpression::Table(Box::new(expression)), rest))
             } else if let Some((expression, rest)) =
+                parse_operation(name, rest, metadata, registry, parameters)?
+            {
+                Ok((expression, rest))
+            } else if let Some((expression, rest)) =
                 parse_element_from_vector(name, rest, metadata, registry, parameters)?
             {
                 Ok((expression, rest))
@@ -57,6 +61,35 @@ pub fn parse_expression<'a>(
     }
 }
 
+fn parse_operation<'a>(
+    name: &str,
+    tokens: &'a [String],
+    metadata: &StateMetadata,
+    registry: &TableRegistry,
+    parameters: &FxHashMap<String, Element>,
+) -> Result<Option<(ElementExpression, &'a [String])>, ParseErr> {
+    let op = match name {
+        "+" => Some(NumericOperator::Add),
+        "-" => Some(NumericOperator::Subtract),
+        "*" => Some(NumericOperator::Multiply),
+        "/" => Some(NumericOperator::Divide),
+        "min" => Some(NumericOperator::Min),
+        "max" => Some(NumericOperator::Max),
+        _ => None,
+    };
+    if let Some(op) = op {
+        let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
+        let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        Ok(Some((
+            ElementExpression::NumericOperation(op, Box::new(x), Box::new(y)),
+            rest,
+        )))
+    } else {
+        Ok(None)
+    }
+}
+
 fn parse_atom(
     token: &str,
     name_to_constant: &FxHashMap<String, Element>,
@@ -69,8 +102,6 @@ fn parse_atom(
         Ok(ElementExpression::Constant(*v))
     } else if let Some(i) = name_to_variable.get(token) {
         Ok(ElementExpression::Variable(*i))
-    } else if token == "stage" {
-        Ok(ElementExpression::Stage)
     } else {
         let v: Element = token.parse().map_err(|e| {
             ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
@@ -669,16 +700,6 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["stage", ")", "1", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(expression, ElementExpression::Stage);
-        assert_eq!(rest, &tokens[1..]);
-
         let tokens: Vec<String> = ["et0", ")", "1", ")"]
             .iter()
             .map(|x| x.to_string())
@@ -755,6 +776,136 @@ mod tests {
             )))
         );
         assert_eq!(rest, &tokens[4..]);
+    }
+
+    #[test]
+    fn parse_operation_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "+", "0", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ElementExpression::NumericOperation(
+                NumericOperator::Add,
+                Box::new(ElementExpression::Constant(0)),
+                Box::new(ElementExpression::Constant(1))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "-", "0", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ElementExpression::NumericOperation(
+                NumericOperator::Subtract,
+                Box::new(ElementExpression::Constant(0)),
+                Box::new(ElementExpression::Constant(1))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "*", "0", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ElementExpression::NumericOperation(
+                NumericOperator::Multiply,
+                Box::new(ElementExpression::Constant(0)),
+                Box::new(ElementExpression::Constant(1))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "/", "0", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ElementExpression::NumericOperation(
+                NumericOperator::Divide,
+                Box::new(ElementExpression::Constant(0)),
+                Box::new(ElementExpression::Constant(1))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "max", "0", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ElementExpression::NumericOperation(
+                NumericOperator::Max,
+                Box::new(ElementExpression::Constant(0)),
+                Box::new(ElementExpression::Constant(1))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "min", "0", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ElementExpression::NumericOperation(
+                NumericOperator::Min,
+                Box::new(ElementExpression::Constant(0)),
+                Box::new(ElementExpression::Constant(1))
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn parse_operation_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "+", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "+", "0", "1", "2", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
     }
 
     #[test]

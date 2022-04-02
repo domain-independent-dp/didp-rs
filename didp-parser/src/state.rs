@@ -10,7 +10,6 @@ use std::rc::Rc;
 pub struct State {
     pub signature_variables: Rc<SignatureVariables>,
     pub resource_variables: ResourceVariables,
-    pub stage: Element,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
@@ -75,11 +74,6 @@ impl State {
             let value = yaml_util::get_numeric_by_key(value, name)?;
             continuous_resource_variables.push(value);
         }
-        let stage = if let Ok(value) = yaml_util::get_usize_by_key(value, "stage") {
-            value
-        } else {
-            0
-        };
         Ok(State {
             signature_variables: Rc::new(SignatureVariables {
                 set_variables,
@@ -92,7 +86,6 @@ impl State {
                 integer_variables: integer_resource_variables,
                 continuous_variables: continuous_resource_variables,
             },
-            stage,
         })
     }
 }
@@ -710,7 +703,7 @@ cr3: 3
         let mut s2 = Set::with_capacity(10);
         s2.insert(0);
         let s3 = Set::with_capacity(2);
-        let mut expected = State {
+        let expected = State {
             signature_variables: Rc::new(SignatureVariables {
                 set_variables: vec![s0, s1, s2, s3],
                 vector_variables: vec![vec![0, 2], vec![0, 1], vec![0], vec![]],
@@ -732,7 +725,6 @@ cr3: 3
                     OrderedFloat(3.0),
                 ],
             },
-            stage: 0,
         };
         assert_eq!(state.unwrap(), expected);
 
@@ -766,7 +758,6 @@ cr0: 0
 cr1: 1
 cr2: 2
 cr3: 3
-stage: 1
 ",
         );
         assert!(yaml.is_ok());
@@ -775,7 +766,6 @@ stage: 1
         let yaml = &yaml[0];
         let state = State::load_from_yaml(yaml, &metadata);
         assert!(state.is_ok());
-        expected.stage = 1;
         assert_eq!(state.unwrap(), expected);
     }
 

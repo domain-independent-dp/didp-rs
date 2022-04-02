@@ -1,3 +1,4 @@
+use super::numeric_operator::NumericOperator;
 use super::reference_expression::ReferenceExpression;
 use crate::state::State;
 use crate::table_data::TableData;
@@ -6,9 +7,13 @@ use crate::variable::{Element, Set, Vector};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ElementExpression {
-    Stage,
     Constant(Element),
     Variable(usize),
+    NumericOperation(
+        NumericOperator,
+        Box<ElementExpression>,
+        Box<ElementExpression>,
+    ),
     Last(Box<VectorExpression>),
     At(Box<VectorExpression>, Box<ElementExpression>),
     Table(Box<TableExpression<Element>>),
@@ -17,9 +22,11 @@ pub enum ElementExpression {
 impl ElementExpression {
     pub fn eval(&self, state: &State, registry: &TableRegistry) -> Element {
         match self {
-            Self::Stage => state.stage,
             Self::Constant(x) => *x,
             Self::Variable(i) => state.signature_variables.element_variables[*i],
+            Self::NumericOperation(op, x, y) => {
+                op.eval(x.eval(state, registry), y.eval(state, registry))
+            }
             Self::Last(vector) => match vector.as_ref() {
                 VectorExpression::Reference(vector) => *vector
                     .eval(
@@ -56,10 +63,16 @@ impl ElementExpression {
             Self::At(vector, i) => match (vector.simplify(registry), i.simplify(registry)) {
                 (
                     VectorExpression::Reference(ReferenceExpression::Constant(vector)),
-                    ElementExpression::Constant(i),
+                    Self::Constant(i),
                 ) => Self::Constant(vector[i]),
                 (vector, i) => Self::At(Box::new(vector), Box::new(i)),
             },
+            Self::NumericOperation(op, x, y) => {
+                match (x.simplify(registry), y.simplify(registry)) {
+                    (Self::Constant(x), Self::Constant(y)) => Self::Constant(op.eval(x, y)),
+                    (x, y) => Self::NumericOperation(op.clone(), Box::new(x), Box::new(y)),
+                }
+            }
             Self::Table(table) => match table.simplify(registry, &registry.element_tables) {
                 TableExpression::Constant(value) => Self::Constant(value),
                 expression => Self::Table(Box::new(expression)),
@@ -540,17 +553,8 @@ mod tests {
                 element_variables: vec![1],
                 ..Default::default()
             }),
-            stage: 1,
             ..Default::default()
         }
-    }
-
-    #[test]
-    fn stage_eval() {
-        let state = generate_state();
-        let registry = generate_registry();
-        let expression = ElementExpression::Stage;
-        assert_eq!(expression.eval(&state, &registry), 1);
     }
 
     #[test]
@@ -567,6 +571,18 @@ mod tests {
         let registry = generate_registry();
         let expression = ElementExpression::Variable(0);
         assert_eq!(expression.eval(&state, &registry), 1);
+    }
+
+    #[test]
+    fn element_numeric_operation_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = ElementExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(ElementExpression::Variable(0)),
+            Box::new(ElementExpression::Constant(1)),
+        );
+        assert_eq!(expression.eval(&state, &registry), 2);
     }
 
     #[test]
@@ -601,13 +617,6 @@ mod tests {
     }
 
     #[test]
-    fn stage_simplify() {
-        let registry = generate_registry();
-        let expression = ElementExpression::Stage;
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
     fn element_constant_simplify() {
         let registry = generate_registry();
         let expression = ElementExpression::Constant(2);
@@ -618,6 +627,26 @@ mod tests {
     fn element_variable_simplify() {
         let registry = generate_registry();
         let expression = ElementExpression::Variable(0);
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn element_numeric_operation_simplify() {
+        let registry = generate_registry();
+        let expression = ElementExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(ElementExpression::Constant(0)),
+            Box::new(ElementExpression::Constant(1)),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            ElementExpression::Constant(1)
+        );
+        let expression = ElementExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(ElementExpression::Variable(0)),
+            Box::new(ElementExpression::Constant(1)),
+        );
         assert_eq!(expression.simplify(&registry), expression);
     }
 

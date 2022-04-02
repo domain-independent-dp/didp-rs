@@ -227,7 +227,6 @@ mod tests {
                     integer_variables: integer_resource_variables,
                     ..Default::default()
                 },
-                stage: 0,
             },
             operator,
             parent,
@@ -333,7 +332,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
@@ -341,7 +339,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         assert_eq!(node.state, state);
         assert!(node.h.borrow().is_none());
@@ -352,7 +349,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
@@ -360,7 +356,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         assert_eq!(node.state, state);
         assert!(node.h.borrow().is_none());
@@ -371,7 +366,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![3, 1, 3]),
-            stage: 0,
         };
         let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
@@ -379,7 +373,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![3, 1, 3]),
-            stage: 0,
         };
         assert_eq!(node.state, state);
         assert!(node.h.borrow().is_none());
@@ -390,7 +383,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![0, 1, 3]),
-            stage: 0,
         };
         let node = registry.get_node(state, 0, None, None);
         assert!(node.is_some());
@@ -398,7 +390,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![0, 1, 3]),
-            stage: 0,
         };
         assert_eq!(node.state, state);
         assert!(node.h.borrow().is_none());
@@ -415,14 +406,12 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         registry.get_node(state, 2, None, None);
 
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         let node = registry.get_node(state, 2, None, None);
         assert!(node.is_none());
@@ -430,7 +419,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
-            stage: 0,
         };
         let node = registry.get_node(state, 2, None, None);
         assert!(node.is_none());
@@ -438,7 +426,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         let node = registry.get_node(state, 3, None, None);
         assert!(node.is_none());
@@ -452,7 +439,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         let node = registry.get_node(state, 2, None, None);
         assert!(node.is_some());
@@ -462,7 +448,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         let node = registry.get_node(state, 1, None, None);
         assert!(node.is_none());
@@ -476,7 +461,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         let node1 = registry.get_node(state, 2, None, None);
         assert!(node1.is_some());
@@ -486,7 +470,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 1,
         };
         let op = Rc::new(didp_parser::Transition::default());
         let node2 = registry.get_node(state, 1, Some(op), Some(node1.clone()));
@@ -510,7 +493,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![2, 3, 3]),
-            stage: 0,
         };
         let node3 = registry.get_node(state, 1, None, None);
         assert!(node3.is_some());
@@ -539,7 +521,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
@@ -547,7 +528,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         assert_eq!(node.state, state);
         assert!(node.h.borrow().is_none());
@@ -560,7 +540,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
@@ -568,7 +547,6 @@ mod tests {
         let state = didp_parser::State {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
-            stage: 0,
         };
         assert_eq!(node.state, state);
         assert!(node.h.borrow().is_none());
