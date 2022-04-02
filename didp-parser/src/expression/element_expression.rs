@@ -107,11 +107,34 @@ impl SetExpression {
                 set.toggle_range(..);
                 set
             }
-            Self::SetOperation(op, x, y) => {
-                let x = x.eval(state, registry);
-                let y = y.eval(state, registry);
-                Self::eval_set_operation(op, x, y)
-            }
+            Self::SetOperation(op, x, y) => match (op, x.as_ref(), y.as_ref()) {
+                (op, x, SetExpression::Reference(y)) => {
+                    let x = x.eval(state, registry);
+                    let y = y.eval(
+                        state,
+                        registry,
+                        &state.signature_variables.set_variables,
+                        &registry.set_tables,
+                    );
+                    Self::eval_set_operation(op, x, y)
+                }
+                (SetOperator::Intersection, SetExpression::Reference(x), y)
+                | (SetOperator::Union, SetExpression::Reference(x), y) => {
+                    let x = x.eval(
+                        state,
+                        registry,
+                        &state.signature_variables.set_variables,
+                        &registry.set_tables,
+                    );
+                    let y = y.eval(state, registry);
+                    Self::eval_set_operation(op, y, x)
+                }
+                (op, x, y) => {
+                    let x = x.eval(state, registry);
+                    let y = y.eval(state, registry);
+                    Self::eval_set_operation(op, x, &y)
+                }
+            },
             Self::SetElementOperation(op, element, set) => {
                 let set = set.eval(state, registry);
                 let element = element.eval(state, registry);
@@ -153,7 +176,7 @@ impl SetExpression {
                     Self::Reference(ReferenceExpression::Constant(x)),
                     Self::Reference(ReferenceExpression::Constant(y)),
                 ) => Self::Reference(ReferenceExpression::Constant(Self::eval_set_operation(
-                    op, x, y,
+                    op, x, &y,
                 ))),
                 (
                     Self::Reference(ReferenceExpression::Variable(x)),
@@ -162,8 +185,8 @@ impl SetExpression {
                     SetOperator::Union | SetOperator::Intersection => {
                         Self::Reference(ReferenceExpression::Variable(x))
                     }
-                    op => Self::SetOperation(
-                        op.clone(),
+                    SetOperator::Difference => Self::SetOperation(
+                        SetOperator::Difference,
                         Box::new(Self::Reference(ReferenceExpression::Variable(x))),
                         Box::new(Self::Reference(ReferenceExpression::Variable(y))),
                     ),
@@ -192,18 +215,18 @@ impl SetExpression {
         }
     }
 
-    fn eval_set_operation(op: &SetOperator, mut x: Set, y: Set) -> Set {
+    fn eval_set_operation(op: &SetOperator, mut x: Set, y: &Set) -> Set {
         match op {
             SetOperator::Union => {
-                x.union_with(&y);
+                x.union_with(y);
                 x
             }
             SetOperator::Difference => {
-                x.difference_with(&y);
+                x.difference_with(y);
                 x
             }
             SetOperator::Intersection => {
-                x.intersect_with(&y);
+                x.intersect_with(y);
                 x
             }
         }
