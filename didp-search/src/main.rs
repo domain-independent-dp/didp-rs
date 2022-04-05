@@ -1,6 +1,7 @@
 use didp_parser::variable;
 use didp_search::astar;
 use didp_search::exist_dfs;
+use didp_search::forward_recursion;
 use std::env;
 use std::fmt;
 use std::fs;
@@ -25,27 +26,26 @@ fn solve<T: variable::Numeric + Ord + fmt::Display>(
         Some(value) => value.clone(),
         None => yaml_rust::Yaml::Null,
     };
-    let solution = match map.get(&yaml_rust::Yaml::from_str("solver")) {
+    let solver = match map.get(&yaml_rust::Yaml::from_str("solver")) {
         Some(yaml_rust::Yaml::String(string)) => match &string[..] {
-            "astar" => astar::astar(&model, &config).unwrap_or_else(|e| {
-                eprintln!("Error: {:?}", e);
-                process::exit(1);
-            }),
-            "exist_dfs" => exist_dfs::run_forward_iterative_exist_dfs(&model, &config)
-                .unwrap_or_else(|e| {
-                    eprintln!("Error: {:?}", e);
-                    process::exit(1);
-                }),
+            "astar" => astar::astar,
+            "exist_dfs" => exist_dfs::run_forward_iterative_exist_dfs,
+            "forward_recursion" => forward_recursion::start_forward_recursion,
             value => {
                 eprintln!("no such solver {:?}", value);
                 process::exit(1);
             }
         },
-        value => {
+        Some(value) => {
             eprintln!("expected String, but found {:?}", value);
             process::exit(1);
         }
+        None => forward_recursion::start_forward_recursion,
     };
+    let solution = solver(&model, &config).unwrap_or_else(|e| {
+        eprintln!("Error: {:?}", e);
+        process::exit(1);
+    });
     match solution {
         Some((cost, transitions)) => {
             println!("transitions:");

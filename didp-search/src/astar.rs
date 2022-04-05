@@ -97,6 +97,16 @@ where
                     registry_capacity,
                 ))
             }
+            "h" => {
+                let f_function = |_, h, _: &didp_parser::State, _: &didp_parser::Model<T>| h;
+                Ok(forward_bfs::forward_bfs(
+                    model,
+                    h_function,
+                    f_function,
+                    ub,
+                    registry_capacity,
+                ))
+            }
             op => Err(
                 util::ConfigErr::new(format!("unexpected operator for f function `{}`", op)).into(),
             ),

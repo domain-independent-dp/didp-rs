@@ -4,6 +4,7 @@ pub mod evaluator;
 pub mod exist_dfs;
 pub mod expression_evaluator;
 pub mod forward_bfs;
+pub mod forward_recursion;
 pub mod priority_queue;
 pub mod search_node;
 pub mod successor_generator;
