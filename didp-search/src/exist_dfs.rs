@@ -6,20 +6,21 @@ use std::fmt;
 use std::rc::Rc;
 use std::str;
 
+#[derive(Default)]
 pub struct IterativeForwardExistDfs<T: variable::Numeric> {
-    ub: Option<T>,
+    primal_bound: Option<T>,
     capacity: Option<usize>,
 }
 
 impl<T: variable::Numeric + fmt::Display> solver::Solver<T> for IterativeForwardExistDfs<T> {
     #[inline]
-    fn set_ub(&mut self, ub: Option<T>) {
-        self.ub = ub;
+    fn set_primal_bound(&mut self, bound: Option<T>) {
+        self.primal_bound = bound;
     }
 
     #[inline]
     fn solve(&mut self, model: &didp_parser::Model<T>) -> solver::Solution<T> {
-        forward_iterative_exist_dfs(model, self.ub, self.capacity)
+        forward_iterative_exist_dfs(model, self.primal_bound, self.capacity)
     }
 }
 
@@ -30,6 +31,7 @@ impl<T: variable::Numeric> IterativeForwardExistDfs<T> {
     {
         let map = match config {
             yaml_rust::Yaml::Hash(map) => map,
+            yaml_rust::Yaml::Null => return Ok(IterativeForwardExistDfs::default()),
             _ => {
                 return Err(solver::ConfigErr::new(format!(
                     "expected Hash, but found `{:?}`",
@@ -47,7 +49,7 @@ impl<T: variable::Numeric> IterativeForwardExistDfs<T> {
                 )))
             }
         };
-        let ub = match map.get(&yaml_rust::Yaml::from_str("ub")) {
+        let primal_bound = match map.get(&yaml_rust::Yaml::from_str("primal_bound")) {
             Some(yaml_rust::Yaml::Integer(value)) => {
                 Some(T::from_integer(*value as variable::Integer))
             }
@@ -62,13 +64,16 @@ impl<T: variable::Numeric> IterativeForwardExistDfs<T> {
                 )))
             }
         };
-        Ok(IterativeForwardExistDfs { capacity, ub })
+        Ok(IterativeForwardExistDfs {
+            capacity,
+            primal_bound,
+        })
     }
 }
 
 pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
     model: &didp_parser::Model<T>,
-    mut ub: Option<T>,
+    mut primal_bound: Option<T>,
     capacity: Option<usize>,
 ) -> solver::Solution<T> {
     let mut nodes = 0;
@@ -84,15 +89,15 @@ pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
         model,
         &generator,
         &mut prob,
-        ub,
+        primal_bound,
         &mut nodes,
     ) {
-        println!("New UB: {}, expanded: {}", cost, nodes);
-        ub = Some(cost);
+        println!("New primal bound: {}, expanded: {}", cost, nodes);
+        primal_bound = Some(cost);
         incumbent = transitions;
     }
     println!("Expanded: {}", nodes);
-    if let Some(cost) = ub {
+    if let Some(cost) = primal_bound {
         incumbent.reverse();
         let transitions = incumbent.into_iter().map(|t| t.as_ref().clone()).collect();
         Some((cost, transitions))
@@ -107,7 +112,7 @@ pub fn exist_dfs<T: variable::Numeric>(
     model: &didp_parser::Model<T>,
     generator: &successor_generator::SuccessorGenerator<T>,
     prob: &mut FxHashMap<didp_parser::State, T>,
-    ub: Option<T>,
+    primal_bound: Option<T>,
     nodes: &mut u32,
 ) -> Option<(T, Vec<Rc<didp_parser::Transition<T>>>)> {
     *nodes += 1;
@@ -123,14 +128,19 @@ pub fn exist_dfs<T: variable::Numeric>(
     }
     for transition in generator.applicable_transitions(&state) {
         let cost = transition.eval_cost(cost, &state, &model.table_registry);
-        if ub.is_none() || cost < ub.unwrap() {
-            let successor = transition.apply_effects(&state, &model.table_registry);
-            if model.check_constraints(&successor) {
-                let result = exist_dfs(successor, cost, model, generator, prob, ub, nodes);
-                if let Some((cost, mut transitions)) = result {
-                    transitions.push(transition);
-                    return Some((cost, transitions));
-                }
+        if let Some(bound) = primal_bound {
+            match model.reduce_function {
+                didp_parser::ReduceFunction::Min if cost >= bound => continue,
+                didp_parser::ReduceFunction::Max if cost <= bound => continue,
+                _ => {}
+            }
+        }
+        let successor = transition.apply_effects(&state, &model.table_registry);
+        if model.check_constraints(&successor) {
+            let result = exist_dfs(successor, cost, model, generator, prob, primal_bound, nodes);
+            if let Some((cost, mut transitions)) = result {
+                transitions.push(transition);
+                return Some((cost, transitions));
             }
         }
     }

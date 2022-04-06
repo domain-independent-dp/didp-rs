@@ -22,7 +22,7 @@ impl fmt::Display for ConfigErr {
 impl Error for ConfigErr {}
 
 pub trait Solver<T: variable::Numeric> {
-    fn set_ub(&mut self, _: Option<T>) {}
+    fn set_primal_bound(&mut self, _: Option<T>) {}
 
     fn solve(&mut self, model: &didp_parser::Model<T>) -> Solution<T>;
 }

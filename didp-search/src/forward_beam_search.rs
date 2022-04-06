@@ -12,7 +12,7 @@ pub fn iterative_forward_beam_search<T: variable::Numeric + Ord + fmt::Display, 
     h_function: &H,
     f_function: &F,
     beams: &[usize],
-    mut ub: Option<T>,
+    mut primal_bound: Option<T>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
@@ -21,17 +21,23 @@ where
 {
     let mut incumbent = Vec::new();
     for beam in beams {
-        let result =
-            forward_beam_search(model, h_function, f_function, *beam, ub, registry_capacity);
-        if let Some((new_ub, new_incumbent)) = result {
-            ub = Some(new_ub);
+        let result = forward_beam_search(
+            model,
+            h_function,
+            f_function,
+            *beam,
+            primal_bound,
+            registry_capacity,
+        );
+        if let Some((new_primal_bound, new_incumbent)) = result {
+            primal_bound = Some(new_primal_bound);
             incumbent = new_incumbent;
-            println!("New UB: {}", new_ub);
+            println!("New primal bound: {}", new_primal_bound);
         } else {
             println!("Failed to find a solution");
         }
     }
-    ub.map(|ub| (ub, incumbent))
+    primal_bound.map(|b| (b, incumbent))
 }
 
 pub fn forward_beam_search<T: variable::Numeric + Ord + fmt::Display, H, F>(
@@ -39,14 +45,17 @@ pub fn forward_beam_search<T: variable::Numeric + Ord + fmt::Display, H, F>(
     h_function: &H,
     f_function: &F,
     beam: usize,
-    ub: Option<T>,
+    primal_bound: Option<T>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
     H: evaluator::Evaluator<T>,
     F: Fn(T, T, &didp_parser::State, &didp_parser::Model<T>) -> T,
 {
-    let mut open = priority_queue::PriorityQueue::new(true);
+    let mut open = match model.reduce_function {
+        didp_parser::ReduceFunction::Max => priority_queue::PriorityQueue::new(false),
+        _ => priority_queue::PriorityQueue::new(true),
+    };
     let mut registry = search_node::SearchNodeRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
@@ -82,8 +91,12 @@ where
             }
             for transition in generator.applicable_transitions(&node.state) {
                 let g = transition.eval_cost(node.g, &node.state, &model.table_registry);
-                if ub.is_some() && g > ub.unwrap() {
-                    continue;
+                if let Some(bound) = primal_bound {
+                    match model.reduce_function {
+                        didp_parser::ReduceFunction::Min if g >= bound => continue,
+                        didp_parser::ReduceFunction::Max if g <= bound => continue,
+                        _ => {}
+                    }
                 }
                 let state = transition.apply_effects(&node.state, &model.table_registry);
                 if let Some(successor) =
@@ -101,10 +114,15 @@ where
                         };
                         if let Some(h) = h {
                             let f = f_function(g, h, &node.state, model);
-                            *successor.f.borrow_mut() = Some(f);
-                            if ub.is_none() || f <= ub.unwrap() {
-                                new_open.push(successor);
+                            if let Some(bound) = primal_bound {
+                                match model.reduce_function {
+                                    didp_parser::ReduceFunction::Min if f >= bound => continue,
+                                    didp_parser::ReduceFunction::Max if f <= bound => continue,
+                                    _ => {}
+                                }
                             }
+                            *successor.f.borrow_mut() = Some(f);
+                            new_open.push(successor);
                         }
                     }
                 }

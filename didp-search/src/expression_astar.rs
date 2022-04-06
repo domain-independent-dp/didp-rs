@@ -7,6 +7,7 @@ use std::error::Error;
 use std::fmt;
 use std::str;
 
+#[derive(Default)]
 pub struct ExpressionAstar<T: variable::Numeric> {
     h_evaluator: expression_evaluator::ExpressionEvaluator<T>,
     f_evaluator_type: FEvaluatorType,
@@ -21,9 +22,15 @@ pub enum FEvaluatorType {
     Overwrite,
 }
 
+impl Default for FEvaluatorType {
+    fn default() -> Self {
+        Self::Plus
+    }
+}
+
 impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for ExpressionAstar<T> {
     #[inline]
-    fn set_ub(&mut self, ub: Option<T>) {
+    fn set_primal_bound(&mut self, ub: Option<T>) {
         self.ub = ub;
     }
 
@@ -91,6 +98,7 @@ impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
     {
         let map = match config {
             yaml_rust::Yaml::Hash(map) => map,
+            yaml_rust::Yaml::Null => return Ok(ExpressionAstar::default()),
             _ => {
                 return Err(solver::ConfigErr::new(format!(
                     "expected Hash, but found `{:?}`",

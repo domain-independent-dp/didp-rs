@@ -6,6 +6,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::str;
 
+#[derive(Default)]
 pub struct ForwardRecursion {
     memo_capacity: Option<usize>,
 }
@@ -51,6 +52,7 @@ impl ForwardRecursion {
     pub fn new(config: &yaml_rust::Yaml) -> Result<ForwardRecursion, solver::ConfigErr> {
         let map = match config {
             yaml_rust::Yaml::Hash(map) => map,
+            yaml_rust::Yaml::Null => return Ok(ForwardRecursion::default()),
             _ => {
                 return Err(solver::ConfigErr::new(format!(
                     "expected Hash, but found `{:?}`",

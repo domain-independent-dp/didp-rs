@@ -12,14 +12,14 @@ pub struct ExpressionBeamSearch<T: variable::Numeric> {
     h_evaluator: expression_evaluator::ExpressionEvaluator<T>,
     f_evaluator_type: FEvaluatorType,
     beams: Vec<usize>,
-    ub: Option<T>,
+    primal_bound: Option<T>,
     registry_capacity: Option<usize>,
 }
 
 impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for ExpressionBeamSearch<T> {
     #[inline]
-    fn set_ub(&mut self, ub: Option<T>) {
-        self.ub = ub;
+    fn set_primal_bound(&mut self, bound: Option<T>) {
+        self.primal_bound = bound;
     }
 
     fn solve(&mut self, model: &didp_parser::Model<T>) -> solver::Solution<T> {
@@ -32,7 +32,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
                     &self.h_evaluator,
                     &f_evaluator,
                     &self.beams,
-                    self.ub,
+                    self.primal_bound,
                     self.registry_capacity,
                 )
             }
@@ -46,7 +46,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
                     &self.h_evaluator,
                     &f_evaluator,
                     &self.beams,
-                    self.ub,
+                    self.primal_bound,
                     self.registry_capacity,
                 )
             }
@@ -60,7 +60,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
                     &self.h_evaluator,
                     &f_evaluator,
                     &self.beams,
-                    self.ub,
+                    self.primal_bound,
                     self.registry_capacity,
                 )
             }
@@ -72,7 +72,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
                     &self.h_evaluator,
                     &f_evaluator,
                     &self.beams,
-                    self.ub,
+                    self.primal_bound,
                     self.registry_capacity,
                 )
             }
@@ -113,7 +113,7 @@ impl<T: variable::Numeric + Ord> ExpressionBeamSearch<T> {
                 .into())
             }
         };
-        let ub = match map.get(&yaml_rust::Yaml::from_str("ub")) {
+        let primal_bound = match map.get(&yaml_rust::Yaml::from_str("primal_bound")) {
             Some(yaml_rust::Yaml::Integer(value)) => {
                 Some(T::from_integer(*value as variable::Integer))
             }
@@ -183,7 +183,7 @@ impl<T: variable::Numeric + Ord> ExpressionBeamSearch<T> {
         Ok(ExpressionBeamSearch {
             h_evaluator,
             f_evaluator_type,
-            ub,
+            primal_bound,
             beams,
             registry_capacity,
         })

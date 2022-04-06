@@ -63,19 +63,19 @@ impl SolverFactory {
 
 pub struct IterativeSearch<T: variable::Numeric> {
     solvers: Vec<Box<dyn solver::Solver<T>>>,
-    ub: Option<T>,
+    primal_bound: Option<T>,
 }
 
 impl<T: variable::Numeric + fmt::Display> solver::Solver<T> for IterativeSearch<T> {
     fn solve(&mut self, model: &didp_parser::Model<T>) -> solver::Solution<T> {
-        let mut cost = self.ub;
+        let mut cost = self.primal_bound;
         let mut transitions = Vec::new();
         for solver in &mut self.solvers {
-            solver.set_ub(cost);
+            solver.set_primal_bound(cost);
             let result = solver.solve(model);
-            if let Some((ub, incumbent)) = result {
-                println!("New UB: {}", ub);
-                cost = Some(ub);
+            if let Some((bound, incumbent)) = result {
+                println!("New primal bound: {}", bound);
+                cost = Some(bound);
                 transitions = incumbent;
             } else {
                 println!("Failed to find a solution");
@@ -103,7 +103,7 @@ impl<T: 'static + variable::Numeric + Ord + fmt::Display> IterativeSearch<T> {
                 .into())
             }
         };
-        let ub = match map.get(&yaml_rust::Yaml::from_str("ub")) {
+        let primal_bound = match map.get(&yaml_rust::Yaml::from_str("primal_bound")) {
             Some(yaml_rust::Yaml::Integer(value)) => {
                 Some(T::from_integer(*value as variable::Integer))
             }
@@ -134,6 +134,9 @@ impl<T: 'static + variable::Numeric + Ord + fmt::Display> IterativeSearch<T> {
         for config in solver_configs {
             solvers.push(factory.create(model, &config)?);
         }
-        Ok(IterativeSearch { solvers, ub })
+        Ok(IterativeSearch {
+            solvers,
+            primal_bound,
+        })
     }
 }
