@@ -138,7 +138,7 @@ impl<T: variable::Numeric> Model<T> {
         }
         let problem_name = yaml_util::get_string_by_key(&problem, "problem")?;
 
-        let variables = yaml_util::get_yaml_by_key(&domain, "variables")?;
+        let variables = yaml_util::get_yaml_by_key(&domain, "state_variables")?;
         let state_metadata = match (
             domain.get(&Yaml::from_str("objects")),
             problem.get(&Yaml::from_str("object_numbers")),
@@ -460,7 +460,7 @@ mod tests {
     fn model_load_from_yaml_ok() {
         let domain = r"
 domain: ADD
-variables: [ {name: v, type: integer} ]
+state_variables: [ {name: v, type: integer} ]
 reduce: min
 transitions:
         - name: add
@@ -553,7 +553,7 @@ base_cases:
 
         let domain = r"
 domain: Fibonacci 
-variables: [ {name: v, type: integer} ]
+state_variables: [ {name: v, type: integer} ]
 reduce: sum
 transitions:
         - name: one
@@ -679,7 +679,7 @@ base_states:
 domain: TSPTW
 reduce: min
 objects: [cities]
-variables:
+state_variables:
         - name: unvisited
           type: set
           object: cities
@@ -1105,7 +1105,7 @@ transitions:
         let domain = r"
 domain: TSPTW
 reduce: min
-variables:
+state_variables:
         - name: unvisited
           type: set
           object: cities
@@ -1197,7 +1197,7 @@ transitions:
 domain: TSPTW
 reduce: min
 objects: [cities]
-variables:
+state_variables:
         - name: unvisited
           type: set
           object: cities
@@ -1232,7 +1232,7 @@ transitions:
         let domain = r"
 reduce: min
 objects: [cities]
-variables:
+state_variables:
         - name: unvisited
           type: set
           object: cities
@@ -1273,7 +1273,7 @@ constraints:
 domain: TSPTW
 reduce: min
 objects: [cities]
-variables:
+state_variables:
         - name: unvisited
           type: set
           object: cities
