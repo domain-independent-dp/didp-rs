@@ -4,7 +4,7 @@ use super::table_vector_parser;
 use super::util;
 use super::util::ParseErr;
 use crate::expression::{
-    NumericExpression, NumericOperator, NumericVectorExpression, ReduceOperator,
+    MathFunction, NumericExpression, NumericOperator, NumericVectorExpression, ReduceOperator,
 };
 use crate::state::StateMetadata;
 use crate::table_registry::TableRegistry;
@@ -75,9 +75,13 @@ where
                 Ok((parse_reduce(name, vector)?, rest))
             } else {
                 let (x, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
-                let (y, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
+                let (expression, rest) = if let Ok(expression) = parse_math(name, x.clone()) {
+                    (expression, rest)
+                } else {
+                    let (y, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
+                    (parse_operation(name, x, y)?, rest)
+                };
                 let rest = util::parse_closing(rest)?;
-                let expression = parse_operation(name, x, y)?;
                 Ok((expression, rest))
             }
         }
@@ -146,9 +150,14 @@ where
                 Ok((parse_reduce(name, vector)?, rest))
             } else {
                 let (x, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
-                let (y, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
+                let (expression, rest) = if let Ok(expression) = parse_math(name, x.clone()) {
+                    (expression, rest)
+                } else {
+                    let (y, rest) =
+                        parse_continuous_expression(rest, metadata, registry, parameters)?;
+                    (parse_operation(name, x, y)?, rest)
+                };
                 let rest = util::parse_closing(rest)?;
-                let expression = parse_operation(name, x, y)?;
                 Ok((expression, rest))
             }
         }
@@ -186,6 +195,17 @@ fn parse_reduce<T: Numeric>(
             "no such reduction operator `{}`",
             name
         ))),
+    }
+}
+
+fn parse_math<T: Numeric>(
+    name: &str,
+    x: NumericExpression<T>,
+) -> Result<NumericExpression<T>, ParseErr> {
+    match name {
+        "sqrt" => Ok(NumericExpression::Math(MathFunction::Sqrt, Box::new(x))),
+        "abs" => Ok(NumericExpression::Math(MathFunction::Abs, Box::new(x))),
+        _ => Err(ParseErr::new(format!("no such math function `{}`", name))),
     }
 }
 
@@ -1258,6 +1278,140 @@ mod tests {
             .collect();
         let result =
             parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_math_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "sqrt", "4", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_integer_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Math(MathFunction::Sqrt, Box::new(NumericExpression::Constant(4)),)
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["(", "abs", "-4", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_integer_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Math(MathFunction::Abs, Box::new(NumericExpression::Constant(-4)),)
+        );
+        assert_eq!(rest, &tokens[4..]);
+    }
+
+    #[test]
+    fn parse_integer_math_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "sqrt", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "sqrt", "2", "3", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "exp", "3", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_math_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "sqrt", "4.0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Math(
+                MathFunction::Sqrt,
+                Box::new(NumericExpression::Constant(4.0)),
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["(", "abs", "-4.0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Math(
+                MathFunction::Abs,
+                Box::new(NumericExpression::Constant(-4.0)),
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+    }
+
+    #[test]
+    fn parse_continuous_math_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "sqrt", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "sqrt", "2.0", "3.0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "exp", "3.0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 

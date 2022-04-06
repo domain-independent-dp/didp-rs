@@ -1,5 +1,5 @@
 use super::element_expression::{ElementExpression, SetExpression, VectorExpression};
-use super::numeric_operator::NumericOperator;
+use super::numeric_operator::{MathFunction, NumericOperator};
 use super::numeric_table_expression::NumericTableExpression;
 use super::reference_expression::ReferenceExpression;
 use super::table_vector_expression::TableVectorExpression;
@@ -16,6 +16,7 @@ pub enum NumericExpression<T: Numeric> {
     IntegerResourceVariable(usize),
     ContinuousResourceVariable(usize),
     Cost,
+    Math(MathFunction, Box<NumericExpression<T>>),
     NumericOperation(
         NumericOperator,
         Box<NumericExpression<T>>,
@@ -69,6 +70,7 @@ impl<T: Numeric> NumericExpression<T> {
                 T::from_continuous(state.resource_variables.continuous_variables[*i].into_inner())
             }
             Self::Cost => cost.unwrap(),
+            Self::Math(op, x) => op.eval(x.eval_inner(cost, state, registry)),
             Self::NumericOperation(op, a, b) => {
                 let a = a.eval_inner(cost, state, registry);
                 let b = b.eval_inner(cost, state, registry);
@@ -119,6 +121,10 @@ impl<T: Numeric> NumericExpression<T> {
 
     pub fn simplify(&self, registry: &TableRegistry) -> NumericExpression<T> {
         match self {
+            Self::Math(op, x) => match x.simplify(registry) {
+                Self::Constant(x) => Self::Constant(op.eval(x)),
+                x => Self::Math(op.clone(), Box::new(x)),
+            },
             Self::NumericOperation(op, a, b) => {
                 match (a.simplify(registry), b.simplify(registry)) {
                     (Self::Constant(a), Self::Constant(b)) => Self::Constant(op.eval(a, b)),
@@ -646,6 +652,20 @@ mod tests {
     }
 
     #[test]
+    fn math_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let expression: NumericExpression<Continuous> = NumericExpression::Math(
+            MathFunction::Sqrt,
+            Box::new(NumericExpression::Constant(4.0)),
+        );
+        assert_eq!(expression.eval(&state, &registry), 2.0);
+        let expression: NumericExpression<Integer> =
+            NumericExpression::Math(MathFunction::Abs, Box::new(NumericExpression::Constant(-1)));
+        assert_eq!(expression.eval(&state, &registry), 1);
+    }
+
+    #[test]
     fn add_eval() {
         let registry = generate_registry();
         let state = generate_state();
@@ -986,6 +1006,25 @@ mod tests {
         let registry = generate_registry();
         let expression: NumericExpression<Integer> = NumericExpression::Cost {};
         assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn math_simplify() {
+        let registry = generate_registry();
+
+        let expression: NumericExpression<Integer> =
+            NumericExpression::Math(MathFunction::Abs, Box::new(NumericExpression::Constant(-3)));
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericExpression::Constant(3)
+        );
+
+        let expression: NumericExpression<Integer> = NumericExpression::Math(
+            MathFunction::Abs,
+            Box::new(NumericExpression::IntegerVariable(0)),
+        );
+        let simplified = expression.simplify(&registry);
+        assert_eq!(simplified, expression);
     }
 
     #[test]

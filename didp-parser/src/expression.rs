@@ -14,7 +14,7 @@ pub use element_expression::{
     VectorExpression,
 };
 pub use numeric_expression::{NumericExpression, NumericVectorExpression, ReduceOperator};
-pub use numeric_operator::NumericOperator;
+pub use numeric_operator::{MathFunction, NumericOperator};
 pub use table_vector_expression::{TableVectorExpression, VectorOrElementExpression};
 
 pub use numeric_table_expression::{ArgumentExpression, NumericTableExpression};

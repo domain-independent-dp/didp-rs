@@ -15,6 +15,7 @@ pub trait Numeric:
     + ToNumeric
     + FromNumeric
     + num_traits::FromPrimitive
+    + num_traits::Signed
     + Copy
     + Sum
     + Product

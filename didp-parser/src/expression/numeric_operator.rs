@@ -1,3 +1,20 @@
+use crate::variable::Numeric;
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum MathFunction {
+    Sqrt,
+    Abs,
+}
+
+impl MathFunction {
+    pub fn eval<T: Numeric + num_traits::Signed>(&self, x: T) -> T {
+        match self {
+            Self::Sqrt => T::from(x.to_continuous().sqrt()),
+            Self::Abs => x.abs(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum NumericOperator {
     Add,
@@ -36,6 +53,18 @@ impl NumericOperator {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sqrt() {
+        let op = MathFunction::Sqrt;
+        assert_eq!(op.eval(4.0), 2.0);
+    }
+
+    #[test]
+    fn abs() {
+        let op = MathFunction::Abs;
+        assert_eq!(op.eval(-4.0), 4.0);
+    }
 
     #[test]
     fn add() {
