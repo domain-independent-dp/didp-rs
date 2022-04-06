@@ -1,43 +1,76 @@
+use crate::solver;
 use crate::successor_generator;
-use crate::util;
 use didp_parser::variable;
 use rustc_hash::FxHashMap;
-use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
 use std::str;
 
-pub fn run_forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
-    model: &didp_parser::Model<T>,
-    config: &yaml_rust::Yaml,
-) -> Result<util::Solution<T>, Box<dyn Error>>
-where
-    <T as str::FromStr>::Err: fmt::Debug,
-{
-    let map = match config {
-        yaml_rust::Yaml::Hash(map) => map,
-        _ => {
-            return Err(
-                util::ConfigErr::new(format!("expected Hash, but found `{:?}`", config)).into(),
-            )
-        }
-    };
-    let capacity = match map.get(&yaml_rust::Yaml::from_str("capacity")) {
-        Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
-        None => Some(1000000),
-        value => {
-            return Err(
-                util::ConfigErr::new(format!("expected Integer, but found `{:?}`", value)).into(),
-            )
-        }
-    };
-    Ok(forward_iterative_exist_dfs(model, capacity))
+pub struct IterativeForwardExistDfs<T: variable::Numeric> {
+    ub: Option<T>,
+    capacity: Option<usize>,
+}
+
+impl<T: variable::Numeric + fmt::Display> solver::Solver<T> for IterativeForwardExistDfs<T> {
+    #[inline]
+    fn set_ub(&mut self, ub: Option<T>) {
+        self.ub = ub;
+    }
+
+    #[inline]
+    fn solve(&mut self, model: &didp_parser::Model<T>) -> solver::Solution<T> {
+        forward_iterative_exist_dfs(model, self.ub, self.capacity)
+    }
+}
+
+impl<T: variable::Numeric> IterativeForwardExistDfs<T> {
+    pub fn new(config: &yaml_rust::Yaml) -> Result<IterativeForwardExistDfs<T>, solver::ConfigErr>
+    where
+        <T as str::FromStr>::Err: fmt::Debug,
+    {
+        let map = match config {
+            yaml_rust::Yaml::Hash(map) => map,
+            _ => {
+                return Err(solver::ConfigErr::new(format!(
+                    "expected Hash, but found `{:?}`",
+                    config
+                )))
+            }
+        };
+        let capacity = match map.get(&yaml_rust::Yaml::from_str("capacity")) {
+            Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
+            None => Some(1000000),
+            value => {
+                return Err(solver::ConfigErr::new(format!(
+                    "expected Integer, but found `{:?}`",
+                    value
+                )))
+            }
+        };
+        let ub = match map.get(&yaml_rust::Yaml::from_str("ub")) {
+            Some(yaml_rust::Yaml::Integer(value)) => {
+                Some(T::from_integer(*value as variable::Integer))
+            }
+            Some(yaml_rust::Yaml::Real(value)) => Some(value.parse().map_err(|e| {
+                solver::ConfigErr::new(format!("could not parse {} as a number: {:?}", value, e))
+            })?),
+            None => None,
+            value => {
+                return Err(solver::ConfigErr::new(format!(
+                    "expected Integer, but found `{:?}`",
+                    value
+                )))
+            }
+        };
+        Ok(IterativeForwardExistDfs { capacity, ub })
+    }
 }
 
 pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
     model: &didp_parser::Model<T>,
+    mut ub: Option<T>,
     capacity: Option<usize>,
-) -> util::Solution<T> {
+) -> solver::Solution<T> {
     let mut nodes = 0;
     let generator = successor_generator::SuccessorGenerator::new(model, false);
     let mut prob = FxHashMap::default();
@@ -45,7 +78,6 @@ pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
         prob.reserve(capacity);
     };
     let mut incumbent = Vec::new();
-    let mut ub = None;
     while let Some((cost, transitions)) = exist_dfs(
         model.target.clone(),
         T::zero(),

@@ -1,5 +1,6 @@
+use super::expression_astar::FEvaluatorType;
 use crate::expression_evaluator;
-use crate::forward_bfs;
+use crate::forward_beam_search;
 use crate::solver;
 use didp_parser::variable;
 use std::cmp;
@@ -7,21 +8,15 @@ use std::error::Error;
 use std::fmt;
 use std::str;
 
-pub struct ExpressionAstar<T: variable::Numeric> {
+pub struct ExpressionBeamSearch<T: variable::Numeric> {
     h_evaluator: expression_evaluator::ExpressionEvaluator<T>,
     f_evaluator_type: FEvaluatorType,
+    beams: Vec<usize>,
     ub: Option<T>,
     registry_capacity: Option<usize>,
 }
 
-pub enum FEvaluatorType {
-    Plus,
-    Max,
-    Min,
-    Overwrite,
-}
-
-impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for ExpressionAstar<T> {
+impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for ExpressionBeamSearch<T> {
     #[inline]
     fn set_ub(&mut self, ub: Option<T>) {
         self.ub = ub;
@@ -32,10 +27,11 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
             FEvaluatorType::Plus => {
                 let f_evaluator =
                     Box::new(|g, h, _: &didp_parser::State, _: &didp_parser::Model<T>| g + h);
-                forward_bfs::forward_bfs(
+                forward_beam_search::iterative_forward_beam_search(
                     model,
                     &self.h_evaluator,
                     &f_evaluator,
+                    &self.beams,
                     self.ub,
                     self.registry_capacity,
                 )
@@ -45,10 +41,11 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
                     Box::new(|g, h, _: &didp_parser::State, _: &didp_parser::Model<T>| {
                         cmp::max(g, h)
                     });
-                forward_bfs::forward_bfs(
+                forward_beam_search::iterative_forward_beam_search(
                     model,
                     &self.h_evaluator,
                     &f_evaluator,
+                    &self.beams,
                     self.ub,
                     self.registry_capacity,
                 )
@@ -58,10 +55,11 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
                     Box::new(|g, h, _: &didp_parser::State, _: &didp_parser::Model<T>| {
                         cmp::min(g, h)
                     });
-                forward_bfs::forward_bfs(
+                forward_beam_search::iterative_forward_beam_search(
                     model,
                     &self.h_evaluator,
                     &f_evaluator,
+                    &self.beams,
                     self.ub,
                     self.registry_capacity,
                 )
@@ -69,10 +67,11 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
             FEvaluatorType::Overwrite => {
                 let f_evaluator =
                     Box::new(|_, h, _: &didp_parser::State, _: &didp_parser::Model<T>| h);
-                forward_bfs::forward_bfs(
+                forward_beam_search::iterative_forward_beam_search(
                     model,
                     &self.h_evaluator,
                     &f_evaluator,
+                    &self.beams,
                     self.ub,
                     self.registry_capacity,
                 )
@@ -81,11 +80,11 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
     }
 }
 
-impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
+impl<T: variable::Numeric + Ord> ExpressionBeamSearch<T> {
     pub fn new(
         model: &didp_parser::Model<T>,
         config: &yaml_rust::Yaml,
-    ) -> Result<ExpressionAstar<T>, Box<dyn Error>>
+    ) -> Result<ExpressionBeamSearch<T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
@@ -130,6 +129,34 @@ impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
                 .into())
             }
         };
+        let beams = match map.get(&yaml_rust::Yaml::from_str("beam")) {
+            Some(yaml_rust::Yaml::Integer(value)) => vec![*value as usize],
+            Some(yaml_rust::Yaml::Array(array)) => {
+                let mut beams = Vec::new();
+                for v in array {
+                    match v {
+                        yaml_rust::Yaml::Integer(value) => {
+                            beams.push(*value as usize);
+                        }
+                        value => {
+                            return Err(solver::ConfigErr::new(format!(
+                                "expected Integer or Array, but found `{:?}`",
+                                value
+                            ))
+                            .into())
+                        }
+                    }
+                }
+                beams
+            }
+            value => {
+                return Err(solver::ConfigErr::new(format!(
+                    "expected Integer or Array, but found `{:?}`",
+                    value
+                ))
+                .into())
+            }
+        };
         let f_evaluator_type = match map.get(&yaml_rust::Yaml::from_str("f")) {
             Some(yaml_rust::Yaml::String(string)) => match &string[..] {
                 "+" => FEvaluatorType::Plus,
@@ -153,10 +180,11 @@ impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
                 .into())
             }
         };
-        Ok(ExpressionAstar {
+        Ok(ExpressionBeamSearch {
             h_evaluator,
             f_evaluator_type,
             ub,
+            beams,
             registry_capacity,
         })
     }

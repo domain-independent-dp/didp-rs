@@ -1,9 +1,7 @@
 use crate::solver;
 use crate::successor_generator;
-use crate::util;
 use didp_parser::variable;
 use rustc_hash::FxHashMap;
-use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -16,7 +14,7 @@ impl<'a, T: variable::Numeric> solver::Solver<T> for ForwardRecursion
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    fn solve(&mut self, model: &didp_parser::Model<T>) -> util::Solution<T> {
+    fn solve(&mut self, model: &didp_parser::Model<T>) -> solver::Solution<T> {
         let generator = successor_generator::SuccessorGenerator::new(model, false);
         let mut memo = FxHashMap::default();
         if let Some(capacity) = self.memo_capacity {
@@ -50,29 +48,24 @@ where
 }
 
 impl ForwardRecursion {
-    pub fn new<T: variable::Numeric>(
-        model: &didp_parser::Model<T>,
-        config: &yaml_rust::Yaml,
-    ) -> Result<ForwardRecursion, Box<dyn Error>> {
+    pub fn new(config: &yaml_rust::Yaml) -> Result<ForwardRecursion, solver::ConfigErr> {
         let map = match config {
             yaml_rust::Yaml::Hash(map) => map,
             _ => {
                 return Err(solver::ConfigErr::new(format!(
                     "expected Hash, but found `{:?}`",
                     config
-                ))
-                .into())
+                )))
             }
         };
         let memo_capacity = match map.get(&yaml_rust::Yaml::from_str("capacity")) {
             Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
             None => Some(1000000),
             value => {
-                return Err(util::ConfigErr::new(format!(
+                return Err(solver::ConfigErr::new(format!(
                     "expected Integer, but found `{:?}`",
                     value
-                ))
-                .into())
+                )))
             }
         };
         Ok(ForwardRecursion { memo_capacity })

@@ -1,8 +1,8 @@
 use crate::evaluator;
 use crate::priority_queue;
 use crate::search_node;
+use crate::solver;
 use crate::successor_generator;
-use crate::util;
 use didp_parser::variable;
 use std::fmt;
 
@@ -12,7 +12,7 @@ pub fn forward_bfs<T: variable::Numeric + Ord + fmt::Display, H, F>(
     f_function: &F,
     ub: Option<T>,
     registry_capacity: Option<usize>,
-) -> util::Solution<T>
+) -> solver::Solution<T>
 where
     H: evaluator::Evaluator<T>,
     F: Fn(T, T, &didp_parser::State, &didp_parser::Model<T>) -> T,

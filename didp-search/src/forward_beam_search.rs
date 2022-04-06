@@ -1,7 +1,8 @@
+use crate::evaluator;
 use crate::priority_queue;
 use crate::search_node;
+use crate::solver;
 use crate::successor_generator;
-use crate::util;
 use didp_parser::variable;
 use std::fmt;
 use std::mem;
@@ -13,9 +14,9 @@ pub fn iterative_forward_beam_search<T: variable::Numeric + Ord + fmt::Display, 
     beams: &[usize],
     mut ub: Option<T>,
     registry_capacity: Option<usize>,
-) -> util::Solution<T>
+) -> solver::Solution<T>
 where
-    H: Fn(&didp_parser::State, &didp_parser::Model<T>) -> Option<T>,
+    H: evaluator::Evaluator<T>,
     F: Fn(T, T, &didp_parser::State, &didp_parser::Model<T>) -> T,
 {
     let mut incumbent = Vec::new();
@@ -25,6 +26,9 @@ where
         if let Some((new_ub, new_incumbent)) = result {
             ub = Some(new_ub);
             incumbent = new_incumbent;
+            println!("New UB: {}", new_ub);
+        } else {
+            println!("Failed to find a solution");
         }
     }
     ub.map(|ub| (ub, incumbent))
@@ -37,9 +41,9 @@ pub fn forward_beam_search<T: variable::Numeric + Ord + fmt::Display, H, F>(
     beam: usize,
     ub: Option<T>,
     registry_capacity: Option<usize>,
-) -> util::Solution<T>
+) -> solver::Solution<T>
 where
-    H: Fn(&didp_parser::State, &didp_parser::Model<T>) -> Option<T>,
+    H: evaluator::Evaluator<T>,
     F: Fn(T, T, &didp_parser::State, &didp_parser::Model<T>) -> T,
 {
     let mut open = priority_queue::PriorityQueue::new(true);
@@ -54,7 +58,7 @@ where
         Some(node) => node,
         None => return None,
     };
-    let h = h_function(&initial_node.state, model)?;
+    let h = h_function.eval(&initial_node.state, model)?;
     let f = f_function(g, h, &initial_node.state, model);
     *initial_node.h.borrow_mut() = Some(h);
     *initial_node.f.borrow_mut() = Some(f);
@@ -90,7 +94,7 @@ where
                         let h = match h {
                             Some(h) => Some(h),
                             None => {
-                                let h = h_function(&node.state, model);
+                                let h = h_function.eval(&node.state, model);
                                 *successor.h.borrow_mut() = h;
                                 h
                             }
