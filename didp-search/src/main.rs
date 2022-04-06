@@ -1,7 +1,5 @@
 use didp_parser::variable;
-use didp_search::astar;
-use didp_search::exist_dfs;
-use didp_search::forward_recursion;
+use didp_search::solver_factory;
 use std::env;
 use std::fmt;
 use std::fs;
@@ -9,43 +7,18 @@ use std::process;
 use std::str;
 use std::time::Instant;
 
-fn solve<T: variable::Numeric + Ord + fmt::Display>(
+fn solve<T: 'static + variable::Numeric + Ord + fmt::Display>(
     model: &didp_parser::Model<T>,
     config: &yaml_rust::Yaml,
 ) where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let map = match config {
-        yaml_rust::Yaml::Hash(map) => map,
-        _ => {
-            eprintln!("expected Hash, but found {:?}", config);
-            process::exit(1);
-        }
-    };
-    let config = match map.get(&yaml_rust::Yaml::from_str("config")) {
-        Some(value) => value.clone(),
-        None => yaml_rust::Yaml::Null,
-    };
-    let solver = match map.get(&yaml_rust::Yaml::from_str("solver")) {
-        Some(yaml_rust::Yaml::String(string)) => match &string[..] {
-            "astar" => astar::astar,
-            "exist_dfs" => exist_dfs::run_forward_iterative_exist_dfs,
-            "forward_recursion" => forward_recursion::start_forward_recursion,
-            value => {
-                eprintln!("no such solver {:?}", value);
-                process::exit(1);
-            }
-        },
-        Some(value) => {
-            eprintln!("expected String, but found {:?}", value);
-            process::exit(1);
-        }
-        None => forward_recursion::start_forward_recursion,
-    };
-    let solution = solver(&model, &config).unwrap_or_else(|e| {
+    let factory = solver_factory::SolverFactory::default();
+    let mut solver = factory.create(model, config).unwrap_or_else(|e| {
         eprintln!("Error: {:?}", e);
         process::exit(1);
     });
+    let solution = solver.solve(&model);
     match solution {
         Some((cost, transitions)) => {
             println!("transitions:");

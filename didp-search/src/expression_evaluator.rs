@@ -1,5 +1,5 @@
 use crate::evaluator;
-use crate::util;
+use crate::solver;
 use didp_parser::expression;
 use didp_parser::expression_parser;
 use didp_parser::variable;
@@ -27,7 +27,7 @@ impl<T: variable::Numeric> ExpressionEvaluator<T> {
                 &parameters,
             )?,
             value => {
-                return Err(util::ConfigErr::new(format!(
+                return Err(solver::ConfigErr::new(format!(
                     "expected String, but found `{:?}`",
                     value
                 ))
@@ -45,7 +45,7 @@ impl<T: variable::Numeric> Default for ExpressionEvaluator<T> {
 }
 
 impl<T: variable::Numeric> evaluator::Evaluator<T> for ExpressionEvaluator<T> {
-    fn eval(&self, state: &didp_parser::State, model: &didp_parser::Model<T>) -> T {
-        self.0.eval(state, &model.table_registry)
+    fn eval(&self, state: &didp_parser::State, model: &didp_parser::Model<T>) -> Option<T> {
+        Some(self.0.eval(state, &model.table_registry))
     }
 }

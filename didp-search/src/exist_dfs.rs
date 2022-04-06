@@ -55,14 +55,15 @@ pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
         ub,
         &mut nodes,
     ) {
-        ub = Some(cost - T::one());
+        println!("New UB: {}, expanded: {}", cost, nodes);
+        ub = Some(cost);
         incumbent = transitions;
-        println!("New UB: {}, expanded: {}", cost - T::one(), nodes);
     }
+    println!("Expanded: {}", nodes);
     if let Some(cost) = ub {
         incumbent.reverse();
         let transitions = incumbent.into_iter().map(|t| t.as_ref().clone()).collect();
-        Some((cost + T::one(), transitions))
+        Some((cost, transitions))
     } else {
         None
     }
@@ -90,7 +91,7 @@ pub fn exist_dfs<T: variable::Numeric>(
     }
     for transition in generator.applicable_transitions(&state) {
         let cost = transition.eval_cost(cost, &state, &model.table_registry);
-        if ub.is_none() || cost <= ub.unwrap() {
+        if ub.is_none() || cost < ub.unwrap() {
             let successor = transition.apply_effects(&state, &model.table_registry);
             if model.check_constraints(&successor) {
                 let result = exist_dfs(successor, cost, model, generator, prob, ub, nodes);

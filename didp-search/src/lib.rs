@@ -1,11 +1,15 @@
-pub mod astar;
 pub mod bound_per_state;
 pub mod evaluator;
 pub mod exist_dfs;
+pub mod expression_astar;
 pub mod expression_evaluator;
+pub mod forward_beam_search;
 pub mod forward_bfs;
 pub mod forward_recursion;
+//pub mod iterative_search;
 pub mod priority_queue;
 pub mod search_node;
+pub mod solver;
+pub mod solver_factory;
 pub mod successor_generator;
 pub mod util;

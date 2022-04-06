@@ -1,67 +1,86 @@
+use crate::solver;
 use crate::successor_generator;
 use crate::util;
 use didp_parser::variable;
 use rustc_hash::FxHashMap;
 use std::error::Error;
+use std::fmt;
 use std::rc::Rc;
+use std::str;
+
+pub struct ForwardRecursion {
+    memo_capacity: Option<usize>,
+}
+
+impl<'a, T: variable::Numeric> solver::Solver<T> for ForwardRecursion
+where
+    <T as str::FromStr>::Err: fmt::Debug,
+{
+    fn solve(&mut self, model: &didp_parser::Model<T>) -> util::Solution<T> {
+        let generator = successor_generator::SuccessorGenerator::new(model, false);
+        let mut memo = FxHashMap::default();
+        if let Some(capacity) = self.memo_capacity {
+            memo.reserve(capacity);
+        }
+        let mut expanded = 0;
+        let cost = forward_recursion(
+            model.target.clone(),
+            model,
+            &generator,
+            &mut memo,
+            &mut expanded,
+        );
+        let mut transitions = Vec::new();
+        match model.reduce_function {
+            didp_parser::ReduceFunction::Max | didp_parser::ReduceFunction::Min
+                if cost.is_some() =>
+            {
+                let mut state = model.target.clone();
+                while let Some((_, Some(transition))) = memo.get(&state) {
+                    let transition = transition.as_ref().clone();
+                    state = transition.apply_effects(&state, &model.table_registry);
+                    transitions.push(transition);
+                }
+            }
+            _ => {}
+        }
+        println!("Expanded: {}", expanded);
+        cost.map(|cost| (cost, transitions))
+    }
+}
+
+impl ForwardRecursion {
+    pub fn new<T: variable::Numeric>(
+        model: &didp_parser::Model<T>,
+        config: &yaml_rust::Yaml,
+    ) -> Result<ForwardRecursion, Box<dyn Error>> {
+        let map = match config {
+            yaml_rust::Yaml::Hash(map) => map,
+            _ => {
+                return Err(solver::ConfigErr::new(format!(
+                    "expected Hash, but found `{:?}`",
+                    config
+                ))
+                .into())
+            }
+        };
+        let memo_capacity = match map.get(&yaml_rust::Yaml::from_str("capacity")) {
+            Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
+            None => Some(1000000),
+            value => {
+                return Err(util::ConfigErr::new(format!(
+                    "expected Integer, but found `{:?}`",
+                    value
+                ))
+                .into())
+            }
+        };
+        Ok(ForwardRecursion { memo_capacity })
+    }
+}
 
 type StateMemo<T> =
     FxHashMap<didp_parser::State, (Option<T>, Option<Rc<didp_parser::Transition<T>>>)>;
-
-pub fn start_forward_recursion<T: variable::Numeric>(
-    model: &didp_parser::Model<T>,
-    config: &yaml_rust::Yaml,
-) -> Result<util::Solution<T>, Box<dyn Error>> {
-    let map = match config {
-        yaml_rust::Yaml::Hash(map) => map,
-        _ => {
-            return Err(
-                util::ConfigErr::new(format!("expected Hash, but found `{:?}`", config)).into(),
-            )
-        }
-    };
-    let memo_capacity = match map.get(&yaml_rust::Yaml::from_str("capacity")) {
-        Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
-        None => Some(1000000),
-        value => {
-            return Err(
-                util::ConfigErr::new(format!("expected Integer, but found `{:?}`", value)).into(),
-            )
-        }
-    };
-
-    let generator = successor_generator::SuccessorGenerator::new(model, false);
-    let mut memo = FxHashMap::default();
-    if let Some(capacity) = memo_capacity {
-        memo.reserve(capacity);
-    }
-    let mut expanded = 0;
-    let cost = forward_recursion(
-        model.target.clone(),
-        model,
-        &generator,
-        &mut memo,
-        &mut expanded,
-    );
-    let mut transitions = Vec::new();
-    match model.reduce_function {
-        didp_parser::ReduceFunction::Max | didp_parser::ReduceFunction::Min if cost.is_some() => {
-            let mut state = model.target.clone();
-            while let Some((_, Some(transition))) = memo.get(&state) {
-                let transition = transition.as_ref().clone();
-                state = transition.apply_effects(&state, &model.table_registry);
-                transitions.push(transition);
-            }
-        }
-        _ => {}
-    }
-    println!("Expanded: {}", expanded);
-    if let Some(cost) = cost {
-        Ok(Some((cost, transitions)))
-    } else {
-        Ok(None)
-    }
-}
 
 pub fn forward_recursion<T: variable::Numeric>(
     state: didp_parser::State,
