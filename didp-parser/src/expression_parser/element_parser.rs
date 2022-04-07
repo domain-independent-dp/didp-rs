@@ -1,3 +1,4 @@
+use super::condition_parser;
 use super::util;
 use super::util::ParseErr;
 use crate::expression::{
@@ -33,6 +34,16 @@ pub fn parse_expression<'a>(
                 &registry.element_tables,
             )? {
                 Ok((ElementExpression::Table(Box::new(expression)), rest))
+            } else if name == "if" {
+                let (condition, rest) =
+                    condition_parser::parse_expression(rest, metadata, registry, parameters)?;
+                let (x, rest) = parse_expression(rest, metadata, registry, parameters)?;
+                let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                Ok((
+                    ElementExpression::If(Box::new(condition), Box::new(x), Box::new(y)),
+                    rest,
+                ))
             } else if let Some((expression, rest)) =
                 parse_operation(name, rest, metadata, registry, parameters)?
             {
@@ -217,6 +228,16 @@ pub fn parse_vector_expression<'a>(
                     VectorExpression::Reference(ReferenceExpression::Table(expression)),
                     rest,
                 ))
+            } else if name == "if" {
+                let (condition, rest) =
+                    condition_parser::parse_expression(rest, metadata, registry, parameters)?;
+                let (x, rest) = parse_vector_expression(rest, metadata, registry, parameters)?;
+                let (y, rest) = parse_vector_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                Ok((
+                    VectorExpression::If(Box::new(condition), Box::new(x), Box::new(y)),
+                    rest,
+                ))
             } else if let Some((expression, rest)) =
                 parse_vector_operation(name, rest, metadata, registry, parameters)?
             {
@@ -341,6 +362,16 @@ pub fn parse_set_expression<'a, 'b, 'c>(
                 parse_set_from(name, rest, metadata, registry, parameters)?
             {
                 Ok((expression, rest))
+            } else if name == "if" {
+                let (condition, rest) =
+                    condition_parser::parse_expression(rest, metadata, registry, parameters)?;
+                let (x, rest) = parse_set_expression(rest, metadata, registry, parameters)?;
+                let (y, rest) = parse_set_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                Ok((
+                    SetExpression::If(Box::new(condition), Box::new(x), Box::new(y)),
+                    rest,
+                ))
             } else if let Some((expression, rest)) =
                 parse_set_operation(name, rest, metadata, registry, parameters)?
             {
@@ -507,6 +538,7 @@ fn parse_reference_atom<T: Clone>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::expression::*;
     use crate::table::*;
 
     fn generate_metadata() -> StateMetadata {
@@ -776,6 +808,58 @@ mod tests {
             )))
         );
         assert_eq!(rest, &tokens[4..]);
+    }
+
+    #[test]
+    fn parse_if_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "if", "true", "0", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ElementExpression::If(
+                Box::new(Condition::Constant(true)),
+                Box::new(ElementExpression::Constant(0)),
+                Box::new(ElementExpression::Constant(1))
+            )
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_if_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "if", "0", "0", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "if", "0", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "if", "true", "true", "0", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -1217,6 +1301,62 @@ mod tests {
     }
 
     #[test]
+    fn parse_vector_if_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "if", "true", "v0", "v1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            VectorExpression::If(
+                Box::new(Condition::Constant(true)),
+                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                    0
+                ))),
+                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                    1
+                ))),
+            )
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_vector_if_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "if", "v0", "v1", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "if", "v0", "v1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "if", "true", "true", "v0", "v1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn parse_vector_reverse_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
@@ -1601,6 +1741,58 @@ mod tests {
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["!", "n2", "s1", ")", "e0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_if_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "if", "true", "s0", "s1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::If(
+                Box::new(Condition::Constant(true)),
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
+            )
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_set_if_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "if", "s0", "s1", "1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "if", "s0", "s1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "if", "true", "true", "s0", "s1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();

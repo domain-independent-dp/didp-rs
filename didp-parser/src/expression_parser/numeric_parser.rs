@@ -1,3 +1,4 @@
+use super::condition_parser;
 use super::element_parser;
 use super::numeric_table_parser;
 use super::table_vector_parser;
@@ -73,6 +74,16 @@ where
             {
                 let rest = util::parse_closing(rest)?;
                 Ok((parse_reduce(name, vector)?, rest))
+            } else if name == "if" {
+                let (condition, rest) =
+                    condition_parser::parse_expression(rest, metadata, registry, parameters)?;
+                let (x, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
+                let (y, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                Ok((
+                    NumericExpression::If(Box::new(condition), Box::new(x), Box::new(y)),
+                    rest,
+                ))
             } else {
                 let (x, rest) = parse_integer_expression(rest, metadata, registry, parameters)?;
                 let (expression, rest) = if let Ok(expression) = parse_math(name, x.clone()) {
@@ -148,6 +159,16 @@ where
             {
                 let rest = util::parse_closing(rest)?;
                 Ok((parse_reduce(name, vector)?, rest))
+            } else if name == "if" {
+                let (condition, rest) =
+                    condition_parser::parse_expression(rest, metadata, registry, parameters)?;
+                let (x, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
+                let (y, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
+                let rest = util::parse_closing(rest)?;
+                Ok((
+                    NumericExpression::If(Box::new(condition), Box::new(x), Box::new(y)),
+                    rest,
+                ))
             } else {
                 let (x, rest) = parse_continuous_expression(rest, metadata, registry, parameters)?;
                 let (expression, rest) = if let Ok(expression) = parse_math(name, x.clone()) {
@@ -416,6 +437,19 @@ where
                         Err(ParseErr::new(format!("no such table `{}`", name)))
                     }
                 }
+                "if" => {
+                    let (condition, rest) =
+                        condition_parser::parse_expression(rest, metadata, registry, parameters)?;
+                    let (x, rest) =
+                        parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                    let (y, rest) =
+                        parse_integer_vector_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((
+                        NumericVectorExpression::If(Box::new(condition), Box::new(x), Box::new(y)),
+                        rest,
+                    ))
+                }
                 name => {
                     if let Ok((v, rest)) =
                         parse_integer_expression(rest, metadata, registry, parameters)
@@ -587,6 +621,19 @@ where
                     } else {
                         Err(ParseErr::new(format!("no such table `{}`", name)))
                     }
+                }
+                "if" => {
+                    let (condition, rest) =
+                        condition_parser::parse_expression(rest, metadata, registry, parameters)?;
+                    let (x, rest) =
+                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
+                    let (y, rest) =
+                        parse_continuous_vector_expression(rest, metadata, registry, parameters)?;
+                    let rest = util::parse_closing(rest)?;
+                    Ok((
+                        NumericVectorExpression::If(Box::new(condition), Box::new(x), Box::new(y)),
+                        rest,
+                    ))
                 }
                 name => {
                     if let Ok((v, rest)) =
@@ -1407,6 +1454,116 @@ mod tests {
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "exp", "3.0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_if_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "if", "true", "0", "i0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_integer_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::If(
+                Box::new(Condition::Constant(true)),
+                Box::new(NumericExpression::Constant(0)),
+                Box::new(NumericExpression::IntegerVariable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_integer_if_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "if", "true", "0", "0", "i0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "if", "0", "i0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "if", "0", "0", "i0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_if_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "if", "true", "0.0", "c0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::If(
+                Box::new(Condition::Constant(true)),
+                Box::new(NumericExpression::Constant(0.0)),
+                Box::new(NumericExpression::ContinuousVariable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_continuous_if_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "if", "true", "0.0", "0.0", "c0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "if", "0.0", "c0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "if", "0.0", "0.0", "c0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -3657,6 +3814,224 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_integer_vector_if_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "if",
+            "true",
+            "(",
+            "numeric-vector",
+            "0",
+            ")",
+            "(",
+            "numeric-vector",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_integer_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::If(
+                Box::new(Condition::Constant(true)),
+                Box::new(NumericVectorExpression::Constant(vec![0])),
+                Box::new(NumericVectorExpression::Constant(vec![1]))
+            )
+        );
+        assert_eq!(rest, &tokens[12..]);
+    }
+
+    #[test]
+    fn parse_integer_vector_if_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "if",
+            "0",
+            "(",
+            "numeric-vector",
+            "0",
+            ")",
+            "(",
+            "numeric-vector",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "if", "true", "(", "numeric-vector", "0", ")", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "if",
+            "true",
+            "true",
+            "(",
+            "numeric-vector",
+            "0",
+            ")",
+            "(",
+            "numeric-vector",
+            "1",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result =
+            parse_integer_vector_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_vector_if_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "if",
+            "true",
+            "(",
+            "numeric-vector",
+            "0.0",
+            ")",
+            "(",
+            "numeric-vector",
+            "1.0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericVectorExpression::If(
+                Box::new(Condition::Constant(true)),
+                Box::new(NumericVectorExpression::Constant(vec![0.0])),
+                Box::new(NumericVectorExpression::Constant(vec![1.0]))
+            )
+        );
+        assert_eq!(rest, &tokens[12..]);
+    }
+
+    #[test]
+    fn parse_continuous_vector_if_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "if",
+            "0",
+            "(",
+            "numeric-vector",
+            "0.0",
+            ")",
+            "(",
+            "numeric-vector",
+            "1.0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "if",
+            "true",
+            "(",
+            "numeric-vector",
+            "0.0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_continuous_vector_expression::<Continuous>(
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = [
+            "(",
+            "if",
+            "true",
+            "true",
+            "(",
+            "numeric-vector",
+            "0.0",
+            ")",
+            "(",
+            "numeric-vector",
+            "1.0",
+            ")",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
         let result = parse_continuous_vector_expression::<Continuous>(
             &tokens,
             &metadata,
