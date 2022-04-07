@@ -48,9 +48,9 @@ where
             f_max = f;
             println!("f = {}, expanded: {}", f, expanded);
         }
-        if model.get_base_cost(&node.state).is_some() {
+        if let Some(cost) = model.get_base_cost(&node.state) {
             println!("Expanded: {}", expanded);
-            return Some((node.g, node.trace_transitions()));
+            return Some(node.trace_transitions(cost, model));
         }
         for transition in generator.applicable_transitions(&node.state) {
             let g = transition.eval_cost(node.g, &node.state, &model.table_registry);
