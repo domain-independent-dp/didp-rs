@@ -99,8 +99,7 @@ pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
     println!("Expanded: {}", nodes);
     if let Some(cost) = primal_bound {
         incumbent.reverse();
-        let transitions = incumbent.into_iter().map(|t| t.as_ref().clone()).collect();
-        Some((cost, transitions))
+        Some((cost, incumbent))
     } else {
         None
     }

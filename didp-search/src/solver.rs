@@ -1,8 +1,9 @@
 use didp_parser::variable;
 use std::error::Error;
 use std::fmt;
+use std::rc::Rc;
 
-pub type Solution<T> = Option<(T, Vec<didp_parser::Transition<T>>)>;
+pub type Solution<T> = Option<(T, Vec<Rc<didp_parser::Transition<T>>>)>;
 
 #[derive(Debug, Clone)]
 pub struct ConfigErr(String);

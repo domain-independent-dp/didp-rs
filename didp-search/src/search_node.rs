@@ -43,17 +43,17 @@ impl<T: variable::Numeric> SearchNode<T> {
         &self,
         base_cost: T,
         model: &didp_parser::Model<T>,
-    ) -> (T, Vec<didp_parser::Transition<T>>) {
+    ) -> (T, Vec<Rc<didp_parser::Transition<T>>>) {
         let mut result = Vec::new();
         let mut cost = base_cost;
         if let (Some(mut node), Some(operator)) = (self.parent.as_ref(), self.operator.as_ref()) {
             cost = operator.eval_cost(cost, &node.state, &model.table_registry);
-            result.push(operator.as_ref().clone());
+            result.push(operator.clone());
             while let (Some(parent), Some(operator)) =
                 (node.parent.as_ref(), node.operator.as_ref())
             {
                 cost = operator.eval_cost(cost, &parent.state, &model.table_registry);
-                result.push(operator.as_ref().clone());
+                result.push(operator.clone());
                 node = parent;
             }
             result.reverse();

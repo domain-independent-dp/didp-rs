@@ -36,7 +36,7 @@ where
             {
                 let mut state = model.target.clone();
                 while let Some((_, Some(transition))) = memo.get(&state) {
-                    let transition = transition.as_ref().clone();
+                    let transition = transition.clone();
                     state = transition.apply_effects(&state, &model.table_registry);
                     transitions.push(transition);
                 }
