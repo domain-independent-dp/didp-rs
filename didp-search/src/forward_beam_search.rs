@@ -13,6 +13,7 @@ pub fn iterative_forward_beam_search<T: variable::Numeric + Ord + fmt::Display, 
     h_function: &H,
     f_function: &F,
     beams: &[usize],
+    maximize: bool,
     mut primal_bound: Option<T>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
@@ -27,6 +28,7 @@ where
             h_function,
             f_function,
             *beam,
+            maximize,
             primal_bound,
             registry_capacity,
         );
@@ -46,6 +48,7 @@ pub fn forward_beam_search<T: variable::Numeric + Ord + fmt::Display, H, F>(
     h_function: &H,
     f_function: &F,
     beam: usize,
+    maximize: bool,
     primal_bound: Option<T>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
@@ -53,10 +56,7 @@ where
     H: evaluator::Evaluator<T>,
     F: Fn(T, T, &didp_parser::State, &didp_parser::Model<T>) -> T,
 {
-    let mut open = match model.reduce_function {
-        didp_parser::ReduceFunction::Max => priority_queue::PriorityQueue::new(false),
-        _ => priority_queue::PriorityQueue::new(true),
-    };
+    let mut open = priority_queue::PriorityQueue::new(!maximize);
     let mut registry = search_node::SearchNodeRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
@@ -89,14 +89,8 @@ where
             i += 1;
             if model.get_base_cost(&node.state).is_some() {
                 if let Some(incumbent) = goal_node.clone() {
-                    match model.reduce_function {
-                        didp_parser::ReduceFunction::Min if node.g < incumbent.g => {
-                            goal_node = Some(node.clone());
-                        }
-                        didp_parser::ReduceFunction::Max if node.g > incumbent.g => {
-                            goal_node = Some(node.clone());
-                        }
-                        _ => {}
+                    if (maximize && node.g > incumbent.g) || (!maximize && node.g < incumbent.g) {
+                        goal_node = Some(node.clone());
                     }
                 } else {
                     goal_node = Some(node.clone())
@@ -105,10 +99,8 @@ where
             for transition in generator.applicable_transitions(&node.state) {
                 let g = transition.eval_cost(node.g, &node.state, &model.table_registry);
                 if let Some(bound) = primal_bound {
-                    match model.reduce_function {
-                        didp_parser::ReduceFunction::Min if g >= bound => continue,
-                        didp_parser::ReduceFunction::Max if g <= bound => continue,
-                        _ => {}
+                    if (maximize && g <= bound) || (!maximize && g >= bound) {
+                        continue;
                     }
                 }
                 let state = transition.apply_effects(&node.state, &model.table_registry);
@@ -128,10 +120,8 @@ where
                         if let Some(h) = h {
                             let f = f_function(g, h, &node.state, model);
                             if let Some(bound) = primal_bound {
-                                match model.reduce_function {
-                                    didp_parser::ReduceFunction::Min if f >= bound => continue,
-                                    didp_parser::ReduceFunction::Max if f <= bound => continue,
-                                    _ => {}
+                                if (maximize && f <= bound) || (!maximize && f >= bound) {
+                                    continue;
                                 }
                             }
                             *successor.f.borrow_mut() = Some(f);

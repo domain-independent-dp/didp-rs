@@ -12,6 +12,7 @@ pub struct ExpressionBeamSearch<T: variable::Numeric> {
     h_evaluator: expression_evaluator::ExpressionEvaluator<T>,
     f_evaluator_type: FEvaluatorType,
     beams: Vec<usize>,
+    maximize: bool,
     primal_bound: Option<T>,
     registry_capacity: Option<usize>,
 }
@@ -32,6 +33,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
                     &self.h_evaluator,
                     &f_evaluator,
                     &self.beams,
+                    self.maximize,
                     self.primal_bound,
                     self.registry_capacity,
                 )
@@ -46,6 +48,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
                     &self.h_evaluator,
                     &f_evaluator,
                     &self.beams,
+                    self.maximize,
                     self.primal_bound,
                     self.registry_capacity,
                 )
@@ -60,6 +63,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
                     &self.h_evaluator,
                     &f_evaluator,
                     &self.beams,
+                    self.maximize,
                     self.primal_bound,
                     self.registry_capacity,
                 )
@@ -72,6 +76,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
                     &self.h_evaluator,
                     &f_evaluator,
                     &self.beams,
+                    self.maximize,
                     self.primal_bound,
                     self.registry_capacity,
                 )
@@ -157,6 +162,17 @@ impl<T: variable::Numeric + Ord> ExpressionBeamSearch<T> {
                 .into())
             }
         };
+        let maximize = match map.get(&yaml_rust::Yaml::from_str("maximize")) {
+            Some(yaml_rust::Yaml::Boolean(value)) => *value,
+            Some(value) => {
+                return Err(solver::ConfigErr::new(format!(
+                    "expected Boolean, but found `{:?}`",
+                    value
+                ))
+                .into())
+            }
+            None => model.reduce_function == didp_parser::ReduceFunction::Max,
+        };
         let f_evaluator_type = match map.get(&yaml_rust::Yaml::from_str("f")) {
             Some(yaml_rust::Yaml::String(string)) => match &string[..] {
                 "+" => FEvaluatorType::Plus,
@@ -185,6 +201,7 @@ impl<T: variable::Numeric + Ord> ExpressionBeamSearch<T> {
             f_evaluator_type,
             primal_bound,
             beams,
+            maximize,
             registry_capacity,
         })
     }
