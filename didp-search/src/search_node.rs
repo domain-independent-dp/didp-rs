@@ -39,26 +39,19 @@ impl<T: variable::Numeric + Ord> PartialOrd for SearchNode<T> {
 }
 
 impl<T: variable::Numeric> SearchNode<T> {
-    pub fn trace_transitions(
-        &self,
-        base_cost: T,
-        model: &didp_parser::Model<T>,
-    ) -> (T, Vec<didp_parser::Transition<T>>) {
+    pub fn trace_transitions(&self) -> Vec<didp_parser::Transition<T>> {
         let mut result = Vec::new();
-        let mut cost = base_cost;
         if let (Some(mut node), Some(operator)) = (self.parent.as_ref(), self.operator.as_ref()) {
-            cost = operator.eval_cost(cost, &node.state, &model.table_registry);
             result.push(operator.as_ref().clone());
             while let (Some(parent), Some(operator)) =
                 (node.parent.as_ref(), node.operator.as_ref())
             {
-                cost = operator.eval_cost(cost, &parent.state, &model.table_registry);
                 result.push(operator.as_ref().clone());
                 node = parent;
             }
             result.reverse();
         }
-        (cost, result)
+        result
     }
 }
 
@@ -264,7 +257,6 @@ mod tests {
 
     #[test]
     fn trace_transitions() {
-        let model = generate_model();
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
         let node1 = Rc::new(generate_node(
             signature_variables,
@@ -275,15 +267,10 @@ mod tests {
             0,
             0,
         ));
-        assert_eq!(node1.trace_transitions(0, &model), (0, Vec::new()));
+        assert_eq!(node1.trace_transitions(), Vec::new());
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
         let op1 = Rc::new(didp_parser::Transition {
             name: String::from("op1"),
-            cost: didp_parser::expression::NumericExpression::NumericOperation(
-                didp_parser::expression::NumericOperator::Add,
-                Box::new(didp_parser::expression::NumericExpression::Cost),
-                Box::new(didp_parser::expression::NumericExpression::Constant(1)),
-            ),
             ..Default::default()
         });
         let node2 = Rc::new(generate_node(
@@ -295,7 +282,7 @@ mod tests {
             0,
             0,
         ));
-        assert_eq!(node2.trace_transitions(0, &model), (0, Vec::new()));
+        assert_eq!(node2.trace_transitions(), Vec::new());
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
         let node2 = Rc::new(generate_node(
             signature_variables,
@@ -306,7 +293,7 @@ mod tests {
             0,
             0,
         ));
-        assert_eq!(node2.trace_transitions(0, &model), (0, Vec::new()));
+        assert_eq!(node2.trace_transitions(), Vec::new());
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
         let node2 = Rc::new(generate_node(
             signature_variables,
@@ -320,11 +307,6 @@ mod tests {
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
         let op2 = Rc::new(didp_parser::Transition {
             name: String::from("op2"),
-            cost: didp_parser::expression::NumericExpression::NumericOperation(
-                didp_parser::expression::NumericOperator::Add,
-                Box::new(didp_parser::expression::NumericExpression::Cost),
-                Box::new(didp_parser::expression::NumericExpression::Constant(1)),
-            ),
             ..Default::default()
         });
         let node3 = Rc::new(generate_node(
@@ -337,8 +319,8 @@ mod tests {
             0,
         ));
         assert_eq!(
-            node3.trace_transitions(0, &model),
-            (2, vec![op1.as_ref().clone(), op2.as_ref().clone()])
+            node3.trace_transitions(),
+            vec![op1.as_ref().clone(), op2.as_ref().clone()]
         );
     }
 

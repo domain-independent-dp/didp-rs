@@ -6,6 +6,7 @@ use crate::successor_generator;
 use didp_parser::variable;
 use std::fmt;
 use std::mem;
+use std::rc::Rc;
 
 pub fn iterative_forward_beam_search<T: variable::Numeric + Ord + fmt::Display, H, F>(
     model: &didp_parser::Model<T>,
@@ -77,7 +78,7 @@ where
 
     loop {
         let mut i = 0;
-        let mut incumbent = None;
+        let mut goal_node: Option<Rc<search_node::SearchNode<T>>> = None;
         while !open.is_empty() && i < beam {
             let node = open.pop().unwrap();
             if *node.closed.borrow() {
@@ -86,16 +87,13 @@ where
             *node.closed.borrow_mut() = true;
             expanded += 1;
             i += 1;
-            if let Some(cost) = model.get_base_cost(&node.state) {
-                let solution = node.trace_transitions(cost, model);
-                if let Some((incumbent_cost, _)) = incumbent {
-                    if (maximize && solution.0 > incumbent_cost)
-                        || (!maximize && solution.0 < incumbent_cost)
-                    {
-                        incumbent = Some(solution);
+            if model.get_base_cost(&node.state).is_some() {
+                if let Some(incumbent) = goal_node.clone() {
+                    if (maximize && node.g > incumbent.g) || (!maximize && node.g < incumbent.g) {
+                        goal_node = Some(node.clone());
                     }
                 } else {
-                    incumbent = Some(solution);
+                    goal_node = Some(node.clone())
                 }
             }
             for transition in generator.applicable_transitions(&node.state) {
@@ -133,9 +131,9 @@ where
                 }
             }
         }
-        if incumbent.is_some() {
+        if let Some(goal_node) = goal_node {
             println!("Expanded: {}", expanded);
-            return incumbent;
+            return Some((goal_node.g, goal_node.trace_transitions()));
         }
         if new_open.is_empty() {
             println!("Expanded: {}", expanded);
