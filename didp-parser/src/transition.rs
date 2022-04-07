@@ -1,16 +1,15 @@
+use crate::effect;
 use crate::expression;
 use crate::expression_parser;
 use crate::grounded_condition;
 use crate::state;
 use crate::table_registry;
-use crate::variable::{Continuous, Integer, Numeric};
+use crate::variable::Numeric;
 use crate::yaml_util;
 use lazy_static::lazy_static;
-use ordered_float::OrderedFloat;
 use rustc_hash::FxHashMap;
 use std::error;
 use std::fmt;
-use std::rc::Rc;
 use std::str;
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -19,13 +18,7 @@ pub struct Transition<T: Numeric> {
     pub elements_in_set_variable: Vec<(usize, usize)>,
     pub elements_in_vector_variable: Vec<(usize, usize)>,
     pub preconditions: Vec<grounded_condition::GroundedCondition>,
-    pub set_effects: Vec<(usize, expression::SetExpression)>,
-    pub vector_effects: Vec<(usize, expression::VectorExpression)>,
-    pub element_effects: Vec<(usize, expression::ElementExpression)>,
-    pub integer_effects: Vec<(usize, expression::NumericExpression<Integer>)>,
-    pub continuous_effects: Vec<(usize, expression::NumericExpression<Continuous>)>,
-    pub integer_resource_effects: Vec<(usize, expression::NumericExpression<Integer>)>,
-    pub continuous_resource_effects: Vec<(usize, expression::NumericExpression<Continuous>)>,
+    pub effect: effect::Effect,
     pub cost: expression::NumericExpression<T>,
 }
 
@@ -50,83 +43,12 @@ impl<T: Numeric> Transition<T> {
             .all(|c| c.is_satisfied(state, registry).unwrap_or(true))
     }
 
-    pub fn apply_effects(
+    pub fn apply(
         &self,
         state: &state::State,
         registry: &table_registry::TableRegistry,
     ) -> state::State {
-        let len = state.signature_variables.set_variables.len();
-        let mut set_variables = Vec::with_capacity(len);
-        let mut i = 0;
-        for e in &self.set_effects {
-            while i < e.0 {
-                set_variables.push(state.signature_variables.set_variables[i].clone());
-                i += 1;
-            }
-            set_variables.push(e.1.eval(state, registry));
-            i += 1;
-        }
-        while i < len {
-            set_variables.push(state.signature_variables.set_variables[i].clone());
-            i += 1;
-        }
-
-        let len = state.signature_variables.vector_variables.len();
-        let mut vector_variables = Vec::with_capacity(len);
-        for e in &self.vector_effects {
-            while i < e.0 {
-                vector_variables.push(state.signature_variables.vector_variables[i].clone());
-                i += 1;
-            }
-            vector_variables.push(e.1.eval(state, registry));
-            i += 1;
-        }
-        while i < len {
-            vector_variables.push(state.signature_variables.vector_variables[i].clone());
-            i += 1;
-        }
-
-        let mut element_variables = state.signature_variables.element_variables.clone();
-        for e in &self.element_effects {
-            element_variables[e.0] = e.1.eval(state, registry);
-        }
-
-        let mut integer_variables = state.signature_variables.integer_variables.clone();
-        for e in &self.integer_effects {
-            integer_variables[e.0] = e.1.eval(state, registry);
-        }
-
-        let mut continuous_variables = state.signature_variables.continuous_variables.clone();
-        for e in &self.continuous_effects {
-            continuous_variables[e.0] = OrderedFloat(e.1.eval(state, registry));
-        }
-
-        let mut integer_resource_variables = state.resource_variables.integer_variables.clone();
-        for e in &self.integer_resource_effects {
-            integer_resource_variables[e.0] = e.1.eval(state, registry);
-        }
-
-        let mut continuous_resource_variables =
-            state.resource_variables.continuous_variables.clone();
-        for e in &self.continuous_resource_effects {
-            continuous_resource_variables[e.0] = OrderedFloat(e.1.eval(state, registry));
-        }
-
-        state::State {
-            signature_variables: {
-                Rc::new(state::SignatureVariables {
-                    set_variables,
-                    vector_variables,
-                    element_variables,
-                    integer_variables,
-                    continuous_variables,
-                })
-            },
-            resource_variables: state::ResourceVariables {
-                integer_variables: integer_resource_variables,
-                continuous_variables: continuous_resource_variables,
-            },
-        }
+        self.effect.apply(state, registry)
     }
 
     pub fn eval_cost(
@@ -182,7 +104,7 @@ where
         ),
     };
 
-    let lifted_effects = yaml_util::get_map_by_key(map, "effects")?;
+    let effect = yaml_util::get_yaml_by_key(map, "effect")?;
     let lifted_cost = yaml_util::get_string_by_key(map, "cost")?;
     let lifted_preconditions = match map.get(&PRECONDITIONS_KEY) {
         Some(lifted_preconditions) => Some(yaml_util::get_array(lifted_preconditions)?),
@@ -227,67 +149,7 @@ where
             }
             None => Vec::new(),
         };
-        let mut set_effects = Vec::new();
-        let mut vector_effects = Vec::new();
-        let mut element_effects = Vec::new();
-        let mut integer_effects = Vec::new();
-        let mut continuous_effects = Vec::new();
-        let mut integer_resource_effects = Vec::new();
-        let mut continuous_resource_effects = Vec::new();
-        for (variable, effect) in lifted_effects {
-            let effect = yaml_util::get_string(effect)?;
-            let variable = yaml_util::get_string(variable)?;
-            if let Some(i) = metadata.name_to_set_variable.get(&variable) {
-                let effect = expression_parser::parse_set(effect, metadata, registry, &parameters)?;
-                set_effects.push((*i, effect));
-            } else if let Some(i) = metadata.name_to_vector_variable.get(&variable) {
-                let effect =
-                    expression_parser::parse_vector(effect, metadata, registry, &parameters)?;
-                vector_effects.push((*i, effect));
-            } else if let Some(i) = metadata.name_to_element_variable.get(&variable) {
-                let effect =
-                    expression_parser::parse_element(effect, metadata, registry, &parameters)?;
-                element_effects.push((*i, effect));
-            } else if let Some(i) = metadata.name_to_integer_variable.get(&variable) {
-                let effect = expression_parser::parse_numeric::<Integer>(
-                    effect,
-                    metadata,
-                    registry,
-                    &parameters,
-                )?;
-                integer_effects.push((*i, effect.simplify(registry)));
-            } else if let Some(i) = metadata.name_to_integer_resource_variable.get(&variable) {
-                let effect = expression_parser::parse_numeric::<Integer>(
-                    effect,
-                    metadata,
-                    registry,
-                    &parameters,
-                )?;
-                integer_resource_effects.push((*i, effect.simplify(registry)));
-            } else if let Some(i) = metadata.name_to_continuous_variable.get(&variable) {
-                let effect = expression_parser::parse_numeric::<Continuous>(
-                    effect,
-                    metadata,
-                    registry,
-                    &parameters,
-                )?;
-                continuous_effects.push((*i, effect.simplify(registry)));
-            } else if let Some(i) = metadata.name_to_continuous_resource_variable.get(&variable) {
-                let effect = expression_parser::parse_numeric::<Continuous>(
-                    effect,
-                    metadata,
-                    registry,
-                    &parameters,
-                )?;
-                continuous_resource_effects.push((*i, effect.simplify(registry)));
-            } else {
-                return Err(yaml_util::YamlContentErr::new(format!(
-                    "no such variable `{}`",
-                    variable
-                ))
-                .into());
-            }
-        }
+        let effect = effect::Effect::load_from_yaml(effect, metadata, registry, &parameters)?;
         let cost =
             expression_parser::parse_numeric(lifted_cost.clone(), metadata, registry, &parameters)?;
         let cost = cost.simplify(registry);
@@ -297,13 +159,7 @@ where
             elements_in_set_variable,
             elements_in_vector_variable,
             preconditions,
-            set_effects,
-            vector_effects,
-            element_effects,
-            integer_effects,
-            continuous_effects,
-            integer_resource_effects,
-            continuous_resource_effects,
+            effect,
             cost,
         })
     }
@@ -333,9 +189,11 @@ mod tests {
     use super::*;
     use crate::table;
     use crate::table_data;
-    use crate::variable::Set;
+    use crate::variable::*;
     use expression::*;
+    use ordered_float::OrderedFloat;
     use rustc_hash::FxHashMap;
+    use std::rc::Rc;
 
     fn generate_metadata() -> state::StateMetadata {
         let object_names = vec![String::from("object")];
@@ -657,19 +515,21 @@ mod tests {
         );
         let transition = Transition {
             name: String::from(""),
-            set_effects: vec![(0, set_effect1), (1, set_effect2)],
-            vector_effects: vec![(0, vector_effect1), (1, vector_effect2)],
-            element_effects: vec![(0, element_effect1), (1, element_effect2)],
-            integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
-            continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
-            integer_resource_effects: vec![
-                (0, integer_resource_effect1),
-                (1, integer_resource_effect2),
-            ],
-            continuous_resource_effects: vec![
-                (0, continuous_resource_effect1),
-                (1, continuous_resource_effect2),
-            ],
+            effect: effect::Effect {
+                set_effects: vec![(0, set_effect1), (1, set_effect2)],
+                vector_effects: vec![(0, vector_effect1), (1, vector_effect2)],
+                element_effects: vec![(0, element_effect1), (1, element_effect2)],
+                integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
+                continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+                integer_resource_effects: vec![
+                    (0, integer_resource_effect1),
+                    (1, integer_resource_effect2),
+                ],
+                continuous_resource_effects: vec![
+                    (0, continuous_resource_effect1),
+                    (1, continuous_resource_effect2),
+                ],
+            },
             cost: NumericExpression::NumericOperation(
                 NumericOperator::Add,
                 Box::new(NumericExpression::Cost),
@@ -697,7 +557,7 @@ mod tests {
                 continuous_variables: vec![OrderedFloat(5.0), OrderedFloat(2.5), OrderedFloat(6.0)],
             },
         };
-        let successor = transition.apply_effects(&state, &registry);
+        let successor = transition.apply(&state, &registry);
         assert_eq!(successor, expected);
     }
 
@@ -725,7 +585,7 @@ mod tests {
         let transition = r"
 name: transition
 preconditions: [(>= (f2 0 1) 10)]
-effects: {e0: '0'}
+effect: {e0: '0'}
 cost: '0'
 ";
         let transition = yaml_rust::YamlLoader::load_from_str(transition);
@@ -737,7 +597,10 @@ cost: '0'
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
-            element_effects: vec![(0, ElementExpression::Constant(0))],
+            effect: effect::Effect {
+                element_effects: vec![(0, ElementExpression::Constant(0))],
+                ..Default::default()
+            },
             cost: NumericExpression::Constant(0),
             ..Default::default()
         }];
@@ -745,7 +608,7 @@ cost: '0'
 
         let transition = r"
 name: transition
-effects: {e0: '0'}
+effect: {e0: '0'}
 cost: '0'
 ";
         let transition = yaml_rust::YamlLoader::load_from_str(transition);
@@ -758,7 +621,10 @@ cost: '0'
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
-            element_effects: vec![(0, ElementExpression::Constant(0))],
+            effect: effect::Effect {
+                element_effects: vec![(0, ElementExpression::Constant(0))],
+                ..Default::default()
+            },
             cost: NumericExpression::Constant(0),
             ..Default::default()
         }];
@@ -772,7 +638,7 @@ parameters:
 preconditions:
         - (>= (f2 e0 e) 10)
         - (is_not e 2)
-effects:
+effect:
         e0: e
         s0: (add e s0)
         p0: (push e p0)
@@ -804,32 +670,34 @@ cost: (+ cost (f1 e))
                     ))),
                     ..Default::default()
                 }],
-                set_effects: vec![(
-                    0,
-                    SetExpression::SetElementOperation(
-                        SetElementOperator::Add,
-                        ElementExpression::Constant(0),
-                        Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-                    ),
-                )],
-                vector_effects: vec![(
-                    0,
-                    VectorExpression::Push(
-                        ElementExpression::Constant(0),
-                        Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                            0,
-                        ))),
-                    ),
-                )],
-                element_effects: vec![(0, ElementExpression::Constant(0))],
-                integer_effects: vec![(0, NumericExpression::Constant(1))],
-                integer_resource_effects: vec![(0, NumericExpression::Constant(2))],
+                effect: effect::Effect {
+                    set_effects: vec![(
+                        0,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(0),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                        ),
+                    )],
+                    vector_effects: vec![(
+                        0,
+                        VectorExpression::Push(
+                            ElementExpression::Constant(0),
+                            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                                0,
+                            ))),
+                        ),
+                    )],
+                    element_effects: vec![(0, ElementExpression::Constant(0))],
+                    integer_effects: vec![(0, NumericExpression::Constant(1))],
+                    integer_resource_effects: vec![(0, NumericExpression::Constant(2))],
+                    ..Default::default()
+                },
                 cost: NumericExpression::NumericOperation(
                     NumericOperator::Add,
                     Box::new(NumericExpression::Cost),
                     Box::new(NumericExpression::Constant(10)),
                 ),
-                ..Default::default()
             },
             Transition {
                 name: String::from("transition e:1"),
@@ -847,32 +715,34 @@ cost: (+ cost (f1 e))
                     ))),
                     ..Default::default()
                 }],
-                set_effects: vec![(
-                    0,
-                    SetExpression::SetElementOperation(
-                        SetElementOperator::Add,
-                        ElementExpression::Constant(1),
-                        Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-                    ),
-                )],
-                vector_effects: vec![(
-                    0,
-                    VectorExpression::Push(
-                        ElementExpression::Constant(1),
-                        Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                            0,
-                        ))),
-                    ),
-                )],
-                element_effects: vec![(0, ElementExpression::Constant(1))],
-                integer_effects: vec![(0, NumericExpression::Constant(1))],
-                integer_resource_effects: vec![(0, NumericExpression::Constant(2))],
+                effect: effect::Effect {
+                    set_effects: vec![(
+                        0,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                        ),
+                    )],
+                    vector_effects: vec![(
+                        0,
+                        VectorExpression::Push(
+                            ElementExpression::Constant(1),
+                            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                                0,
+                            ))),
+                        ),
+                    )],
+                    element_effects: vec![(0, ElementExpression::Constant(1))],
+                    integer_effects: vec![(0, NumericExpression::Constant(1))],
+                    integer_resource_effects: vec![(0, NumericExpression::Constant(2))],
+                    ..Default::default()
+                },
                 cost: NumericExpression::NumericOperation(
                     NumericOperator::Add,
                     Box::new(NumericExpression::Cost),
                     Box::new(NumericExpression::Constant(20)),
                 ),
-                ..Default::default()
             },
         ];
         assert_eq!(transitions.unwrap(), (expected, false));
@@ -889,7 +759,7 @@ parameters:
           object: s0
 preconditions:
         - (>= (f2 e0 e) 10)
-effects:
+effect:
         e0: e
         s0: (add e s0)
         p0: e
@@ -929,7 +799,7 @@ parameters:
           object: s0
 preconditions:
         - (>= (f2 e0 e) 10)
-effects:
+effect:
         e0: e
         s0: (add e s0)
         p0: (push e p0)
@@ -948,7 +818,7 @@ effects:
 name: transition
 preconditions:
         - (>= (f2 e0 e) 10)
-effects:
+effect:
         e0: e
         s0: (add e s0)
         p0: (push e p0)
@@ -970,7 +840,7 @@ parameters:
           object: s0
 preconditions:
         - (>= (f2 e0 e) 10)
-effects:
+effect:
         e0: e
         s0: (add e s0)
         p0: (push e p0)

@@ -105,7 +105,7 @@ where
                         continue;
                     }
                 }
-                let state = transition.apply_effects(&node.state, &model.table_registry);
+                let state = transition.apply(&node.state, &model.table_registry);
                 if let Some(successor) =
                     registry.get_node(state, g, Some(transition), Some(node.clone()))
                 {

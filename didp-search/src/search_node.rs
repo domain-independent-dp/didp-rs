@@ -336,10 +336,7 @@ mod tests {
             0,
             0,
         ));
-        assert_eq!(
-            node3.trace_transitions(0, &model),
-            (2, vec![op1.as_ref().clone(), op2.as_ref().clone()])
-        );
+        assert_eq!(node3.trace_transitions(0, &model), (2, vec![op1, op2]));
     }
 
     #[test]

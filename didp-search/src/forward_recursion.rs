@@ -37,7 +37,7 @@ where
                 let mut state = model.target.clone();
                 while let Some((_, Some(transition))) = memo.get(&state) {
                     let transition = transition.clone();
-                    state = transition.apply_effects(&state, &model.table_registry);
+                    state = transition.apply(&state, &model.table_registry);
                     transitions.push(transition);
                 }
             }
@@ -94,7 +94,7 @@ pub fn forward_recursion<T: variable::Numeric>(
     let mut cost = None;
     let mut best_transition = None;
     for transition in generator.applicable_transitions(&state) {
-        let successor = transition.apply_effects(&state, &model.table_registry);
+        let successor = transition.apply(&state, &model.table_registry);
         if model.check_constraints(&successor) {
             let successor_cost = forward_recursion(successor, model, generator, memo, expanded);
             if let Some(successor_cost) = successor_cost {

@@ -134,7 +134,7 @@ pub fn exist_dfs<T: variable::Numeric>(
                 _ => {}
             }
         }
-        let successor = transition.apply_effects(&state, &model.table_registry);
+        let successor = transition.apply(&state, &model.table_registry);
         if model.check_constraints(&successor) {
             let result = exist_dfs(successor, cost, model, generator, prob, primal_bound, nodes);
             if let Some((cost, mut transitions)) = result {

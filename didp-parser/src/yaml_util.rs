@@ -35,19 +35,6 @@ pub fn get_map(
     }
 }
 
-pub fn get_map_by_key<'a, 'b>(
-    map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-    key: &'b str,
-) -> Result<&'a linked_hash_map::LinkedHashMap<Yaml, Yaml>, YamlContentErr> {
-    match map.get(&Yaml::String(String::from(key))) {
-        Some(value) => get_map(value),
-        None => Err(YamlContentErr::new(format!(
-            "no such key `{}` in yaml",
-            key
-        ))),
-    }
-}
-
 pub fn get_yaml_by_key<'a, 'b>(
     map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &'b str,
@@ -254,32 +241,6 @@ mod tests {
     fn get_map_err() {
         let yaml = Yaml::Array(vec![Yaml::Integer(0), Yaml::Integer(1), Yaml::Integer(2)]);
         let map = get_map(&yaml);
-        assert!(map.is_err());
-    }
-
-    #[test]
-    fn get_map_by_key_ok() {
-        let mut inner_map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
-        inner_map.insert(Yaml::Integer(0), Yaml::Integer(2));
-        let mut outer_map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
-        outer_map.insert(Yaml::String(String::from("map")), Yaml::Hash(inner_map));
-        let map = get_map_by_key(&outer_map, "map");
-        assert!(map.is_ok());
-        let map = map.unwrap();
-        assert_eq!(map.len(), 1);
-        assert!(matches!(map.get(&Yaml::Integer(0)), Some(Yaml::Integer(2))));
-    }
-
-    #[test]
-    fn get_map_by_key_err() {
-        let mut inner_map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
-        inner_map.insert(Yaml::Integer(0), Yaml::Integer(2));
-        let mut outer_map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
-        outer_map.insert(Yaml::String(String::from("map")), Yaml::Hash(inner_map));
-        outer_map.insert(Yaml::String(String::from("integer")), Yaml::Integer(0));
-        let map = get_map_by_key(&outer_map, "array");
-        assert!(map.is_err());
-        let map = get_map_by_key(&outer_map, "integer");
         assert!(map.is_err());
     }
 

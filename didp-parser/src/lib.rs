@@ -6,6 +6,7 @@ use yaml_rust::Yaml;
 
 mod base_case;
 mod base_state;
+mod effect;
 pub mod expression;
 pub mod expression_parser;
 mod grounded_condition;
@@ -20,6 +21,7 @@ mod yaml_util;
 
 pub use base_case::BaseCase;
 pub use base_state::BaseState;
+pub use effect::Effect;
 pub use expression_parser::ParseErr;
 pub use grounded_condition::GroundedCondition;
 pub use state::{ResourceVariables, SignatureVariables, State, StateMetadata};
@@ -464,7 +466,7 @@ state_variables: [ {name: v, type: integer} ]
 reduce: min
 transitions:
         - name: add
-          effects:
+          effect:
                 v: (+ v 1)
           cost: (+ cost 1)
 ";
@@ -522,14 +524,17 @@ base_cases:
             }],
             forward_transitions: vec![Transition {
                 name: String::from("add"),
-                integer_effects: vec![(
-                    0,
-                    NumericExpression::NumericOperation(
-                        NumericOperator::Add,
-                        Box::new(NumericExpression::IntegerVariable(0)),
-                        Box::new(NumericExpression::Constant(1)),
-                    ),
-                )],
+                effect: effect::Effect {
+                    integer_effects: vec![(
+                        0,
+                        NumericExpression::NumericOperation(
+                            NumericOperator::Add,
+                            Box::new(NumericExpression::IntegerVariable(0)),
+                            Box::new(NumericExpression::Constant(1)),
+                        ),
+                    )],
+                    ..Default::default()
+                },
                 cost: NumericExpression::NumericOperation(
                     NumericOperator::Add,
                     Box::new(NumericExpression::Cost),
@@ -558,12 +563,12 @@ reduce: sum
 transitions:
         - name: one
           direction: backward
-          effects:
+          effect:
                 v: (+ v 1)
           cost: cost
         - name: two
           direction: backward
-          effects:
+          effect:
                 v: (+ v 2)
           cost: cost
 ";
@@ -635,27 +640,33 @@ base_states:
             backward_transitions: vec![
                 Transition {
                     name: String::from("one"),
-                    integer_effects: vec![(
-                        0,
-                        NumericExpression::NumericOperation(
-                            NumericOperator::Add,
-                            Box::new(NumericExpression::IntegerVariable(0)),
-                            Box::new(NumericExpression::Constant(1)),
-                        ),
-                    )],
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            NumericExpression::NumericOperation(
+                                NumericOperator::Add,
+                                Box::new(NumericExpression::IntegerVariable(0)),
+                                Box::new(NumericExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
                     cost: NumericExpression::Cost,
                     ..Default::default()
                 },
                 Transition {
                     name: String::from("two"),
-                    integer_effects: vec![(
-                        0,
-                        NumericExpression::NumericOperation(
-                            NumericOperator::Add,
-                            Box::new(NumericExpression::IntegerVariable(0)),
-                            Box::new(NumericExpression::Constant(2)),
-                        ),
-                    )],
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            NumericExpression::NumericOperation(
+                                NumericOperator::Add,
+                                Box::new(NumericExpression::IntegerVariable(0)),
+                                Box::new(NumericExpression::Constant(2)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
                     cost: NumericExpression::Cost,
                     ..Default::default()
                 },
@@ -713,7 +724,7 @@ transitions:
           direction: forward
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
-          effects:
+          effect:
                 unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
@@ -869,33 +880,38 @@ table_values:
                         )),
                         ..Default::default()
                     }],
-                    set_effects: vec![(
-                        0,
-                        SetExpression::SetElementOperation(
-                            SetElementOperator::Remove,
-                            ElementExpression::Constant(0),
-                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-                        ),
-                    )],
-                    element_effects: vec![(0, ElementExpression::Constant(0))],
-                    integer_resource_effects: vec![(
-                        0,
-                        NumericExpression::NumericOperation(
-                            NumericOperator::Max,
-                            Box::new(NumericExpression::NumericOperation(
-                                NumericOperator::Add,
-                                Box::new(NumericExpression::IntegerResourceVariable(0)),
-                                Box::new(NumericExpression::IntegerTable(
-                                    NumericTableExpression::Table2D(
-                                        0,
-                                        ElementExpression::Variable(0),
-                                        ElementExpression::Constant(0),
-                                    ),
+                    effect: Effect {
+                        set_effects: vec![(
+                            0,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Remove,
+                                ElementExpression::Constant(0),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    0,
+                                ))),
+                            ),
+                        )],
+                        element_effects: vec![(0, ElementExpression::Constant(0))],
+                        integer_resource_effects: vec![(
+                            0,
+                            NumericExpression::NumericOperation(
+                                NumericOperator::Max,
+                                Box::new(NumericExpression::NumericOperation(
+                                    NumericOperator::Add,
+                                    Box::new(NumericExpression::IntegerResourceVariable(0)),
+                                    Box::new(NumericExpression::IntegerTable(
+                                        NumericTableExpression::Table2D(
+                                            0,
+                                            ElementExpression::Variable(0),
+                                            ElementExpression::Constant(0),
+                                        ),
+                                    )),
                                 )),
-                            )),
-                            Box::new(NumericExpression::Constant(0)),
-                        ),
-                    )],
+                                Box::new(NumericExpression::Constant(0)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
                     cost: NumericExpression::NumericOperation(
                         NumericOperator::Add,
                         Box::new(NumericExpression::Cost),
@@ -920,33 +936,38 @@ table_values:
                         )),
                         ..Default::default()
                     }],
-                    set_effects: vec![(
-                        0,
-                        SetExpression::SetElementOperation(
-                            SetElementOperator::Remove,
-                            ElementExpression::Constant(1),
-                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-                        ),
-                    )],
-                    element_effects: vec![(0, ElementExpression::Constant(1))],
-                    integer_resource_effects: vec![(
-                        0,
-                        NumericExpression::NumericOperation(
-                            NumericOperator::Max,
-                            Box::new(NumericExpression::NumericOperation(
-                                NumericOperator::Add,
-                                Box::new(NumericExpression::IntegerResourceVariable(0)),
-                                Box::new(NumericExpression::IntegerTable(
-                                    NumericTableExpression::Table2D(
-                                        0,
-                                        ElementExpression::Variable(0),
-                                        ElementExpression::Constant(1),
-                                    ),
+                    effect: Effect {
+                        set_effects: vec![(
+                            0,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Remove,
+                                ElementExpression::Constant(1),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    0,
+                                ))),
+                            ),
+                        )],
+                        element_effects: vec![(0, ElementExpression::Constant(1))],
+                        integer_resource_effects: vec![(
+                            0,
+                            NumericExpression::NumericOperation(
+                                NumericOperator::Max,
+                                Box::new(NumericExpression::NumericOperation(
+                                    NumericOperator::Add,
+                                    Box::new(NumericExpression::IntegerResourceVariable(0)),
+                                    Box::new(NumericExpression::IntegerTable(
+                                        NumericTableExpression::Table2D(
+                                            0,
+                                            ElementExpression::Variable(0),
+                                            ElementExpression::Constant(1),
+                                        ),
+                                    )),
                                 )),
-                            )),
-                            Box::new(NumericExpression::Constant(1)),
-                        ),
-                    )],
+                                Box::new(NumericExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
                     cost: NumericExpression::NumericOperation(
                         NumericOperator::Add,
                         Box::new(NumericExpression::Cost),
@@ -971,33 +992,38 @@ table_values:
                         )),
                         ..Default::default()
                     }],
-                    set_effects: vec![(
-                        0,
-                        SetExpression::SetElementOperation(
-                            SetElementOperator::Remove,
-                            ElementExpression::Constant(2),
-                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-                        ),
-                    )],
-                    element_effects: vec![(0, ElementExpression::Constant(2))],
-                    integer_resource_effects: vec![(
-                        0,
-                        NumericExpression::NumericOperation(
-                            NumericOperator::Max,
-                            Box::new(NumericExpression::NumericOperation(
-                                NumericOperator::Add,
-                                Box::new(NumericExpression::IntegerResourceVariable(0)),
-                                Box::new(NumericExpression::IntegerTable(
-                                    NumericTableExpression::Table2D(
-                                        0,
-                                        ElementExpression::Variable(0),
-                                        ElementExpression::Constant(2),
-                                    ),
+                    effect: effect::Effect {
+                        set_effects: vec![(
+                            0,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Remove,
+                                ElementExpression::Constant(2),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    0,
+                                ))),
+                            ),
+                        )],
+                        element_effects: vec![(0, ElementExpression::Constant(2))],
+                        integer_resource_effects: vec![(
+                            0,
+                            NumericExpression::NumericOperation(
+                                NumericOperator::Max,
+                                Box::new(NumericExpression::NumericOperation(
+                                    NumericOperator::Add,
+                                    Box::new(NumericExpression::IntegerResourceVariable(0)),
+                                    Box::new(NumericExpression::IntegerTable(
+                                        NumericTableExpression::Table2D(
+                                            0,
+                                            ElementExpression::Variable(0),
+                                            ElementExpression::Constant(2),
+                                        ),
+                                    )),
                                 )),
-                            )),
-                            Box::new(NumericExpression::Constant(1)),
-                        ),
-                    )],
+                                Box::new(NumericExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
                     cost: NumericExpression::NumericOperation(
                         NumericOperator::Add,
                         Box::new(NumericExpression::Cost),
@@ -1087,7 +1113,7 @@ transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
-          effects:
+          effect:
                 unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
@@ -1137,7 +1163,7 @@ transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
-          effects:
+          effect:
                 unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
@@ -1178,7 +1204,7 @@ transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
-          effects:
+          effect:
                 unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
@@ -1214,7 +1240,7 @@ transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
-          effects:
+          effect:
                 unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
@@ -1306,7 +1332,7 @@ transitions:
         - name: visit
           parameters: [{ name: to, object: unvisited }]
           preconditions: [(connected location to)]
-          effects:
+          effect:
                 unvisited: (remove to unvisited)
                 location: to
                 time: (max (+ time (distance location to)) (ready_time to))
