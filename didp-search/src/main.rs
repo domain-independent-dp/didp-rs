@@ -23,7 +23,7 @@ fn solve<T: 'static + variable::Numeric + Ord + fmt::Display>(
         Some((cost, transitions)) => {
             println!("transitions:");
             for transition in transitions {
-                println!("{}", transition.name);
+                println!("{}", transition.get_full_name());
             }
             println!("cost: {}", cost);
         }

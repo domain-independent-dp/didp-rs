@@ -870,7 +870,9 @@ table_values:
             reduce_function: ReduceFunction::Min,
             forward_transitions: vec![
                 Transition {
-                    name: String::from("visit to:0"),
+                    name: String::from("visit"),
+                    parameter_names: vec![String::from("to")],
+                    parameter_values: vec![0],
                     elements_in_set_variable: vec![(0, 0)],
                     preconditions: vec![GroundedCondition {
                         condition: Condition::Table(TableExpression::Table2D(
@@ -926,7 +928,9 @@ table_values:
                     ..Default::default()
                 },
                 Transition {
-                    name: String::from("visit to:1"),
+                    name: String::from("visit"),
+                    parameter_names: vec![String::from("to")],
+                    parameter_values: vec![1],
                     elements_in_set_variable: vec![(0, 1)],
                     preconditions: vec![GroundedCondition {
                         condition: Condition::Table(TableExpression::Table2D(
@@ -982,7 +986,9 @@ table_values:
                     ..Default::default()
                 },
                 Transition {
-                    name: String::from("visit to:2"),
+                    name: String::from("visit"),
+                    parameter_names: vec![String::from("to")],
+                    parameter_values: vec![2],
                     elements_in_set_variable: vec![(0, 2)],
                     preconditions: vec![GroundedCondition {
                         condition: Condition::Table(TableExpression::Table2D(

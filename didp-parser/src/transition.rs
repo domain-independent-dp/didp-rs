@@ -4,7 +4,7 @@ use crate::expression_parser;
 use crate::grounded_condition;
 use crate::state;
 use crate::table_registry;
-use crate::variable::Numeric;
+use crate::variable::{Element, Numeric};
 use crate::yaml_util;
 use lazy_static::lazy_static;
 use rustc_hash::FxHashMap;
@@ -15,8 +15,10 @@ use std::str;
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct Transition<T: Numeric> {
     pub name: String,
-    pub elements_in_set_variable: Vec<(usize, usize)>,
-    pub elements_in_vector_variable: Vec<(usize, usize)>,
+    pub parameter_names: Vec<String>,
+    pub parameter_values: Vec<Element>,
+    pub elements_in_set_variable: Vec<(usize, Element)>,
+    pub elements_in_vector_variable: Vec<(usize, Element)>,
     pub preconditions: Vec<grounded_condition::GroundedCondition>,
     pub effect: effect::Effect,
     pub cost: expression::NumericExpression<T>,
@@ -59,15 +61,27 @@ impl<T: Numeric> Transition<T> {
     ) -> T {
         self.cost.eval_cost(cost, state, registry)
     }
+
+    pub fn get_full_name(&self) -> String {
+        let mut full_name = self.name.clone();
+        for (name, value) in self
+            .parameter_names
+            .iter()
+            .zip(self.parameter_values.iter())
+        {
+            full_name = full_name + format!(" {}:{}", name, value).as_str();
+        }
+        full_name
+    }
 }
 
-type TranstionsWithDirection<T> = (Vec<Transition<T>>, bool);
+type TransitionsWithDirection<T> = (Vec<Transition<T>>, bool);
 
 pub fn load_transitions_from_yaml<T: Numeric>(
     value: &yaml_rust::Yaml,
     metadata: &state::StateMetadata,
     registry: &table_registry::TableRegistry,
-) -> Result<TranstionsWithDirection<T>, Box<dyn error::Error>>
+) -> Result<TransitionsWithDirection<T>, Box<dyn error::Error>>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
@@ -117,10 +131,10 @@ where
             .zip(elements_in_set_variable_array.into_iter())
             .zip(elements_in_vector_variable_array.into_iter())
     {
-        let mut name = lifted_name.clone();
-        for parameter_name in &parameter_names {
-            name += format!(" {}:{}", parameter_name, parameters[parameter_name]).as_str();
-        }
+        let parameter_values = parameter_names
+            .iter()
+            .map(|name| parameters[name])
+            .collect();
         let preconditions = match lifted_preconditions {
             Some(lifted_preconditions) => {
                 let mut preconditions = Vec::with_capacity(lifted_preconditions.len());
@@ -155,7 +169,9 @@ where
         let cost = cost.simplify(registry);
 
         transitions.push(Transition {
-            name,
+            name: lifted_name.clone(),
+            parameter_names: parameter_names.clone(),
+            parameter_values,
             elements_in_set_variable,
             elements_in_vector_variable,
             preconditions,
@@ -578,6 +594,20 @@ mod tests {
     }
 
     #[test]
+    fn get_full_name() {
+        let transition = Transition::<Integer> {
+            name: String::from("transition"),
+            parameter_names: vec![String::from("param1"), String::from("param2")],
+            parameter_values: vec![0, 1],
+            ..Default::default()
+        };
+        assert_eq!(
+            transition.get_full_name(),
+            String::from("transition param1:0 param2:1")
+        );
+    }
+
+    #[test]
     fn load_transitions_from_yaml_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
@@ -655,7 +685,9 @@ cost: (+ cost (f1 e))
         assert!(transitions.is_ok());
         let expected = vec![
             Transition {
-                name: String::from("transition e:0"),
+                name: String::from("transition"),
+                parameter_names: vec![String::from("e")],
+                parameter_values: vec![0],
                 elements_in_set_variable: vec![(0, 0)],
                 elements_in_vector_variable: Vec::new(),
                 preconditions: vec![grounded_condition::GroundedCondition {
@@ -700,7 +732,9 @@ cost: (+ cost (f1 e))
                 ),
             },
             Transition {
-                name: String::from("transition e:1"),
+                name: String::from("transition"),
+                parameter_names: vec![String::from("e")],
+                parameter_values: vec![1],
                 elements_in_set_variable: vec![(0, 1)],
                 elements_in_vector_variable: Vec::new(),
                 preconditions: vec![grounded_condition::GroundedCondition {
