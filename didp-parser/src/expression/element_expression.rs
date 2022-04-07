@@ -1,3 +1,4 @@
+use super::condition::Condition;
 use super::numeric_operator::NumericOperator;
 use super::reference_expression::ReferenceExpression;
 use crate::state::State;
@@ -5,7 +6,7 @@ use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 use crate::variable::{Element, Set, Vector};
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ElementExpression {
     Constant(Element),
     Variable(usize),
@@ -17,6 +18,11 @@ pub enum ElementExpression {
     Last(Box<VectorExpression>),
     At(Box<VectorExpression>, Box<ElementExpression>),
     Table(Box<TableExpression<Element>>),
+    If(
+        Box<Condition>,
+        Box<ElementExpression>,
+        Box<ElementExpression>,
+    ),
 }
 
 impl ElementExpression {
@@ -49,6 +55,13 @@ impl ElementExpression {
                 vector => vector.eval(state, registry)[i.eval(state, registry)],
             },
             Self::Table(table) => *table.eval(state, registry, &registry.element_tables),
+            Self::If(condition, x, y) => {
+                if condition.eval(state, registry) {
+                    x.eval(state, registry)
+                } else {
+                    y.eval(state, registry)
+                }
+            }
         }
     }
 
@@ -77,18 +90,28 @@ impl ElementExpression {
                 TableExpression::Constant(value) => Self::Constant(value),
                 expression => Self::Table(Box::new(expression)),
             },
+            Self::If(condition, x, y) => match condition.simplify(registry) {
+                Condition::Constant(true) => x.simplify(registry),
+                Condition::Constant(false) => y.simplify(registry),
+                condition => Self::If(
+                    Box::new(condition),
+                    Box::new(x.simplify(registry)),
+                    Box::new(y.simplify(registry)),
+                ),
+            },
             _ => self.clone(),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum SetExpression {
     Reference(ReferenceExpression<Set>),
     Complement(Box<SetExpression>),
     SetOperation(SetOperator, Box<SetExpression>, Box<SetExpression>),
     SetElementOperation(SetElementOperator, ElementExpression, Box<SetExpression>),
     FromVector(usize, Box<VectorExpression>),
+    If(Box<Condition>, Box<SetExpression>, Box<SetExpression>),
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -168,6 +191,13 @@ impl SetExpression {
                     set
                 }
             },
+            Self::If(condition, x, y) => {
+                if condition.eval(state, registry) {
+                    x.eval(state, registry)
+                } else {
+                    y.eval(state, registry)
+                }
+            }
         }
     }
 
@@ -225,6 +255,15 @@ impl SetExpression {
                 }
                 vector => Self::FromVector(*capacity, Box::new(vector)),
             },
+            Self::If(condition, x, y) => match condition.simplify(registry) {
+                Condition::Constant(true) => x.simplify(registry),
+                Condition::Constant(false) => y.simplify(registry),
+                condition => Self::If(
+                    Box::new(condition),
+                    Box::new(x.simplify(registry)),
+                    Box::new(y.simplify(registry)),
+                ),
+            },
         }
     }
 
@@ -259,7 +298,7 @@ impl SetExpression {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum VectorExpression {
     Reference(ReferenceExpression<Vector>),
     Indices(Box<VectorExpression>),
@@ -268,6 +307,7 @@ pub enum VectorExpression {
     Push(ElementExpression, Box<VectorExpression>),
     Pop(Box<VectorExpression>),
     FromSet(Box<SetExpression>),
+    If(Box<Condition>, Box<VectorExpression>, Box<VectorExpression>),
 }
 
 impl VectorExpression {
@@ -319,6 +359,13 @@ impl VectorExpression {
                     .collect(),
                 set => set.eval(state, registry).ones().collect(),
             },
+            Self::If(condition, x, y) => {
+                if condition.eval(state, registry) {
+                    x.eval(state, registry)
+                } else {
+                    y.eval(state, registry)
+                }
+            }
         }
     }
 
@@ -381,11 +428,20 @@ impl VectorExpression {
                 }
                 set => Self::FromSet(Box::new(set)),
             },
+            Self::If(condition, x, y) => match condition.simplify(registry) {
+                Condition::Constant(true) => x.simplify(registry),
+                Condition::Constant(false) => y.simplify(registry),
+                condition => Self::If(
+                    Box::new(condition),
+                    Box::new(x.simplify(registry)),
+                    Box::new(y.simplify(registry)),
+                ),
+            },
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TableExpression<T: Clone> {
     Constant(T),
     Table1D(usize, ElementExpression),
@@ -467,6 +523,8 @@ impl<T: Clone> TableExpression<T> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::condition::{Comparison, ComparisonOperator};
+    use super::super::numeric_expression::NumericExpression;
     use super::*;
     use crate::state::*;
     use crate::table::*;
@@ -617,6 +675,24 @@ mod tests {
     }
 
     #[test]
+    fn element_if_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = ElementExpression::If(
+            Box::new(Condition::Constant(true)),
+            Box::new(ElementExpression::Constant(1)),
+            Box::new(ElementExpression::Constant(0)),
+        );
+        assert_eq!(expression.eval(&state, &registry), 1);
+        let expression = ElementExpression::If(
+            Box::new(Condition::Constant(false)),
+            Box::new(ElementExpression::Constant(1)),
+            Box::new(ElementExpression::Constant(0)),
+        );
+        assert_eq!(expression.eval(&state, &registry), 0);
+    }
+
+    #[test]
     fn element_constant_simplify() {
         let registry = generate_registry();
         let expression = ElementExpression::Constant(2);
@@ -701,6 +777,67 @@ mod tests {
             ElementExpression::Variable(0),
         )));
         assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn element_if_simplify() {
+        let registry = generate_registry();
+        let expression = ElementExpression::If(
+            Box::new(Condition::Constant(true)),
+            Box::new(ElementExpression::Constant(1)),
+            Box::new(ElementExpression::Constant(0)),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            ElementExpression::Constant(1)
+        );
+        let expression = ElementExpression::If(
+            Box::new(Condition::Constant(false)),
+            Box::new(ElementExpression::Constant(1)),
+            Box::new(ElementExpression::Constant(0)),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            ElementExpression::Constant(0)
+        );
+        let expression = ElementExpression::If(
+            Box::new(Condition::Comparison(Box::new(Comparison::ComparisonII(
+                ComparisonOperator::Gt,
+                NumericExpression::IntegerVariable(0),
+                NumericExpression::Constant(1),
+            )))),
+            Box::new(ElementExpression::Constant(1)),
+            Box::new(ElementExpression::Constant(0)),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn set_if_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let mut s1 = Set::with_capacity(3);
+        s1.insert(1);
+        let mut s0 = Set::with_capacity(3);
+        s0.insert(0);
+        let expression = SetExpression::If(
+            Box::new(Condition::Constant(true)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                s1.clone(),
+            ))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                s0.clone(),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry), s1);
+        let expression = SetExpression::If(
+            Box::new(Condition::Constant(false)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(s1))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                s0.clone(),
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry), s0);
     }
 
     #[test]
@@ -1109,6 +1246,51 @@ mod tests {
     }
 
     #[test]
+    fn set_if_simplify() {
+        let registry = generate_registry();
+        let mut s1 = Set::with_capacity(3);
+        s1.insert(1);
+        let mut s0 = Set::with_capacity(3);
+        s0.insert(0);
+        let expression = SetExpression::If(
+            Box::new(Condition::Constant(true)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                s1.clone(),
+            ))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                s0.clone(),
+            ))),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(s1.clone()))
+        );
+        let expression = SetExpression::If(
+            Box::new(Condition::Constant(false)),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                s1.clone(),
+            ))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(
+                s0.clone(),
+            ))),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant(s0.clone()))
+        );
+        let expression = SetExpression::If(
+            Box::new(Condition::Comparison(Box::new(Comparison::ComparisonII(
+                ComparisonOperator::Gt,
+                NumericExpression::IntegerVariable(0),
+                NumericExpression::Constant(1),
+            )))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(s1))),
+            Box::new(SetExpression::Reference(ReferenceExpression::Constant(s0))),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
     fn vector_reference_eval() {
         let state = generate_state();
         let registry = generate_registry();
@@ -1188,6 +1370,32 @@ mod tests {
             ReferenceExpression::Variable(0),
         )));
         assert_eq!(expression.eval(&state, &registry), vec![0, 2]);
+    }
+
+    #[test]
+    fn vector_if_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = VectorExpression::If(
+            Box::new(Condition::Constant(true)),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![0, 1],
+            ))),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![1, 0],
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry), vec![0, 1]);
+        let expression = VectorExpression::If(
+            Box::new(Condition::Constant(false)),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![0, 1],
+            ))),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![1, 0],
+            ))),
+        );
+        assert_eq!(expression.eval(&state, &registry), vec![1, 0]);
     }
 
     #[test]
@@ -1591,5 +1799,50 @@ mod tests {
             expression.simplify(&registry, &registry.element_tables),
             expression
         );
+    }
+
+    #[test]
+    fn vector_if_simplify() {
+        let registry = generate_registry();
+        let expression = VectorExpression::If(
+            Box::new(Condition::Constant(true)),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![0, 1],
+            ))),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![1, 0],
+            ))),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1]))
+        );
+        let expression = VectorExpression::If(
+            Box::new(Condition::Constant(false)),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![0, 1],
+            ))),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![1, 0],
+            ))),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 0]))
+        );
+        let expression = VectorExpression::If(
+            Box::new(Condition::Comparison(Box::new(Comparison::ComparisonII(
+                ComparisonOperator::Gt,
+                NumericExpression::IntegerVariable(0),
+                NumericExpression::Constant(1),
+            )))),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![0, 1],
+            ))),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
+                vec![1, 0],
+            ))),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
     }
 }

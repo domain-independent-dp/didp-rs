@@ -13,7 +13,7 @@ pub enum Condition {
     And(Box<Condition>, Box<Condition>),
     Or(Box<Condition>, Box<Condition>),
     Comparison(Box<Comparison>),
-    Set(set_condition::SetCondition),
+    Set(Box<set_condition::SetCondition>),
     Table(TableExpression<bool>),
 }
 
@@ -60,7 +60,7 @@ impl Condition {
             },
             Self::Set(condition) => match condition.simplify(registry) {
                 set_condition::SetCondition::Constant(value) => Self::Constant(value),
-                condition => Self::Set(condition),
+                condition => Self::Set(Box::new(condition)),
             },
             Self::Table(condition) => match condition.simplify(registry, &registry.bool_tables) {
                 TableExpression::Constant(value) => Self::Constant(value),
@@ -859,10 +859,10 @@ mod tests {
     fn set_eval() {
         let registry = generate_registry();
         let state = generate_state();
-        let expression = Condition::Set(set_condition::SetCondition::Eq(
+        let expression = Condition::Set(Box::new(set_condition::SetCondition::Eq(
             element_expression::ElementExpression::Variable(0),
             element_expression::ElementExpression::Constant(1),
-        ));
+        )));
         assert!(expression.eval(&state, &registry));
     }
 
@@ -1698,16 +1698,16 @@ mod tests {
     #[test]
     fn set_simplify() {
         let registry = generate_registry();
-        let expression = Condition::Set(set_condition::SetCondition::Eq(
+        let expression = Condition::Set(Box::new(set_condition::SetCondition::Eq(
             element_expression::ElementExpression::Variable(0),
             element_expression::ElementExpression::Constant(1),
-        ));
+        )));
         assert_eq!(
             expression.simplify(&registry),
-            Condition::Set(set_condition::SetCondition::Eq(
+            Condition::Set(Box::new(set_condition::SetCondition::Eq(
                 element_expression::ElementExpression::Variable(0),
                 element_expression::ElementExpression::Constant(1),
-            ))
+            )))
         );
     }
 }

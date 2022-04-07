@@ -507,10 +507,10 @@ mod tests {
         let state = generate_state();
         let registry = generate_registry();
         let set_condition = grounded_condition::GroundedCondition {
-            condition: Condition::Set(SetCondition::IsIn(
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )),
+            ))),
             ..Default::default()
         };
         let numeric_condition = grounded_condition::GroundedCondition {
@@ -545,10 +545,10 @@ mod tests {
         let state = generate_state();
         let registry = generate_registry();
         let set_condition = grounded_condition::GroundedCondition {
-            condition: Condition::Set(SetCondition::IsIn(
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )),
+            ))),
             ..Default::default()
         };
         let numeric_condition = grounded_condition::GroundedCondition {

@@ -1,3 +1,4 @@
+use super::condition::Condition;
 use super::element_expression::{ElementExpression, SetExpression, VectorExpression};
 use super::numeric_operator::{MathFunction, NumericOperator};
 use super::numeric_table_expression::NumericTableExpression;
@@ -29,6 +30,11 @@ pub enum NumericExpression<T: Numeric> {
     Last(Box<NumericVectorExpression<T>>),
     At(Box<NumericVectorExpression<T>>, ElementExpression),
     Reduce(ReduceOperator, Box<NumericVectorExpression<T>>),
+    If(
+        Box<Condition>,
+        Box<NumericExpression<T>>,
+        Box<NumericExpression<T>>,
+    ),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -116,6 +122,13 @@ impl<T: Numeric> NumericExpression<T> {
                 NumericVectorExpression::Constant(vector) => Self::eval_reduce(op, vector),
                 vector => Self::eval_reduce(op, &vector.eval_inner(cost, state, registry)),
             },
+            Self::If(condition, x, y) => {
+                if condition.eval(state, registry) {
+                    x.eval_inner(cost, state, registry)
+                } else {
+                    y.eval_inner(cost, state, registry)
+                }
+            }
         }
     }
 
@@ -177,6 +190,15 @@ impl<T: Numeric> NumericExpression<T> {
                 }
                 vector => Self::Reduce(op.clone(), Box::new(vector)),
             },
+            Self::If(condition, x, y) => match condition.simplify(registry) {
+                Condition::Constant(true) => x.simplify(registry),
+                Condition::Constant(false) => y.simplify(registry),
+                condition => Self::If(
+                    Box::new(condition),
+                    Box::new(x.simplify(registry)),
+                    Box::new(y.simplify(registry)),
+                ),
+            },
             _ => self.clone(),
         }
     }
@@ -218,6 +240,11 @@ pub enum NumericVectorExpression<T: Numeric> {
     ),
     IntegerTable(TableVectorExpression<Integer>),
     ContinuousTable(TableVectorExpression<Continuous>),
+    If(
+        Box<Condition>,
+        Box<NumericVectorExpression<T>>,
+        Box<NumericVectorExpression<T>>,
+    ),
 }
 
 impl<T: Numeric> NumericVectorExpression<T> {
@@ -280,6 +307,13 @@ impl<T: Numeric> NumericVectorExpression<T> {
                 .into_iter()
                 .map(T::from_continuous)
                 .collect(),
+            Self::If(condition, x, y) => {
+                if condition.eval(state, registry) {
+                    x.eval(state, registry)
+                } else {
+                    y.eval(state, registry)
+                }
+            }
         }
     }
 
@@ -353,6 +387,15 @@ impl<T: Numeric> NumericVectorExpression<T> {
                     expression => Self::ContinuousTable(expression),
                 }
             }
+            Self::If(condition, x, y) => match condition.simplify(registry) {
+                Condition::Constant(true) => x.simplify(registry),
+                Condition::Constant(false) => y.simplify(registry),
+                condition => Self::If(
+                    Box::new(condition),
+                    Box::new(x.simplify(registry)),
+                    Box::new(y.simplify(registry)),
+                ),
+            },
             _ => self.clone(),
         }
     }
@@ -422,6 +465,7 @@ impl<T: Numeric> NumericVectorExpression<T> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::condition::{Comparison, ComparisonOperator};
     use super::super::element_expression;
     use super::super::reference_expression::ReferenceExpression;
     use super::*;
@@ -967,6 +1011,24 @@ mod tests {
     }
 
     #[test]
+    fn if_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = NumericExpression::If(
+            Box::new(Condition::Constant(true)),
+            Box::new(NumericExpression::Constant(1)),
+            Box::new(NumericExpression::Constant(0)),
+        );
+        assert_eq!(expression.eval(&state, &registry), 1);
+        let expression = NumericExpression::If(
+            Box::new(Condition::Constant(true)),
+            Box::new(NumericExpression::Constant(0)),
+            Box::new(NumericExpression::Constant(1)),
+        );
+        assert_eq!(expression.eval(&state, &registry), 0);
+    }
+
+    #[test]
     fn constant_simplify() {
         let registry = generate_registry();
         let expression = NumericExpression::Constant(2);
@@ -1331,6 +1393,39 @@ mod tests {
                     ElementExpression::Variable(0),
                 ),
             )),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn if_simplify() {
+        let registry = generate_registry();
+        let expression = NumericExpression::If(
+            Box::new(Condition::Constant(true)),
+            Box::new(NumericExpression::Constant(1)),
+            Box::new(NumericExpression::Constant(0)),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericExpression::Constant(1)
+        );
+        let expression = NumericExpression::If(
+            Box::new(Condition::Constant(false)),
+            Box::new(NumericExpression::Constant(1)),
+            Box::new(NumericExpression::Constant(0)),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericExpression::Constant(0)
+        );
+        let expression = NumericExpression::If(
+            Box::new(Condition::Comparison(Box::new(Comparison::ComparisonII(
+                ComparisonOperator::Gt,
+                NumericExpression::IntegerVariable(0),
+                NumericExpression::Constant(1),
+            )))),
+            Box::new(NumericExpression::Constant(1)),
+            Box::new(NumericExpression::Constant(0)),
         );
         assert_eq!(expression.simplify(&registry), expression);
     }
@@ -1708,6 +1803,24 @@ mod tests {
                 VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             ));
         assert_eq!(expression.eval(&state, &registry), vec![10.0, 20.0]);
+    }
+
+    #[test]
+    fn vector_if_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let expression = NumericVectorExpression::If(
+            Box::new(Condition::Constant(true)),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![1, 0])),
+        );
+        assert_eq!(expression.eval(&state, &registry), vec![0, 1]);
+        let expression = NumericVectorExpression::If(
+            Box::new(Condition::Constant(false)),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![1, 0])),
+        );
+        assert_eq!(expression.eval(&state, &registry), vec![1, 0]);
     }
 
     #[test]
@@ -2128,6 +2241,39 @@ mod tests {
                 0,
                 VectorExpression::Reference(ReferenceExpression::Variable(0)),
             ));
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn vector_if_simplify() {
+        let registry = generate_registry();
+        let expression = NumericVectorExpression::If(
+            Box::new(Condition::Constant(true)),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![1, 0])),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericVectorExpression::Constant(vec![0, 1])
+        );
+        let expression = NumericVectorExpression::If(
+            Box::new(Condition::Constant(false)),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![1, 0])),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            NumericVectorExpression::Constant(vec![1, 0])
+        );
+        let expression = NumericVectorExpression::If(
+            Box::new(Condition::Comparison(Box::new(Comparison::ComparisonII(
+                ComparisonOperator::Gt,
+                NumericExpression::IntegerVariable(0),
+                NumericExpression::Constant(1),
+            )))),
+            Box::new(NumericVectorExpression::Constant(vec![0, 1])),
+            Box::new(NumericVectorExpression::Constant(vec![1, 0])),
+        );
         assert_eq!(expression.simplify(&registry), expression);
     }
 }

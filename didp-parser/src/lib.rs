@@ -841,16 +841,16 @@ table_values:
                 cost: NumericExpression::Constant(0),
                 conditions: vec![
                     GroundedCondition {
-                        condition: Condition::Set(SetCondition::IsEmpty(SetExpression::Reference(
-                            ReferenceExpression::Variable(0),
+                        condition: Condition::Set(Box::new(SetCondition::IsEmpty(
+                            SetExpression::Reference(ReferenceExpression::Variable(0)),
                         ))),
                         ..Default::default()
                     },
                     GroundedCondition {
-                        condition: Condition::Set(SetCondition::Eq(
+                        condition: Condition::Set(Box::new(SetCondition::Eq(
                             ElementExpression::Variable(0),
                             ElementExpression::Constant(0),
-                        )),
+                        ))),
                         ..Default::default()
                     },
                 ],

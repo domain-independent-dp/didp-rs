@@ -202,49 +202,49 @@ mod tests {
         };
 
         let condition = GroundedCondition {
-            condition: Condition::Set(SetCondition::IsIn(
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Variable(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )),
+            ))),
             ..Default::default()
         };
         assert_eq!(condition.is_satisfied(&state, &registry), Some(true));
 
         let condition = GroundedCondition {
-            condition: Condition::Set(SetCondition::Ne(
+            condition: Condition::Set(Box::new(SetCondition::Ne(
                 ElementExpression::Constant(0),
                 ElementExpression::Constant(0),
-            )),
+            ))),
             elements_in_set_variable: vec![(0, 0), (0, 0)],
             elements_in_vector_variable: vec![],
         };
         assert_eq!(condition.is_satisfied(&state, &registry), Some(false));
 
         let condition = GroundedCondition {
-            condition: Condition::Set(SetCondition::Ne(
+            condition: Condition::Set(Box::new(SetCondition::Ne(
                 ElementExpression::Constant(0),
                 ElementExpression::Constant(1),
-            )),
+            ))),
             elements_in_set_variable: vec![(0, 1), (0, 0)],
             elements_in_vector_variable: vec![],
         };
         assert!(condition.is_satisfied(&state, &registry).is_none());
 
         let condition = GroundedCondition {
-            condition: Condition::Set(SetCondition::IsIn(
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )),
+            ))),
             elements_in_set_variable: vec![],
             elements_in_vector_variable: vec![(0, 0)],
         };
         assert!(condition.is_satisfied(&state, &registry).is_none());
 
         let condition = GroundedCondition {
-            condition: Condition::Set(SetCondition::IsIn(
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(1),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )),
+            ))),
             elements_in_set_variable: vec![],
             elements_in_vector_variable: vec![(0, 1)],
         };
@@ -276,10 +276,10 @@ condition: (and (is_in e0 s0) true)
         let expected = vec![GroundedCondition {
             elements_in_set_variable: Vec::new(),
             elements_in_vector_variable: Vec::new(),
-            condition: Condition::Set(SetCondition::IsIn(
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Variable(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )),
+            ))),
         }];
         assert_eq!(conditions.unwrap(), expected);
 
@@ -317,10 +317,10 @@ condition: (and (is_in e0 s0) true)
         let expected = vec![GroundedCondition {
             elements_in_set_variable: Vec::new(),
             elements_in_vector_variable: Vec::new(),
-            condition: Condition::Set(SetCondition::IsIn(
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
-            )),
+            ))),
         }];
         assert_eq!(conditions.unwrap(), expected);
 
@@ -381,18 +381,18 @@ forall:
             GroundedCondition {
                 elements_in_set_variable: Vec::new(),
                 elements_in_vector_variable: vec![(0, 0)],
-                condition: Condition::Set(SetCondition::IsIn(
+                condition: Condition::Set(Box::new(SetCondition::IsIn(
                     ElementExpression::Constant(0),
                     SetExpression::Reference(ReferenceExpression::Variable(0)),
-                )),
+                ))),
             },
             GroundedCondition {
                 elements_in_set_variable: Vec::new(),
                 elements_in_vector_variable: vec![(0, 1)],
-                condition: Condition::Set(SetCondition::IsIn(
+                condition: Condition::Set(Box::new(SetCondition::IsIn(
                     ElementExpression::Constant(1),
                     SetExpression::Reference(ReferenceExpression::Variable(0)),
-                )),
+                ))),
             },
         ];
         assert_eq!(conditions.unwrap(), expected);

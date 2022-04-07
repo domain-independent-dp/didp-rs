@@ -6,7 +6,7 @@ use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 use crate::variable::{Element, Numeric};
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ArgumentExpression {
     Set(SetExpression),
     Vector(VectorExpression),
@@ -23,7 +23,7 @@ impl ArgumentExpression {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum NumericTableExpression<T: Numeric> {
     Constant(T),
     Table(usize, Vec<ElementExpression>),

@@ -3,7 +3,7 @@ use super::reference_expression::ReferenceExpression;
 use crate::state::State;
 use crate::table_registry::TableRegistry;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum SetCondition {
     Constant(bool),
     Eq(ElementExpression, ElementExpression),

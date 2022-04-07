@@ -77,14 +77,14 @@ fn parse_operation<'a, 'b, 'c>(
                 element_parser::parse_expression(tokens, metadata, registry, parameters)?;
             let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
-            Ok((Condition::Set(SetCondition::Eq(x, y)), rest))
+            Ok((Condition::Set(Box::new(SetCondition::Eq(x, y))), rest))
         }
         "is_not" => {
             let (x, rest) =
                 element_parser::parse_expression(tokens, metadata, registry, parameters)?;
             let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
-            Ok((Condition::Set(SetCondition::Ne(x, y)), rest))
+            Ok((Condition::Set(Box::new(SetCondition::Ne(x, y))), rest))
         }
         "is_in" => {
             let (element, rest) =
@@ -92,7 +92,10 @@ fn parse_operation<'a, 'b, 'c>(
             let (set, rest) =
                 element_parser::parse_set_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
-            Ok((Condition::Set(SetCondition::IsIn(element, set)), rest))
+            Ok((
+                Condition::Set(Box::new(SetCondition::IsIn(element, set))),
+                rest,
+            ))
         }
         "is_subset" => {
             let (x, rest) =
@@ -100,13 +103,13 @@ fn parse_operation<'a, 'b, 'c>(
             let (y, rest) =
                 element_parser::parse_set_expression(rest, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
-            Ok((Condition::Set(SetCondition::IsSubset(x, y)), rest))
+            Ok((Condition::Set(Box::new(SetCondition::IsSubset(x, y))), rest))
         }
         "is_empty" => {
             let (set, rest) =
                 element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
-            Ok((Condition::Set(SetCondition::IsEmpty(set)), rest))
+            Ok((Condition::Set(Box::new(SetCondition::IsEmpty(set))), rest))
         }
         _ => parse_comparison(name, tokens, metadata, registry, parameters)
             .map(|(condition, rest)| (Condition::Comparison(Box::new(condition)), rest)),
@@ -396,9 +399,9 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Not(Box::new(Condition::Set(SetCondition::IsEmpty(
+            Condition::Not(Box::new(Condition::Set(Box::new(SetCondition::IsEmpty(
                 SetExpression::Reference(ReferenceExpression::Variable(0))
-            ))))
+            )))))
         );
         assert_eq!(rest, &tokens[7..]);
     }
@@ -450,12 +453,12 @@ mod tests {
         assert_eq!(
             expression,
             Condition::And(
-                Box::new(Condition::Set(SetCondition::IsEmpty(
+                Box::new(Condition::Set(Box::new(SetCondition::IsEmpty(
                     SetExpression::Reference(ReferenceExpression::Variable(0))
-                ))),
-                Box::new(Condition::Set(SetCondition::IsEmpty(
+                )))),
+                Box::new(Condition::Set(Box::new(SetCondition::IsEmpty(
                     SetExpression::Reference(ReferenceExpression::Variable(1))
-                )))
+                ))))
             )
         );
         assert_eq!(rest, &tokens[11..]);
@@ -509,12 +512,12 @@ mod tests {
         assert_eq!(
             expression,
             Condition::Or(
-                Box::new(Condition::Set(SetCondition::IsEmpty(
+                Box::new(Condition::Set(Box::new(SetCondition::IsEmpty(
                     SetExpression::Reference(ReferenceExpression::Variable(0))
-                ))),
-                Box::new(Condition::Set(SetCondition::IsEmpty(
+                )))),
+                Box::new(Condition::Set(Box::new(SetCondition::IsEmpty(
                     SetExpression::Reference(ReferenceExpression::Variable(1))
-                )))
+                ))))
             )
         );
         assert_eq!(rest, &tokens[11..]);
@@ -1182,10 +1185,10 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Set(SetCondition::Eq(
+            Condition::Set(Box::new(SetCondition::Eq(
                 ElementExpression::Constant(2),
                 ElementExpression::Variable(0)
-            ))
+            )))
         );
         assert_eq!(rest, &tokens[5..]);
     }
@@ -1239,10 +1242,10 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Set(SetCondition::Ne(
+            Condition::Set(Box::new(SetCondition::Ne(
                 ElementExpression::Constant(2),
                 ElementExpression::Variable(0)
-            ))
+            )))
         );
         assert_eq!(rest, &tokens[5..]);
     }
@@ -1296,10 +1299,10 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Set(SetCondition::IsIn(
+            Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(2),
                 SetExpression::Reference(ReferenceExpression::Variable(0))
-            ))
+            )))
         );
         assert_eq!(rest, &tokens[5..]);
     }
@@ -1353,10 +1356,10 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Set(SetCondition::IsSubset(
+            Condition::Set(Box::new(SetCondition::IsSubset(
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
                 SetExpression::Reference(ReferenceExpression::Variable(1))
-            ))
+            )))
         );
         assert_eq!(rest, &tokens[5..]);
     }
@@ -1403,9 +1406,9 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            Condition::Set(SetCondition::IsEmpty(SetExpression::Reference(
+            Condition::Set(Box::new(SetCondition::IsEmpty(SetExpression::Reference(
                 ReferenceExpression::Variable(0)
-            )))
+            ))))
         );
         assert_eq!(rest, &tokens[4..]);
     }

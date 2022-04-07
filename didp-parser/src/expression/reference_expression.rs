@@ -3,7 +3,7 @@ use crate::state::State;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ReferenceExpression<T: Clone> {
     Constant(T),
     Variable(usize),
