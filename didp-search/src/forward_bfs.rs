@@ -82,5 +82,6 @@ where
             }
         }
     }
+    println!("Expanded: {}", expanded);
     None
 }

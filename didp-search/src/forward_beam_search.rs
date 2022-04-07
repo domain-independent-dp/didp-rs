@@ -146,6 +146,7 @@ where
             return Some((goal_node.g, goal_node.trace_transitions()));
         }
         if new_open.is_empty() {
+            println!("Expanded: {}", expanded);
             return None;
         }
         registry.clear();
