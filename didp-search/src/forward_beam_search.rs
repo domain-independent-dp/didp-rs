@@ -79,7 +79,6 @@ where
     loop {
         let mut i = 0;
         let mut goal_node: Option<Rc<search_node::SearchNode<T>>> = None;
-        let mut goal_cost: Option<T> = None;
         while !open.is_empty() && i < beam {
             let node = open.pop().unwrap();
             if *node.closed.borrow() {
@@ -88,23 +87,19 @@ where
             *node.closed.borrow_mut() = true;
             expanded += 1;
             i += 1;
-            if let Some(cost) = model.get_base_cost(&node.state) {
-                let cost = f_function(node.g, cost, &node.state, model);
-                if let Some(incumbent) = goal_cost {
+            if model.get_base_cost(&node.state).is_some() {
+                if let Some(incumbent) = goal_node.clone() {
                     match model.reduce_function {
-                        didp_parser::ReduceFunction::Min if cost < incumbent => {
+                        didp_parser::ReduceFunction::Min if node.g < incumbent.g => {
                             goal_node = Some(node.clone());
-                            goal_cost = Some(cost);
                         }
-                        didp_parser::ReduceFunction::Max if cost > incumbent => {
+                        didp_parser::ReduceFunction::Max if node.g > incumbent.g => {
                             goal_node = Some(node.clone());
-                            goal_cost = Some(cost);
                         }
                         _ => {}
                     }
                 } else {
-                    goal_node = Some(node.clone());
-                    goal_cost = Some(cost);
+                    goal_node = Some(node.clone())
                 }
             }
             for transition in generator.applicable_transitions(&node.state) {
@@ -146,9 +141,9 @@ where
                 }
             }
         }
-        if let (Some(goal_cost), Some(goal_node)) = (goal_cost, goal_node) {
+        if let Some(goal_node) = goal_node {
             println!("Expanded: {}", expanded);
-            return Some((goal_cost, goal_node.trace_transitions()));
+            return Some((goal_node.g, goal_node.trace_transitions()));
         }
         if new_open.is_empty() {
             return None;
