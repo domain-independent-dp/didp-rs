@@ -6,6 +6,7 @@ use crate::successor_generator;
 use didp_parser::variable;
 use std::fmt;
 use std::mem;
+use std::rc::Rc;
 
 pub fn iterative_forward_beam_search<T: variable::Numeric + Ord + fmt::Display, H, F>(
     model: &didp_parser::Model<T>,
@@ -77,6 +78,8 @@ where
 
     loop {
         let mut i = 0;
+        let mut goal_node: Option<Rc<search_node::SearchNode<T>>> = None;
+        let mut goal_cost: Option<T> = None;
         while !open.is_empty() && i < beam {
             let node = open.pop().unwrap();
             if *node.closed.borrow() {
@@ -86,8 +89,23 @@ where
             expanded += 1;
             i += 1;
             if let Some(cost) = model.get_base_cost(&node.state) {
-                println!("Expanded: {}", expanded);
-                return Some((node.g + cost, node.trace_transitions()));
+                let cost = f_function(node.g, cost, &node.state, model);
+                if let Some(incumbent) = goal_cost {
+                    match model.reduce_function {
+                        didp_parser::ReduceFunction::Min if cost < incumbent => {
+                            goal_node = Some(node.clone());
+                            goal_cost = Some(cost);
+                        }
+                        didp_parser::ReduceFunction::Max if cost > incumbent => {
+                            goal_node = Some(node.clone());
+                            goal_cost = Some(cost);
+                        }
+                        _ => {}
+                    }
+                } else {
+                    goal_node = Some(node.clone());
+                    goal_cost = Some(cost);
+                }
             }
             for transition in generator.applicable_transitions(&node.state) {
                 let g = transition.eval_cost(node.g, &node.state, &model.table_registry);
@@ -127,6 +145,10 @@ where
                     }
                 }
             }
+        }
+        if let (Some(goal_cost), Some(goal_node)) = (goal_cost, goal_node) {
+            println!("Expanded: {}", expanded);
+            return Some((goal_cost, goal_node.trace_transitions()));
         }
         if new_open.is_empty() {
             return None;
