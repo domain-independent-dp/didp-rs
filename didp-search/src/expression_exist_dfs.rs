@@ -12,6 +12,7 @@ use std::str;
 pub struct ExpressionExistDfs<T: variable::Numeric> {
     g_expressions: Option<FxHashMap<String, String>>,
     primal_bound: Option<T>,
+    maximize: bool,
     capacity: Option<usize>,
 }
 
@@ -39,6 +40,7 @@ where
             model,
             &generator,
             self.primal_bound,
+            self.maximize,
             self.capacity,
         ))
     }
@@ -111,10 +113,21 @@ impl<T: variable::Numeric> ExpressionExistDfs<T> {
                 )))
             }
         };
+        let maximize = match map.get(&yaml_rust::Yaml::from_str("maximize")) {
+            Some(yaml_rust::Yaml::Boolean(value)) => *value,
+            Some(value) => {
+                return Err(solver::ConfigErr::new(format!(
+                    "expected Boolean, but found `{:?}`",
+                    value
+                )))
+            }
+            None => false,
+        };
         Ok(ExpressionExistDfs {
             g_expressions,
-            capacity,
             primal_bound,
+            maximize,
+            capacity,
         })
     }
 }
