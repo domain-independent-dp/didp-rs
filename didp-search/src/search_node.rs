@@ -1,12 +1,17 @@
 use crate::hashable_state;
 use crate::priority_queue;
+use crate::successor_generator::{MaybeApplicable, SuccessorGenerator};
+use didp_parser::expression_parser::parse_numeric;
 use didp_parser::variable::{Continuous, Element, Integer, Numeric, Set, Vector};
 use didp_parser::ReduceFunction;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections;
+use std::error::Error;
+use std::fmt;
 use std::rc::Rc;
+use std::str;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct StateForSearchNode {
@@ -149,10 +154,93 @@ impl didp_parser::DPState for StateForSearchNode {
     }
 }
 
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct TransitionWithG<T: Numeric> {
+    pub transition: didp_parser::Transition<T>,
+    pub g: didp_parser::expression::NumericExpression<T>,
+}
+
+impl<T: Numeric> MaybeApplicable for TransitionWithG<T> {
+    fn is_applicable<U: didp_parser::DPState>(
+        &self,
+        state: &U,
+        registry: &didp_parser::TableRegistry,
+    ) -> bool {
+        self.transition.is_applicable(state, registry)
+    }
+}
+
+impl<'a, T: Numeric> SuccessorGenerator<'a, TransitionWithG<T>>
+where
+    <T as str::FromStr>::Err: fmt::Debug,
+{
+    pub fn new(
+        model: &'a didp_parser::Model<T>,
+        backward: bool,
+    ) -> SuccessorGenerator<'a, TransitionWithG<T>> {
+        let transitions = if backward {
+            &model.backward_transitions
+        } else {
+            &model.forward_transitions
+        };
+        let transitions = transitions
+            .iter()
+            .map(|t| {
+                Rc::new(TransitionWithG {
+                    transition: t.clone(),
+                    g: t.cost.clone(),
+                })
+            })
+            .collect();
+        SuccessorGenerator {
+            transitions,
+            registry: &model.table_registry,
+        }
+    }
+
+    pub fn with_expressions(
+        model: &'a didp_parser::Model<T>,
+        backward: bool,
+        g_expressions: &FxHashMap<String, String>,
+    ) -> Result<SuccessorGenerator<'a, TransitionWithG<T>>, Box<dyn Error>> {
+        let original_transitions = if backward {
+            &model.backward_transitions
+        } else {
+            &model.forward_transitions
+        };
+        let mut transitions = Vec::with_capacity(original_transitions.len());
+        let mut parameters = FxHashMap::default();
+        for t in original_transitions {
+            for (name, value) in t.parameter_names.iter().zip(t.parameter_values.iter()) {
+                parameters.insert(name.clone(), *value);
+            }
+            let g = if let Some(expression) = g_expressions.get(&t.name) {
+                parse_numeric(
+                    expression.clone(),
+                    &model.state_metadata,
+                    &model.table_registry,
+                    &parameters,
+                )?
+            } else {
+                t.cost.clone()
+            };
+            transitions.push(Rc::new(TransitionWithG {
+                transition: t.clone(),
+                g,
+            }));
+            parameters.clear();
+        }
+        Ok(SuccessorGenerator {
+            transitions,
+            registry: &model.table_registry,
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct SearchNode<T: Numeric> {
     pub state: StateForSearchNode,
-    pub operator: Option<Rc<didp_parser::Transition<T>>>,
+    pub operator: Option<Rc<TransitionWithG<T>>>,
     pub parent: Option<Rc<SearchNode<T>>>,
     pub g: T,
     pub h: RefCell<Option<T>>,
@@ -185,16 +273,20 @@ impl<T: Numeric> SearchNode<T> {
         &self,
         base_cost: T,
         model: &didp_parser::Model<T>,
-    ) -> (T, Vec<Rc<didp_parser::Transition<T>>>) {
+    ) -> (T, Vec<Rc<TransitionWithG<T>>>) {
         let mut result = Vec::new();
         let mut cost = base_cost;
         if let (Some(mut node), Some(operator)) = (self.parent.as_ref(), self.operator.as_ref()) {
-            cost = operator.eval_cost(cost, &node.state, &model.table_registry);
+            cost = operator
+                .transition
+                .eval_cost(cost, &node.state, &model.table_registry);
             result.push(operator.clone());
             while let (Some(parent), Some(operator)) =
                 (node.parent.as_ref(), node.operator.as_ref())
             {
-                cost = operator.eval_cost(cost, &parent.state, &model.table_registry);
+                cost = operator
+                    .transition
+                    .eval_cost(cost, &parent.state, &model.table_registry);
                 result.push(operator.clone());
                 node = parent;
             }
@@ -233,7 +325,7 @@ impl<'a, T: Numeric + Ord> SearchNodeRegistry<'a, T> {
         &mut self,
         mut state: StateForSearchNode,
         g: T,
-        operator: Option<Rc<didp_parser::Transition<T>>>,
+        operator: Option<Rc<TransitionWithG<T>>>,
         parent: Option<Rc<SearchNode<T>>>,
     ) -> Option<Rc<SearchNode<T>>> {
         let entry = self.registry.entry(state.signature_variables.clone());
@@ -370,7 +462,7 @@ mod tests {
         signature_variables: Rc<hashable_state::HashableSignatureVariables>,
         integer_resource_variables: Vec<Integer>,
         parent: Option<Rc<SearchNode<Integer>>>,
-        operator: Option<Rc<didp_parser::Transition<Integer>>>,
+        operator: Option<Rc<TransitionWithG<Integer>>>,
         g: Integer,
         h: Integer,
         f: Integer,
@@ -771,14 +863,21 @@ mod tests {
         ));
         assert_eq!(node1.trace_transitions(0, &model), (0, Vec::new()));
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let op1 = Rc::new(didp_parser::Transition {
-            name: String::from("op1"),
-            cost: didp_parser::expression::NumericExpression::NumericOperation(
+        let op1 = Rc::new(TransitionWithG {
+            transition: didp_parser::Transition {
+                name: String::from("op1"),
+                cost: didp_parser::expression::NumericExpression::NumericOperation(
+                    didp_parser::expression::NumericOperator::Add,
+                    Box::new(didp_parser::expression::NumericExpression::Cost),
+                    Box::new(didp_parser::expression::NumericExpression::Constant(1)),
+                ),
+                ..Default::default()
+            },
+            g: didp_parser::expression::NumericExpression::NumericOperation(
                 didp_parser::expression::NumericOperator::Add,
                 Box::new(didp_parser::expression::NumericExpression::Cost),
                 Box::new(didp_parser::expression::NumericExpression::Constant(1)),
             ),
-            ..Default::default()
         });
         let node2 = Rc::new(generate_node(
             signature_variables,
@@ -812,14 +911,21 @@ mod tests {
             0,
         ));
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let op2 = Rc::new(didp_parser::Transition {
-            name: String::from("op2"),
-            cost: didp_parser::expression::NumericExpression::NumericOperation(
+        let op2 = Rc::new(TransitionWithG {
+            transition: didp_parser::Transition {
+                name: String::from("op2"),
+                cost: didp_parser::expression::NumericExpression::NumericOperation(
+                    didp_parser::expression::NumericOperator::Add,
+                    Box::new(didp_parser::expression::NumericExpression::Cost),
+                    Box::new(didp_parser::expression::NumericExpression::Constant(1)),
+                ),
+                ..Default::default()
+            },
+            g: didp_parser::expression::NumericExpression::NumericOperation(
                 didp_parser::expression::NumericOperator::Add,
                 Box::new(didp_parser::expression::NumericExpression::Cost),
                 Box::new(didp_parser::expression::NumericExpression::Constant(1)),
             ),
-            ..Default::default()
         });
         let node3 = Rc::new(generate_node(
             signature_variables,
@@ -980,7 +1086,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let op = Rc::new(didp_parser::Transition::default());
+        let op = Rc::new(TransitionWithG::default());
         let node2 = registry.get_node(state, 1, Some(op), Some(node1.clone()));
         assert!(node2.is_some());
         let node2 = node2.unwrap();

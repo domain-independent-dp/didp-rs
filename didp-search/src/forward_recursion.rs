@@ -2,7 +2,9 @@ use crate::hashable_state;
 use crate::solver;
 use crate::successor_generator;
 use didp_parser::variable;
+use didp_parser::Transition;
 use rustc_hash::FxHashMap;
+use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -12,12 +14,15 @@ pub struct ForwardRecursion {
     memo_capacity: Option<usize>,
 }
 
-impl<'a, T: variable::Numeric> solver::Solver<T> for ForwardRecursion
+impl<T: variable::Numeric> solver::Solver<T> for ForwardRecursion
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    fn solve(&mut self, model: &didp_parser::Model<T>) -> solver::Solution<T> {
-        let generator = successor_generator::SuccessorGenerator::new(model, false);
+    fn solve(
+        &mut self,
+        model: &didp_parser::Model<T>,
+    ) -> Result<solver::Solution<T>, Box<dyn Error>> {
+        let generator = successor_generator::SuccessorGenerator::<Transition<T>>::new(model, false);
         let mut memo = FxHashMap::default();
         if let Some(capacity) = self.memo_capacity {
             memo.reserve(capacity);
@@ -40,7 +45,7 @@ where
             _ => {}
         }
         println!("Expanded: {}", expanded);
-        cost.map(|cost| (cost, transitions))
+        Ok(cost.map(|cost| (cost, transitions)))
     }
 }
 
@@ -76,7 +81,7 @@ type StateMemo<T> =
 pub fn forward_recursion<T: variable::Numeric>(
     state: hashable_state::HashableState,
     model: &didp_parser::Model<T>,
-    generator: &successor_generator::SuccessorGenerator<T>,
+    generator: &successor_generator::SuccessorGenerator<Transition<T>>,
     memo: &mut StateMemo<T>,
     expanded: &mut i32,
 ) -> Option<T> {

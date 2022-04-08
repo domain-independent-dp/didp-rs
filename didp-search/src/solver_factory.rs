@@ -1,6 +1,6 @@
-use crate::exist_dfs;
 use crate::expression_astar;
 use crate::expression_beam_search;
+use crate::expression_exist_dfs;
 use crate::forward_recursion;
 use crate::solver;
 use didp_parser::variable;
@@ -12,9 +12,8 @@ use std::str;
 pub struct SolverFactory;
 
 impl SolverFactory {
-    pub fn create<'a, T: 'static + variable::Numeric + Ord + fmt::Display>(
+    pub fn create<T: 'static + variable::Numeric + Ord + fmt::Display>(
         &self,
-        model: &'a didp_parser::Model<T>,
         config: &yaml_rust::Yaml,
     ) -> Result<Box<dyn solver::Solver<T>>, Box<dyn Error>>
     where
@@ -36,19 +35,19 @@ impl SolverFactory {
         };
         match map.get(&yaml_rust::Yaml::from_str("solver")) {
             Some(yaml_rust::Yaml::String(string)) => match &string[..] {
-                "expression_astar" => Ok(Box::new(expression_astar::ExpressionAstar::new(
-                    model, &config,
-                )?)),
-                "expression_beam" => Ok(Box::new(
-                    expression_beam_search::ExpressionBeamSearch::new(model, &config)?,
-                )),
-                "iterative_exist_dfs" => {
-                    Ok(Box::new(exist_dfs::IterativeForwardExistDfs::new(&config)?))
+                "expression_astar" => {
+                    Ok(Box::new(expression_astar::ExpressionAstar::new(&config)?))
                 }
+                "expression_beam" => Ok(Box::new(
+                    expression_beam_search::ExpressionBeamSearch::new(&config)?,
+                )),
+                "expression_exist_dfs" => Ok(Box::new(
+                    expression_exist_dfs::ExpressionExistDfs::new(&config)?,
+                )),
                 "forward_recursion" => {
                     Ok(Box::new(forward_recursion::ForwardRecursion::new(&config)?))
                 }
-                "iterative" => Ok(Box::new(IterativeSearch::new(model, &config)?)),
+                "iterative" => Ok(Box::new(IterativeSearch::new(&config)?)),
                 value => Err(solver::ConfigErr::new(format!("no such solver {:?}", value)).into()),
             },
             Some(value) => Err(solver::ConfigErr::new(format!(
@@ -67,12 +66,15 @@ pub struct IterativeSearch<T: variable::Numeric> {
 }
 
 impl<T: variable::Numeric + fmt::Display> solver::Solver<T> for IterativeSearch<T> {
-    fn solve(&mut self, model: &didp_parser::Model<T>) -> solver::Solution<T> {
+    fn solve(
+        &mut self,
+        model: &didp_parser::Model<T>,
+    ) -> Result<solver::Solution<T>, Box<dyn Error>> {
         let mut cost = self.primal_bound;
         let mut transitions = Vec::new();
         for solver in &mut self.solvers {
             solver.set_primal_bound(cost);
-            let result = solver.solve(model);
+            let result = solver.solve(model)?;
             if let Some((bound, incumbent)) = result {
                 println!("New primal bound: {}", bound);
                 cost = Some(bound);
@@ -81,15 +83,12 @@ impl<T: variable::Numeric + fmt::Display> solver::Solver<T> for IterativeSearch<
                 println!("Failed to find a solution");
             }
         }
-        cost.map(|cost| (cost, transitions))
+        Ok(cost.map(|cost| (cost, transitions)))
     }
 }
 
 impl<T: 'static + variable::Numeric + Ord + fmt::Display> IterativeSearch<T> {
-    pub fn new(
-        model: &didp_parser::Model<T>,
-        config: &yaml_rust::Yaml,
-    ) -> Result<IterativeSearch<T>, Box<dyn Error>>
+    pub fn new(config: &yaml_rust::Yaml) -> Result<IterativeSearch<T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
@@ -132,7 +131,7 @@ impl<T: 'static + variable::Numeric + Ord + fmt::Display> IterativeSearch<T> {
         let factory = SolverFactory::default();
         let mut solvers = Vec::new();
         for config in solver_configs {
-            solvers.push(factory.create(model, &config)?);
+            solvers.push(factory.create(&config)?);
         }
         Ok(IterativeSearch {
             solvers,

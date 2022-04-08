@@ -14,11 +14,14 @@ fn solve<T: 'static + variable::Numeric + Ord + fmt::Display>(
     <T as str::FromStr>::Err: fmt::Debug,
 {
     let factory = solver_factory::SolverFactory::default();
-    let mut solver = factory.create(model, config).unwrap_or_else(|e| {
+    let mut solver = factory.create(config).unwrap_or_else(|e| {
         eprintln!("Error: {:?}", e);
         process::exit(1);
     });
-    let solution = solver.solve(&model);
+    let solution = solver.solve(&model).unwrap_or_else(|e| {
+        eprintln!("Error: {:?}", e);
+        process::exit(1);
+    });
     match solution {
         Some((cost, transitions)) => {
             println!("transitions:");

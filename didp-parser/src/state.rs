@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Ordering;
 
-pub trait DPState {
+pub trait DPState: Clone {
     fn get_set_variable(&self, i: usize) -> &Set;
     fn get_vector_variable(&self, i: usize) -> &Vector;
     fn get_element_variable(&self, i: usize) -> Element;

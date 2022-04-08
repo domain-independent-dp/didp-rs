@@ -1,38 +1,43 @@
 use crate::evaluator;
 use crate::priority_queue;
-use crate::search_node;
+use crate::search_node::{SearchNodeRegistry, StateForSearchNode, TransitionWithG};
 use crate::solver;
-use crate::successor_generator;
+use crate::successor_generator::SuccessorGenerator;
 use didp_parser::variable;
 use std::fmt;
+use std::rc::Rc;
 
-pub fn forward_bfs<T, H, F>(
-    model: &didp_parser::Model<T>,
-    h_function: &H,
-    f_function: &F,
+pub struct BFSEvaluators<'a, T: variable::Numeric, H, F> {
+    pub generator: SuccessorGenerator<'a, TransitionWithG<T>>,
+    pub h_evaluator: H,
+    pub f_evaluator: F,
+}
+
+pub fn forward_bfs<'a, T, H, F>(
+    model: &'a didp_parser::Model<T>,
+    evaluators: &BFSEvaluators<'a, T, H, F>,
     ub: Option<T>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
     T: variable::Numeric + Ord + fmt::Display,
     H: evaluator::Evaluator<T>,
-    F: Fn(T, T, &search_node::StateForSearchNode, &didp_parser::Model<T>) -> T,
+    F: Fn(T, T, &StateForSearchNode, &didp_parser::Model<T>) -> T,
 {
     let mut open = priority_queue::PriorityQueue::new(true);
-    let mut registry = search_node::SearchNodeRegistry::new(model);
+    let mut registry = SearchNodeRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
     }
-    let generator = successor_generator::SuccessorGenerator::new(model, false);
 
     let g = T::zero();
-    let initial_state = search_node::StateForSearchNode::new(&model.target);
+    let initial_state = StateForSearchNode::new(&model.target);
     let initial_node = match registry.get_node(initial_state, g, None, None) {
         Some(node) => node,
         None => return None,
     };
-    let h = h_function.eval(&initial_node.state, model)?;
-    let f = f_function(g, h, &initial_node.state, model);
+    let h = evaluators.h_evaluator.eval(&initial_node.state, model)?;
+    let f = (evaluators.f_evaluator)(g, h, &initial_node.state, model);
     *initial_node.h.borrow_mut() = Some(h);
     *initial_node.f.borrow_mut() = Some(f);
     open.push(initial_node);
@@ -52,14 +57,23 @@ where
         }
         if let Some(cost) = model.get_base_cost(&node.state) {
             println!("Expanded: {}", expanded);
-            return Some(node.trace_transitions(cost, model));
+            let (cost, transitions) = node.trace_transitions(cost, model);
+            let transitions = transitions
+                .into_iter()
+                .map(|t| Rc::new(t.transition.clone()))
+                .collect();
+            return Some((cost, transitions));
         }
-        for transition in generator.applicable_transitions(&node.state) {
-            let g = transition.eval_cost(node.g, &node.state, &model.table_registry);
+        for transition in evaluators.generator.applicable_transitions(&node.state) {
+            let g = transition
+                .g
+                .eval_cost(node.g, &node.state, &model.table_registry);
             if ub.is_some() && g >= ub.unwrap() {
                 continue;
             }
-            let state = transition.apply(&node.state, &model.table_registry);
+            let state = transition
+                .transition
+                .apply(&node.state, &model.table_registry);
             if let Some(successor) =
                 registry.get_node(state, g, Some(transition), Some(node.clone()))
             {
@@ -68,13 +82,13 @@ where
                     let h = match h {
                         Some(h) => Some(h),
                         None => {
-                            let h = h_function.eval(&node.state, model);
+                            let h = evaluators.h_evaluator.eval(&node.state, model);
                             *successor.h.borrow_mut() = h;
                             h
                         }
                     };
                     if let Some(h) = h {
-                        let f = f_function(g, h, &node.state, model);
+                        let f = (evaluators.f_evaluator)(g, h, &node.state, model);
                         *successor.f.borrow_mut() = Some(f);
                         if ub.is_none() || f < ub.unwrap() {
                             open.push(successor);

@@ -1,31 +1,33 @@
 use crate::evaluator;
+use crate::forward_bfs::BFSEvaluators;
 use crate::priority_queue;
-use crate::search_node;
+use crate::search_node::{SearchNodeRegistry, StateForSearchNode};
 use crate::solver;
-use crate::successor_generator;
 use didp_parser::variable;
 use std::fmt;
 use std::mem;
+use std::rc::Rc;
+use std::str;
 
-pub fn iterative_forward_beam_search<T: variable::Numeric + Ord + fmt::Display, H, F>(
-    model: &didp_parser::Model<T>,
-    h_function: &H,
-    f_function: &F,
+pub fn iterative_forward_beam_search<'a, T, H, F>(
+    model: &'a didp_parser::Model<T>,
+    evaluators: &BFSEvaluators<'a, T, H, F>,
     beams: &[usize],
     maximize: bool,
     mut primal_bound: Option<T>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
+    T: variable::Numeric + Ord + fmt::Display,
+    <T as str::FromStr>::Err: fmt::Debug,
     H: evaluator::Evaluator<T>,
-    F: Fn(T, T, &search_node::StateForSearchNode, &didp_parser::Model<T>) -> T,
+    F: Fn(T, T, &StateForSearchNode, &didp_parser::Model<T>) -> T,
 {
     let mut incumbent = Vec::new();
     for beam in beams {
         let result = forward_beam_search(
             model,
-            h_function,
-            f_function,
+            evaluators,
             *beam,
             maximize,
             primal_bound,
@@ -42,34 +44,34 @@ where
     primal_bound.map(|b| (b, incumbent))
 }
 
-pub fn forward_beam_search<T: variable::Numeric + Ord + fmt::Display, H, F>(
-    model: &didp_parser::Model<T>,
-    h_function: &H,
-    f_function: &F,
+pub fn forward_beam_search<'a, T, H, F>(
+    model: &'a didp_parser::Model<T>,
+    evaluators: &BFSEvaluators<'a, T, H, F>,
     beam: usize,
     maximize: bool,
     primal_bound: Option<T>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
+    T: variable::Numeric + Ord + fmt::Display,
+    <T as str::FromStr>::Err: fmt::Debug,
     H: evaluator::Evaluator<T>,
-    F: Fn(T, T, &search_node::StateForSearchNode, &didp_parser::Model<T>) -> T,
+    F: Fn(T, T, &StateForSearchNode, &didp_parser::Model<T>) -> T,
 {
     let mut open = priority_queue::PriorityQueue::new(!maximize);
-    let mut registry = search_node::SearchNodeRegistry::new(model);
+    let mut registry = SearchNodeRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
     }
-    let generator = successor_generator::SuccessorGenerator::new(model, false);
 
     let g = T::zero();
-    let initial_state = search_node::StateForSearchNode::new(&model.target);
+    let initial_state = StateForSearchNode::new(&model.target);
     let initial_node = match registry.get_node(initial_state, g, None, None) {
         Some(node) => node,
         None => return None,
     };
-    let h = h_function.eval(&initial_node.state, model)?;
-    let f = f_function(g, h, &initial_node.state, model);
+    let h = evaluators.h_evaluator.eval(&initial_node.state, model)?;
+    let f = (evaluators.f_evaluator)(g, h, &initial_node.state, model);
     *initial_node.h.borrow_mut() = Some(h);
     *initial_node.f.borrow_mut() = Some(f);
     open.push(initial_node);
@@ -99,14 +101,18 @@ where
                     incumbent = Some(solution);
                 }
             }
-            for transition in generator.applicable_transitions(&node.state) {
-                let g = transition.eval_cost(node.g, &node.state, &model.table_registry);
+            for transition in evaluators.generator.applicable_transitions(&node.state) {
+                let g = transition
+                    .g
+                    .eval_cost(node.g, &node.state, &model.table_registry);
                 if let Some(bound) = primal_bound {
                     if (maximize && g <= bound) || (!maximize && g >= bound) {
                         continue;
                     }
                 }
-                let state = transition.apply(&node.state, &model.table_registry);
+                let state = transition
+                    .transition
+                    .apply(&node.state, &model.table_registry);
                 if let Some(successor) =
                     registry.get_node(state, g, Some(transition), Some(node.clone()))
                 {
@@ -115,13 +121,13 @@ where
                         let h = match h {
                             Some(h) => Some(h),
                             None => {
-                                let h = h_function.eval(&node.state, model);
+                                let h = evaluators.h_evaluator.eval(&node.state, model);
                                 *successor.h.borrow_mut() = h;
                                 h
                             }
                         };
                         if let Some(h) = h {
-                            let f = f_function(g, h, &node.state, model);
+                            let f = (evaluators.f_evaluator)(g, h, &node.state, model);
                             if let Some(bound) = primal_bound {
                                 if (maximize && f <= bound) || (!maximize && f >= bound) {
                                     continue;
@@ -134,9 +140,13 @@ where
                 }
             }
         }
-        if incumbent.is_some() {
+        if let Some((cost, transitions)) = incumbent {
             println!("Expanded: {}", expanded);
-            return incumbent;
+            let transitions = transitions
+                .into_iter()
+                .map(|t| Rc::new(t.transition.clone()))
+                .collect();
+            return Some((cost, transitions));
         }
         if new_open.is_empty() {
             println!("Expanded: {}", expanded);

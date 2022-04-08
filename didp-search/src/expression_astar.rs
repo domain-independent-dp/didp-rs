@@ -1,16 +1,19 @@
-use crate::expression_evaluator;
+use crate::expression_evaluator::ExpressionEvaluator;
 use crate::forward_bfs;
 use crate::search_node::StateForSearchNode;
+use crate::search_node::TransitionWithG;
 use crate::solver;
+use crate::successor_generator::SuccessorGenerator;
 use didp_parser::variable;
+use rustc_hash::FxHashMap;
 use std::cmp;
 use std::error::Error;
 use std::fmt;
 use std::str;
 
-#[derive(Default)]
 pub struct ExpressionAstar<T: variable::Numeric> {
-    h_evaluator: expression_evaluator::ExpressionEvaluator<T>,
+    g_expressions: Option<FxHashMap<String, String>>,
+    h_expression: Option<String>,
     f_evaluator_type: FEvaluatorType,
     ub: Option<T>,
     registry_capacity: Option<usize>,
@@ -29,77 +32,96 @@ impl Default for FEvaluatorType {
     }
 }
 
-impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for ExpressionAstar<T> {
+impl<T> solver::Solver<T> for ExpressionAstar<T>
+where
+    T: variable::Numeric + Ord + fmt::Display,
+    <T as str::FromStr>::Err: fmt::Debug,
+{
     #[inline]
     fn set_primal_bound(&mut self, ub: Option<T>) {
         self.ub = ub;
     }
 
-    fn solve(&mut self, model: &didp_parser::Model<T>) -> solver::Solution<T> {
-        match self.f_evaluator_type {
+    fn solve(
+        &mut self,
+        model: &didp_parser::Model<T>,
+    ) -> Result<solver::Solution<T>, Box<dyn Error>> {
+        let generator = if let Some(g_expressions) = self.g_expressions.as_ref() {
+            SuccessorGenerator::with_expressions(&model, false, g_expressions)?
+        } else {
+            SuccessorGenerator::<TransitionWithG<T>>::new(&model, false)
+        };
+        let h_evaluator = if let Some(h_expression) = self.h_expression.as_ref() {
+            ExpressionEvaluator::new(h_expression.clone(), &model)?
+        } else {
+            ExpressionEvaluator::default()
+        };
+        let solution = match self.f_evaluator_type {
             FEvaluatorType::Plus => {
                 let f_evaluator =
                     Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| g + h);
-                forward_bfs::forward_bfs(
-                    model,
-                    &self.h_evaluator,
-                    &f_evaluator,
-                    self.ub,
-                    self.registry_capacity,
-                )
+                let evaluators = forward_bfs::BFSEvaluators {
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                };
+                forward_bfs::forward_bfs(model, &evaluators, self.ub, self.registry_capacity)
             }
             FEvaluatorType::Max => {
                 let f_evaluator =
                     Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| {
                         cmp::max(g, h)
                     });
-                forward_bfs::forward_bfs(
-                    model,
-                    &self.h_evaluator,
-                    &f_evaluator,
-                    self.ub,
-                    self.registry_capacity,
-                )
+                let evaluators = forward_bfs::BFSEvaluators {
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                };
+                forward_bfs::forward_bfs(model, &evaluators, self.ub, self.registry_capacity)
             }
             FEvaluatorType::Min => {
                 let f_evaluator =
                     Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| {
                         cmp::min(g, h)
                     });
-                forward_bfs::forward_bfs(
-                    model,
-                    &self.h_evaluator,
-                    &f_evaluator,
-                    self.ub,
-                    self.registry_capacity,
-                )
+                let evaluators = forward_bfs::BFSEvaluators {
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                };
+                forward_bfs::forward_bfs(model, &evaluators, self.ub, self.registry_capacity)
             }
             FEvaluatorType::Overwrite => {
                 let f_evaluator =
                     Box::new(|_, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| h);
-                forward_bfs::forward_bfs(
-                    model,
-                    &self.h_evaluator,
-                    &f_evaluator,
-                    self.ub,
-                    self.registry_capacity,
-                )
+                let evaluators = forward_bfs::BFSEvaluators {
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                };
+                forward_bfs::forward_bfs(model, &evaluators, self.ub, self.registry_capacity)
             }
-        }
+        };
+        Ok(solution)
     }
 }
 
 impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
-    pub fn new(
-        model: &didp_parser::Model<T>,
-        config: &yaml_rust::Yaml,
-    ) -> Result<ExpressionAstar<T>, Box<dyn Error>>
+    pub fn new(config: &yaml_rust::Yaml) -> Result<ExpressionAstar<T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
         let map = match config {
             yaml_rust::Yaml::Hash(map) => map,
-            yaml_rust::Yaml::Null => return Ok(ExpressionAstar::default()),
+            yaml_rust::Yaml::Null => {
+                return Ok(ExpressionAstar {
+                    g_expressions: None,
+                    h_expression: None,
+                    f_evaluator_type: FEvaluatorType::default(),
+                    ub: None,
+                    registry_capacity: Some(1000000),
+                })
+            }
             _ => {
                 return Err(solver::ConfigErr::new(format!(
                     "expected Hash, but found `{:?}`",
@@ -108,32 +130,41 @@ impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
                 .into())
             }
         };
-        let h_evaluator = match map.get(&yaml_rust::Yaml::from_str("h")) {
-            Some(value) => expression_evaluator::ExpressionEvaluator::load_from_yaml(value, model)?,
-            None => expression_evaluator::ExpressionEvaluator::default(),
-        };
-        let registry_capacity = match map.get(&yaml_rust::Yaml::from_str("registry_capacity")) {
-            Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
-            None => Some(1000000),
+        let g_expressions = match map.get(&yaml_rust::Yaml::from_str("g")) {
+            Some(yaml_rust::Yaml::Hash(map)) => {
+                let mut g_expressions = FxHashMap::default();
+                g_expressions.reserve(map.len());
+                for (key, value) in map.iter() {
+                    match (key, value) {
+                        (yaml_rust::Yaml::String(key), yaml_rust::Yaml::String(value)) => {
+                            g_expressions.insert(key.clone(), value.clone());
+                        }
+                        _ => {
+                            return Err(solver::ConfigErr::new(format!(
+                                "expected (String, String), but found (`{:?}`, `{:?}`)",
+                                key, value
+                            ))
+                            .into())
+                        }
+                    }
+                }
+                Some(g_expressions)
+            }
+            None => None,
             value => {
                 return Err(solver::ConfigErr::new(format!(
-                    "expected Integer, but found `{:?}`",
+                    "expected Hash, but found `{:?}`",
                     value
                 ))
                 .into())
             }
         };
-        let ub = match map.get(&yaml_rust::Yaml::from_str("ub")) {
-            Some(yaml_rust::Yaml::Integer(value)) => {
-                Some(T::from_integer(*value as variable::Integer))
-            }
-            Some(yaml_rust::Yaml::Real(value)) => Some(value.parse().map_err(|e| {
-                solver::ConfigErr::new(format!("could not parse {} as a number: {:?}", value, e))
-            })?),
+        let h_expression = match map.get(&yaml_rust::Yaml::from_str("h")) {
+            Some(yaml_rust::Yaml::String(value)) => Some(value.clone()),
             None => None,
             value => {
                 return Err(solver::ConfigErr::new(format!(
-                    "expected Integer, but found `{:?}`",
+                    "expected String, but found `{:?}`",
                     value
                 ))
                 .into())
@@ -162,8 +193,36 @@ impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
                 .into())
             }
         };
+        let ub = match map.get(&yaml_rust::Yaml::from_str("ub")) {
+            Some(yaml_rust::Yaml::Integer(value)) => {
+                Some(T::from_integer(*value as variable::Integer))
+            }
+            Some(yaml_rust::Yaml::Real(value)) => Some(value.parse().map_err(|e| {
+                solver::ConfigErr::new(format!("could not parse {} as a number: {:?}", value, e))
+            })?),
+            None => None,
+            value => {
+                return Err(solver::ConfigErr::new(format!(
+                    "expected Integer, but found `{:?}`",
+                    value
+                ))
+                .into())
+            }
+        };
+        let registry_capacity = match map.get(&yaml_rust::Yaml::from_str("registry_capacity")) {
+            Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
+            None => Some(1000000),
+            value => {
+                return Err(solver::ConfigErr::new(format!(
+                    "expected Integer, but found `{:?}`",
+                    value
+                ))
+                .into())
+            }
+        };
         Ok(ExpressionAstar {
-            h_evaluator,
+            g_expressions,
+            h_expression,
             f_evaluator_type,
             ub,
             registry_capacity,

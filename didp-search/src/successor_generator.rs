@@ -2,15 +2,36 @@ use didp_parser::variable;
 use didp_parser::Transition;
 use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct SuccessorGenerator<'a, T: variable::Numeric> {
-    transitions: Vec<Rc<Transition<T>>>,
-    registry: &'a didp_parser::TableRegistry,
+pub trait MaybeApplicable {
+    fn is_applicable<T: didp_parser::DPState>(
+        &self,
+        state: &T,
+        registry: &didp_parser::TableRegistry,
+    ) -> bool;
 }
 
-impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
-    pub fn new(model: &'a didp_parser::Model<T>, backward: bool) -> SuccessorGenerator<'a, T> {
-        let transitions = if backward {
+impl<T: variable::Numeric> MaybeApplicable for Transition<T> {
+    fn is_applicable<U: didp_parser::DPState>(
+        &self,
+        state: &U,
+        registry: &didp_parser::TableRegistry,
+    ) -> bool {
+        Transition::<T>::is_applicable(self, state, registry)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct SuccessorGenerator<'a, T: MaybeApplicable> {
+    pub transitions: Vec<Rc<T>>,
+    pub registry: &'a didp_parser::TableRegistry,
+}
+
+impl<'a, T: variable::Numeric> SuccessorGenerator<'a, Transition<T>> {
+    pub fn new(
+        model: &'a didp_parser::Model<T>,
+        backward: bool,
+    ) -> SuccessorGenerator<'a, Transition<T>> {
+        let transitions: Vec<Rc<Transition<T>>> = if backward {
             model
                 .backward_transitions
                 .iter()
@@ -28,12 +49,14 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
             registry: &model.table_registry,
         }
     }
+}
 
+impl<'a, T: MaybeApplicable> SuccessorGenerator<'a, T> {
     pub fn generate_applicable_transitions<U: didp_parser::DPState>(
         &self,
         state: &U,
-        mut result: Vec<Rc<Transition<T>>>,
-    ) -> Vec<Rc<Transition<T>>> {
+        mut result: Vec<Rc<T>>,
+    ) -> Vec<Rc<T>> {
         result.clear();
         for op in self.transitions.iter() {
             if op.is_applicable(state, self.registry) {
@@ -55,16 +78,16 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
     }
 }
 
-pub struct ApplicableTransitions<'a, 'b, T: variable::Numeric, U: didp_parser::DPState> {
+pub struct ApplicableTransitions<'a, 'b, T: MaybeApplicable, U: didp_parser::DPState> {
     state: &'b U,
     generator: &'a SuccessorGenerator<'a, T>,
-    iter: std::slice::Iter<'a, Rc<Transition<T>>>,
+    iter: std::slice::Iter<'a, Rc<T>>,
 }
 
-impl<'a, 'b, T: variable::Numeric, U: didp_parser::DPState> Iterator
+impl<'a, 'b, T: MaybeApplicable, U: didp_parser::DPState> Iterator
     for ApplicableTransitions<'a, 'b, T, U>
 {
-    type Item = Rc<Transition<T>>;
+    type Item = Rc<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.iter.next() {
@@ -84,6 +107,7 @@ impl<'a, 'b, T: variable::Numeric, U: didp_parser::DPState> Iterator
 mod tests {
     use super::*;
     use didp_parser::expression::*;
+    use didp_parser::variable::Integer;
     use didp_parser::GroundedCondition;
     use rustc_hash::FxHashMap;
     use std::rc::Rc;
@@ -184,7 +208,7 @@ mod tests {
             ..Default::default()
         };
 
-        let generator = SuccessorGenerator::new(&model, false);
+        let generator = SuccessorGenerator::<Transition<Integer>>::new(&model, false);
 
         let result = Vec::new();
         let result = generator.generate_applicable_transitions(&state, result);
@@ -192,7 +216,7 @@ mod tests {
         assert_eq!(*result[0], model.forward_transitions[0]);
         assert_eq!(*result[1], model.forward_transitions[1]);
 
-        let generator = SuccessorGenerator::new(&model, true);
+        let generator = SuccessorGenerator::<Transition<Integer>>::new(&model, true);
         let result = Vec::new();
         let result = generator.generate_applicable_transitions(&state, result);
         assert_eq!(result.len(), 2);
@@ -210,7 +234,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let generator = SuccessorGenerator::new(&model, false);
+        let generator = SuccessorGenerator::<Transition<Integer>>::new(&model, false);
         let mut transitions = generator.applicable_transitions(&state);
         assert_eq!(
             transitions.next(),
@@ -221,7 +245,7 @@ mod tests {
             Some(Rc::new(model.forward_transitions[1].clone()))
         );
         assert_eq!(transitions.next(), None);
-        let generator = SuccessorGenerator::new(&model, true);
+        let generator = SuccessorGenerator::<Transition<Integer>>::new(&model, true);
         let mut transitions = generator.applicable_transitions(&state);
         assert_eq!(
             transitions.next(),
