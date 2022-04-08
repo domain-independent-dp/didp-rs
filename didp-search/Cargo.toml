@@ -7,6 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+ordered-float = "2.10.0"
 fixedbitset = "0.4.1"
 didp-parser = { path = "../didp-parser" }
 rustc-hash = "1.1.0"

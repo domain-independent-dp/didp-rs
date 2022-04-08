@@ -1,3 +1,4 @@
+use crate::hashable_state;
 use crate::solver;
 use crate::successor_generator;
 use didp_parser::variable;
@@ -84,7 +85,7 @@ pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
     };
     let mut incumbent = Vec::new();
     while let Some((cost, transitions)) = exist_dfs(
-        model.target.clone(),
+        hashable_state::HashableState::new(&model.target),
         T::zero(),
         model,
         &generator,
@@ -106,11 +107,11 @@ pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
 }
 
 pub fn exist_dfs<T: variable::Numeric>(
-    state: didp_parser::State,
+    state: hashable_state::HashableState,
     cost: T,
     model: &didp_parser::Model<T>,
     generator: &successor_generator::SuccessorGenerator<T>,
-    prob: &mut FxHashMap<didp_parser::State, T>,
+    prob: &mut FxHashMap<hashable_state::HashableState, T>,
     primal_bound: Option<T>,
     nodes: &mut u32,
 ) -> Option<(T, Vec<Rc<didp_parser::Transition<T>>>)> {

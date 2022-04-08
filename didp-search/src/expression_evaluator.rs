@@ -45,7 +45,7 @@ impl<T: variable::Numeric> Default for ExpressionEvaluator<T> {
 }
 
 impl<T: variable::Numeric> evaluator::Evaluator<T> for ExpressionEvaluator<T> {
-    fn eval(&self, state: &didp_parser::State, model: &didp_parser::Model<T>) -> Option<T> {
+    fn eval<U: didp_parser::DPState>(&self, state: &U, model: &didp_parser::Model<T>) -> Option<T> {
         Some(self.0.eval(state, &model.table_registry))
     }
 }

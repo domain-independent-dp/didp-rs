@@ -6,7 +6,7 @@ use crate::successor_generator;
 use didp_parser::variable;
 use std::fmt;
 
-pub fn forward_bfs<T: variable::Numeric + Ord + fmt::Display, H, F>(
+pub fn forward_bfs<T, H, F>(
     model: &didp_parser::Model<T>,
     h_function: &H,
     f_function: &F,
@@ -14,8 +14,9 @@ pub fn forward_bfs<T: variable::Numeric + Ord + fmt::Display, H, F>(
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
+    T: variable::Numeric + Ord + fmt::Display,
     H: evaluator::Evaluator<T>,
-    F: Fn(T, T, &didp_parser::State, &didp_parser::Model<T>) -> T,
+    F: Fn(T, T, &search_node::StateForSearchNode, &didp_parser::Model<T>) -> T,
 {
     let mut open = priority_queue::PriorityQueue::new(true);
     let mut registry = search_node::SearchNodeRegistry::new(model);
@@ -25,7 +26,8 @@ where
     let generator = successor_generator::SuccessorGenerator::new(model, false);
 
     let g = T::zero();
-    let initial_node = match registry.get_node(model.target.clone(), g, None, None) {
+    let initial_state = search_node::StateForSearchNode::new(&model.target);
+    let initial_node = match registry.get_node(initial_state, g, None, None) {
         Some(node) => node,
         None => return None,
     };

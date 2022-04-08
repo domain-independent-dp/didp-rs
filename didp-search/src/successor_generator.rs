@@ -29,9 +29,9 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
         }
     }
 
-    pub fn generate_applicable_transitions(
+    pub fn generate_applicable_transitions<U: didp_parser::DPState>(
         &self,
-        state: &didp_parser::State,
+        state: &U,
         mut result: Vec<Rc<Transition<T>>>,
     ) -> Vec<Rc<Transition<T>>> {
         result.clear();
@@ -43,10 +43,10 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
         result
     }
 
-    pub fn applicable_transitions<'b>(
+    pub fn applicable_transitions<'b, U: didp_parser::DPState>(
         &'a self,
-        state: &'b didp_parser::State,
-    ) -> ApplicableTransitions<'a, 'b, T> {
+        state: &'b U,
+    ) -> ApplicableTransitions<'a, 'b, T, U> {
         ApplicableTransitions {
             state,
             generator: self,
@@ -55,13 +55,15 @@ impl<'a, T: variable::Numeric> SuccessorGenerator<'a, T> {
     }
 }
 
-pub struct ApplicableTransitions<'a, 'b, T: variable::Numeric> {
-    state: &'b didp_parser::State,
+pub struct ApplicableTransitions<'a, 'b, T: variable::Numeric, U: didp_parser::DPState> {
+    state: &'b U,
     generator: &'a SuccessorGenerator<'a, T>,
     iter: std::slice::Iter<'a, Rc<Transition<T>>>,
 }
 
-impl<'a, 'b, T: variable::Numeric> Iterator for ApplicableTransitions<'a, 'b, T> {
+impl<'a, 'b, T: variable::Numeric, U: didp_parser::DPState> Iterator
+    for ApplicableTransitions<'a, 'b, T, U>
+{
     type Item = Rc<Transition<T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -175,10 +177,10 @@ mod tests {
     fn generate_applicable_transitions() {
         let model = generate_model();
         let state = didp_parser::State {
-            signature_variables: Rc::new(didp_parser::SignatureVariables {
+            signature_variables: didp_parser::SignatureVariables {
                 integer_variables: vec![2],
                 ..Default::default()
-            }),
+            },
             ..Default::default()
         };
 
@@ -202,10 +204,10 @@ mod tests {
     fn applicable_transitions() {
         let model = generate_model();
         let state = didp_parser::State {
-            signature_variables: Rc::new(didp_parser::SignatureVariables {
+            signature_variables: didp_parser::SignatureVariables {
                 integer_variables: vec![2],
                 ..Default::default()
-            }),
+            },
             ..Default::default()
         };
         let generator = SuccessorGenerator::new(&model, false);

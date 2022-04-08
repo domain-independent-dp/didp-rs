@@ -1,3 +1,4 @@
+use crate::hashable_state;
 use crate::solver;
 use crate::successor_generator;
 use didp_parser::variable;
@@ -22,19 +23,14 @@ where
             memo.reserve(capacity);
         }
         let mut expanded = 0;
-        let cost = forward_recursion(
-            model.target.clone(),
-            model,
-            &generator,
-            &mut memo,
-            &mut expanded,
-        );
+        let state = hashable_state::HashableState::new(&model.target);
+        let cost = forward_recursion(state, model, &generator, &mut memo, &mut expanded);
         let mut transitions = Vec::new();
         match model.reduce_function {
             didp_parser::ReduceFunction::Max | didp_parser::ReduceFunction::Min
                 if cost.is_some() =>
             {
-                let mut state = model.target.clone();
+                let mut state = hashable_state::HashableState::new(&model.target);
                 while let Some((_, Some(transition))) = memo.get(&state) {
                     let transition = transition.clone();
                     state = transition.apply(&state, &model.table_registry);
@@ -75,10 +71,10 @@ impl ForwardRecursion {
 }
 
 type StateMemo<T> =
-    FxHashMap<didp_parser::State, (Option<T>, Option<Rc<didp_parser::Transition<T>>>)>;
+    FxHashMap<hashable_state::HashableState, (Option<T>, Option<Rc<didp_parser::Transition<T>>>)>;
 
 pub fn forward_recursion<T: variable::Numeric>(
-    state: didp_parser::State,
+    state: hashable_state::HashableState,
     model: &didp_parser::Model<T>,
     generator: &successor_generator::SuccessorGenerator<T>,
     memo: &mut StateMemo<T>,

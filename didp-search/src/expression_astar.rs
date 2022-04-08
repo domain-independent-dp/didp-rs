@@ -1,5 +1,6 @@
 use crate::expression_evaluator;
 use crate::forward_bfs;
+use crate::search_node::StateForSearchNode;
 use crate::solver;
 use didp_parser::variable;
 use std::cmp;
@@ -38,7 +39,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
         match self.f_evaluator_type {
             FEvaluatorType::Plus => {
                 let f_evaluator =
-                    Box::new(|g, h, _: &didp_parser::State, _: &didp_parser::Model<T>| g + h);
+                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| g + h);
                 forward_bfs::forward_bfs(
                     model,
                     &self.h_evaluator,
@@ -49,7 +50,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
             }
             FEvaluatorType::Max => {
                 let f_evaluator =
-                    Box::new(|g, h, _: &didp_parser::State, _: &didp_parser::Model<T>| {
+                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| {
                         cmp::max(g, h)
                     });
                 forward_bfs::forward_bfs(
@@ -62,7 +63,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
             }
             FEvaluatorType::Min => {
                 let f_evaluator =
-                    Box::new(|g, h, _: &didp_parser::State, _: &didp_parser::Model<T>| {
+                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| {
                         cmp::min(g, h)
                     });
                 forward_bfs::forward_bfs(
@@ -75,7 +76,7 @@ impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for Expression
             }
             FEvaluatorType::Overwrite => {
                 let f_evaluator =
-                    Box::new(|_, h, _: &didp_parser::State, _: &didp_parser::Model<T>| h);
+                    Box::new(|_, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| h);
                 forward_bfs::forward_bfs(
                     model,
                     &self.h_evaluator,
