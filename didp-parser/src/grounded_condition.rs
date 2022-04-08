@@ -1,6 +1,7 @@
 use crate::expression;
 use crate::expression_parser;
 use crate::state;
+use crate::state::DPState;
 use crate::table_registry;
 use crate::variable::Element;
 use crate::yaml_util;
@@ -17,18 +18,18 @@ pub struct GroundedCondition {
 }
 
 impl GroundedCondition {
-    pub fn is_satisfied(
+    pub fn is_satisfied<U: DPState>(
         &self,
-        state: &state::State,
+        state: &U,
         registry: &table_registry::TableRegistry,
     ) -> Option<bool> {
         for (i, v) in &self.elements_in_set_variable {
-            if !state.signature_variables.set_variables[*i].contains(*v) {
+            if !state.get_set_variable(*i).contains(*v) {
                 return None;
             }
         }
         for (i, v) in &self.elements_in_vector_variable {
-            if !state.signature_variables.vector_variables[*i].contains(v) {
+            if !state.get_vector_variable(*i).contains(v) {
                 return None;
             }
         }
@@ -122,7 +123,6 @@ mod tests {
     use crate::table;
     use crate::table_data;
     use crate::variable;
-    use std::rc::Rc;
 
     fn generate_metadata() -> state::StateMetadata {
         let object_names = vec![String::from("object")];
@@ -192,12 +192,12 @@ mod tests {
         let mut s0 = variable::Set::with_capacity(2);
         s0.insert(0);
         let state = state::State {
-            signature_variables: Rc::new(state::SignatureVariables {
+            signature_variables: state::SignatureVariables {
                 set_variables: vec![s0],
                 vector_variables: vec![vec![1]],
                 element_variables: vec![0],
                 ..Default::default()
-            }),
+            },
             ..Default::default()
         };
 

@@ -4,10 +4,8 @@ use crate::state;
 use crate::table_registry;
 use crate::variable::{Continuous, Element, Integer};
 use crate::yaml_util;
-use ordered_float::OrderedFloat;
 use rustc_hash::FxHashMap;
 use std::error::Error;
-use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct Effect {
@@ -21,85 +19,6 @@ pub struct Effect {
 }
 
 impl Effect {
-    pub fn apply(
-        &self,
-        state: &state::State,
-        registry: &table_registry::TableRegistry,
-    ) -> state::State {
-        let len = state.signature_variables.set_variables.len();
-        let mut set_variables = Vec::with_capacity(len);
-        let mut i = 0;
-        for e in &self.set_effects {
-            while i < e.0 {
-                set_variables.push(state.signature_variables.set_variables[i].clone());
-                i += 1;
-            }
-            set_variables.push(e.1.eval(state, registry));
-            i += 1;
-        }
-        while i < len {
-            set_variables.push(state.signature_variables.set_variables[i].clone());
-            i += 1;
-        }
-
-        let len = state.signature_variables.vector_variables.len();
-        let mut vector_variables = Vec::with_capacity(len);
-        for e in &self.vector_effects {
-            while i < e.0 {
-                vector_variables.push(state.signature_variables.vector_variables[i].clone());
-                i += 1;
-            }
-            vector_variables.push(e.1.eval(state, registry));
-            i += 1;
-        }
-        while i < len {
-            vector_variables.push(state.signature_variables.vector_variables[i].clone());
-            i += 1;
-        }
-
-        let mut element_variables = state.signature_variables.element_variables.clone();
-        for e in &self.element_effects {
-            element_variables[e.0] = e.1.eval(state, registry);
-        }
-
-        let mut integer_variables = state.signature_variables.integer_variables.clone();
-        for e in &self.integer_effects {
-            integer_variables[e.0] = e.1.eval(state, registry);
-        }
-
-        let mut continuous_variables = state.signature_variables.continuous_variables.clone();
-        for e in &self.continuous_effects {
-            continuous_variables[e.0] = OrderedFloat(e.1.eval(state, registry));
-        }
-
-        let mut integer_resource_variables = state.resource_variables.integer_variables.clone();
-        for e in &self.integer_resource_effects {
-            integer_resource_variables[e.0] = e.1.eval(state, registry);
-        }
-
-        let mut continuous_resource_variables =
-            state.resource_variables.continuous_variables.clone();
-        for e in &self.continuous_resource_effects {
-            continuous_resource_variables[e.0] = OrderedFloat(e.1.eval(state, registry));
-        }
-
-        state::State {
-            signature_variables: {
-                Rc::new(state::SignatureVariables {
-                    set_variables,
-                    vector_variables,
-                    element_variables,
-                    integer_variables,
-                    continuous_variables,
-                })
-            },
-            resource_variables: state::ResourceVariables {
-                integer_variables: integer_resource_variables,
-                continuous_variables: continuous_resource_variables,
-            },
-        }
-    }
-
     pub fn load_from_yaml(
         value: &yaml_rust::Yaml,
         metadata: &state::StateMetadata,
@@ -173,7 +92,6 @@ mod tests {
     use super::*;
     use crate::table;
     use crate::table_data;
-    use crate::variable::Set;
     use expression::*;
     use rustc_hash::FxHashMap;
 
@@ -318,135 +236,6 @@ mod tests {
             },
             ..Default::default()
         }
-    }
-
-    fn generate_state() -> state::State {
-        let mut set1 = Set::with_capacity(3);
-        set1.insert(0);
-        set1.insert(2);
-        let mut set2 = Set::with_capacity(3);
-        set2.insert(0);
-        set2.insert(1);
-        state::State {
-            signature_variables: Rc::new(state::SignatureVariables {
-                set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2], vec![1, 2]],
-                element_variables: vec![1, 2],
-                integer_variables: vec![1, 2, 3],
-                continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
-            }),
-            resource_variables: state::ResourceVariables {
-                integer_variables: vec![4, 5, 6],
-                continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
-            },
-        }
-    }
-
-    #[test]
-    fn appy() {
-        let state = generate_state();
-        let registry = generate_registry();
-        let set_effect1 = SetExpression::SetElementOperation(
-            SetElementOperator::Add,
-            ElementExpression::Constant(1),
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-        );
-        let set_effect2 = SetExpression::SetElementOperation(
-            SetElementOperator::Remove,
-            ElementExpression::Constant(0),
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
-        );
-        let vector_effect1 = VectorExpression::Push(
-            ElementExpression::Constant(1),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        let vector_effect2 = VectorExpression::Push(
-            ElementExpression::Constant(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                1,
-            ))),
-        );
-        let element_effect1 = ElementExpression::Constant(2);
-        let element_effect2 = ElementExpression::Constant(1);
-        let integer_effect1 = NumericExpression::NumericOperation(
-            NumericOperator::Subtract,
-            Box::new(NumericExpression::IntegerVariable(0)),
-            Box::new(NumericExpression::Constant(1)),
-        );
-        let integer_effect2 = NumericExpression::NumericOperation(
-            NumericOperator::Multiply,
-            Box::new(NumericExpression::IntegerVariable(1)),
-            Box::new(NumericExpression::Constant(2)),
-        );
-        let continuous_effect1 = NumericExpression::NumericOperation(
-            NumericOperator::Subtract,
-            Box::new(NumericExpression::ContinuousVariable(0)),
-            Box::new(NumericExpression::Constant(1.0)),
-        );
-        let continuous_effect2 = NumericExpression::NumericOperation(
-            NumericOperator::Multiply,
-            Box::new(NumericExpression::ContinuousVariable(1)),
-            Box::new(NumericExpression::Constant(2.0)),
-        );
-        let integer_resource_effect1 = NumericExpression::NumericOperation(
-            NumericOperator::Add,
-            Box::new(NumericExpression::IntegerResourceVariable(0)),
-            Box::new(NumericExpression::Constant(1)),
-        );
-        let integer_resource_effect2 = NumericExpression::NumericOperation(
-            NumericOperator::Divide,
-            Box::new(NumericExpression::IntegerResourceVariable(1)),
-            Box::new(NumericExpression::Constant(2)),
-        );
-        let continuous_resource_effect1 = NumericExpression::NumericOperation(
-            NumericOperator::Add,
-            Box::new(NumericExpression::ContinuousResourceVariable(0)),
-            Box::new(NumericExpression::Constant(1.0)),
-        );
-        let continuous_resource_effect2 = NumericExpression::NumericOperation(
-            NumericOperator::Divide,
-            Box::new(NumericExpression::ContinuousResourceVariable(1)),
-            Box::new(NumericExpression::Constant(2.0)),
-        );
-        let effect = Effect {
-            set_effects: vec![(0, set_effect1), (1, set_effect2)],
-            vector_effects: vec![(0, vector_effect1), (1, vector_effect2)],
-            element_effects: vec![(0, element_effect1), (1, element_effect2)],
-            integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
-            continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
-            integer_resource_effects: vec![
-                (0, integer_resource_effect1),
-                (1, integer_resource_effect2),
-            ],
-            continuous_resource_effects: vec![
-                (0, continuous_resource_effect1),
-                (1, continuous_resource_effect2),
-            ],
-        };
-
-        let mut set1 = Set::with_capacity(3);
-        set1.insert(0);
-        set1.insert(1);
-        set1.insert(2);
-        let mut set2 = Set::with_capacity(3);
-        set2.insert(1);
-        let expected = state::State {
-            signature_variables: Rc::new(state::SignatureVariables {
-                set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
-                element_variables: vec![2, 1],
-                integer_variables: vec![0, 4, 3],
-                continuous_variables: vec![OrderedFloat(0.0), OrderedFloat(4.0), OrderedFloat(3.0)],
-            }),
-            resource_variables: state::ResourceVariables {
-                integer_variables: vec![5, 2, 6],
-                continuous_variables: vec![OrderedFloat(5.0), OrderedFloat(2.5), OrderedFloat(6.0)],
-            },
-        };
-        let successor = effect.apply(&state, &registry);
-        assert_eq!(successor, expected);
     }
 
     #[test]

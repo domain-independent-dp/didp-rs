@@ -3,6 +3,7 @@ use crate::expression;
 use crate::expression_parser;
 use crate::grounded_condition;
 use crate::state;
+use crate::state::DPState;
 use crate::table_registry;
 use crate::variable::{Element, Numeric};
 use crate::yaml_util;
@@ -25,18 +26,18 @@ pub struct Transition<T: Numeric> {
 }
 
 impl<T: Numeric> Transition<T> {
-    pub fn is_applicable(
+    pub fn is_applicable<U: DPState>(
         &self,
-        state: &state::State,
+        state: &U,
         registry: &table_registry::TableRegistry,
     ) -> bool {
         for (i, v) in &self.elements_in_set_variable {
-            if !state.signature_variables.set_variables[*i].contains(*v) {
+            if !state.get_set_variable(*i).contains(*v) {
                 return false;
             }
         }
         for (i, v) in &self.elements_in_vector_variable {
-            if !state.signature_variables.vector_variables[*i].contains(v) {
+            if !state.get_vector_variable(*i).contains(v) {
                 return false;
             }
         }
@@ -45,18 +46,22 @@ impl<T: Numeric> Transition<T> {
             .all(|c| c.is_satisfied(state, registry).unwrap_or(true))
     }
 
-    pub fn apply(
-        &self,
-        state: &state::State,
-        registry: &table_registry::TableRegistry,
-    ) -> state::State {
-        self.effect.apply(state, registry)
+    pub fn apply<U: DPState>(&self, state: &U, registry: &table_registry::TableRegistry) -> U {
+        state.apply_effect(&self.effect, registry)
     }
 
-    pub fn eval_cost(
+    pub fn apply_in_place<U: DPState>(
+        &self,
+        state: &mut U,
+        registry: &table_registry::TableRegistry,
+    ) {
+        state.apply_effect_in_place(&self.effect, registry)
+    }
+
+    pub fn eval_cost<U: DPState>(
         &self,
         cost: T,
-        state: &state::State,
+        state: &U,
         registry: &table_registry::TableRegistry,
     ) -> T {
         self.cost.eval_cost(cost, state, registry)
@@ -69,7 +74,7 @@ impl<T: Numeric> Transition<T> {
             .iter()
             .zip(self.parameter_values.iter())
         {
-            full_name = full_name + format!(" {}:{}", name, value).as_str();
+            full_name += format!(" {}:{}", name, value).as_str();
         }
         full_name
     }
@@ -207,9 +212,7 @@ mod tests {
     use crate::table_data;
     use crate::variable::*;
     use expression::*;
-    use ordered_float::OrderedFloat;
     use rustc_hash::FxHashMap;
-    use std::rc::Rc;
 
     fn generate_metadata() -> state::StateMetadata {
         let object_names = vec![String::from("object")];
@@ -362,16 +365,16 @@ mod tests {
         set2.insert(0);
         set2.insert(1);
         state::State {
-            signature_variables: Rc::new(state::SignatureVariables {
+            signature_variables: state::SignatureVariables {
                 set_variables: vec![set1, set2],
                 vector_variables: vec![vec![0, 2], vec![1, 2]],
                 element_variables: vec![1, 2],
                 integer_variables: vec![1, 2, 3],
-                continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
-            }),
+                continuous_variables: vec![1.0, 2.0, 3.0],
+            },
             resource_variables: state::ResourceVariables {
                 integer_variables: vec![4, 5, 6],
-                continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
+                continuous_variables: vec![4.0, 5.0, 6.0],
             },
         }
     }
@@ -561,16 +564,16 @@ mod tests {
         let mut set2 = Set::with_capacity(3);
         set2.insert(1);
         let expected = state::State {
-            signature_variables: Rc::new(state::SignatureVariables {
+            signature_variables: state::SignatureVariables {
                 set_variables: vec![set1, set2],
                 vector_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
                 element_variables: vec![2, 1],
                 integer_variables: vec![0, 4, 3],
-                continuous_variables: vec![OrderedFloat(0.0), OrderedFloat(4.0), OrderedFloat(3.0)],
-            }),
+                continuous_variables: vec![0.0, 4.0, 3.0],
+            },
             resource_variables: state::ResourceVariables {
                 integer_variables: vec![5, 2, 6],
-                continuous_variables: vec![OrderedFloat(5.0), OrderedFloat(2.5), OrderedFloat(6.0)],
+                continuous_variables: vec![5.0, 2.5, 6.0],
             },
         };
         let successor = transition.apply(&state, &registry);

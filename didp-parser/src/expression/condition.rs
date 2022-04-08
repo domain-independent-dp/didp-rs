@@ -1,7 +1,7 @@
 use super::element_expression::TableExpression;
 use super::numeric_expression::NumericExpression;
 use super::set_condition;
-use crate::state::State;
+use crate::state::DPState;
 use crate::table_registry::TableRegistry;
 use crate::variable;
 use num_traits::FromPrimitive;
@@ -24,7 +24,7 @@ impl Default for Condition {
 }
 
 impl Condition {
-    pub fn eval(&self, state: &State, registry: &TableRegistry) -> bool {
+    pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> bool {
         match self {
             Self::Constant(value) => *value,
             Self::Not(condition) => !condition.eval(state, registry),
@@ -103,7 +103,7 @@ impl Default for Comparison {
 }
 
 impl Comparison {
-    pub fn eval(&self, state: &State, registry: &TableRegistry) -> bool {
+    pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> bool {
         match self {
             Self::Constant(value) => *value,
             Self::ComparisonII(op, x, y) => {
@@ -207,12 +207,10 @@ pub enum ComparisonOperator {
 mod tests {
     use super::super::element_expression;
     use super::*;
-    use crate::state;
+    use crate::state::*;
     use crate::table;
     use crate::table_data;
-    use ordered_float::OrderedFloat;
     use rustc_hash::FxHashMap;
-    use std::rc::Rc;
 
     fn generate_registry() -> TableRegistry {
         let mut name_to_constant = FxHashMap::default();
@@ -263,16 +261,16 @@ mod tests {
         set2.insert(0);
         set2.insert(1);
         State {
-            signature_variables: Rc::new(state::SignatureVariables {
+            signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2],
                 vector_variables: vec![vec![0, 2]],
                 element_variables: vec![1],
                 integer_variables: vec![1, 2, 3],
-                continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
-            }),
-            resource_variables: state::ResourceVariables {
+                continuous_variables: vec![1.0, 2.0, 3.0],
+            },
+            resource_variables: ResourceVariables {
                 integer_variables: vec![4, 5, 6],
-                continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
+                continuous_variables: vec![4.0, 5.0, 6.0],
             },
         }
     }

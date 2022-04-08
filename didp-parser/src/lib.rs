@@ -24,7 +24,8 @@ pub use base_state::BaseState;
 pub use effect::Effect;
 pub use expression_parser::ParseErr;
 pub use grounded_condition::GroundedCondition;
-pub use state::{ResourceVariables, SignatureVariables, State, StateMetadata};
+pub use state::{DPState, ResourceVariables, SignatureVariables, State, StateMetadata};
+pub use table::{Table, Table1D, Table2D, Table3D};
 pub use table_data::TableData;
 pub use table_registry::TableRegistry;
 pub use transition::Transition;
@@ -99,7 +100,7 @@ pub struct Model<T: variable::Numeric> {
 }
 
 impl<T: variable::Numeric> Model<T> {
-    pub fn check_constraints(&self, state: &state::State) -> bool {
+    pub fn check_constraints<U: DPState>(&self, state: &U) -> bool {
         self.constraints.iter().all(|constraint| {
             constraint
                 .is_satisfied(state, &self.table_registry)
@@ -107,9 +108,9 @@ impl<T: variable::Numeric> Model<T> {
         })
     }
 
-    pub fn get_base_cost(&self, state: &state::State) -> Option<T> {
+    pub fn get_base_cost<U: DPState>(&self, state: &U) -> Option<T> {
         for base_state in &self.base_states {
-            let cost = base_state.get_cost(state);
+            let cost = base_state.get_cost(state, &self.state_metadata);
             if cost.is_some() {
                 return cost;
             }
@@ -293,7 +294,6 @@ impl<T: variable::Numeric> Model<T> {
 mod tests {
     use super::*;
     use expression::*;
-    use std::rc::Rc;
 
     #[test]
     fn cost_type_load_from_yaml_ok() {
@@ -505,10 +505,10 @@ base_cases:
                 ..Default::default()
             },
             target: state::State {
-                signature_variables: Rc::new(SignatureVariables {
+                signature_variables: SignatureVariables {
                     integer_variables: vec![0],
                     ..Default::default()
-                }),
+                },
                 ..Default::default()
             },
             base_cases: vec![BaseCase {
@@ -608,29 +608,29 @@ base_states:
                 ..Default::default()
             },
             target: state::State {
-                signature_variables: Rc::new(SignatureVariables {
+                signature_variables: SignatureVariables {
                     integer_variables: vec![10],
                     ..Default::default()
-                }),
+                },
                 ..Default::default()
             },
             base_states: vec![
                 BaseState {
                     state: state::State {
-                        signature_variables: Rc::new(SignatureVariables {
+                        signature_variables: SignatureVariables {
                             integer_variables: vec![0],
                             ..Default::default()
-                        }),
+                        },
                         ..Default::default()
                     },
                     cost: 0,
                 },
                 BaseState {
                     state: state::State {
-                        signature_variables: Rc::new(SignatureVariables {
+                        signature_variables: SignatureVariables {
                             integer_variables: vec![1],
                             ..Default::default()
-                        }),
+                        },
                         ..Default::default()
                     },
                     cost: 0,
@@ -801,11 +801,11 @@ table_values:
                 ..Default::default()
             },
             target: state::State {
-                signature_variables: Rc::new(state::SignatureVariables {
+                signature_variables: state::SignatureVariables {
                     set_variables: vec![unvisited],
                     element_variables: vec![0],
                     ..Default::default()
-                }),
+                },
                 resource_variables: state::ResourceVariables {
                     integer_variables: vec![0],
                     ..Default::default()

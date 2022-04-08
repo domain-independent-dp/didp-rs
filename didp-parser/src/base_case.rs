@@ -19,9 +19,9 @@ pub struct BaseCase<T: Numeric> {
 }
 
 impl<T: Numeric> BaseCase<T> {
-    pub fn get_cost(
+    pub fn get_cost<U: state::DPState>(
         &self,
-        state: &state::State,
+        state: &U,
         registry: &table_registry::TableRegistry,
     ) -> Option<T> {
         let is_satisfied = self
@@ -109,7 +109,6 @@ mod tests {
     use crate::expression::*;
     use crate::variable;
     use rustc_hash::FxHashMap;
-    use std::rc::Rc;
 
     fn generate_metadata() -> state::StateMetadata {
         let mut name_to_object = FxHashMap::default();
@@ -136,11 +135,11 @@ mod tests {
         s0.insert(0);
         s0.insert(1);
         state::State {
-            signature_variables: Rc::new(state::SignatureVariables {
+            signature_variables: state::SignatureVariables {
                 set_variables: vec![s0],
                 integer_variables: vec![1],
                 ..Default::default()
-            }),
+            },
             ..Default::default()
         }
     }

@@ -35,6 +35,7 @@ version = "0.1.0"
 dependencies = [
  "didp-parser",
  "fixedbitset",
+ "ordered-float",
  "rustc-hash",
  "yaml-rust",
 ]

@@ -1,7 +1,7 @@
 use super::element_expression::{ElementExpression, SetExpression, VectorExpression};
 use super::reference_expression::ReferenceExpression;
 use super::util;
-use crate::state::State;
+use crate::state::DPState;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 use crate::variable::{Element, Numeric};
@@ -43,10 +43,15 @@ pub enum NumericTableExpression<T: Numeric> {
 }
 
 impl<T: Numeric> NumericTableExpression<T> {
-    pub fn eval(&self, state: &State, registry: &TableRegistry, tables: &TableData<T>) -> T {
-        let set_variables = &state.signature_variables.set_variables;
+    pub fn eval<U: DPState>(
+        &self,
+        state: &U,
+        registry: &TableRegistry,
+        tables: &TableData<T>,
+    ) -> T {
+        let set_f = |i| state.get_set_variable(i);
         let set_tables = &registry.set_tables;
-        let vector_variables = &state.signature_variables.vector_variables;
+        let vector_f = |i| state.get_vector_variable(i);
         let vector_tables = &registry.vector_tables;
         match self {
             Self::Constant(value) => *value,
@@ -65,11 +70,11 @@ impl<T: Numeric> NumericTableExpression<T> {
                 tables.tables_2d[*i].eval(x.eval(state, registry), y.eval(state, registry))
             }
             Self::Table1DSum(i, SetExpression::Reference(x)) => {
-                tables.tables_1d[*i].sum(x.eval(state, registry, set_variables, set_tables).ones())
+                tables.tables_1d[*i].sum(x.eval(state, registry, &set_f, set_tables).ones())
             }
             Self::Table1DSum(i, x) => tables.tables_1d[*i].sum(x.eval(state, registry).ones()),
             Self::Table1DVectorSum(i, VectorExpression::Reference(x)) => tables.tables_1d[*i].sum(
-                x.eval(state, registry, vector_variables, vector_tables)
+                x.eval(state, registry, &vector_f, vector_tables)
                     .iter()
                     .copied(),
             ),
@@ -77,21 +82,21 @@ impl<T: Numeric> NumericTableExpression<T> {
                 tables.tables_1d[*i].sum(x.eval(state, registry).into_iter())
             }
             Self::Table2DSum(i, SetExpression::Reference(x), SetExpression::Reference(y)) => {
-                let y = y.eval(state, registry, set_variables, set_tables);
-                x.eval(state, registry, set_variables, set_tables)
+                let y = y.eval(state, registry, &set_f, set_tables);
+                x.eval(state, registry, &set_f, set_tables)
                     .ones()
                     .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
                     .sum()
             }
             Self::Table2DSum(i, SetExpression::Reference(x), y) => {
                 let y = y.eval(state, registry);
-                x.eval(state, registry, set_variables, set_tables)
+                x.eval(state, registry, &set_f, set_tables)
                     .ones()
                     .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
                     .sum()
             }
             Self::Table2DSum(i, x, SetExpression::Reference(y)) => {
-                let y = y.eval(state, registry, set_variables, set_tables);
+                let y = y.eval(state, registry, &set_f, set_tables);
                 x.eval(state, registry)
                     .ones()
                     .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
@@ -109,16 +114,16 @@ impl<T: Numeric> NumericTableExpression<T> {
                 VectorExpression::Reference(x),
                 VectorExpression::Reference(y),
             ) => tables.tables_2d[*i].sum(
-                x.eval(state, registry, vector_variables, vector_tables)
+                x.eval(state, registry, &vector_f, vector_tables)
                     .iter()
                     .copied(),
-                y.eval(state, registry, vector_variables, vector_tables)
+                y.eval(state, registry, &vector_f, vector_tables)
                     .iter()
                     .copied(),
             ),
             Self::Table2DVectorSum(i, VectorExpression::Reference(x), y) => tables.tables_2d[*i]
                 .sum(
-                    x.eval(state, registry, vector_variables, vector_tables)
+                    x.eval(state, registry, &vector_f, vector_tables)
                         .iter()
                         .copied(),
                     y.eval(state, registry).into_iter(),
@@ -126,7 +131,7 @@ impl<T: Numeric> NumericTableExpression<T> {
             Self::Table2DVectorSum(i, x, VectorExpression::Reference(y)) => tables.tables_2d[*i]
                 .sum(
                     x.eval(state, registry).into_iter(),
-                    y.eval(state, registry, vector_variables, vector_tables)
+                    y.eval(state, registry, &vector_f, vector_tables)
                         .iter()
                         .copied(),
                 ),
@@ -139,20 +144,20 @@ impl<T: Numeric> NumericTableExpression<T> {
                 SetExpression::Reference(x),
                 VectorExpression::Reference(y),
             ) => tables.tables_2d[*i].sum(
-                x.eval(state, registry, set_variables, set_tables).ones(),
-                y.eval(state, registry, vector_variables, vector_tables)
+                x.eval(state, registry, &set_f, set_tables).ones(),
+                y.eval(state, registry, &vector_f, vector_tables)
                     .iter()
                     .copied(),
             ),
             Self::Table2DSetVectorSum(i, SetExpression::Reference(x), y) => tables.tables_2d[*i]
                 .sum(
-                    x.eval(state, registry, set_variables, set_tables).ones(),
+                    x.eval(state, registry, &set_f, set_tables).ones(),
                     y.eval(state, registry).into_iter(),
                 ),
             Self::Table2DSetVectorSum(i, x, VectorExpression::Reference(y)) => tables.tables_2d[*i]
                 .sum(
                     x.eval(state, registry).ones(),
-                    y.eval(state, registry, vector_variables, vector_tables)
+                    y.eval(state, registry, &vector_f, vector_tables)
                         .iter()
                         .copied(),
                 ),
@@ -165,21 +170,21 @@ impl<T: Numeric> NumericTableExpression<T> {
                 VectorExpression::Reference(x),
                 SetExpression::Reference(y),
             ) => {
-                let x = x.eval(state, registry, vector_variables, vector_tables);
-                y.eval(state, registry, set_variables, set_tables)
+                let x = x.eval(state, registry, &vector_f, vector_tables);
+                y.eval(state, registry, &set_f, set_tables)
                     .ones()
                     .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
                     .sum()
             }
             Self::Table2DVectorSetSum(i, x, SetExpression::Reference(y)) => {
                 let x = x.eval(state, registry);
-                y.eval(state, registry, set_variables, set_tables)
+                y.eval(state, registry, &set_f, set_tables)
                     .ones()
                     .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
                     .sum()
             }
             Self::Table2DVectorSetSum(i, VectorExpression::Reference(x), y) => {
-                let x = x.eval(state, registry, vector_variables, vector_tables);
+                let x = x.eval(state, registry, &vector_f, vector_tables);
                 y.eval(state, registry)
                     .ones()
                     .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
@@ -193,7 +198,7 @@ impl<T: Numeric> NumericTableExpression<T> {
                     .sum()
             }
             Self::Table2DSumX(i, SetExpression::Reference(x), y) => tables.tables_2d[*i].sum_x(
-                x.eval(state, registry, set_variables, set_tables).ones(),
+                x.eval(state, registry, &set_f, set_tables).ones(),
                 y.eval(state, registry),
             ),
             Self::Table2DSumX(i, x, y) => {
@@ -201,14 +206,14 @@ impl<T: Numeric> NumericTableExpression<T> {
             }
             Self::Table2DSumY(i, x, SetExpression::Reference(y)) => tables.tables_2d[*i].sum_y(
                 x.eval(state, registry),
-                y.eval(state, registry, set_variables, set_tables).ones(),
+                y.eval(state, registry, &set_f, set_tables).ones(),
             ),
             Self::Table2DSumY(i, x, y) => {
                 tables.tables_2d[*i].sum_y(x.eval(state, registry), y.eval(state, registry).ones())
             }
             Self::Table2DVectorSumX(i, VectorExpression::Reference(x), y) => tables.tables_2d[*i]
                 .sum_x(
-                    x.eval(state, registry, vector_variables, vector_tables)
+                    x.eval(state, registry, &vector_f, vector_tables)
                         .iter()
                         .copied(),
                     y.eval(state, registry),
@@ -218,7 +223,7 @@ impl<T: Numeric> NumericTableExpression<T> {
             Self::Table2DVectorSumY(i, x, VectorExpression::Reference(y)) => tables.tables_2d[*i]
                 .sum_y(
                     x.eval(state, registry),
-                    y.eval(state, registry, vector_variables, vector_tables)
+                    y.eval(state, registry, &vector_f, vector_tables)
                         .iter()
                         .copied(),
                 ),
@@ -355,10 +360,10 @@ impl<T: Numeric> NumericTableExpression<T> {
         }
     }
 
-    fn sum_table(
+    fn sum_table<U: DPState>(
         i: usize,
         args: &[ArgumentExpression],
-        state: &State,
+        state: &U,
         registry: &TableRegistry,
         tables: &TableData<T>,
     ) -> T {
@@ -368,12 +373,8 @@ impl<T: Numeric> NumericTableExpression<T> {
                 ArgumentExpression::Set(set) => {
                     result = match set {
                         SetExpression::Reference(set) => {
-                            let set = set.eval(
-                                state,
-                                registry,
-                                &state.signature_variables.set_variables,
-                                &registry.set_tables,
-                            );
+                            let f = |i| state.get_set_variable(i);
+                            let set = set.eval(state, registry, &f, &registry.set_tables);
                             util::expand_vector_with_set(result, set)
                         }
                         _ => util::expand_vector_with_set(result, &set.eval(state, registry)),
@@ -382,12 +383,8 @@ impl<T: Numeric> NumericTableExpression<T> {
                 ArgumentExpression::Vector(vector) => {
                     result = match vector {
                         VectorExpression::Reference(vector) => {
-                            let vector = vector.eval(
-                                state,
-                                registry,
-                                &state.signature_variables.vector_variables,
-                                &registry.vector_tables,
-                            );
+                            let f = |i| state.get_vector_variable(i);
+                            let vector = vector.eval(state, registry, &f, &registry.vector_tables);
                             util::expand_vector_with_slice(result, vector)
                         }
                         _ => util::expand_vector_with_slice(result, &vector.eval(state, registry)),
@@ -470,7 +467,6 @@ mod tests {
     use crate::table;
     use crate::variable::*;
     use rustc_hash::FxHashMap;
-    use std::rc::Rc;
 
     fn generate_registry() -> TableRegistry {
         let mut name_to_constant = FxHashMap::default();
@@ -533,11 +529,11 @@ mod tests {
         set2.insert(0);
         set2.insert(1);
         State {
-            signature_variables: Rc::new(SignatureVariables {
+            signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2, Set::with_capacity(3), Set::with_capacity(3)],
                 vector_variables: vec![vec![0, 2], vec![0, 1], vec![], vec![]],
                 ..Default::default()
-            }),
+            },
             ..Default::default()
         }
     }

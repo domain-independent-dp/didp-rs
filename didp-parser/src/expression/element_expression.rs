@@ -1,7 +1,7 @@
 use super::condition::Condition;
 use super::numeric_operator::NumericOperator;
 use super::reference_expression::ReferenceExpression;
-use crate::state::State;
+use crate::state::DPState;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 use crate::variable::{Element, Set, Vector};
@@ -26,32 +26,29 @@ pub enum ElementExpression {
 }
 
 impl ElementExpression {
-    pub fn eval(&self, state: &State, registry: &TableRegistry) -> Element {
+    pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> Element {
         match self {
             Self::Constant(x) => *x,
-            Self::Variable(i) => state.signature_variables.element_variables[*i],
+            Self::Variable(i) => state.get_element_variable(*i),
             Self::NumericOperation(op, x, y) => {
                 op.eval(x.eval(state, registry), y.eval(state, registry))
             }
             Self::Last(vector) => match vector.as_ref() {
-                VectorExpression::Reference(vector) => *vector
-                    .eval(
-                        state,
-                        registry,
-                        &state.signature_variables.vector_variables,
-                        &registry.vector_tables,
-                    )
-                    .last()
-                    .unwrap(),
+                VectorExpression::Reference(vector) => {
+                    let f = |i| state.get_vector_variable(i);
+                    *vector
+                        .eval(state, registry, &f, &registry.vector_tables)
+                        .last()
+                        .unwrap()
+                }
                 vector => *vector.eval(state, registry).last().unwrap(),
             },
             Self::At(vector, i) => match vector.as_ref() {
-                VectorExpression::Reference(vector) => vector.eval(
-                    state,
-                    registry,
-                    &state.signature_variables.vector_variables,
-                    &registry.vector_tables,
-                )[i.eval(state, registry)],
+                VectorExpression::Reference(vector) => {
+                    let f = |i| state.get_vector_variable(i);
+                    vector.eval(state, registry, &f, &registry.vector_tables)
+                        [i.eval(state, registry)]
+                }
                 vector => vector.eval(state, registry)[i.eval(state, registry)],
             },
             Self::Table(table) => *table.eval(state, registry, &registry.element_tables),
@@ -128,16 +125,14 @@ pub enum SetElementOperator {
 }
 
 impl SetExpression {
-    pub fn eval(&self, state: &State, registry: &TableRegistry) -> Set {
+    pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> Set {
         match self {
-            Self::Reference(expression) => expression
-                .eval(
-                    state,
-                    registry,
-                    &state.signature_variables.set_variables,
-                    &registry.set_tables,
-                )
-                .clone(),
+            Self::Reference(expression) => {
+                let f = |i| state.get_set_variable(i);
+                expression
+                    .eval(state, registry, &f, &registry.set_tables)
+                    .clone()
+            }
             Self::Complement(set) => {
                 let mut set = set.eval(state, registry);
                 set.toggle_range(..);
@@ -146,22 +141,14 @@ impl SetExpression {
             Self::SetOperation(op, x, y) => match (op, x.as_ref(), y.as_ref()) {
                 (op, x, SetExpression::Reference(y)) => {
                     let x = x.eval(state, registry);
-                    let y = y.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    );
+                    let f = |i| state.get_set_variable(i);
+                    let y = y.eval(state, registry, &f, &registry.set_tables);
                     Self::eval_set_operation(op, x, y)
                 }
                 (SetOperator::Intersection, SetExpression::Reference(x), y)
                 | (SetOperator::Union, SetExpression::Reference(x), y) => {
-                    let x = x.eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    );
+                    let f = |i| state.get_set_variable(i);
+                    let x = x.eval(state, registry, &f, &registry.set_tables);
                     let y = y.eval(state, registry);
                     Self::eval_set_operation(op, y, x)
                 }
@@ -311,16 +298,14 @@ pub enum VectorExpression {
 }
 
 impl VectorExpression {
-    pub fn eval(&self, state: &State, registry: &TableRegistry) -> Vector {
+    pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> Vector {
         match self {
-            Self::Reference(expression) => expression
-                .eval(
-                    state,
-                    registry,
-                    &state.signature_variables.vector_variables,
-                    &registry.vector_tables,
-                )
-                .clone(),
+            Self::Reference(expression) => {
+                let f = |i| state.get_vector_variable(i);
+                expression
+                    .eval(state, registry, &f, &registry.vector_tables)
+                    .clone()
+            }
             Self::Indices(vector) => {
                 let mut vector = vector.eval(state, registry);
                 vector.iter_mut().enumerate().for_each(|(i, v)| *v = i);
@@ -348,15 +333,12 @@ impl VectorExpression {
                 vector
             }
             Self::FromSet(set) => match set.as_ref() {
-                SetExpression::Reference(set) => set
-                    .eval(
-                        state,
-                        registry,
-                        &state.signature_variables.set_variables,
-                        &registry.set_tables,
-                    )
-                    .ones()
-                    .collect(),
+                SetExpression::Reference(set) => {
+                    let f = |i| state.get_set_variable(i);
+                    set.eval(state, registry, &f, &registry.set_tables)
+                        .ones()
+                        .collect()
+                }
                 set => set.eval(state, registry).ones().collect(),
             },
             Self::If(condition, x, y) => {
@@ -456,9 +438,9 @@ pub enum TableExpression<T: Clone> {
 }
 
 impl<T: Clone> TableExpression<T> {
-    pub fn eval<'a>(
+    pub fn eval<'a, U: DPState>(
         &'a self,
-        state: &State,
+        state: &U,
         registry: &'a TableRegistry,
         tables: &'a TableData<T>,
     ) -> &'a T {
@@ -529,7 +511,6 @@ mod tests {
     use crate::state::*;
     use crate::table::*;
     use rustc_hash::FxHashMap;
-    use std::rc::Rc;
 
     fn generate_registry() -> TableRegistry {
         let mut name_to_constant = FxHashMap::default();
@@ -605,12 +586,12 @@ mod tests {
         set2.insert(0);
         set2.insert(1);
         State {
-            signature_variables: Rc::new(SignatureVariables {
+            signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2],
                 vector_variables: vec![vec![0, 2]],
                 element_variables: vec![1],
                 ..Default::default()
-            }),
+            },
             ..Default::default()
         }
     }

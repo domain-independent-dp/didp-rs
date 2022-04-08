@@ -1,30 +1,192 @@
-use crate::variable::{Element, Integer, Numeric, OrderedContinuous, Set, Vector};
+use crate::effect;
+use crate::table_registry;
+use crate::variable::{Continuous, Element, Integer, Numeric, Set, Vector};
 use crate::yaml_util;
 use lazy_static::lazy_static;
-use ordered_float::OrderedFloat;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Ordering;
-use std::rc::Rc;
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
-pub struct State {
-    pub signature_variables: Rc<SignatureVariables>,
-    pub resource_variables: ResourceVariables,
+pub trait DPState {
+    fn get_set_variable(&self, i: usize) -> &Set;
+    fn get_vector_variable(&self, i: usize) -> &Vector;
+    fn get_element_variable(&self, i: usize) -> Element;
+    fn get_integer_variable(&self, i: usize) -> Integer;
+    fn get_continuous_variable(&self, i: usize) -> Continuous;
+    fn get_integer_resource_variable(&self, i: usize) -> Integer;
+    fn get_continuous_resource_variable(&self, i: usize) -> Continuous;
+    fn apply_effect(
+        &self,
+        effect: &effect::Effect,
+        registry: &table_registry::TableRegistry,
+    ) -> Self;
+    fn apply_effect_in_place(
+        &mut self,
+        effect: &effect::Effect,
+        registry: &table_registry::TableRegistry,
+    );
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct SignatureVariables {
     pub set_variables: Vec<Set>,
     pub vector_variables: Vec<Vector>,
     pub element_variables: Vec<Element>,
     pub integer_variables: Vec<Integer>,
-    pub continuous_variables: Vec<OrderedContinuous>,
+    pub continuous_variables: Vec<Continuous>,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct ResourceVariables {
     pub integer_variables: Vec<Integer>,
-    pub continuous_variables: Vec<OrderedContinuous>,
+    pub continuous_variables: Vec<Continuous>,
+}
+
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct State {
+    pub signature_variables: SignatureVariables,
+    pub resource_variables: ResourceVariables,
+}
+
+impl DPState for State {
+    #[inline]
+    fn get_set_variable(&self, i: usize) -> &Set {
+        &self.signature_variables.set_variables[i]
+    }
+
+    #[inline]
+    fn get_vector_variable(&self, i: usize) -> &Vector {
+        &self.signature_variables.vector_variables[i]
+    }
+
+    #[inline]
+    fn get_element_variable(&self, i: usize) -> Element {
+        self.signature_variables.element_variables[i]
+    }
+
+    #[inline]
+    fn get_integer_variable(&self, i: usize) -> Integer {
+        self.signature_variables.integer_variables[i]
+    }
+
+    #[inline]
+    fn get_continuous_variable(&self, i: usize) -> Continuous {
+        self.signature_variables.continuous_variables[i]
+    }
+
+    #[inline]
+    fn get_integer_resource_variable(&self, i: usize) -> Integer {
+        self.resource_variables.integer_variables[i]
+    }
+
+    #[inline]
+    fn get_continuous_resource_variable(&self, i: usize) -> Continuous {
+        self.resource_variables.continuous_variables[i]
+    }
+
+    fn apply_effect(
+        &self,
+        effect: &effect::Effect,
+        registry: &table_registry::TableRegistry,
+    ) -> Self {
+        let len = self.signature_variables.set_variables.len();
+        let mut set_variables = Vec::with_capacity(len);
+        let mut i = 0;
+        for e in &effect.set_effects {
+            while i < e.0 {
+                set_variables.push(self.signature_variables.set_variables[i].clone());
+                i += 1;
+            }
+            set_variables.push(e.1.eval(self, registry));
+            i += 1;
+        }
+        while i < len {
+            set_variables.push(self.signature_variables.set_variables[i].clone());
+            i += 1;
+        }
+
+        let len = self.signature_variables.vector_variables.len();
+        let mut vector_variables = Vec::with_capacity(len);
+        for e in &effect.vector_effects {
+            while i < e.0 {
+                vector_variables.push(self.signature_variables.vector_variables[i].clone());
+                i += 1;
+            }
+            vector_variables.push(e.1.eval(self, registry));
+            i += 1;
+        }
+        while i < len {
+            vector_variables.push(self.signature_variables.vector_variables[i].clone());
+            i += 1;
+        }
+
+        let mut element_variables = self.signature_variables.element_variables.clone();
+        for e in &effect.element_effects {
+            element_variables[e.0] = e.1.eval(self, registry);
+        }
+
+        let mut integer_variables = self.signature_variables.integer_variables.clone();
+        for e in &effect.integer_effects {
+            integer_variables[e.0] = e.1.eval(self, registry);
+        }
+
+        let mut continuous_variables = self.signature_variables.continuous_variables.clone();
+        for e in &effect.continuous_effects {
+            continuous_variables[e.0] = e.1.eval(self, registry);
+        }
+
+        let mut integer_resource_variables = self.resource_variables.integer_variables.clone();
+        for e in &effect.integer_resource_effects {
+            integer_resource_variables[e.0] = e.1.eval(self, registry);
+        }
+
+        let mut continuous_resource_variables =
+            self.resource_variables.continuous_variables.clone();
+        for e in &effect.continuous_resource_effects {
+            continuous_resource_variables[e.0] = e.1.eval(self, registry);
+        }
+
+        State {
+            signature_variables: SignatureVariables {
+                set_variables,
+                vector_variables,
+                element_variables,
+                integer_variables,
+                continuous_variables,
+            },
+            resource_variables: ResourceVariables {
+                integer_variables: integer_resource_variables,
+                continuous_variables: continuous_resource_variables,
+            },
+        }
+    }
+
+    fn apply_effect_in_place(
+        &mut self,
+        effect: &effect::Effect,
+        registry: &table_registry::TableRegistry,
+    ) {
+        for e in &effect.set_effects {
+            self.signature_variables.set_variables[e.0] = e.1.eval(self, registry);
+        }
+        for e in &effect.vector_effects {
+            self.signature_variables.vector_variables[e.0] = e.1.eval(self, registry);
+        }
+        for e in &effect.element_effects {
+            self.signature_variables.element_variables[e.0] = e.1.eval(self, registry);
+        }
+        for e in &effect.integer_effects {
+            self.signature_variables.integer_variables[e.0] = e.1.eval(self, registry);
+        }
+        for e in &effect.continuous_effects {
+            self.signature_variables.continuous_variables[e.0] = e.1.eval(self, registry);
+        }
+        for e in &effect.integer_resource_effects {
+            self.resource_variables.integer_variables[e.0] = e.1.eval(self, registry);
+        }
+        for e in &effect.continuous_resource_effects {
+            self.resource_variables.continuous_variables[e.0] = e.1.eval(self, registry);
+        }
+    }
 }
 
 impl State {
@@ -59,7 +221,7 @@ impl State {
         }
         let mut continuous_variables = Vec::with_capacity(metadata.continuous_variable_names.len());
         for name in &metadata.continuous_variable_names {
-            let value = OrderedFloat(yaml_util::get_numeric_by_key(value, name)?);
+            let value = yaml_util::get_numeric_by_key(value, name)?;
             continuous_variables.push(value);
         }
         let mut integer_resource_variables =
@@ -75,13 +237,13 @@ impl State {
             continuous_resource_variables.push(value);
         }
         Ok(State {
-            signature_variables: Rc::new(SignatureVariables {
+            signature_variables: SignatureVariables {
                 set_variables,
                 vector_variables,
                 element_variables,
                 integer_variables,
                 continuous_variables,
-            }),
+            },
             resource_variables: ResourceVariables {
                 integer_variables: integer_resource_variables,
                 continuous_variables: continuous_resource_variables,
@@ -209,42 +371,41 @@ impl StateMetadata {
         name_set
     }
 
-    pub fn dominance(&self, a: &State, b: &State) -> Option<Ordering> {
+    pub fn dominance<U: DPState>(&self, a: &U, b: &U) -> Option<Ordering> {
         let status = Some(Ordering::Equal);
-        let status = Self::compare_resource_variables(
-            &a.resource_variables.integer_variables,
-            &b.resource_variables.integer_variables,
-            &self.integer_less_is_better,
-            status,
-        );
+        let x = |i| a.get_integer_resource_variable(i);
+        let y = |i| b.get_integer_resource_variable(i);
+        let status = Self::compare_resource_variables(&x, &y, &self.integer_less_is_better, status);
         status?;
-        Self::compare_resource_variables(
-            &a.resource_variables.continuous_variables,
-            &b.resource_variables.continuous_variables,
-            &self.continuous_less_is_better,
-            status,
-        )
+        let x = |i| a.get_continuous_resource_variable(i);
+        let y = |i| b.get_continuous_resource_variable(i);
+        Self::compare_resource_variables(&x, &y, &self.continuous_less_is_better, status)
     }
 
-    fn compare_resource_variables<T: Numeric>(
-        a: &[T],
-        b: &[T],
+    fn compare_resource_variables<T: Numeric, F, G>(
+        x: &F,
+        y: &G,
         less_is_better: &[bool],
         mut status: Option<Ordering>,
-    ) -> Option<Ordering> {
-        debug_assert!(a.len() == b.len());
-        for (i, (v1, v2)) in a.iter().zip(b.iter()).enumerate() {
+    ) -> Option<Ordering>
+    where
+        F: Fn(usize) -> T,
+        G: Fn(usize) -> T,
+    {
+        for (i, less_is_better) in less_is_better.iter().enumerate() {
+            let v1 = x(i);
+            let v2 = y(i);
             match status {
                 Some(Ordering::Equal) => {
                     if v1 < v2 {
-                        if less_is_better[i] {
+                        if *less_is_better {
                             status = Some(Ordering::Greater);
                         } else {
                             status = Some(Ordering::Less);
                         }
                     }
                     if v1 > v2 {
-                        if less_is_better[i] {
+                        if *less_is_better {
                             status = Some(Ordering::Less);
                         } else {
                             status = Some(Ordering::Greater);
@@ -253,19 +414,19 @@ impl StateMetadata {
                 }
                 Some(Ordering::Less) => {
                     if v1 < v2 {
-                        if less_is_better[i] {
+                        if *less_is_better {
                             return None;
                         }
-                    } else if v1 > v2 && !less_is_better[i] {
+                    } else if v1 > v2 && !less_is_better {
                         return None;
                     }
                 }
                 Some(Ordering::Greater) => {
                     if v1 > v2 {
-                        if less_is_better[i] {
+                        if *less_is_better {
                             return None;
                         }
-                    } else if v1 < v2 && !less_is_better[i] {
+                    } else if v1 < v2 && !less_is_better {
                         return None;
                     }
                 }
@@ -531,6 +692,33 @@ type GroundedParameterTriplet = (
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::expression::*;
+    use crate::table;
+    use crate::table_data;
+
+    fn generate_registry() -> table_registry::TableRegistry {
+        let tables_1d = vec![table::Table1D::new(vec![10, 20, 30])];
+        let mut name_to_table_1d = FxHashMap::default();
+        name_to_table_1d.insert(String::from("f1"), 0);
+
+        let tables_2d = vec![table::Table2D::new(vec![
+            vec![10, 20, 30],
+            vec![40, 50, 60],
+        ])];
+        let mut name_to_table_2d = FxHashMap::default();
+        name_to_table_2d.insert(String::from("f2"), 0);
+
+        table_registry::TableRegistry {
+            integer_tables: table_data::TableData {
+                tables_1d,
+                name_to_table_1d,
+                tables_2d,
+                name_to_table_2d,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
 
     fn generate_metadata() -> StateMetadata {
         let object_names = vec![String::from("object"), String::from("small")];
@@ -704,26 +892,16 @@ cr3: 3
         s2.insert(0);
         let s3 = Set::with_capacity(2);
         let expected = State {
-            signature_variables: Rc::new(SignatureVariables {
+            signature_variables: SignatureVariables {
                 set_variables: vec![s0, s1, s2, s3],
                 vector_variables: vec![vec![0, 2], vec![0, 1], vec![0], vec![]],
                 element_variables: vec![0, 1, 2, 3],
                 integer_variables: vec![0, 1, 2, 3],
-                continuous_variables: vec![
-                    OrderedFloat(0.0),
-                    OrderedFloat(1.0),
-                    OrderedFloat(2.0),
-                    OrderedFloat(3.0),
-                ],
-            }),
+                continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
+            },
             resource_variables: ResourceVariables {
                 integer_variables: vec![0, 1, 2, 3],
-                continuous_variables: vec![
-                    OrderedFloat(0.0),
-                    OrderedFloat(1.0),
-                    OrderedFloat(2.0),
-                    OrderedFloat(3.0),
-                ],
+                continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
             },
         };
         assert_eq!(state.unwrap(), expected);
@@ -951,20 +1129,311 @@ cr3: 3
     }
 
     #[test]
+    fn state_getter() {
+        let mut set1 = Set::with_capacity(3);
+        set1.insert(0);
+        set1.insert(2);
+        let mut set2 = Set::with_capacity(3);
+        set2.insert(0);
+        set2.insert(1);
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![set1.clone(), set2.clone()],
+                vector_variables: vec![vec![0, 2], vec![1, 2]],
+                element_variables: vec![1, 2],
+                integer_variables: vec![1, 2, 3],
+                continuous_variables: vec![1.0, 2.0, 3.0],
+            },
+            resource_variables: ResourceVariables {
+                integer_variables: vec![4, 5, 6],
+                continuous_variables: vec![4.0, 5.0, 6.0],
+            },
+        };
+        assert_eq!(state.get_set_variable(0), &set1);
+        assert_eq!(state.get_set_variable(1), &set2);
+        assert_eq!(state.get_vector_variable(0), &vec![0, 2]);
+        assert_eq!(state.get_vector_variable(1), &vec![1, 2]);
+        assert_eq!(state.get_element_variable(0), 1);
+        assert_eq!(state.get_element_variable(1), 2);
+        assert_eq!(state.get_integer_variable(0), 1);
+        assert_eq!(state.get_integer_variable(1), 2);
+        assert_eq!(state.get_integer_variable(2), 3);
+        assert_eq!(state.get_continuous_variable(0), 1.0);
+        assert_eq!(state.get_continuous_variable(1), 2.0);
+        assert_eq!(state.get_continuous_variable(2), 3.0);
+        assert_eq!(state.get_integer_resource_variable(0), 4);
+        assert_eq!(state.get_integer_resource_variable(1), 5);
+        assert_eq!(state.get_integer_resource_variable(2), 6);
+        assert_eq!(state.get_continuous_resource_variable(0), 4.0);
+        assert_eq!(state.get_continuous_resource_variable(1), 5.0);
+        assert_eq!(state.get_continuous_resource_variable(2), 6.0);
+    }
+
+    #[test]
+    fn appy_effect() {
+        let mut set1 = Set::with_capacity(3);
+        set1.insert(0);
+        set1.insert(2);
+        let mut set2 = Set::with_capacity(3);
+        set2.insert(0);
+        set2.insert(1);
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![set1, set2],
+                vector_variables: vec![vec![0, 2], vec![1, 2]],
+                element_variables: vec![1, 2],
+                integer_variables: vec![1, 2, 3],
+                continuous_variables: vec![1.0, 2.0, 3.0],
+            },
+            resource_variables: ResourceVariables {
+                integer_variables: vec![4, 5, 6],
+                continuous_variables: vec![4.0, 5.0, 6.0],
+            },
+        };
+        let registry = generate_registry();
+        let set_effect1 = SetExpression::SetElementOperation(
+            SetElementOperator::Add,
+            ElementExpression::Constant(1),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+        );
+        let set_effect2 = SetExpression::SetElementOperation(
+            SetElementOperator::Remove,
+            ElementExpression::Constant(0),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
+        );
+        let vector_effect1 = VectorExpression::Push(
+            ElementExpression::Constant(1),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                0,
+            ))),
+        );
+        let vector_effect2 = VectorExpression::Push(
+            ElementExpression::Constant(0),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                1,
+            ))),
+        );
+        let element_effect1 = ElementExpression::Constant(2);
+        let element_effect2 = ElementExpression::Constant(1);
+        let integer_effect1 = NumericExpression::NumericOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericExpression::IntegerVariable(0)),
+            Box::new(NumericExpression::Constant(1)),
+        );
+        let integer_effect2 = NumericExpression::NumericOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericExpression::IntegerVariable(1)),
+            Box::new(NumericExpression::Constant(2)),
+        );
+        let continuous_effect1 = NumericExpression::NumericOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericExpression::ContinuousVariable(0)),
+            Box::new(NumericExpression::Constant(1.0)),
+        );
+        let continuous_effect2 = NumericExpression::NumericOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericExpression::ContinuousVariable(1)),
+            Box::new(NumericExpression::Constant(2.0)),
+        );
+        let integer_resource_effect1 = NumericExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(NumericExpression::IntegerResourceVariable(0)),
+            Box::new(NumericExpression::Constant(1)),
+        );
+        let integer_resource_effect2 = NumericExpression::NumericOperation(
+            NumericOperator::Divide,
+            Box::new(NumericExpression::IntegerResourceVariable(1)),
+            Box::new(NumericExpression::Constant(2)),
+        );
+        let continuous_resource_effect1 = NumericExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(NumericExpression::ContinuousResourceVariable(0)),
+            Box::new(NumericExpression::Constant(1.0)),
+        );
+        let continuous_resource_effect2 = NumericExpression::NumericOperation(
+            NumericOperator::Divide,
+            Box::new(NumericExpression::ContinuousResourceVariable(1)),
+            Box::new(NumericExpression::Constant(2.0)),
+        );
+        let effect = effect::Effect {
+            set_effects: vec![(0, set_effect1), (1, set_effect2)],
+            vector_effects: vec![(0, vector_effect1), (1, vector_effect2)],
+            element_effects: vec![(0, element_effect1), (1, element_effect2)],
+            integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
+            continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+            integer_resource_effects: vec![
+                (0, integer_resource_effect1),
+                (1, integer_resource_effect2),
+            ],
+            continuous_resource_effects: vec![
+                (0, continuous_resource_effect1),
+                (1, continuous_resource_effect2),
+            ],
+        };
+
+        let mut set1 = Set::with_capacity(3);
+        set1.insert(0);
+        set1.insert(1);
+        set1.insert(2);
+        let mut set2 = Set::with_capacity(3);
+        set2.insert(1);
+        let expected = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![set1, set2],
+                vector_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
+                element_variables: vec![2, 1],
+                integer_variables: vec![0, 4, 3],
+                continuous_variables: vec![0.0, 4.0, 3.0],
+            },
+            resource_variables: ResourceVariables {
+                integer_variables: vec![5, 2, 6],
+                continuous_variables: vec![5.0, 2.5, 6.0],
+            },
+        };
+        let successor = state.apply_effect(&effect, &registry);
+        assert_eq!(successor, expected);
+    }
+
+    #[test]
+    fn appy_effect_in_place() {
+        let mut set1 = Set::with_capacity(3);
+        set1.insert(0);
+        set1.insert(2);
+        let mut set2 = Set::with_capacity(3);
+        set2.insert(0);
+        set2.insert(1);
+        let mut state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![set1, set2],
+                vector_variables: vec![vec![0, 2], vec![1, 2]],
+                element_variables: vec![1, 2],
+                integer_variables: vec![1, 2, 3],
+                continuous_variables: vec![1.0, 2.0, 3.0],
+            },
+            resource_variables: ResourceVariables {
+                integer_variables: vec![4, 5, 6],
+                continuous_variables: vec![4.0, 5.0, 6.0],
+            },
+        };
+        let registry = generate_registry();
+        let set_effect1 = SetExpression::SetElementOperation(
+            SetElementOperator::Add,
+            ElementExpression::Constant(1),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+        );
+        let set_effect2 = SetExpression::SetElementOperation(
+            SetElementOperator::Remove,
+            ElementExpression::Constant(0),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
+        );
+        let vector_effect1 = VectorExpression::Push(
+            ElementExpression::Constant(1),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                0,
+            ))),
+        );
+        let vector_effect2 = VectorExpression::Push(
+            ElementExpression::Constant(0),
+            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                1,
+            ))),
+        );
+        let element_effect1 = ElementExpression::Constant(2);
+        let element_effect2 = ElementExpression::Constant(1);
+        let integer_effect1 = NumericExpression::NumericOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericExpression::IntegerVariable(0)),
+            Box::new(NumericExpression::Constant(1)),
+        );
+        let integer_effect2 = NumericExpression::NumericOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericExpression::IntegerVariable(1)),
+            Box::new(NumericExpression::Constant(2)),
+        );
+        let continuous_effect1 = NumericExpression::NumericOperation(
+            NumericOperator::Subtract,
+            Box::new(NumericExpression::ContinuousVariable(0)),
+            Box::new(NumericExpression::Constant(1.0)),
+        );
+        let continuous_effect2 = NumericExpression::NumericOperation(
+            NumericOperator::Multiply,
+            Box::new(NumericExpression::ContinuousVariable(1)),
+            Box::new(NumericExpression::Constant(2.0)),
+        );
+        let integer_resource_effect1 = NumericExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(NumericExpression::IntegerResourceVariable(0)),
+            Box::new(NumericExpression::Constant(1)),
+        );
+        let integer_resource_effect2 = NumericExpression::NumericOperation(
+            NumericOperator::Divide,
+            Box::new(NumericExpression::IntegerResourceVariable(1)),
+            Box::new(NumericExpression::Constant(2)),
+        );
+        let continuous_resource_effect1 = NumericExpression::NumericOperation(
+            NumericOperator::Add,
+            Box::new(NumericExpression::ContinuousResourceVariable(0)),
+            Box::new(NumericExpression::Constant(1.0)),
+        );
+        let continuous_resource_effect2 = NumericExpression::NumericOperation(
+            NumericOperator::Divide,
+            Box::new(NumericExpression::ContinuousResourceVariable(1)),
+            Box::new(NumericExpression::Constant(2.0)),
+        );
+        let effect = effect::Effect {
+            set_effects: vec![(0, set_effect1), (1, set_effect2)],
+            vector_effects: vec![(0, vector_effect1), (1, vector_effect2)],
+            element_effects: vec![(0, element_effect1), (1, element_effect2)],
+            integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
+            continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+            integer_resource_effects: vec![
+                (0, integer_resource_effect1),
+                (1, integer_resource_effect2),
+            ],
+            continuous_resource_effects: vec![
+                (0, continuous_resource_effect1),
+                (1, continuous_resource_effect2),
+            ],
+        };
+
+        let mut set1 = Set::with_capacity(3);
+        set1.insert(0);
+        set1.insert(1);
+        set1.insert(2);
+        let mut set2 = Set::with_capacity(3);
+        set2.insert(1);
+        let expected = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![set1, set2],
+                vector_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
+                element_variables: vec![2, 1],
+                integer_variables: vec![0, 4, 3],
+                continuous_variables: vec![0.0, 4.0, 3.0],
+            },
+            resource_variables: ResourceVariables {
+                integer_variables: vec![5, 2, 6],
+                continuous_variables: vec![5.0, 2.5, 6.0],
+            },
+        };
+        state.apply_effect_in_place(&effect, &registry);
+        assert_eq!(state, expected);
+    }
+
+    #[test]
     fn dominance() {
         let metadata = generate_metadata();
 
         let a = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![],
+                continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
             },
             ..Default::default()
         };
         let b = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![],
+                continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
             },
             ..Default::default()
         };
@@ -973,7 +1442,7 @@ cr3: 3
         let b = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 1, 3, 0],
-                continuous_variables: vec![],
+                continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
             },
             ..Default::default()
         };
@@ -983,7 +1452,7 @@ cr3: 3
         let b = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 3, 3, 0],
-                continuous_variables: vec![],
+                continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
             },
             ..Default::default()
         };
@@ -992,24 +1461,14 @@ cr3: 3
         let a = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![
-                    OrderedFloat(1.0),
-                    OrderedFloat(2.0),
-                    OrderedFloat(2.0),
-                    OrderedFloat(0.0),
-                ],
+                continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
             },
             ..Default::default()
         };
         let b = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![
-                    OrderedFloat(1.0),
-                    OrderedFloat(1.0),
-                    OrderedFloat(3.0),
-                    OrderedFloat(0.0),
-                ],
+                continuous_variables: vec![1.0, 1.0, 3.0, 0.0],
             },
             ..Default::default()
         };
@@ -1019,12 +1478,7 @@ cr3: 3
         let b = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![
-                    OrderedFloat(1.0),
-                    OrderedFloat(3.0),
-                    OrderedFloat(4.0),
-                    OrderedFloat(0.0),
-                ],
+                continuous_variables: vec![1.0, 3.0, 4.0, 0.0],
             },
             ..Default::default()
         };
@@ -1059,19 +1513,14 @@ cr3: 3
         let a = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![
-                    OrderedFloat(1.0),
-                    OrderedFloat(2.0),
-                    OrderedFloat(2.0),
-                    OrderedFloat(0.0),
-                ],
+                continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
             },
             ..Default::default()
         };
         let b = State {
             resource_variables: ResourceVariables {
                 integer_variables: vec![1, 2, 2, 0],
-                continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(1.0), OrderedFloat(3.0)],
+                continuous_variables: vec![1.0, 1.0, 3.0],
             },
             ..Default::default()
         };

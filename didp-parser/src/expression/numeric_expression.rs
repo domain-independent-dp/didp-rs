@@ -4,7 +4,7 @@ use super::numeric_operator::{MathFunction, NumericOperator};
 use super::numeric_table_expression::NumericTableExpression;
 use super::reference_expression::ReferenceExpression;
 use super::table_vector_expression::TableVectorExpression;
-use crate::state::State;
+use crate::state::DPState;
 use crate::table_registry::TableRegistry;
 use crate::variable::{Continuous, FromNumeric, Integer, Numeric};
 use std::boxed::Box;
@@ -52,28 +52,24 @@ impl<T: Numeric> Default for NumericExpression<T> {
 }
 
 impl<T: Numeric> NumericExpression<T> {
-    pub fn eval(&self, state: &State, registry: &TableRegistry) -> T {
+    pub fn eval<U: DPState>(&self, state: &U, registry: &TableRegistry) -> T {
         self.eval_inner(None, state, registry)
     }
 
-    pub fn eval_cost(&self, cost: T, state: &State, registry: &TableRegistry) -> T {
+    pub fn eval_cost<U: DPState>(&self, cost: T, state: &U, registry: &TableRegistry) -> T {
         self.eval_inner(Some(cost), state, registry)
     }
 
-    fn eval_inner(&self, cost: Option<T>, state: &State, registry: &TableRegistry) -> T {
+    fn eval_inner<U: DPState>(&self, cost: Option<T>, state: &U, registry: &TableRegistry) -> T {
         match self {
             Self::Constant(x) => *x,
-            Self::IntegerVariable(i) => {
-                T::from_integer(state.signature_variables.integer_variables[*i])
-            }
+            Self::IntegerVariable(i) => T::from_integer(state.get_integer_variable(*i)),
             Self::IntegerResourceVariable(i) => {
-                T::from_integer(state.resource_variables.integer_variables[*i])
+                T::from_integer(state.get_integer_resource_variable(*i))
             }
-            Self::ContinuousVariable(i) => {
-                T::from_continuous(state.signature_variables.continuous_variables[*i].into_inner())
-            }
+            Self::ContinuousVariable(i) => T::from_continuous(state.get_continuous_variable(*i)),
             Self::ContinuousResourceVariable(i) => {
-                T::from_continuous(state.resource_variables.continuous_variables[*i].into_inner())
+                T::from_continuous(state.get_continuous_resource_variable(*i))
             }
             Self::Cost => cost.unwrap(),
             Self::Math(op, x) => op.eval(x.eval_inner(cost, state, registry)),
@@ -83,24 +79,16 @@ impl<T: Numeric> NumericExpression<T> {
                 op.eval(a, b)
             }
             Self::Cardinality(SetExpression::Reference(expression)) => {
-                let set = expression.eval(
-                    state,
-                    registry,
-                    &state.signature_variables.set_variables,
-                    &registry.set_tables,
-                );
+                let f = |i| state.get_set_variable(i);
+                let set = expression.eval(state, registry, &f, &registry.set_tables);
                 FromNumeric::from_usize(set.count_ones(..))
             }
             Self::Cardinality(set) => {
                 FromNumeric::from_usize(set.eval(state, registry).count_ones(..))
             }
             Self::Length(VectorExpression::Reference(expression)) => {
-                let vector = expression.eval(
-                    state,
-                    registry,
-                    &state.signature_variables.vector_variables,
-                    &registry.vector_tables,
-                );
+                let f = |i| state.get_vector_variable(i);
+                let vector = expression.eval(state, registry, &f, &registry.vector_tables);
                 FromNumeric::from_usize(vector.len())
             }
             Self::Length(vector) => FromNumeric::from_usize(vector.eval(state, registry).len()),
@@ -248,15 +236,20 @@ pub enum NumericVectorExpression<T: Numeric> {
 }
 
 impl<T: Numeric> NumericVectorExpression<T> {
-    pub fn eval(&self, state: &State, registry: &TableRegistry) -> Vec<T> {
+    pub fn eval<U: DPState>(&self, state: &U, registry: &TableRegistry) -> Vec<T> {
         self.eval_inner(None, state, registry)
     }
 
-    pub fn eval_cost(&self, cost: T, state: &State, registry: &TableRegistry) -> Vec<T> {
+    pub fn eval_cost<U: DPState>(&self, cost: T, state: &U, registry: &TableRegistry) -> Vec<T> {
         self.eval_inner(Some(cost), state, registry)
     }
 
-    fn eval_inner(&self, cost: Option<T>, state: &State, registry: &TableRegistry) -> Vec<T> {
+    fn eval_inner<U: DPState>(
+        &self,
+        cost: Option<T>,
+        state: &U,
+        registry: &TableRegistry,
+    ) -> Vec<T> {
         match self {
             Self::Constant(vector) => vector.clone(),
             Self::Reverse(vector) => {
@@ -474,9 +467,7 @@ mod tests {
     use crate::table_data;
     use crate::variable::*;
     use approx::assert_relative_eq;
-    use ordered_float::OrderedFloat;
     use rustc_hash::FxHashMap;
-    use std::rc::Rc;
 
     fn generate_state() -> state::State {
         let mut set1 = Set::with_capacity(3);
@@ -486,16 +477,16 @@ mod tests {
         set2.insert(0);
         set2.insert(1);
         state::State {
-            signature_variables: Rc::new(state::SignatureVariables {
+            signature_variables: state::SignatureVariables {
                 set_variables: vec![set1, set2],
                 vector_variables: vec![vec![0, 2]],
                 element_variables: vec![1],
                 integer_variables: vec![1, 2, 3],
-                continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
-            }),
+                continuous_variables: vec![1.0, 2.0, 3.0],
+            },
             resource_variables: state::ResourceVariables {
                 integer_variables: vec![4, 5, 6],
-                continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
+                continuous_variables: vec![4.0, 5.0, 6.0],
             },
         }
     }

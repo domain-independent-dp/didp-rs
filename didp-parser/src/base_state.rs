@@ -1,5 +1,6 @@
 use crate::state;
-use crate::variable::Numeric;
+use crate::state::DPState;
+use crate::variable::{Continuous, Numeric};
 use crate::yaml_util;
 use lazy_static::lazy_static;
 use std::error::Error;
@@ -13,12 +14,50 @@ pub struct BaseState<T: Numeric> {
 }
 
 impl<T: Numeric> BaseState<T> {
-    pub fn get_cost(&self, state: &state::State) -> Option<T> {
-        if *state == self.state {
-            Some(self.cost)
-        } else {
-            None
+    pub fn get_cost<U: DPState>(&self, state: &U, metadata: &state::StateMetadata) -> Option<T> {
+        for i in 0..metadata.number_of_element_variables() {
+            if self.state.get_element_variable(i) != state.get_element_variable(i) {
+                return None;
+            }
         }
+        for i in 0..metadata.number_of_integer_variables() {
+            if self.state.get_integer_variable(i) != state.get_integer_variable(i) {
+                return None;
+            }
+        }
+        for i in 0..metadata.number_of_integer_resource_variables() {
+            if self.state.get_integer_resource_variable(i) != state.get_integer_resource_variable(i)
+            {
+                return None;
+            }
+        }
+        for i in 0..metadata.number_of_continuous_variables() {
+            if (self.state.get_continuous_variable(i) - state.get_continuous_variable(i)).abs()
+                > Continuous::EPSILON
+            {
+                return None;
+            }
+        }
+        for i in 0..metadata.number_of_continuous_resource_variables() {
+            if (self.state.get_continuous_resource_variable(i)
+                - state.get_continuous_resource_variable(i))
+            .abs()
+                > Continuous::EPSILON
+            {
+                return None;
+            }
+        }
+        for i in 0..metadata.number_of_set_variables() {
+            if self.state.get_set_variable(i) != state.get_set_variable(i) {
+                return None;
+            }
+        }
+        for i in 0..metadata.number_of_vector_variables() {
+            if self.state.get_vector_variable(i) != state.get_vector_variable(i) {
+                return None;
+            }
+        }
+        Some(self.cost)
     }
 
     pub fn load_from_yaml(
@@ -52,7 +91,6 @@ mod tests {
     use super::*;
     use crate::variable;
     use rustc_hash::FxHashMap;
-    use std::rc::Rc;
 
     fn generate_metadata() -> state::StateMetadata {
         let mut name_to_integer_variable = FxHashMap::default();
@@ -66,10 +104,10 @@ mod tests {
 
     fn generate_state() -> state::State {
         state::State {
-            signature_variables: Rc::new(state::SignatureVariables {
+            signature_variables: state::SignatureVariables {
                 integer_variables: vec![1],
                 ..Default::default()
-            }),
+            },
             ..Default::default()
         }
     }
@@ -77,30 +115,31 @@ mod tests {
     #[test]
     fn get_cost() {
         let state = generate_state();
+        let metadata = generate_metadata();
 
         let base_state = BaseState {
             state: state::State {
-                signature_variables: Rc::new(state::SignatureVariables {
+                signature_variables: state::SignatureVariables {
                     integer_variables: vec![1],
                     ..Default::default()
-                }),
+                },
                 ..Default::default()
             },
             cost: 1,
         };
-        assert_eq!(base_state.get_cost(&state), Some(1));
+        assert_eq!(base_state.get_cost(&state, &metadata), Some(1));
 
         let base_state = BaseState {
             state: state::State {
-                signature_variables: Rc::new(state::SignatureVariables {
+                signature_variables: state::SignatureVariables {
                     integer_variables: vec![2],
                     ..Default::default()
-                }),
+                },
                 ..Default::default()
             },
             cost: 1,
         };
-        assert_eq!(base_state.get_cost(&state), None);
+        assert_eq!(base_state.get_cost(&state, &metadata), None);
     }
 
     #[test]
@@ -109,10 +148,10 @@ mod tests {
 
         let expected = BaseState {
             state: state::State {
-                signature_variables: Rc::new(state::SignatureVariables {
+                signature_variables: state::SignatureVariables {
                     integer_variables: vec![1],
                     ..Default::default()
-                }),
+                },
                 ..Default::default()
             },
             cost: 0,

@@ -1,5 +1,5 @@
 use super::element_expression::TableExpression;
-use crate::state::State;
+use crate::state::DPState;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 
@@ -11,16 +11,19 @@ pub enum ReferenceExpression<T: Clone> {
 }
 
 impl<T: Clone> ReferenceExpression<T> {
-    pub fn eval<'a>(
+    pub fn eval<'a, U: DPState, F>(
         &'a self,
-        state: &'a State,
+        state: &'a U,
         registry: &'a TableRegistry,
-        variables: &'a [T],
+        get_variable: &'a F,
         tables: &'a TableData<T>,
-    ) -> &'a T {
+    ) -> &'a T
+    where
+        F: Fn(usize) -> &'a T,
+    {
         match self {
             Self::Constant(value) => value,
-            Self::Variable(i) => &variables[*i],
+            Self::Variable(i) => get_variable(*i),
             Self::Table(table) => table.eval(state, registry, tables),
         }
     }
@@ -48,7 +51,6 @@ mod tests {
     use crate::table::*;
     use crate::table_data::TableData;
     use rustc_hash::FxHashMap;
-    use std::rc::Rc;
 
     fn generate_registry() -> TableRegistry {
         let mut name_to_table_1d = FxHashMap::default();
@@ -65,10 +67,10 @@ mod tests {
 
     fn generate_state() -> State {
         State {
-            signature_variables: Rc::new(SignatureVariables {
+            signature_variables: SignatureVariables {
                 vector_variables: vec![vec![0, 2]],
                 ..Default::default()
-            }),
+            },
             ..Default::default()
         }
     }
@@ -78,13 +80,9 @@ mod tests {
         let state = generate_state();
         let registry = generate_registry();
         let expression = ReferenceExpression::Constant(vec![0, 1, 2]);
+        let f = |i| state.get_vector_variable(i);
         assert_eq!(
-            *expression.eval(
-                &state,
-                &registry,
-                &state.signature_variables.vector_variables,
-                &registry.vector_tables
-            ),
+            *expression.eval(&state, &registry, &f, &registry.vector_tables),
             vec![0, 1, 2]
         );
     }
@@ -94,13 +92,9 @@ mod tests {
         let state = generate_state();
         let registry = generate_registry();
         let expression = ReferenceExpression::Variable(0);
+        let f = |i| state.get_vector_variable(i);
         assert_eq!(
-            *expression.eval(
-                &state,
-                &registry,
-                &state.signature_variables.vector_variables,
-                &registry.vector_tables
-            ),
+            *expression.eval(&state, &registry, &f, &registry.vector_tables),
             vec![0, 2]
         );
     }
@@ -111,13 +105,9 @@ mod tests {
         let registry = generate_registry();
         let expression =
             ReferenceExpression::Table(TableExpression::Table1D(0, ElementExpression::Constant(0)));
+        let f = |i| state.get_vector_variable(i);
         assert_eq!(
-            *expression.eval(
-                &state,
-                &registry,
-                &state.signature_variables.vector_variables,
-                &registry.vector_tables
-            ),
+            *expression.eval(&state, &registry, &f, &registry.vector_tables),
             vec![0, 1]
         );
     }

@@ -1,6 +1,6 @@
 use super::element_expression::{ElementExpression, SetExpression};
 use super::reference_expression::ReferenceExpression;
-use crate::state::State;
+use crate::state::DPState;
 use crate::table_registry::TableRegistry;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -14,62 +14,37 @@ pub enum SetCondition {
 }
 
 impl SetCondition {
-    pub fn eval(&self, state: &State, registry: &TableRegistry) -> bool {
+    pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> bool {
         match self {
             Self::Constant(value) => *value,
             Self::Eq(x, y) => x.eval(state, registry) == y.eval(state, registry),
             Self::Ne(x, y) => x.eval(state, registry) != y.eval(state, registry),
             Self::IsIn(element, SetExpression::Reference(set)) => {
-                let set = set.eval(
-                    state,
-                    registry,
-                    &state.signature_variables.set_variables,
-                    &registry.set_tables,
-                );
+                let f = |i| state.get_set_variable(i);
+                let set = set.eval(state, registry, &f, &registry.set_tables);
                 set.contains(element.eval(state, registry))
             }
             Self::IsIn(e, s) => s.eval(state, registry).contains(e.eval(state, registry)),
             Self::IsSubset(SetExpression::Reference(x), SetExpression::Reference(y)) => {
-                let x = x.eval(
-                    state,
-                    registry,
-                    &state.signature_variables.set_variables,
-                    &registry.set_tables,
-                );
-                let y = y.eval(
-                    state,
-                    registry,
-                    &state.signature_variables.set_variables,
-                    &registry.set_tables,
-                );
+                let f = |i| state.get_set_variable(i);
+                let x = x.eval(state, registry, &f, &registry.set_tables);
+                let y = y.eval(state, registry, &f, &registry.set_tables);
                 x.is_subset(y)
             }
             Self::IsSubset(x, SetExpression::Reference(y)) => {
-                let y = y.eval(
-                    state,
-                    registry,
-                    &state.signature_variables.set_variables,
-                    &registry.set_tables,
-                );
+                let f = |i| state.get_set_variable(i);
+                let y = y.eval(state, registry, &f, &registry.set_tables);
                 x.eval(state, registry).is_subset(y)
             }
             Self::IsSubset(SetExpression::Reference(x), y) => {
-                let x = x.eval(
-                    state,
-                    registry,
-                    &state.signature_variables.set_variables,
-                    &registry.set_tables,
-                );
+                let f = |i| state.get_set_variable(i);
+                let x = x.eval(state, registry, &f, &registry.set_tables);
                 x.is_subset(&y.eval(state, registry))
             }
             Self::IsSubset(x, y) => x.eval(state, registry).is_subset(&y.eval(state, registry)),
             Self::IsEmpty(SetExpression::Reference(set)) => {
-                let set = set.eval(
-                    state,
-                    registry,
-                    &state.signature_variables.set_variables,
-                    &registry.set_tables,
-                );
+                let f = |i| state.get_set_variable(i);
+                let set = set.eval(state, registry, &f, &registry.set_tables);
                 set.count_ones(..) == 0
             }
             Self::IsEmpty(s) => s.eval(state, registry).count_ones(..) == 0,
@@ -133,7 +108,6 @@ mod tests {
     use super::*;
     use crate::state::*;
     use crate::variable::*;
-    use std::rc::Rc;
 
     fn generate_state() -> State {
         let mut set1 = Set::with_capacity(3);
@@ -146,12 +120,12 @@ mod tests {
         set3.insert(1);
         let set4 = Set::with_capacity(3);
         State {
-            signature_variables: Rc::new(SignatureVariables {
+            signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2, set3, set4],
                 vector_variables: vec![vec![0, 2], vec![], vec![], vec![]],
                 element_variables: vec![1, 2, 3, 4],
                 ..Default::default()
-            }),
+            },
             ..Default::default()
         }
     }

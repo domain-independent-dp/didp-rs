@@ -2,7 +2,7 @@ use super::element_expression::{ElementExpression, SetExpression, VectorExpressi
 use super::numeric_table_expression::ArgumentExpression;
 use super::reference_expression::ReferenceExpression;
 use super::util;
-use crate::state::State;
+use crate::state::DPState;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 use crate::variable::Numeric;
@@ -21,17 +21,22 @@ pub enum TableVectorExpression<T: Numeric> {
 }
 
 impl<T: Numeric> TableVectorExpression<T> {
-    pub fn eval(&self, state: &State, registry: &TableRegistry, tables: &TableData<T>) -> Vec<T> {
-        let vector_variables = &state.signature_variables.vector_variables;
+    pub fn eval<U: DPState>(
+        &self,
+        state: &U,
+        registry: &TableRegistry,
+        tables: &TableData<T>,
+    ) -> Vec<T> {
+        let vector_f = |i| state.get_vector_variable(i);
         let vector_tables = &registry.vector_tables;
-        let set_variables = &state.signature_variables.set_variables;
+        let set_f = |i| state.get_set_variable(i);
         let set_tables = &registry.set_tables;
         match self {
             Self::Constant(vector) => vector.clone(),
             Self::Table(i, args) => Self::eval_table(*i, args, state, registry, tables),
             Self::TableSum(i, args) => Self::eval_table_sum(*i, args, state, registry, tables),
             Self::Table1D(i, VectorExpression::Reference(x)) => x
-                .eval(state, registry, vector_variables, vector_tables)
+                .eval(state, registry, &vector_f, vector_tables)
                 .iter()
                 .map(|x| tables.tables_1d[*i].eval(*x))
                 .collect(),
@@ -41,13 +46,13 @@ impl<T: Numeric> TableVectorExpression<T> {
                 .map(|x| tables.tables_1d[*i].eval(x))
                 .collect(),
             Self::Table2D(i, VectorExpression::Reference(x), VectorExpression::Reference(y)) => x
-                .eval(state, registry, vector_variables, vector_tables)
+                .eval(state, registry, &vector_f, vector_tables)
                 .iter()
-                .zip(y.eval(state, registry, vector_variables, vector_tables))
+                .zip(y.eval(state, registry, &vector_f, vector_tables))
                 .map(|(x, y)| tables.tables_2d[*i].eval(*x, *y))
                 .collect(),
             Self::Table2D(i, VectorExpression::Reference(x), y) => x
-                .eval(state, registry, vector_variables, vector_tables)
+                .eval(state, registry, &vector_f, vector_tables)
                 .iter()
                 .zip(y.eval(state, registry))
                 .map(|(x, y)| tables.tables_2d[*i].eval(*x, y))
@@ -55,7 +60,7 @@ impl<T: Numeric> TableVectorExpression<T> {
             Self::Table2D(i, x, VectorExpression::Reference(y)) => x
                 .eval(state, registry)
                 .into_iter()
-                .zip(y.eval(state, registry, vector_variables, vector_tables))
+                .zip(y.eval(state, registry, &vector_f, vector_tables))
                 .map(|(x, y)| tables.tables_2d[*i].eval(x, *y))
                 .collect(),
             Self::Table2D(i, x, y) => x
@@ -66,7 +71,7 @@ impl<T: Numeric> TableVectorExpression<T> {
                 .collect(),
             Self::Table2DX(i, VectorExpression::Reference(x), y) => {
                 let y = y.eval(state, registry);
-                x.eval(state, registry, vector_variables, vector_tables)
+                x.eval(state, registry, &vector_f, vector_tables)
                     .iter()
                     .map(|x| tables.tables_2d[*i].eval(*x, y))
                     .collect()
@@ -80,7 +85,7 @@ impl<T: Numeric> TableVectorExpression<T> {
             }
             Self::Table2DY(i, x, VectorExpression::Reference(y)) => {
                 let x = x.eval(state, registry);
-                y.eval(state, registry, vector_variables, vector_tables)
+                y.eval(state, registry, &vector_f, vector_tables)
                     .iter()
                     .map(|y| tables.tables_2d[*i].eval(x, *y))
                     .collect()
@@ -93,21 +98,21 @@ impl<T: Numeric> TableVectorExpression<T> {
                     .collect()
             }
             Self::Table2DXSum(i, VectorExpression::Reference(x), SetExpression::Reference(y)) => {
-                let y = y.eval(state, registry, set_variables, set_tables);
-                x.eval(state, registry, vector_variables, vector_tables)
+                let y = y.eval(state, registry, &set_f, set_tables);
+                x.eval(state, registry, &vector_f, vector_tables)
                     .iter()
                     .map(|x| tables.tables_2d[*i].sum_y(*x, y.ones()))
                     .collect()
             }
             Self::Table2DXSum(i, VectorExpression::Reference(x), y) => {
                 let y = y.eval(state, registry);
-                x.eval(state, registry, vector_variables, vector_tables)
+                x.eval(state, registry, &vector_f, vector_tables)
                     .iter()
                     .map(|x| tables.tables_2d[*i].sum_y(*x, y.ones()))
                     .collect()
             }
             Self::Table2DXSum(i, x, SetExpression::Reference(y)) => {
-                let y = y.eval(state, registry, set_variables, set_tables);
+                let y = y.eval(state, registry, &set_f, set_tables);
                 x.eval(state, registry)
                     .into_iter()
                     .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
@@ -121,14 +126,14 @@ impl<T: Numeric> TableVectorExpression<T> {
                     .collect()
             }
             Self::Table2DYSum(i, SetExpression::Reference(x), VectorExpression::Reference(y)) => {
-                let x = x.eval(state, registry, set_variables, set_tables);
-                y.eval(state, registry, vector_variables, vector_tables)
+                let x = x.eval(state, registry, &set_f, set_tables);
+                y.eval(state, registry, &vector_f, vector_tables)
                     .iter()
                     .map(|y| tables.tables_2d[*i].sum_x(x.ones(), *y))
                     .collect()
             }
             Self::Table2DYSum(i, SetExpression::Reference(x), y) => {
-                let x = x.eval(state, registry, set_variables, set_tables);
+                let x = x.eval(state, registry, &set_f, set_tables);
                 y.eval(state, registry)
                     .into_iter()
                     .map(|y| tables.tables_2d[*i].sum_x(x.ones(), y))
@@ -136,7 +141,7 @@ impl<T: Numeric> TableVectorExpression<T> {
             }
             Self::Table2DYSum(i, x, VectorExpression::Reference(y)) => {
                 let x = x.eval(state, registry);
-                y.eval(state, registry, vector_variables, vector_tables)
+                y.eval(state, registry, &vector_f, vector_tables)
                     .iter()
                     .map(|y| tables.tables_2d[*i].sum_x(x.ones(), *y))
                     .collect()
@@ -225,10 +230,10 @@ impl<T: Numeric> TableVectorExpression<T> {
         }
     }
 
-    fn eval_table(
+    fn eval_table<U: DPState>(
         i: usize,
         args: &[VectorOrElementExpression],
-        state: &State,
+        state: &U,
         registry: &TableRegistry,
         tables: &TableData<T>,
     ) -> Vec<T> {
@@ -242,12 +247,8 @@ impl<T: Numeric> TableVectorExpression<T> {
                 }
                 VectorOrElementExpression::Vector(vector) => match vector {
                     VectorExpression::Reference(vector) => {
-                        let vector = vector.eval(
-                            state,
-                            registry,
-                            &state.signature_variables.vector_variables,
-                            &registry.vector_tables,
-                        );
+                        let f = |i| state.get_vector_variable(i);
+                        let vector = vector.eval(state, registry, &f, &registry.vector_tables);
                         if vector_mode {
                             result.iter_mut().zip(vector).for_each(|(r, v)| r.push(*v));
                         } else {
@@ -359,10 +360,10 @@ impl<T: Numeric> TableVectorExpression<T> {
         })
     }
 
-    fn eval_table_sum(
+    fn eval_table_sum<U: DPState>(
         i: usize,
         args: &[ArgumentExpression],
-        state: &State,
+        state: &U,
         registry: &TableRegistry,
         tables: &TableData<T>,
     ) -> Vec<T> {
@@ -379,12 +380,8 @@ impl<T: Numeric> TableVectorExpression<T> {
                 ArgumentExpression::Set(set) => {
                     result = match set {
                         SetExpression::Reference(set) => {
-                            let set = set.eval(
-                                state,
-                                registry,
-                                &state.signature_variables.set_variables,
-                                &registry.set_tables,
-                            );
+                            let f = |i| state.get_set_variable(i);
+                            let set = set.eval(state, registry, &f, &registry.set_tables);
                             result
                                 .into_iter()
                                 .map(|rr| util::expand_vector_with_set(rr, set))
@@ -402,15 +399,13 @@ impl<T: Numeric> TableVectorExpression<T> {
                 ArgumentExpression::Vector(vector) => {
                     if vector_mode {
                         match vector {
-                            VectorExpression::Reference(vector) => result
-                                .iter_mut()
-                                .zip(vector.eval(
-                                    state,
-                                    registry,
-                                    &state.signature_variables.vector_variables,
-                                    &registry.vector_tables,
-                                ))
-                                .for_each(|(rr, v)| rr.iter_mut().for_each(|r| r.push(*v))),
+                            VectorExpression::Reference(vector) => {
+                                let f = |i| state.get_vector_variable(i);
+                                result
+                                    .iter_mut()
+                                    .zip(vector.eval(state, registry, &f, &registry.vector_tables))
+                                    .for_each(|(rr, v)| rr.iter_mut().for_each(|r| r.push(*v)))
+                            }
                             _ => result
                                 .iter_mut()
                                 .zip(vector.eval(state, registry))
@@ -418,20 +413,18 @@ impl<T: Numeric> TableVectorExpression<T> {
                         }
                     } else {
                         result = match vector {
-                            VectorExpression::Reference(vector) => vector
-                                .eval(
-                                    state,
-                                    registry,
-                                    &state.signature_variables.vector_variables,
-                                    &registry.vector_tables,
-                                )
-                                .iter()
-                                .map(|v| {
-                                    let mut rr = result[0].clone();
-                                    rr.iter_mut().for_each(|r| r.push(*v));
-                                    rr
-                                })
-                                .collect(),
+                            VectorExpression::Reference(vector) => {
+                                let f = |i| state.get_vector_variable(i);
+                                vector
+                                    .eval(state, registry, &f, &registry.vector_tables)
+                                    .iter()
+                                    .map(|v| {
+                                        let mut rr = result[0].clone();
+                                        rr.iter_mut().for_each(|r| r.push(*v));
+                                        rr
+                                    })
+                                    .collect()
+                            }
                             _ => vector
                                 .eval(state, registry)
                                 .into_iter()
@@ -577,9 +570,7 @@ mod test {
     use crate::table;
     use crate::table_data;
     use crate::variable::*;
-    use ordered_float::OrderedFloat;
     use rustc_hash::FxHashMap;
-    use std::rc::Rc;
 
     fn generate_state() -> State {
         let mut set1 = Set::with_capacity(3);
@@ -589,16 +580,16 @@ mod test {
         set2.insert(0);
         set2.insert(1);
         State {
-            signature_variables: Rc::new(SignatureVariables {
+            signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2],
                 vector_variables: vec![vec![0, 2]],
                 element_variables: vec![1],
                 integer_variables: vec![1, 2, 3],
-                continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
-            }),
+                continuous_variables: vec![1.0, 2.0, 3.0],
+            },
             resource_variables: ResourceVariables {
                 integer_variables: vec![4, 5, 6],
-                continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
+                continuous_variables: vec![4.0, 5.0, 6.0],
             },
         }
     }
