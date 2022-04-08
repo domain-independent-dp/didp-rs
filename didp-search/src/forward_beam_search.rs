@@ -9,54 +9,88 @@ use std::mem;
 use std::rc::Rc;
 use std::str;
 
-pub fn iterative_forward_beam_search<'a, T, H, F>(
+pub fn iterative_forward_beam_search<'a, T, U, H, F>(
     model: &'a didp_parser::Model<T>,
-    evaluators: &BFSEvaluators<'a, T, H, F>,
+    evaluators: &BFSEvaluators<'a, T, U, H, F>,
     beams: &[usize],
     maximize: bool,
-    mut primal_bound: Option<T>,
+    mut g_bound: Option<U>,
+    discard_g_bound: bool,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
-    T: variable::Numeric + Ord + fmt::Display,
-    <T as str::FromStr>::Err: fmt::Debug,
-    H: evaluator::Evaluator<T>,
-    F: Fn(T, T, &StateForSearchNode, &didp_parser::Model<T>) -> T,
+    T: variable::Numeric + fmt::Display,
+    U: variable::Numeric + Ord + fmt::Display,
+    <U as str::FromStr>::Err: fmt::Debug,
+    H: evaluator::Evaluator<U>,
+    F: Fn(U, U, &StateForSearchNode, &didp_parser::Model<T>) -> U,
 {
     let mut incumbent = Vec::new();
+    let mut cost = None;
     for beam in beams {
         let result = forward_beam_search(
             model,
             evaluators,
             *beam,
             maximize,
-            primal_bound,
+            g_bound,
             registry_capacity,
         );
-        if let Some((new_primal_bound, new_incumbent)) = result {
-            primal_bound = Some(new_primal_bound);
-            incumbent = new_incumbent;
-            println!("New primal bound: {}", new_primal_bound);
+        if let Some((new_g_bound, new_cost, new_incumbent)) = result {
+            if let Some(current_cost) = cost {
+                match model.reduce_function {
+                    didp_parser::ReduceFunction::Max if new_cost > current_cost => {
+                        incumbent = new_incumbent;
+                        cost = Some(new_cost);
+                        println!("New primal bound: {}", new_cost);
+                    }
+                    didp_parser::ReduceFunction::Min if new_cost < current_cost => {
+                        incumbent = new_incumbent;
+                        cost = Some(new_cost);
+                        println!("New primal bound: {}", new_cost);
+                    }
+                    _ => {}
+                }
+            } else {
+                incumbent = new_incumbent;
+                cost = Some(new_cost);
+                println!("New primal bound: {}", new_cost);
+            }
+            if !discard_g_bound {
+                if let Some(current_bound) = g_bound {
+                    if (maximize && new_g_bound > current_bound)
+                        || (!maximize && new_g_bound < current_bound)
+                    {
+                        g_bound = Some(new_g_bound);
+                        println!("New g bound: {}", new_g_bound);
+                    }
+                } else {
+                    g_bound = Some(new_g_bound);
+                    println!("New g bound: {}", new_g_bound);
+                }
+            }
         } else {
             println!("Failed to find a solution");
         }
     }
-    primal_bound.map(|b| (b, incumbent))
+    cost.map(|cost| (cost, incumbent))
 }
 
-pub fn forward_beam_search<'a, T, H, F>(
+pub type BeamSearchSolution<T, U> = Option<(U, T, Vec<Rc<didp_parser::Transition<T>>>)>;
+
+pub fn forward_beam_search<'a, T, U, H, F>(
     model: &'a didp_parser::Model<T>,
-    evaluators: &BFSEvaluators<'a, T, H, F>,
+    evaluators: &BFSEvaluators<'a, T, U, H, F>,
     beam: usize,
     maximize: bool,
-    primal_bound: Option<T>,
+    g_bound: Option<U>,
     registry_capacity: Option<usize>,
-) -> solver::Solution<T>
+) -> BeamSearchSolution<T, U>
 where
-    T: variable::Numeric + Ord + fmt::Display,
-    <T as str::FromStr>::Err: fmt::Debug,
-    H: evaluator::Evaluator<T>,
-    F: Fn(T, T, &StateForSearchNode, &didp_parser::Model<T>) -> T,
+    T: variable::Numeric,
+    U: variable::Numeric + Ord + fmt::Display,
+    H: evaluator::Evaluator<U>,
+    F: Fn(U, U, &StateForSearchNode, &didp_parser::Model<T>) -> U,
 {
     let mut open = priority_queue::PriorityQueue::new(!maximize);
     let mut registry = SearchNodeRegistry::new(model);
@@ -64,7 +98,7 @@ where
         registry.reserve(capacity);
     }
 
-    let g = T::zero();
+    let g = U::zero();
     let initial_state = StateForSearchNode::new(&model.target);
     let initial_node = match registry.get_node(initial_state, g, None, None) {
         Some(node) => node,
@@ -90,16 +124,20 @@ where
             expanded += 1;
             i += 1;
             if let Some(cost) = model.get_base_cost(&node.state) {
-                if !maximize || primal_bound.is_none() || node.g <= primal_bound.unwrap() {
-                    let solution = node.trace_transitions(cost, model);
-                    if let Some((incumbent_cost, _)) = incumbent {
-                        if (maximize && solution.0 > incumbent_cost)
-                            || (!maximize && solution.0 < incumbent_cost)
-                        {
-                            incumbent = Some(solution);
+                if !maximize || g_bound.is_none() || node.g > g_bound.unwrap() {
+                    let (cost, solution) = node.trace_transitions(cost, model);
+                    if let Some((_, incumbent_cost, _)) = incumbent {
+                        match model.reduce_function {
+                            didp_parser::ReduceFunction::Max if cost > incumbent_cost => {
+                                incumbent = Some((node.g, cost, solution));
+                            }
+                            didp_parser::ReduceFunction::Min if cost < incumbent_cost => {
+                                incumbent = Some((node.g, cost, solution));
+                            }
+                            _ => {}
                         }
                     } else {
-                        incumbent = Some(solution);
+                        incumbent = Some((node.g, cost, solution));
                     }
                 }
             }
@@ -107,7 +145,7 @@ where
                 let g = transition
                     .g
                     .eval_cost(node.g, &node.state, &model.table_registry);
-                if !maximize && primal_bound.is_some() && g >= primal_bound.unwrap() {
+                if !maximize && g_bound.is_some() && g >= g_bound.unwrap() {
                     continue;
                 }
                 let state = transition
@@ -128,8 +166,8 @@ where
                         };
                         if let Some(h) = h {
                             let f = (evaluators.f_evaluator)(g, h, &node.state, model);
-                            if let Some(bound) = primal_bound {
-                                if (maximize && f <= bound) || (!maximize && f >= bound) {
+                            if let Some(bound) = g_bound {
+                                if !maximize && f >= bound {
                                     continue;
                                 }
                             }
@@ -140,13 +178,13 @@ where
                 }
             }
         }
-        if let Some((cost, transitions)) = incumbent {
+        if let Some((g, cost, transitions)) = incumbent {
             println!("Expanded: {}", expanded);
             let transitions = transitions
                 .into_iter()
                 .map(|t| Rc::new(t.transition.clone()))
                 .collect();
-            return Some((cost, transitions));
+            return Some((g, cost, transitions));
         }
         if new_open.is_empty() {
             println!("Expanded: {}", expanded);

@@ -1,5 +1,6 @@
 use crate::hashable_state;
 use crate::priority_queue;
+use crate::solver::ConfigErr;
 use crate::successor_generator::{MaybeApplicable, SuccessorGenerator};
 use didp_parser::expression_parser::parse_numeric;
 use didp_parser::variable::{Continuous, Element, Integer, Numeric, Set, Vector};
@@ -155,29 +156,26 @@ impl didp_parser::DPState for StateForSearchNode {
 }
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct TransitionWithG<T: Numeric> {
+pub struct TransitionWithG<T: Numeric, U: Numeric> {
     pub transition: didp_parser::Transition<T>,
-    pub g: didp_parser::expression::NumericExpression<T>,
+    pub g: didp_parser::expression::NumericExpression<U>,
 }
 
-impl<T: Numeric> MaybeApplicable for TransitionWithG<T> {
-    fn is_applicable<U: didp_parser::DPState>(
+impl<T: Numeric, U: Numeric> MaybeApplicable for TransitionWithG<T, U> {
+    fn is_applicable<S: didp_parser::DPState>(
         &self,
-        state: &U,
+        state: &S,
         registry: &didp_parser::TableRegistry,
     ) -> bool {
         self.transition.is_applicable(state, registry)
     }
 }
 
-impl<'a, T: Numeric> SuccessorGenerator<'a, TransitionWithG<T>>
-where
-    <T as str::FromStr>::Err: fmt::Debug,
-{
+impl<'a, T: Numeric> SuccessorGenerator<'a, TransitionWithG<T, T>> {
     pub fn new(
         model: &'a didp_parser::Model<T>,
         backward: bool,
-    ) -> SuccessorGenerator<'a, TransitionWithG<T>> {
+    ) -> SuccessorGenerator<'a, TransitionWithG<T, T>> {
         let transitions = if backward {
             &model.backward_transitions
         } else {
@@ -197,12 +195,17 @@ where
             registry: &model.table_registry,
         }
     }
+}
 
+impl<'a, T: Numeric, U: Numeric> SuccessorGenerator<'a, TransitionWithG<T, U>>
+where
+    <U as str::FromStr>::Err: fmt::Debug,
+{
     pub fn with_expressions(
         model: &'a didp_parser::Model<T>,
         backward: bool,
         g_expressions: &FxHashMap<String, String>,
-    ) -> Result<SuccessorGenerator<'a, TransitionWithG<T>>, Box<dyn Error>> {
+    ) -> Result<SuccessorGenerator<'a, TransitionWithG<T, U>>, Box<dyn Error>> {
         let original_transitions = if backward {
             &model.backward_transitions
         } else {
@@ -222,7 +225,9 @@ where
                     &parameters,
                 )?
             } else {
-                t.cost.clone()
+                return Err(
+                    ConfigErr::new(format!("expression for `{}` is undefined", t.name)).into(),
+                );
             };
             transitions.push(Rc::new(TransitionWithG {
                 transition: t.clone(),
@@ -238,42 +243,42 @@ where
 }
 
 #[derive(Debug)]
-pub struct SearchNode<T: Numeric> {
+pub struct SearchNode<T: Numeric, U: Numeric> {
     pub state: StateForSearchNode,
-    pub operator: Option<Rc<TransitionWithG<T>>>,
-    pub parent: Option<Rc<SearchNode<T>>>,
-    pub g: T,
-    pub h: RefCell<Option<T>>,
-    pub f: RefCell<Option<T>>,
+    pub operator: Option<Rc<TransitionWithG<T, U>>>,
+    pub parent: Option<Rc<SearchNode<T, U>>>,
+    pub g: U,
+    pub h: RefCell<Option<U>>,
+    pub f: RefCell<Option<U>>,
     pub closed: RefCell<bool>,
 }
 
-impl<T: Numeric + PartialOrd> PartialEq for SearchNode<T> {
+impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for SearchNode<T, U> {
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f
     }
 }
 
-impl<T: Numeric + Ord> Eq for SearchNode<T> {}
+impl<T: Numeric, U: Numeric + Ord> Eq for SearchNode<T, U> {}
 
-impl<T: Numeric + Ord> Ord for SearchNode<T> {
+impl<T: Numeric, U: Numeric + Ord> Ord for SearchNode<T, U> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.f.cmp(&other.f)
     }
 }
 
-impl<T: Numeric + Ord> PartialOrd for SearchNode<T> {
+impl<T: Numeric, U: Numeric + Ord> PartialOrd for SearchNode<T, U> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<T: Numeric> SearchNode<T> {
+impl<T: Numeric, U: Numeric> SearchNode<T, U> {
     pub fn trace_transitions(
         &self,
         base_cost: T,
         model: &didp_parser::Model<T>,
-    ) -> (T, Vec<Rc<TransitionWithG<T>>>) {
+    ) -> (T, Vec<Rc<TransitionWithG<T, U>>>) {
         let mut result = Vec::new();
         let mut cost = base_cost;
         if let (Some(mut node), Some(operator)) = (self.parent.as_ref(), self.operator.as_ref()) {
@@ -296,16 +301,16 @@ impl<T: Numeric> SearchNode<T> {
     }
 }
 
-pub type OpenList<T> = priority_queue::PriorityQueue<Rc<SearchNode<T>>>;
+pub type OpenList<T, U> = priority_queue::PriorityQueue<Rc<SearchNode<T, U>>>;
 
-pub struct SearchNodeRegistry<'a, T: Numeric> {
-    registry: FxHashMap<Rc<hashable_state::HashableSignatureVariables>, Vec<Rc<SearchNode<T>>>>,
+pub struct SearchNodeRegistry<'a, T: Numeric, U: Numeric> {
+    registry: FxHashMap<Rc<hashable_state::HashableSignatureVariables>, Vec<Rc<SearchNode<T, U>>>>,
     metadata: &'a didp_parser::StateMetadata,
     reduce_function: &'a ReduceFunction,
 }
 
-impl<'a, T: Numeric + Ord> SearchNodeRegistry<'a, T> {
-    pub fn new(model: &'a didp_parser::Model<T>) -> SearchNodeRegistry<T> {
+impl<'a, T: Numeric, U: Numeric + Ord> SearchNodeRegistry<'a, T, U> {
+    pub fn new(model: &'a didp_parser::Model<T>) -> SearchNodeRegistry<T, U> {
         SearchNodeRegistry {
             registry: FxHashMap::default(),
             metadata: &model.state_metadata,
@@ -324,10 +329,10 @@ impl<'a, T: Numeric + Ord> SearchNodeRegistry<'a, T> {
     pub fn get_node(
         &mut self,
         mut state: StateForSearchNode,
-        g: T,
-        operator: Option<Rc<TransitionWithG<T>>>,
-        parent: Option<Rc<SearchNode<T>>>,
-    ) -> Option<Rc<SearchNode<T>>> {
+        g: U,
+        operator: Option<Rc<TransitionWithG<T, U>>>,
+        parent: Option<Rc<SearchNode<T, U>>>,
+    ) -> Option<Rc<SearchNode<T, U>>> {
         let entry = self.registry.entry(state.signature_variables.clone());
         let v = match entry {
             collections::hash_map::Entry::Occupied(entry) => {
@@ -461,12 +466,12 @@ mod tests {
     fn generate_node(
         signature_variables: Rc<hashable_state::HashableSignatureVariables>,
         integer_resource_variables: Vec<Integer>,
-        parent: Option<Rc<SearchNode<Integer>>>,
-        operator: Option<Rc<TransitionWithG<Integer>>>,
+        parent: Option<Rc<SearchNode<Integer, Integer>>>,
+        operator: Option<Rc<TransitionWithG<Integer, Integer>>>,
         g: Integer,
         h: Integer,
         f: Integer,
-    ) -> SearchNode<Integer> {
+    ) -> SearchNode<Integer, Integer> {
         SearchNode {
             state: StateForSearchNode {
                 signature_variables,
@@ -1071,7 +1076,7 @@ mod tests {
     #[test]
     fn get_dominating_node() {
         let model = generate_model();
-        let mut registry = SearchNodeRegistry::<Integer>::new(&model);
+        let mut registry = SearchNodeRegistry::<Integer, Integer>::new(&model);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),

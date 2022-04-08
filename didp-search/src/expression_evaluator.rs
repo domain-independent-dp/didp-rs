@@ -10,9 +10,9 @@ use std::str;
 pub struct ExpressionEvaluator<T: variable::Numeric>(expression::NumericExpression<T>);
 
 impl<T: variable::Numeric> ExpressionEvaluator<T> {
-    pub fn new(
+    pub fn new<U: variable::Numeric>(
         expression: String,
-        model: &didp_parser::Model<T>,
+        model: &didp_parser::Model<U>,
     ) -> Result<ExpressionEvaluator<T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,
@@ -35,7 +35,11 @@ impl<T: variable::Numeric> Default for ExpressionEvaluator<T> {
 }
 
 impl<T: variable::Numeric> evaluator::Evaluator<T> for ExpressionEvaluator<T> {
-    fn eval<U: didp_parser::DPState>(&self, state: &U, model: &didp_parser::Model<T>) -> Option<T> {
+    fn eval<U: variable::Numeric, S: didp_parser::DPState>(
+        &self,
+        state: &S,
+        model: &didp_parser::Model<U>,
+    ) -> Option<T> {
         Some(self.0.eval(state, &model.table_registry))
     }
 }

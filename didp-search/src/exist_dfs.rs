@@ -9,34 +9,39 @@ use std::fmt;
 use std::rc::Rc;
 
 #[derive(Clone, PartialEq, Default)]
-pub struct DFSNode<T: variable::Numeric> {
+pub struct DFSNode<U: variable::Numeric> {
     pub state: hashable_state::HashableState,
-    pub g: T,
+    pub g: U,
 }
 
-pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
+pub fn forward_iterative_exist_dfs<T, U>(
     model: &didp_parser::Model<T>,
-    generator: &SuccessorGenerator<TransitionWithG<T>>,
-    mut primal_bound: Option<T>,
+    generator: &SuccessorGenerator<TransitionWithG<T, U>>,
+    mut g_bound: Option<U>,
     maximize: bool,
     capacity: Option<usize>,
-) -> solver::Solution<T> {
+) -> solver::Solution<T>
+where
+    T: variable::Numeric + fmt::Display,
+    U: variable::Numeric + fmt::Display,
+{
     let mut expanded = 0;
     let mut prob = FxHashMap::default();
     if let Some(capacity) = capacity {
         prob.reserve(capacity);
     };
     let mut incumbent = Vec::new();
+    let mut cost = None;
     let node = DFSNode {
         state: hashable_state::HashableState::new(&model.target),
-        g: T::zero(),
+        g: U::zero(),
     };
-    while let Some((cost, transitions)) = exist_dfs(
+    while let Some((new_g_bound, new_cost, transitions)) = exist_dfs(
         node.clone(),
         model,
         &generator,
         &mut prob,
-        primal_bound,
+        g_bound,
         maximize,
         &mut expanded,
     ) {
@@ -45,13 +50,31 @@ pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
             .map(|t| Rc::new(t.transition.clone()))
             .collect();
         transitions.reverse();
-        let cost = solver::compute_solution_cost(cost, &transitions, &model.target, &model);
-        println!("New primal bound: {}, expanded: {}", cost, expanded);
-        primal_bound = Some(cost);
-        incumbent = transitions;
+        let new_cost = solver::compute_solution_cost(new_cost, &transitions, &model.target, &model);
+        if let Some(current_cost) = cost {
+            match model.reduce_function {
+                didp_parser::ReduceFunction::Max if new_cost > current_cost => {
+                    cost = Some(new_cost);
+                    incumbent = transitions;
+                    println!("New primal bound: {}, expanded: {}", new_cost, expanded);
+                }
+                didp_parser::ReduceFunction::Min if new_cost < current_cost => {
+                    cost = Some(new_cost);
+                    incumbent = transitions;
+                    println!("New primal bound: {}, expanded: {}", new_cost, expanded);
+                }
+                _ => {}
+            }
+        } else {
+            cost = Some(new_cost);
+            incumbent = transitions;
+            println!("New primal bound: {}, expanded: {}", new_cost, expanded);
+        }
+        g_bound = Some(new_g_bound);
+        println!("New g bound: {}, expanded: {}", new_g_bound, expanded);
     }
     println!("Expanded: {}", expanded);
-    if let Some(cost) = primal_bound {
+    if let Some(cost) = cost {
         incumbent.reverse();
         Some((cost, incumbent))
     } else {
@@ -59,23 +82,25 @@ pub fn forward_iterative_exist_dfs<T: variable::Numeric + fmt::Display>(
     }
 }
 
-pub fn exist_dfs<T: variable::Numeric>(
-    node: DFSNode<T>,
+pub type ExistDFSSolution<T, U> = Option<(U, T, Vec<Rc<TransitionWithG<T, U>>>)>;
+
+pub fn exist_dfs<T: variable::Numeric, U: variable::Numeric>(
+    node: DFSNode<U>,
     model: &didp_parser::Model<T>,
-    generator: &SuccessorGenerator<TransitionWithG<T>>,
-    prob: &mut FxHashMap<hashable_state::HashableState, T>,
-    primal_bound: Option<T>,
+    generator: &SuccessorGenerator<TransitionWithG<T, U>>,
+    prob: &mut FxHashMap<hashable_state::HashableState, U>,
+    g_bound: Option<U>,
     maximize: bool,
     expanded: &mut u32,
-) -> Option<(T, Vec<Rc<TransitionWithG<T>>>)> {
+) -> ExistDFSSolution<T, U> {
     let state = node.state;
     let g = node.g;
     *expanded += 1;
-    if let Some(cost) = model.get_base_cost(&state) {
-        if maximize && primal_bound.is_some() && g <= primal_bound.unwrap() {
+    if let Some(base_cost) = model.get_base_cost(&state) {
+        if maximize && g_bound.is_some() && g <= g_bound.unwrap() {
             return None;
         }
-        return Some((cost, Vec::new()));
+        return Some((g, base_cost, Vec::new()));
     }
     if let Some(other_g) = prob.get(&state) {
         if (maximize && g <= *other_g) || (!maximize && g >= *other_g) {
@@ -86,7 +111,7 @@ pub fn exist_dfs<T: variable::Numeric>(
     }
     for transition in generator.applicable_transitions(&state) {
         let g = transition.g.eval_cost(g, &state, &model.table_registry);
-        if !maximize && primal_bound.is_some() && g >= primal_bound.unwrap() {
+        if !maximize && g_bound.is_some() && g >= g_bound.unwrap() {
             continue;
         }
         let successor = transition.transition.apply(&state, &model.table_registry);
@@ -95,18 +120,10 @@ pub fn exist_dfs<T: variable::Numeric>(
                 state: successor,
                 g,
             };
-            let result = exist_dfs(
-                node,
-                model,
-                generator,
-                prob,
-                primal_bound,
-                maximize,
-                expanded,
-            );
-            if let Some((cost, mut transitions)) = result {
+            let result = exist_dfs(node, model, generator, prob, g_bound, maximize, expanded);
+            if let Some((g, base_cost, mut transitions)) = result {
                 transitions.push(transition);
-                return Some((cost, transitions));
+                return Some((g, base_cost, transitions));
             }
         }
     }

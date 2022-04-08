@@ -7,22 +7,23 @@ use didp_parser::variable;
 use std::fmt;
 use std::rc::Rc;
 
-pub struct BFSEvaluators<'a, T: variable::Numeric, H, F> {
-    pub generator: SuccessorGenerator<'a, TransitionWithG<T>>,
+pub struct BFSEvaluators<'a, T: variable::Numeric, U: variable::Numeric, H, F> {
+    pub generator: SuccessorGenerator<'a, TransitionWithG<T, U>>,
     pub h_evaluator: H,
     pub f_evaluator: F,
 }
 
-pub fn forward_bfs<'a, T, H, F>(
+pub fn forward_bfs<'a, T, U, H, F>(
     model: &'a didp_parser::Model<T>,
-    evaluators: &BFSEvaluators<'a, T, H, F>,
-    ub: Option<T>,
+    evaluators: &BFSEvaluators<'a, T, U, H, F>,
+    g_bound: Option<U>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
-    T: variable::Numeric + Ord + fmt::Display,
-    H: evaluator::Evaluator<T>,
-    F: Fn(T, T, &StateForSearchNode, &didp_parser::Model<T>) -> T,
+    T: variable::Numeric,
+    U: variable::Numeric + Ord + fmt::Display,
+    H: evaluator::Evaluator<U>,
+    F: Fn(U, U, &StateForSearchNode, &didp_parser::Model<T>) -> U,
 {
     let mut open = priority_queue::PriorityQueue::new(true);
     let mut registry = SearchNodeRegistry::new(model);
@@ -30,7 +31,7 @@ where
         registry.reserve(capacity);
     }
 
-    let g = T::zero();
+    let g = U::zero();
     let initial_state = StateForSearchNode::new(&model.target);
     let initial_node = match registry.get_node(initial_state, g, None, None) {
         Some(node) => node,
@@ -68,7 +69,7 @@ where
             let g = transition
                 .g
                 .eval_cost(node.g, &node.state, &model.table_registry);
-            if ub.is_some() && g >= ub.unwrap() {
+            if g_bound.is_some() && g >= g_bound.unwrap() {
                 continue;
             }
             let state = transition
@@ -90,7 +91,7 @@ where
                     if let Some(h) = h {
                         let f = (evaluators.f_evaluator)(g, h, &node.state, model);
                         *successor.f.borrow_mut() = Some(f);
-                        if ub.is_none() || f < ub.unwrap() {
+                        if g_bound.is_none() || f < g_bound.unwrap() {
                             open.push(successor);
                         }
                     }

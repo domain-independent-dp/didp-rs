@@ -26,9 +26,9 @@ pub struct Transition<T: Numeric> {
 }
 
 impl<T: Numeric> Transition<T> {
-    pub fn is_applicable<U: DPState>(
+    pub fn is_applicable<S: DPState>(
         &self,
-        state: &U,
+        state: &S,
         registry: &table_registry::TableRegistry,
     ) -> bool {
         for (i, v) in &self.elements_in_set_variable {
@@ -46,22 +46,22 @@ impl<T: Numeric> Transition<T> {
             .all(|c| c.is_satisfied(state, registry).unwrap_or(true))
     }
 
-    pub fn apply<U: DPState>(&self, state: &U, registry: &table_registry::TableRegistry) -> U {
+    pub fn apply<S: DPState>(&self, state: &S, registry: &table_registry::TableRegistry) -> S {
         state.apply_effect(&self.effect, registry)
     }
 
-    pub fn apply_in_place<U: DPState>(
+    pub fn apply_in_place<S: DPState>(
         &self,
-        state: &mut U,
+        state: &mut S,
         registry: &table_registry::TableRegistry,
     ) {
         state.apply_effect_in_place(&self.effect, registry)
     }
 
-    pub fn eval_cost<U: DPState>(
+    pub fn eval_cost<S: DPState>(
         &self,
         cost: T,
-        state: &U,
+        state: &S,
         registry: &table_registry::TableRegistry,
     ) -> T {
         self.cost.eval_cost(cost, state, registry)

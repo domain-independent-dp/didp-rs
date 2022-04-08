@@ -11,14 +11,6 @@ use std::error::Error;
 use std::fmt;
 use std::str;
 
-pub struct ExpressionAstar<T: variable::Numeric> {
-    g_expressions: Option<FxHashMap<String, String>>,
-    h_expression: Option<String>,
-    f_evaluator_type: FEvaluatorType,
-    ub: Option<T>,
-    registry_capacity: Option<usize>,
-}
-
 pub enum FEvaluatorType {
     Plus,
     Max,
@@ -32,100 +24,111 @@ impl Default for FEvaluatorType {
     }
 }
 
-impl<T> solver::Solver<T> for ExpressionAstar<T>
+pub struct ExpressionAstar<T: variable::Numeric> {
+    evaluator_cost_type: Option<didp_parser::CostType>,
+    g_expressions: Option<FxHashMap<String, String>>,
+    h_expression: Option<String>,
+    f_evaluator_type: FEvaluatorType,
+    primal_bound: Option<T>,
+    primal_bound_is_not_g_bound: bool,
+    registry_capacity: Option<usize>,
+}
+
+impl<T: variable::Numeric> Default for ExpressionAstar<T> {
+    fn default() -> Self {
+        ExpressionAstar {
+            evaluator_cost_type: None,
+            g_expressions: None,
+            h_expression: None,
+            f_evaluator_type: FEvaluatorType::default(),
+            primal_bound: None,
+            primal_bound_is_not_g_bound: false,
+            registry_capacity: Some(1000000),
+        }
+    }
+}
+
+impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for ExpressionAstar<T>
 where
-    T: variable::Numeric + Ord + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
 {
     #[inline]
-    fn set_primal_bound(&mut self, ub: Option<T>) {
-        self.ub = ub;
+    fn set_primal_bound(&mut self, primal_bound: Option<T>) {
+        self.primal_bound = primal_bound
     }
 
     fn solve(
         &mut self,
         model: &didp_parser::Model<T>,
     ) -> Result<solver::Solution<T>, Box<dyn Error>> {
-        let generator = if let Some(g_expressions) = self.g_expressions.as_ref() {
-            SuccessorGenerator::with_expressions(&model, false, g_expressions)?
-        } else {
-            SuccessorGenerator::<TransitionWithG<T>>::new(&model, false)
-        };
-        let h_evaluator = if let Some(h_expression) = self.h_expression.as_ref() {
-            ExpressionEvaluator::new(h_expression.clone(), &model)?
-        } else {
-            ExpressionEvaluator::default()
-        };
-        let solution = match self.f_evaluator_type {
-            FEvaluatorType::Plus => {
-                let f_evaluator =
-                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| g + h);
-                let evaluators = forward_bfs::BFSEvaluators {
-                    generator,
-                    h_evaluator,
-                    f_evaluator,
-                };
-                forward_bfs::forward_bfs(model, &evaluators, self.ub, self.registry_capacity)
+        match (
+            self.g_expressions.as_ref(),
+            self.evaluator_cost_type.as_ref(),
+        ) {
+            (Some(g_expressions), Some(didp_parser::CostType::Integer)) => {
+                let generator =
+                    SuccessorGenerator::<TransitionWithG<T, variable::Integer>>::with_expressions(
+                        &model,
+                        false,
+                        g_expressions,
+                    )?;
+                self.solve_inner(model, generator)
             }
-            FEvaluatorType::Max => {
-                let f_evaluator =
-                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| {
-                        cmp::max(g, h)
-                    });
-                let evaluators = forward_bfs::BFSEvaluators {
-                    generator,
-                    h_evaluator,
-                    f_evaluator,
-                };
-                forward_bfs::forward_bfs(model, &evaluators, self.ub, self.registry_capacity)
+            (Some(g_expressions), Some(didp_parser::CostType::Continuous)) => {
+                let generator = SuccessorGenerator::<
+                    TransitionWithG<T, variable::OrderedContinuous>,
+                >::with_expressions(&model, false, g_expressions)?;
+                self.solve_inner(model, generator)
             }
-            FEvaluatorType::Min => {
-                let f_evaluator =
-                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| {
-                        cmp::min(g, h)
-                    });
-                let evaluators = forward_bfs::BFSEvaluators {
-                    generator,
-                    h_evaluator,
-                    f_evaluator,
-                };
-                forward_bfs::forward_bfs(model, &evaluators, self.ub, self.registry_capacity)
+            (Some(g_expressions), None) => {
+                let generator = SuccessorGenerator::<TransitionWithG<T, T>>::with_expressions(
+                    &model,
+                    false,
+                    g_expressions,
+                )?;
+                self.solve_inner(model, generator)
             }
-            FEvaluatorType::Overwrite => {
-                let f_evaluator =
-                    Box::new(|_, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| h);
-                let evaluators = forward_bfs::BFSEvaluators {
-                    generator,
-                    h_evaluator,
-                    f_evaluator,
-                };
-                forward_bfs::forward_bfs(model, &evaluators, self.ub, self.registry_capacity)
+            _ => {
+                let generator = SuccessorGenerator::<TransitionWithG<T, T>>::new(&model, false);
+                self.solve_inner(model, generator)
             }
-        };
-        Ok(solution)
+        }
     }
 }
 
-impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
+impl<T: variable::Numeric> ExpressionAstar<T> {
     pub fn new(config: &yaml_rust::Yaml) -> Result<ExpressionAstar<T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
         let map = match config {
             yaml_rust::Yaml::Hash(map) => map,
-            yaml_rust::Yaml::Null => {
-                return Ok(ExpressionAstar {
-                    g_expressions: None,
-                    h_expression: None,
-                    f_evaluator_type: FEvaluatorType::default(),
-                    ub: None,
-                    registry_capacity: Some(1000000),
-                })
-            }
+            yaml_rust::Yaml::Null => return Ok(ExpressionAstar::default()),
             _ => {
                 return Err(solver::ConfigErr::new(format!(
                     "expected Hash, but found `{:?}`",
                     config
+                ))
+                .into())
+            }
+        };
+        let evaluator_cost_type = match map.get(&yaml_rust::Yaml::from_str("evaluator_cost_type")) {
+            Some(yaml_rust::Yaml::String(value)) => match &value[..] {
+                "integer" => Some(didp_parser::CostType::Integer),
+                "continuous" => Some(didp_parser::CostType::Continuous),
+                _ => {
+                    return Err(solver::ConfigErr::new(format!(
+                        "no such evaluator cost type `{}`",
+                        value
+                    ))
+                    .into())
+                }
+            },
+            None => None,
+            value => {
+                return Err(solver::ConfigErr::new(format!(
+                    "expected String, but found `{:?}`",
+                    value
                 ))
                 .into())
             }
@@ -149,6 +152,12 @@ impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
                     }
                 }
                 Some(g_expressions)
+            }
+            None if evaluator_cost_type.is_some() => {
+                return Err(solver::ConfigErr::new(String::from(
+                    "please specify g expressions if you specify evaluator cost type",
+                ))
+                .into())
             }
             None => None,
             value => {
@@ -184,7 +193,7 @@ impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
                     .into())
                 }
             },
-            None => FEvaluatorType::Plus,
+            None => FEvaluatorType::default(),
             value => {
                 return Err(solver::ConfigErr::new(format!(
                     "expected String, but found `{:?}`",
@@ -193,7 +202,7 @@ impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
                 .into())
             }
         };
-        let ub = match map.get(&yaml_rust::Yaml::from_str("ub")) {
+        let primal_bound = match map.get(&yaml_rust::Yaml::from_str("primal_bound")) {
             Some(yaml_rust::Yaml::Integer(value)) => {
                 Some(T::from_integer(*value as variable::Integer))
             }
@@ -209,6 +218,18 @@ impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
                 .into())
             }
         };
+        let primal_bound_is_not_g_bound =
+            match map.get(&yaml_rust::Yaml::from_str("primal_bound_is_not_g_bound")) {
+                Some(yaml_rust::Yaml::Boolean(value)) => *value,
+                None => false,
+                value => {
+                    return Err(solver::ConfigErr::new(format!(
+                        "expected Boolean, but found `{:?}`",
+                        value
+                    ))
+                    .into())
+                }
+            };
         let registry_capacity = match map.get(&yaml_rust::Yaml::from_str("registry_capacity")) {
             Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
             None => Some(1000000),
@@ -221,11 +242,81 @@ impl<T: variable::Numeric + Ord> ExpressionAstar<T> {
             }
         };
         Ok(ExpressionAstar {
+            evaluator_cost_type,
             g_expressions,
             h_expression,
             f_evaluator_type,
-            ub,
+            primal_bound,
+            primal_bound_is_not_g_bound,
             registry_capacity,
         })
+    }
+
+    fn solve_inner<'a, U>(
+        &self,
+        model: &'a didp_parser::Model<T>,
+        generator: SuccessorGenerator<'a, TransitionWithG<T, U>>,
+    ) -> Result<solver::Solution<T>, Box<dyn Error>>
+    where
+        <U as str::FromStr>::Err: fmt::Debug,
+        U: variable::Numeric + Ord + fmt::Display,
+    {
+        let h_evaluator = if let Some(h_expression) = self.h_expression.as_ref() {
+            ExpressionEvaluator::new(h_expression.clone(), &model)?
+        } else {
+            ExpressionEvaluator::default()
+        };
+        let g_bound = if self.primal_bound_is_not_g_bound {
+            None
+        } else {
+            self.primal_bound.map(U::from)
+        };
+        let solution = match self.f_evaluator_type {
+            FEvaluatorType::Plus => {
+                let f_evaluator =
+                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| g + h);
+                let evaluators = forward_bfs::BFSEvaluators {
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                };
+                forward_bfs::forward_bfs(model, &evaluators, g_bound, self.registry_capacity)
+            }
+            FEvaluatorType::Max => {
+                let f_evaluator =
+                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| {
+                        cmp::max(g, h)
+                    });
+                let evaluators = forward_bfs::BFSEvaluators {
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                };
+                forward_bfs::forward_bfs(model, &evaluators, g_bound, self.registry_capacity)
+            }
+            FEvaluatorType::Min => {
+                let f_evaluator =
+                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| {
+                        cmp::min(g, h)
+                    });
+                let evaluators = forward_bfs::BFSEvaluators {
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                };
+                forward_bfs::forward_bfs(model, &evaluators, g_bound, self.registry_capacity)
+            }
+            FEvaluatorType::Overwrite => {
+                let f_evaluator =
+                    Box::new(|_, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| h);
+                let evaluators = forward_bfs::BFSEvaluators {
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                };
+                forward_bfs::forward_bfs(model, &evaluators, g_bound, self.registry_capacity)
+            }
+        };
+        Ok(solution)
     }
 }
