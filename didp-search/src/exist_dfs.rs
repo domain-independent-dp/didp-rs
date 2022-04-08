@@ -72,10 +72,13 @@ pub fn exist_dfs<T: variable::Numeric>(
     let g = node.g;
     *expanded += 1;
     if let Some(cost) = model.get_base_cost(&state) {
+        if maximize && primal_bound.is_some() && g <= primal_bound.unwrap() {
+            return None;
+        }
         return Some((cost, Vec::new()));
     }
     if let Some(other_g) = prob.get(&state) {
-        if g >= *other_g {
+        if (maximize && g <= *other_g) || (!maximize && g >= *other_g) {
             return None;
         } else {
             prob.remove(&state);
@@ -83,10 +86,8 @@ pub fn exist_dfs<T: variable::Numeric>(
     }
     for transition in generator.applicable_transitions(&state) {
         let g = transition.g.eval_cost(g, &state, &model.table_registry);
-        if let Some(bound) = primal_bound {
-            if (maximize && g <= bound) || (!maximize && g >= bound) {
-                continue;
-            }
+        if !maximize && primal_bound.is_some() && g >= primal_bound.unwrap() {
+            continue;
         }
         let successor = transition.transition.apply(&state, &model.table_registry);
         if model.check_constraints(&successor) {

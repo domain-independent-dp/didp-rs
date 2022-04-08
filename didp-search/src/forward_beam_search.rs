@@ -90,25 +90,25 @@ where
             expanded += 1;
             i += 1;
             if let Some(cost) = model.get_base_cost(&node.state) {
-                let solution = node.trace_transitions(cost, model);
-                if let Some((incumbent_cost, _)) = incumbent {
-                    if (maximize && solution.0 > incumbent_cost)
-                        || (!maximize && solution.0 < incumbent_cost)
-                    {
+                if !maximize || primal_bound.is_none() || node.g <= primal_bound.unwrap() {
+                    let solution = node.trace_transitions(cost, model);
+                    if let Some((incumbent_cost, _)) = incumbent {
+                        if (maximize && solution.0 > incumbent_cost)
+                            || (!maximize && solution.0 < incumbent_cost)
+                        {
+                            incumbent = Some(solution);
+                        }
+                    } else {
                         incumbent = Some(solution);
                     }
-                } else {
-                    incumbent = Some(solution);
                 }
             }
             for transition in evaluators.generator.applicable_transitions(&node.state) {
                 let g = transition
                     .g
                     .eval_cost(node.g, &node.state, &model.table_registry);
-                if let Some(bound) = primal_bound {
-                    if (maximize && g <= bound) || (!maximize && g >= bound) {
-                        continue;
-                    }
+                if !maximize && primal_bound.is_some() && g >= primal_bound.unwrap() {
+                    continue;
                 }
                 let state = transition
                     .transition
