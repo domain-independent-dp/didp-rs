@@ -3,6 +3,7 @@ use crate::expression_beam_search;
 use crate::expression_exist_dfs;
 use crate::forward_recursion;
 use crate::solver;
+use didp_parser::expression_parser::ParseNumericExpression;
 use didp_parser::variable;
 use std::error::Error;
 use std::fmt;
@@ -12,11 +13,12 @@ use std::str;
 pub struct SolverFactory;
 
 impl SolverFactory {
-    pub fn create<T: 'static + variable::Numeric + Ord + fmt::Display>(
+    pub fn create<T>(
         &self,
         config: &yaml_rust::Yaml,
     ) -> Result<Box<dyn solver::Solver<T>>, Box<dyn Error>>
     where
+        T: 'static + variable::Numeric + ParseNumericExpression + Ord + fmt::Display,
         <T as str::FromStr>::Err: fmt::Debug,
     {
         let map = match config {
@@ -87,7 +89,10 @@ impl<T: variable::Numeric + fmt::Display> solver::Solver<T> for IterativeSearch<
     }
 }
 
-impl<T: 'static + variable::Numeric + Ord + fmt::Display> IterativeSearch<T> {
+impl<T> IterativeSearch<T>
+where
+    T: 'static + variable::Numeric + ParseNumericExpression + Ord + fmt::Display,
+{
     pub fn new(config: &yaml_rust::Yaml) -> Result<IterativeSearch<T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,

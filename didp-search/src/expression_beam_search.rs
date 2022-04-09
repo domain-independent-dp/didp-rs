@@ -6,6 +6,7 @@ use crate::search_node::StateForSearchNode;
 use crate::search_node::TransitionWithG;
 use crate::solver;
 use crate::successor_generator::SuccessorGenerator;
+use didp_parser::expression_parser::ParseNumericExpression;
 use didp_parser::variable;
 use rustc_hash::FxHashMap;
 use std::cmp;
@@ -14,7 +15,6 @@ use std::fmt;
 use std::str;
 
 pub struct ExpressionBeamSearch<T: variable::Numeric> {
-    evaluator_cost_type: Option<didp_parser::CostType>,
     g_expressions: Option<FxHashMap<String, String>>,
     h_expression: Option<String>,
     f_evaluator_type: FEvaluatorType,
@@ -29,7 +29,6 @@ pub struct ExpressionBeamSearch<T: variable::Numeric> {
 impl<T: variable::Numeric> Default for ExpressionBeamSearch<T> {
     fn default() -> Self {
         ExpressionBeamSearch {
-            evaluator_cost_type: None,
             g_expressions: None,
             h_expression: None,
             f_evaluator_type: FEvaluatorType::default(),
@@ -43,8 +42,9 @@ impl<T: variable::Numeric> Default for ExpressionBeamSearch<T> {
     }
 }
 
-impl<T: variable::Numeric + Ord + fmt::Display> solver::Solver<T> for ExpressionBeamSearch<T>
+impl<T> solver::Solver<T> for ExpressionBeamSearch<T>
 where
+    T: variable::Numeric + ParseNumericExpression + Ord + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
 {
     #[inline]
@@ -56,34 +56,26 @@ where
         &mut self,
         model: &didp_parser::Model<T>,
     ) -> Result<solver::Solution<T>, Box<dyn Error>> {
-        match (
-            self.g_expressions.as_ref(),
-            self.evaluator_cost_type.as_ref(),
-        ) {
-            (Some(g_expressions), Some(didp_parser::CostType::Integer)) => {
-                let generator =
+        match self.g_expressions.as_ref() {
+            Some(g_expressions) => {
+                if let Ok(generator) =
                     SuccessorGenerator::<TransitionWithG<T, variable::Integer>>::with_expressions(
                         &model,
                         false,
                         g_expressions,
+                    )
+                {
+                    self.solve_inner(model, generator)
+                } else {
+                    let generator = SuccessorGenerator::<
+                        TransitionWithG<T, variable::OrderedContinuous>,
+                    >::with_expressions(
+                        &model, false, g_expressions
                     )?;
-                self.solve_inner(model, generator)
+                    self.solve_inner(model, generator)
+                }
             }
-            (Some(g_expressions), Some(didp_parser::CostType::Continuous)) => {
-                let generator = SuccessorGenerator::<
-                    TransitionWithG<T, variable::OrderedContinuous>,
-                >::with_expressions(&model, false, g_expressions)?;
-                self.solve_inner(model, generator)
-            }
-            (Some(g_expressions), None) => {
-                let generator = SuccessorGenerator::<TransitionWithG<T, T>>::with_expressions(
-                    &model,
-                    false,
-                    g_expressions,
-                )?;
-                self.solve_inner(model, generator)
-            }
-            _ => {
+            None => {
                 let generator = SuccessorGenerator::<TransitionWithG<T, T>>::new(&model, false);
                 self.solve_inner(model, generator)
             }
@@ -107,27 +99,6 @@ impl<T: variable::Numeric + fmt::Display> ExpressionBeamSearch<T> {
                 .into())
             }
         };
-        let evaluator_cost_type = match map.get(&yaml_rust::Yaml::from_str("evaluator_cost_type")) {
-            Some(yaml_rust::Yaml::String(value)) => match &value[..] {
-                "integer" => Some(didp_parser::CostType::Integer),
-                "continuous" => Some(didp_parser::CostType::Continuous),
-                _ => {
-                    return Err(solver::ConfigErr::new(format!(
-                        "no such evaluator cost type `{}`",
-                        value
-                    ))
-                    .into())
-                }
-            },
-            None => None,
-            value => {
-                return Err(solver::ConfigErr::new(format!(
-                    "expected String, but found `{:?}`",
-                    value
-                ))
-                .into())
-            }
-        };
         let g_expressions = match map.get(&yaml_rust::Yaml::from_str("g")) {
             Some(yaml_rust::Yaml::Hash(map)) => {
                 let mut g_expressions = FxHashMap::default();
@@ -147,12 +118,6 @@ impl<T: variable::Numeric + fmt::Display> ExpressionBeamSearch<T> {
                     }
                 }
                 Some(g_expressions)
-            }
-            None if evaluator_cost_type.is_some() => {
-                return Err(solver::ConfigErr::new(String::from(
-                    "please define g expressions if you specify evaluator cost type",
-                ))
-                .into())
             }
             None => None,
             value => {
@@ -288,7 +253,6 @@ impl<T: variable::Numeric + fmt::Display> ExpressionBeamSearch<T> {
             }
         };
         Ok(ExpressionBeamSearch {
-            evaluator_cost_type,
             g_expressions,
             h_expression,
             f_evaluator_type,
@@ -308,7 +272,7 @@ impl<T: variable::Numeric + fmt::Display> ExpressionBeamSearch<T> {
     ) -> Result<solver::Solution<T>, Box<dyn Error>>
     where
         <U as str::FromStr>::Err: fmt::Debug,
-        U: variable::Numeric + Ord + fmt::Display,
+        U: variable::Numeric + ParseNumericExpression + Ord + fmt::Display,
     {
         let h_evaluator = if let Some(h_expression) = self.h_expression.as_ref() {
             ExpressionEvaluator::new(h_expression.clone(), &model)?

@@ -1,6 +1,6 @@
 use crate::effect;
 use crate::expression;
-use crate::expression_parser;
+use crate::expression_parser::ParseNumericExpression;
 use crate::grounded_condition;
 use crate::state;
 use crate::state::DPState;
@@ -82,7 +82,7 @@ impl<T: Numeric> Transition<T> {
 
 type TransitionsWithDirection<T> = (Vec<Transition<T>>, bool);
 
-pub fn load_transitions_from_yaml<T: Numeric>(
+pub fn load_transitions_from_yaml<T: Numeric + ParseNumericExpression>(
     value: &yaml_rust::Yaml,
     metadata: &state::StateMetadata,
     registry: &table_registry::TableRegistry,
@@ -169,8 +169,7 @@ where
             None => Vec::new(),
         };
         let effect = effect::Effect::load_from_yaml(effect, metadata, registry, &parameters)?;
-        let cost =
-            expression_parser::parse_numeric(lifted_cost.clone(), metadata, registry, &parameters)?;
+        let cost = T::parse_expression(lifted_cost.clone(), metadata, registry, &parameters)?;
         let cost = cost.simplify(registry);
 
         transitions.push(Transition {

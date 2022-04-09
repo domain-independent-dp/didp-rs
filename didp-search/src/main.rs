@@ -1,3 +1,4 @@
+use didp_parser::expression_parser::ParseNumericExpression;
 use didp_parser::variable;
 use didp_search::solver_factory;
 use std::env;
@@ -7,10 +8,9 @@ use std::process;
 use std::str;
 use std::time::Instant;
 
-fn solve<T: 'static + variable::Numeric + Ord + fmt::Display>(
-    model: &didp_parser::Model<T>,
-    config: &yaml_rust::Yaml,
-) where
+fn solve<T>(model: &didp_parser::Model<T>, config: &yaml_rust::Yaml)
+where
+    T: 'static + variable::Numeric + ParseNumericExpression + Ord + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
 {
     let factory = solver_factory::SolverFactory::default();
@@ -82,28 +82,14 @@ fn main() {
     });
     assert_eq!(config.len(), 1);
     let config = &config[0];
-    let cost_type = didp_parser::CostType::load_from_yaml(domain).unwrap_or_else(|e| {
-        eprintln!("Coundn't load a cost type: {:?}", e);
-        process::exit(1);
-    });
-    match cost_type {
-        didp_parser::CostType::Integer => {
-            let model = didp_parser::Model::<variable::Integer>::load_from_yaml(domain, problem)
-                .unwrap_or_else(|e| {
-                    eprintln!("Coundn't load a model: {:?}", e);
-                    process::exit(1);
-                });
-            solve(&model, config)
-        }
-        didp_parser::CostType::Continuous => {
-            let model =
-                didp_parser::Model::<variable::OrderedContinuous>::load_from_yaml(domain, problem)
-                    .unwrap_or_else(|e| {
-                        eprintln!("Coundn't load a model: {:?}", e);
-                        process::exit(1);
-                    });
-            solve(&model, config)
-        }
+    let model =
+        didp_parser::CostWrappedModel::load_from_yaml(domain, problem).unwrap_or_else(|e| {
+            eprintln!("Coundn't load a model: {:?}", e);
+            process::exit(1);
+        });
+    match model {
+        didp_parser::CostWrappedModel::Integer(model) => solve(&model, config),
+        didp_parser::CostWrappedModel::OrderedContinuous(model) => solve(&model, config),
     }
     let stop = Instant::now();
     println!("Time: {:?}", stop.duration_since(start));

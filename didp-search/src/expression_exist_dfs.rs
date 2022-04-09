@@ -2,6 +2,7 @@ use crate::exist_dfs;
 use crate::search_node::TransitionWithG;
 use crate::solver;
 use crate::successor_generator::SuccessorGenerator;
+use didp_parser::expression_parser::ParseNumericExpression;
 use didp_parser::variable;
 use rustc_hash::FxHashMap;
 use std::error::Error;
@@ -10,7 +11,6 @@ use std::str;
 
 #[derive(Default)]
 pub struct ExpressionExistDfs<T: variable::Numeric> {
-    evaluator_cost_type: Option<didp_parser::CostType>,
     g_expressions: Option<FxHashMap<String, String>>,
     maximize: bool,
     primal_bound: Option<T>,
@@ -18,8 +18,9 @@ pub struct ExpressionExistDfs<T: variable::Numeric> {
     capacity: Option<usize>,
 }
 
-impl<'a, T: variable::Numeric + fmt::Display> solver::Solver<T> for ExpressionExistDfs<T>
+impl<'a, T> solver::Solver<T> for ExpressionExistDfs<T>
 where
+    T: variable::Numeric + ParseNumericExpression + Ord + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
 {
     #[inline]
@@ -32,45 +33,50 @@ where
         &mut self,
         model: &didp_parser::Model<T>,
     ) -> Result<solver::Solution<T>, Box<dyn Error>> {
-        let solution = match (self.g_expressions.as_ref(), self.evaluator_cost_type.as_ref()) {
-            (Some(g_expressions), Some(didp_parser::CostType::Integer)) => {
-                let generator = 
-                        SuccessorGenerator::<TransitionWithG<T, variable::Integer>>::with_expressions(model, false, g_expressions)?;
-                let g_bound = if self.primal_bound_is_not_g_bound {
-                    None
+        let solution = match self.g_expressions.as_ref() {
+            Some(g_expressions) => {
+                if let Ok(generator) =
+                    SuccessorGenerator::<TransitionWithG<T, variable::Integer>>::with_expressions(
+                        &model,
+                        false,
+                        g_expressions,
+                    )
+                {
+                    let g_bound = if self.primal_bound_is_not_g_bound {
+                        None
+                    } else {
+                        self.primal_bound.map(|x| x.to_integer())
+                    };
+                    exist_dfs::forward_iterative_exist_dfs(
+                        model,
+                        &generator,
+                        g_bound,
+                        self.maximize,
+                        self.capacity,
+                    )
                 } else {
-                    self.primal_bound.map(|x| x.to_integer())
-                };
-                exist_dfs::forward_iterative_exist_dfs(
-                    model,
-                    &generator,
-                    g_bound,
-                    self.maximize,
-                    self.capacity,
-                )
+                    let generator = SuccessorGenerator::<
+                        TransitionWithG<T, variable::OrderedContinuous>,
+                    >::with_expressions(
+                        &model, false, g_expressions
+                    )?;
+                    let g_bound = if self.primal_bound_is_not_g_bound {
+                        None
+                    } else {
+                        self.primal_bound
+                            .map(|x| ordered_float::OrderedFloat(x.to_continuous()))
+                    };
+                    exist_dfs::forward_iterative_exist_dfs(
+                        model,
+                        &generator,
+                        g_bound,
+                        self.maximize,
+                        self.capacity,
+                    )
+                }
             }
-            (Some(g_expressions), Some(didp_parser::CostType::Continuous)) => {
-                let generator = 
-                        SuccessorGenerator::<TransitionWithG<T, variable::Continuous>>::with_expressions(model, false, g_expressions)?;
-                let g_bound = if self.primal_bound_is_not_g_bound {
-                    None
-                } else {
-                    self.primal_bound.map(|x| x.to_continuous())
-                };
-                exist_dfs::forward_iterative_exist_dfs(
-                    model,
-                    &generator,
-                    g_bound,
-                    self.maximize,
-                    self.capacity,
-                )
-            }
-            (Some(g_expressions), None) => {
-                let generator = SuccessorGenerator::<TransitionWithG<T, T>>::with_expressions(
-                    &model,
-                    false,
-                    g_expressions,
-                )?;
+            None => {
+                let generator = SuccessorGenerator::<TransitionWithG<T, T>>::new(&model, false);
                 let g_bound = if self.primal_bound_is_not_g_bound {
                     None
                 } else {
@@ -80,16 +86,6 @@ where
                     model,
                     &generator,
                     g_bound,
-                    self.maximize,
-                    self.capacity,
-                )
-            }
-            _ => {
-                let generator = SuccessorGenerator::<TransitionWithG<T, T>>::new(model, false);
-                exist_dfs::forward_iterative_exist_dfs(
-                    model,
-                    &generator,
-                    self.primal_bound,
                     self.maximize,
                     self.capacity,
                 )
@@ -114,27 +110,6 @@ impl<T: variable::Numeric> ExpressionExistDfs<T> {
                 )))
             }
         };
-        let evaluator_cost_type = match map.get(&yaml_rust::Yaml::from_str("evaluator_cost_type")) {
-            Some(yaml_rust::Yaml::String(value)) => match &value[..] {
-                "integer" => Some(didp_parser::CostType::Integer),
-                "continuous" => Some(didp_parser::CostType::Continuous),
-                _ => {
-                    return Err(solver::ConfigErr::new(format!(
-                        "no such evaluator cost type `{}`",
-                        value
-                    ))
-                    )
-                }
-            },
-            None => None,
-            value => {
-                return Err(solver::ConfigErr::new(format!(
-                    "expected String, but found `{:?}`",
-                    value
-                ))
-                )
-            }
-        };
         let g_expressions = match map.get(&yaml_rust::Yaml::from_str("g")) {
             Some(yaml_rust::Yaml::Hash(map)) => {
                 let mut g_expressions = FxHashMap::default();
@@ -153,12 +128,6 @@ impl<T: variable::Numeric> ExpressionExistDfs<T> {
                     }
                 }
                 Some(g_expressions)
-            }
-            None if evaluator_cost_type.is_some() => {
-                return Err(solver::ConfigErr::new(String::from(
-                    "please define g expressions if you specify evaluator cost type",
-                ))
-                )
             }
             None => None,
             value => {
@@ -211,12 +180,10 @@ impl<T: variable::Numeric> ExpressionExistDfs<T> {
                     return Err(solver::ConfigErr::new(format!(
                         "expected Boolean, but found `{:?}`",
                         value
-                    ))
-                    )
+                    )))
                 }
             };
         Ok(ExpressionExistDfs {
-            evaluator_cost_type,
             g_expressions,
             primal_bound,
             maximize,

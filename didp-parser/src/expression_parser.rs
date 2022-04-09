@@ -3,8 +3,6 @@ use crate::state;
 use crate::table_registry;
 use crate::variable;
 use rustc_hash::FxHashMap;
-use std::fmt;
-use std::str;
 
 mod condition_parser;
 mod element_parser;
@@ -15,25 +13,77 @@ mod util;
 
 pub use util::ParseErr;
 
-pub fn parse_numeric<T: variable::Numeric>(
-    text: String,
-    metadata: &state::StateMetadata,
-    registry: &table_registry::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
-) -> Result<expression::NumericExpression<T>, ParseErr>
-where
-    <T as str::FromStr>::Err: fmt::Debug,
-{
-    let tokens = tokenize(text);
-    let (expression, rest) =
-        numeric_parser::parse_expression(&tokens, metadata, registry, parameters)?;
-    if rest.is_empty() {
-        Ok(expression)
-    } else {
-        Err(ParseErr::new(format!(
-            "unexpected tokens: `{}`",
-            rest.join(" ")
-        )))
+pub trait ParseNumericExpression {
+    fn parse_expression(
+        text: String,
+        metadata: &state::StateMetadata,
+        registry: &table_registry::TableRegistry,
+        parameters: &FxHashMap<String, usize>,
+    ) -> Result<expression::NumericExpression<Self>, ParseErr>
+    where
+        Self: variable::Numeric;
+}
+
+impl ParseNumericExpression for variable::Integer {
+    fn parse_expression(
+        text: String,
+        metadata: &state::StateMetadata,
+        registry: &table_registry::TableRegistry,
+        parameters: &FxHashMap<String, usize>,
+    ) -> Result<expression::NumericExpression<Self>, ParseErr> {
+        let tokens = tokenize(text);
+        let (expression, rest) =
+            numeric_parser::parse_integer_expression(&tokens, metadata, registry, parameters)?;
+        if rest.is_empty() {
+            Ok(expression)
+        } else {
+            Err(ParseErr::new(format!(
+                "unexpected tokens: `{}`",
+                rest.join(" ")
+            )))
+        }
+    }
+}
+
+impl ParseNumericExpression for variable::Continuous {
+    fn parse_expression(
+        text: String,
+        metadata: &state::StateMetadata,
+        registry: &table_registry::TableRegistry,
+        parameters: &FxHashMap<String, usize>,
+    ) -> Result<expression::NumericExpression<Self>, ParseErr> {
+        let tokens = tokenize(text);
+        let (expression, rest) =
+            numeric_parser::parse_continuous_expression(&tokens, metadata, registry, parameters)?;
+        if rest.is_empty() {
+            Ok(expression)
+        } else {
+            Err(ParseErr::new(format!(
+                "unexpected tokens: `{}`",
+                rest.join(" ")
+            )))
+        }
+    }
+}
+
+impl ParseNumericExpression for variable::OrderedContinuous {
+    fn parse_expression(
+        text: String,
+        metadata: &state::StateMetadata,
+        registry: &table_registry::TableRegistry,
+        parameters: &FxHashMap<String, usize>,
+    ) -> Result<expression::NumericExpression<Self>, ParseErr> {
+        let tokens = tokenize(text);
+        let (expression, rest) =
+            numeric_parser::parse_continuous_expression(&tokens, metadata, registry, parameters)?;
+        if rest.is_empty() {
+            Ok(expression)
+        } else {
+            Err(ParseErr::new(format!(
+                "unexpected tokens: `{}`",
+                rest.join(" ")
+            )))
+        }
     }
 }
 
@@ -264,22 +314,69 @@ mod tests {
     }
 
     #[test]
-    fn parse_numeric_ok() {
+    fn parse_integer_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "(+ (- 5 (/ (sum f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(union (intersection s0 (difference s2 (add 2 s3))) (remove 1 s1))|)))".to_string();
-        let result = parse_numeric::<variable::Integer>(text, &metadata, &registry, &parameters);
+        let result = variable::Integer::parse_expression(text, &metadata, &registry, &parameters);
         assert!(result.is_ok());
     }
 
     #[test]
-    fn parse_numeric_err() {
+    fn parse_integer_err() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "(+ cost 1))".to_string();
-        let result = parse_numeric::<variable::Integer>(text, &metadata, &registry, &parameters);
+        let result = variable::Integer::parse_expression(text, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+        let text = "(+ cost 1.5)".to_string();
+        let result = variable::Integer::parse_expression(text, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let text = "(+ (- 5 (/ (sum f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(union (intersection s0 (difference s2 (add 2 s3))) (remove 1 s1))|)))".to_string();
+        let result =
+            variable::Continuous::parse_expression(text, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_continuous_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let text = "(+ cost 1))".to_string();
+        let result =
+            variable::Continuous::parse_expression(text, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_ordered_continuous() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let text = "(+ (- 5 (/ (sum f4 4 !s2 e0 3) (max (f2 2 e1) n0))) (* r1 (min 3 |(union (intersection s0 (difference s2 (add 2 s3))) (remove 1 s1))|)))".to_string();
+        let result =
+            variable::OrderedContinuous::parse_expression(text, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn parse_ordered_continuous_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let text = "(+ cost 1))".to_string();
+        let result =
+            variable::OrderedContinuous::parse_expression(text, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 

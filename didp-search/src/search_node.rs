@@ -2,7 +2,7 @@ use crate::hashable_state;
 use crate::priority_queue;
 use crate::solver::ConfigErr;
 use crate::successor_generator::{MaybeApplicable, SuccessorGenerator};
-use didp_parser::expression_parser::parse_numeric;
+use didp_parser::expression_parser::ParseNumericExpression;
 use didp_parser::variable::{Continuous, Element, Integer, Numeric, Set, Vector};
 use didp_parser::ReduceFunction;
 use rustc_hash::FxHashMap;
@@ -197,7 +197,8 @@ impl<'a, T: Numeric> SuccessorGenerator<'a, TransitionWithG<T, T>> {
     }
 }
 
-impl<'a, T: Numeric, U: Numeric> SuccessorGenerator<'a, TransitionWithG<T, U>>
+impl<'a, T: Numeric, U: Numeric + ParseNumericExpression>
+    SuccessorGenerator<'a, TransitionWithG<T, U>>
 where
     <U as str::FromStr>::Err: fmt::Debug,
 {
@@ -218,7 +219,7 @@ where
                 parameters.insert(name.clone(), *value);
             }
             let g = if let Some(expression) = g_expressions.get(&t.name) {
-                parse_numeric(
+                U::parse_expression(
                     expression.clone(),
                     &model.state_metadata,
                     &model.table_registry,

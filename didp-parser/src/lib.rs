@@ -31,28 +31,6 @@ pub use table_registry::TableRegistry;
 pub use transition::Transition;
 pub use util::ModelErr;
 
-#[derive(Debug, PartialEq)]
-pub enum CostType {
-    Integer,
-    Continuous,
-}
-
-impl CostType {
-    pub fn load_from_yaml(value: &Yaml) -> Result<CostType, Box<dyn Error>> {
-        let map = yaml_util::get_map(value)?;
-        let numeric_type = yaml_util::get_string_by_key(&map, "cost_type")?;
-        match &numeric_type[..] {
-            "integer" => Ok(Self::Integer),
-            "continuous" => Ok(Self::Continuous),
-            _ => Err(yaml_util::YamlContentErr::new(format!(
-                "no such numeric type `{}`",
-                numeric_type
-            ))
-            .into()),
-        }
-    }
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum ReduceFunction {
     Min,
@@ -123,7 +101,9 @@ impl<T: variable::Numeric> Model<T> {
         }
         None
     }
+}
 
+impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> {
     pub fn load_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model<T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,
@@ -290,52 +270,30 @@ impl<T: variable::Numeric> Model<T> {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum CostWrappedModel {
+    Integer(Model<variable::Integer>),
+    OrderedContinuous(Model<variable::OrderedContinuous>),
+}
+
+impl CostWrappedModel {
+    pub fn load_from_yaml(
+        domain: &Yaml,
+        problem: &Yaml,
+    ) -> Result<CostWrappedModel, Box<dyn Error>> {
+        if let Ok(model) = Model::<variable::Integer>::load_from_yaml(domain, problem) {
+            Ok(CostWrappedModel::Integer(model))
+        } else {
+            let model = Model::<variable::OrderedContinuous>::load_from_yaml(domain, problem)?;
+            Ok(CostWrappedModel::OrderedContinuous(model))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use expression::*;
-
-    #[test]
-    fn cost_type_load_from_yaml_ok() {
-        let yaml = r"cost_type: integer";
-        let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
-        assert!(yaml.is_ok());
-        let yaml = yaml.unwrap();
-        assert_eq!(yaml.len(), 1);
-        let yaml = &yaml[0];
-        let numeric_type = CostType::load_from_yaml(yaml);
-        assert!(numeric_type.is_ok());
-        assert_eq!(numeric_type.unwrap(), CostType::Integer);
-        let yaml = r"cost_type: continuous";
-        let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
-        assert!(yaml.is_ok());
-        let yaml = yaml.unwrap();
-        assert_eq!(yaml.len(), 1);
-        let yaml = &yaml[0];
-        let numeric_type = CostType::load_from_yaml(yaml);
-        assert!(numeric_type.is_ok());
-        assert_eq!(numeric_type.unwrap(), CostType::Continuous);
-    }
-
-    #[test]
-    fn cost_type_load_from_yaml_err() {
-        let yaml = r"type: integer";
-        let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
-        assert!(yaml.is_ok());
-        let yaml = yaml.unwrap();
-        assert_eq!(yaml.len(), 1);
-        let yaml = &yaml[0];
-        let numeric_type = CostType::load_from_yaml(yaml);
-        assert!(numeric_type.is_err());
-        let yaml = r"cost_type: bool";
-        let yaml = yaml_rust::YamlLoader::load_from_str(yaml);
-        assert!(yaml.is_ok());
-        let yaml = yaml.unwrap();
-        assert_eq!(yaml.len(), 1);
-        let yaml = &yaml[0];
-        let numeric_type = CostType::load_from_yaml(yaml);
-        assert!(numeric_type.is_err());
-    }
 
     #[test]
     fn reduce_function_load_from_yaml_ok() {
@@ -385,7 +343,7 @@ mod tests {
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let reduce = CostType::load_from_yaml(yaml);
+        let reduce = ReduceFunction::load_from_yaml(yaml);
         assert!(reduce.is_err());
     }
 
@@ -1521,5 +1479,181 @@ table_values:
 
         let model = Model::<variable::Integer>::load_from_yaml(domain, problem);
         assert!(model.is_err());
+    }
+    #[test]
+    fn cost_wrapped_model_load_from_yaml_ok() {
+        let domain = r"
+domain: ADD
+state_variables: [ {name: v, type: integer} ]
+reduce: min
+transitions:
+        - name: add
+          effect:
+                v: (+ v 1)
+          cost: (+ cost 1)
+";
+        let domain = yaml_rust::YamlLoader::load_from_str(domain);
+        assert!(domain.is_ok());
+        let domain = domain.unwrap();
+        assert_eq!(domain.len(), 1);
+        let domain = &domain[0];
+
+        let problem = r"
+domain: ADD
+problem: one
+target:
+        v: 0
+base_cases:
+        - [(>= v 1), (= 0 0)]
+";
+        let problem = yaml_rust::YamlLoader::load_from_str(problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+        assert_eq!(problem.len(), 1);
+        let problem = &problem[0];
+
+        let model = CostWrappedModel::load_from_yaml(domain, problem);
+        assert!(model.is_ok());
+        let model = model.unwrap();
+
+        let mut name_to_integer_variable = FxHashMap::default();
+        name_to_integer_variable.insert(String::from("v"), 0);
+        let expected = CostWrappedModel::Integer(Model {
+            domain_name: String::from("ADD"),
+            problem_name: String::from("one"),
+            state_metadata: state::StateMetadata {
+                integer_variable_names: vec![String::from("v")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: state::State {
+                signature_variables: SignatureVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            base_cases: vec![BaseCase {
+                cost: NumericExpression::Constant(0),
+                conditions: vec![GroundedCondition {
+                    condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                        ComparisonOperator::Ge,
+                        NumericExpression::IntegerVariable(0),
+                        NumericExpression::Constant(1),
+                    ))),
+                    ..Default::default()
+                }],
+            }],
+            forward_transitions: vec![Transition {
+                name: String::from("add"),
+                effect: effect::Effect {
+                    integer_effects: vec![(
+                        0,
+                        NumericExpression::NumericOperation(
+                            NumericOperator::Add,
+                            Box::new(NumericExpression::IntegerVariable(0)),
+                            Box::new(NumericExpression::Constant(1)),
+                        ),
+                    )],
+                    ..Default::default()
+                },
+                cost: NumericExpression::NumericOperation(
+                    NumericOperator::Add,
+                    Box::new(NumericExpression::Cost),
+                    Box::new(NumericExpression::Constant(1)),
+                ),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        assert_eq!(model, expected);
+
+        let domain = r"
+domain: ADD
+state_variables: [ {name: v, type: integer} ]
+reduce: min
+transitions:
+        - name: add
+          effect:
+                v: (+ v 1)
+          cost: (+ cost 1.0)
+";
+        let domain = yaml_rust::YamlLoader::load_from_str(domain);
+        assert!(domain.is_ok());
+        let domain = domain.unwrap();
+        assert_eq!(domain.len(), 1);
+        let domain = &domain[0];
+
+        let problem = r"
+domain: ADD
+problem: one
+target:
+        v: 0
+base_cases:
+        - [(>= v 1), (= 0 0)]
+";
+        let problem = yaml_rust::YamlLoader::load_from_str(problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+        assert_eq!(problem.len(), 1);
+        let problem = &problem[0];
+
+        let model = CostWrappedModel::load_from_yaml(domain, problem);
+        assert!(model.is_ok());
+        let model = model.unwrap();
+
+        let mut name_to_integer_variable = FxHashMap::default();
+        name_to_integer_variable.insert(String::from("v"), 0);
+        let expected = CostWrappedModel::OrderedContinuous(Model {
+            domain_name: String::from("ADD"),
+            problem_name: String::from("one"),
+            state_metadata: state::StateMetadata {
+                integer_variable_names: vec![String::from("v")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: state::State {
+                signature_variables: SignatureVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            base_cases: vec![BaseCase {
+                cost: NumericExpression::Constant(ordered_float::OrderedFloat(0.0)),
+                conditions: vec![GroundedCondition {
+                    condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                        ComparisonOperator::Ge,
+                        NumericExpression::IntegerVariable(0),
+                        NumericExpression::Constant(1),
+                    ))),
+                    ..Default::default()
+                }],
+            }],
+            forward_transitions: vec![Transition {
+                name: String::from("add"),
+                effect: effect::Effect {
+                    integer_effects: vec![(
+                        0,
+                        NumericExpression::NumericOperation(
+                            NumericOperator::Add,
+                            Box::new(NumericExpression::IntegerVariable(0)),
+                            Box::new(NumericExpression::Constant(1)),
+                        ),
+                    )],
+                    ..Default::default()
+                },
+                cost: NumericExpression::NumericOperation(
+                    NumericOperator::Add,
+                    Box::new(NumericExpression::Cost),
+                    Box::new(NumericExpression::Constant(ordered_float::OrderedFloat(
+                        1.0,
+                    ))),
+                ),
+                ..Default::default()
+            }],
+            ..Default::default()
+        });
+        assert_eq!(model, expected);
     }
 }

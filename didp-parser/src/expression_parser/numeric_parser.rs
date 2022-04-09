@@ -14,21 +14,6 @@ use rustc_hash::FxHashMap;
 use std::fmt;
 use std::str;
 
-pub fn parse_expression<'a, T: Numeric>(
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, Element>,
-) -> Result<(NumericExpression<T>, &'a [String]), ParseErr>
-where
-    <T as str::FromStr>::Err: fmt::Debug,
-{
-    match parse_integer_expression(tokens, metadata, registry, parameters) {
-        Ok(expression) => Ok(expression),
-        Err(_) => parse_continuous_expression(tokens, metadata, registry, parameters),
-    }
-}
-
 pub fn parse_integer_expression<'a, T: Numeric>(
     tokens: &'a [String],
     metadata: &StateMetadata,
@@ -993,48 +978,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_expression_ok() {
-        let metadata = generate_metadata();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "f1", "1", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression::<Integer>(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericExpression::IntegerTable(NumericTableExpression::Table1D(
-                0,
-                ElementExpression::Constant(1)
-            ))
-        );
-        assert_eq!(rest, &tokens[4..]);
-
-        let tokens: Vec<String> = ["(", "+", "(", "cf1", "1", ")", "i0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            NumericExpression::NumericOperation(
-                NumericOperator::Add,
-                Box::new(NumericExpression::ContinuousTable(
-                    NumericTableExpression::Table1D(0, ElementExpression::Constant(1))
-                )),
-                Box::new(NumericExpression::IntegerVariable(0))
-            )
-        );
-        assert_eq!(rest, &tokens[8..]);
-    }
-
-    #[test]
     fn parse_integer_atom_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
@@ -1163,7 +1106,8 @@ mod tests {
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["cr1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_continuous_expression::<Continuous>(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, NumericExpression::ContinuousResourceVariable(1));

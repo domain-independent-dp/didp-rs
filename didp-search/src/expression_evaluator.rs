@@ -1,6 +1,6 @@
 use crate::evaluator;
 use didp_parser::expression;
-use didp_parser::expression_parser;
+use didp_parser::expression_parser::ParseNumericExpression;
 use didp_parser::variable;
 use rustc_hash::FxHashMap;
 use std::error::Error;
@@ -9,7 +9,7 @@ use std::str;
 
 pub struct ExpressionEvaluator<T: variable::Numeric>(expression::NumericExpression<T>);
 
-impl<T: variable::Numeric> ExpressionEvaluator<T> {
+impl<T: variable::Numeric + ParseNumericExpression> ExpressionEvaluator<T> {
     pub fn new<U: variable::Numeric>(
         expression: String,
         model: &didp_parser::Model<U>,
@@ -18,7 +18,7 @@ impl<T: variable::Numeric> ExpressionEvaluator<T> {
         <T as str::FromStr>::Err: fmt::Debug,
     {
         let parameters = FxHashMap::default();
-        let expression = expression_parser::parse_numeric(
+        let expression = T::parse_expression(
             expression,
             &model.state_metadata,
             &model.table_registry,

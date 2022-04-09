@@ -1,5 +1,6 @@
 use crate::expression;
 use crate::expression_parser;
+use crate::expression_parser::ParseNumericExpression;
 use crate::state;
 use crate::table_registry;
 use crate::variable::{Continuous, Element, Integer};
@@ -48,24 +49,16 @@ impl Effect {
                     expression_parser::parse_element(effect, metadata, registry, parameters)?;
                 element_effects.push((*i, effect));
             } else if let Some(i) = metadata.name_to_integer_variable.get(&variable) {
-                let effect = expression_parser::parse_numeric::<Integer>(
-                    effect, metadata, registry, parameters,
-                )?;
+                let effect = Integer::parse_expression(effect, metadata, registry, parameters)?;
                 integer_effects.push((*i, effect.simplify(registry)));
             } else if let Some(i) = metadata.name_to_integer_resource_variable.get(&variable) {
-                let effect = expression_parser::parse_numeric::<Integer>(
-                    effect, metadata, registry, parameters,
-                )?;
+                let effect = Integer::parse_expression(effect, metadata, registry, parameters)?;
                 integer_resource_effects.push((*i, effect.simplify(registry)));
             } else if let Some(i) = metadata.name_to_continuous_variable.get(&variable) {
-                let effect = expression_parser::parse_numeric::<Continuous>(
-                    effect, metadata, registry, parameters,
-                )?;
+                let effect = Continuous::parse_expression(effect, metadata, registry, parameters)?;
                 continuous_effects.push((*i, effect.simplify(registry)));
             } else if let Some(i) = metadata.name_to_continuous_resource_variable.get(&variable) {
-                let effect = expression_parser::parse_numeric::<Continuous>(
-                    effect, metadata, registry, parameters,
-                )?;
+                let effect = Continuous::parse_expression(effect, metadata, registry, parameters)?;
                 continuous_resource_effects.push((*i, effect.simplify(registry)));
             } else {
                 return Err(yaml_util::YamlContentErr::new(format!(

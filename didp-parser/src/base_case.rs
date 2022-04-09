@@ -1,5 +1,5 @@
 use crate::expression::{Condition, NumericExpression};
-use crate::expression_parser;
+use crate::expression_parser::ParseNumericExpression;
 use crate::grounded_condition::GroundedCondition;
 use crate::state;
 use crate::table_registry;
@@ -34,7 +34,9 @@ impl<T: Numeric> BaseCase<T> {
             None
         }
     }
+}
 
+impl<T: Numeric + ParseNumericExpression> BaseCase<T> {
     pub fn load_from_yaml(
         value: &yaml_rust::Yaml,
         metadata: &state::StateMetadata,
@@ -54,12 +56,7 @@ impl<T: Numeric> BaseCase<T> {
                     Some(cost) => {
                         let cost = yaml_util::get_string(cost)?;
                         let parameters = FxHashMap::default();
-                        let cost = expression_parser::parse_numeric(
-                            cost,
-                            metadata,
-                            registry,
-                            &parameters,
-                        )?;
+                        let cost = T::parse_expression(cost, metadata, registry, &parameters)?;
                         cost.simplify(registry)
                     }
                     _ => NumericExpression::Constant(T::zero()),
