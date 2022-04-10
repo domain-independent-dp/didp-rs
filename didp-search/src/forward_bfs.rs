@@ -75,10 +75,10 @@ where
             let state = transition
                 .transition
                 .apply(&node.state, &model.table_registry);
-            if let Some(successor) =
-                registry.get_node(state, g, Some(transition), Some(node.clone()))
-            {
-                if model.check_constraints(&successor.state) {
+            if model.check_constraints(&state) {
+                if let Some(successor) =
+                    registry.get_node(state, g, Some(transition), Some(node.clone()))
+                {
                     let h = *successor.h.borrow();
                     let h = match h {
                         Some(h) => Some(h),
