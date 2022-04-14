@@ -171,6 +171,17 @@ impl<T: Numeric, U: Numeric> MaybeApplicable for TransitionWithG<T, U> {
     }
 }
 
+impl<T: Numeric, U: Numeric> TransitionWithG<T, U> {
+    pub fn eval_cost<S: didp_parser::DPState>(
+        &self,
+        cost: T,
+        state: &S,
+        registry: &didp_parser::TableRegistry,
+    ) -> T {
+        self.transition.eval_cost(cost, state, registry)
+    }
+}
+
 impl<'a, T: Numeric> SuccessorGenerator<'a, TransitionWithG<T, T>> {
     pub fn new(
         model: &'a didp_parser::Model<T>,
@@ -248,6 +259,7 @@ pub struct SearchNode<T: Numeric, U: Numeric> {
     pub state: StateForSearchNode,
     pub operator: Option<Rc<TransitionWithG<T, U>>>,
     pub parent: Option<Rc<SearchNode<T, U>>>,
+    pub cost: T,
     pub g: U,
     pub h: RefCell<Option<U>>,
     pub f: RefCell<Option<U>>,
@@ -330,6 +342,7 @@ impl<'a, T: Numeric, U: Numeric + Ord> SearchNodeRegistry<'a, T, U> {
     pub fn get_node(
         &mut self,
         mut state: StateForSearchNode,
+        cost: T,
         g: U,
         operator: Option<Rc<TransitionWithG<T, U>>>,
         parent: Option<Rc<SearchNode<T, U>>>,
@@ -344,17 +357,19 @@ impl<'a, T: Numeric, U: Numeric + Ord> SearchNodeRegistry<'a, T, U> {
                     let result = self.metadata.dominance(&state, &other.state);
                     match result {
                         Some(Ordering::Equal) | Some(Ordering::Less)
-                            if (*self.reduce_function == ReduceFunction::Max && g <= other.g)
+                            if (*self.reduce_function == ReduceFunction::Max
+                                && cost <= other.cost)
                                 || (*self.reduce_function == ReduceFunction::Min
-                                    && g >= other.g) =>
+                                    && cost >= other.cost) =>
                         {
                             // dominated
                             return None;
                         }
                         Some(Ordering::Equal) | Some(Ordering::Greater)
-                            if (*self.reduce_function == ReduceFunction::Max && g >= other.g)
+                            if (*self.reduce_function == ReduceFunction::Max
+                                && cost >= other.cost)
                                 || (*self.reduce_function == ReduceFunction::Min
-                                    && g <= other.g) =>
+                                    && cost <= other.cost) =>
                         {
                             // dominating
                             if !*other.closed.borrow() {
@@ -376,6 +391,7 @@ impl<'a, T: Numeric, U: Numeric + Ord> SearchNodeRegistry<'a, T, U> {
                                 state,
                                 operator,
                                 parent,
+                                cost,
                                 g,
                                 h,
                                 f: RefCell::new(None),
@@ -394,6 +410,7 @@ impl<'a, T: Numeric, U: Numeric + Ord> SearchNodeRegistry<'a, T, U> {
         let node = Rc::new(SearchNode {
             state,
             operator,
+            cost,
             g,
             h: RefCell::new(None),
             f: RefCell::new(None),
@@ -483,6 +500,7 @@ mod tests {
             },
             operator,
             parent,
+            cost: g,
             g,
             h: RefCell::new(Some(h)),
             f: RefCell::new(Some(f)),
@@ -954,7 +972,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 1, None, None);
+        let node = registry.get_node(state, 1, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {
@@ -971,7 +989,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 1, None, None);
+        let node = registry.get_node(state, 1, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {
@@ -988,7 +1006,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![3, 1, 3]),
         };
-        let node = registry.get_node(state, 1, None, None);
+        let node = registry.get_node(state, 1, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {
@@ -1005,7 +1023,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![0, 1, 3]),
         };
-        let node = registry.get_node(state, 0, None, None);
+        let node = registry.get_node(state, 0, 0, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {
@@ -1028,27 +1046,27 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        registry.get_node(state, 2, None, None);
+        registry.get_node(state, 2, 2, None, None);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 2, None, None);
+        let node = registry.get_node(state, 2, 2, None, None);
         assert!(node.is_none());
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
         };
-        let node = registry.get_node(state, 2, None, None);
+        let node = registry.get_node(state, 2, 2, None, None);
         assert!(node.is_none());
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 3, None, None);
+        let node = registry.get_node(state, 3, 3, None, None);
         assert!(node.is_none());
     }
 
@@ -1061,7 +1079,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 2, None, None);
+        let node = registry.get_node(state, 2, 2, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         assert!(node.h.borrow().is_none());
@@ -1070,7 +1088,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 1, None, None);
+        let node = registry.get_node(state, 1, 1, None, None);
         assert!(node.is_none());
     }
 
@@ -1083,7 +1101,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node1 = registry.get_node(state, 2, None, None);
+        let node1 = registry.get_node(state, 2, 2, None, None);
         assert!(node1.is_some());
         let node1 = node1.unwrap();
         *node1.h.borrow_mut() = Some(3);
@@ -1093,7 +1111,7 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         let op = Rc::new(TransitionWithG::default());
-        let node2 = registry.get_node(state, 1, Some(op), Some(node1.clone()));
+        let node2 = registry.get_node(state, 1, 1, Some(op), Some(node1.clone()));
         assert!(node2.is_some());
         let node2 = node2.unwrap();
         assert_eq!(
@@ -1115,7 +1133,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![2, 3, 3]),
         };
-        let node3 = registry.get_node(state, 1, None, None);
+        let node3 = registry.get_node(state, 1, 1, None, None);
         assert!(node3.is_some());
         let node3 = node3.unwrap();
         assert_eq!(
@@ -1143,7 +1161,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 1, None, None);
+        let node = registry.get_node(state, 1, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {
@@ -1162,7 +1180,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 1, None, None);
+        let node = registry.get_node(state, 1, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {

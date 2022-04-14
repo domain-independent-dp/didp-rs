@@ -31,9 +31,10 @@ where
         registry.reserve(capacity);
     }
 
+    let cost = T::zero();
     let g = U::zero();
     let initial_state = StateForSearchNode::new(&model.target);
-    let initial_node = match registry.get_node(initial_state, g, None, None) {
+    let initial_node = match registry.get_node(initial_state, cost, g, None, None) {
         Some(node) => node,
         None => return None,
     };
@@ -69,6 +70,7 @@ where
             let g = transition
                 .g
                 .eval_cost(node.g, &node.state, &model.table_registry);
+            let cost = transition.eval_cost(node.cost, &node.state, &model.table_registry);
             if g_bound.is_some() && g >= g_bound.unwrap() {
                 continue;
             }
@@ -77,7 +79,7 @@ where
                 .apply(&node.state, &model.table_registry);
             if model.check_constraints(&state) {
                 if let Some(successor) =
-                    registry.get_node(state, g, Some(transition), Some(node.clone()))
+                    registry.get_node(state, cost, g, Some(transition), Some(node.clone()))
                 {
                     let h = *successor.h.borrow();
                     let h = match h {
