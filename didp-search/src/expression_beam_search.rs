@@ -1,9 +1,9 @@
 use super::expression_astar::FEvaluatorType;
+use crate::bfs_node::TransitionWithG;
 use crate::expression_evaluator::ExpressionEvaluator;
 use crate::forward_beam_search;
 use crate::forward_bfs;
 use crate::search_node::StateForSearchNode;
-use crate::search_node::TransitionWithG;
 use crate::solver;
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::expression_parser::ParseNumericExpression;

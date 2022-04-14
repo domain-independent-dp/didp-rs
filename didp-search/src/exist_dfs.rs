@@ -1,5 +1,5 @@
+use crate::bfs_node::TransitionWithG;
 use crate::hashable_state;
-use crate::search_node::TransitionWithG;
 use crate::solver;
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::variable;

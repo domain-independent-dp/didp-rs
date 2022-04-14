@@ -1,3 +1,4 @@
+use crate::dijkstra;
 use crate::expression_astar;
 use crate::expression_beam_search;
 use crate::expression_exist_dfs;
@@ -37,6 +38,7 @@ impl SolverFactory {
         };
         match map.get(&yaml_rust::Yaml::from_str("solver")) {
             Some(yaml_rust::Yaml::String(string)) => match &string[..] {
+                "dijkstra" => Ok(Box::new(dijkstra::Dijkstra::new(&config)?)),
                 "expression_astar" => {
                     Ok(Box::new(expression_astar::ExpressionAstar::new(&config)?))
                 }

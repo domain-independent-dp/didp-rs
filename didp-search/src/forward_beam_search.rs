@@ -1,7 +1,8 @@
+use crate::bfs_node::BFSNodeRegistry;
 use crate::evaluator;
 use crate::forward_bfs::BFSEvaluators;
 use crate::priority_queue;
-use crate::search_node::{SearchNodeRegistry, StateForSearchNode};
+use crate::search_node::StateForSearchNode;
 use crate::solver;
 use didp_parser::variable;
 use std::fmt;
@@ -93,7 +94,7 @@ where
     F: Fn(U, U, &StateForSearchNode, &didp_parser::Model<T>) -> U,
 {
     let mut open = priority_queue::PriorityQueue::new(!maximize);
-    let mut registry = SearchNodeRegistry::new(model);
+    let mut registry = BFSNodeRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
     }

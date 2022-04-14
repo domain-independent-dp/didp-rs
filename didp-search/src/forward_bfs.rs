@@ -1,6 +1,7 @@
+use crate::bfs_node::{BFSNodeRegistry, TransitionWithG};
 use crate::evaluator;
 use crate::priority_queue;
-use crate::search_node::{SearchNodeRegistry, StateForSearchNode, TransitionWithG};
+use crate::search_node::StateForSearchNode;
 use crate::solver;
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::variable;
@@ -26,7 +27,7 @@ where
     F: Fn(U, U, &StateForSearchNode, &didp_parser::Model<T>) -> U,
 {
     let mut open = priority_queue::PriorityQueue::new(true);
-    let mut registry = SearchNodeRegistry::new(model);
+    let mut registry = BFSNodeRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
     }

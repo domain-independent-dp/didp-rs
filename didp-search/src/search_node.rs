@@ -1,18 +1,11 @@
 use crate::hashable_state;
-use crate::priority_queue;
-use crate::solver::ConfigErr;
-use crate::successor_generator::{MaybeApplicable, SuccessorGenerator};
-use didp_parser::expression_parser::ParseNumericExpression;
 use didp_parser::variable::{Continuous, Element, Integer, Numeric, Set, Vector};
 use didp_parser::ReduceFunction;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections;
-use std::error::Error;
-use std::fmt;
 use std::rc::Rc;
-use std::str;
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct StateForSearchNode {
@@ -155,156 +148,50 @@ impl didp_parser::DPState for StateForSearchNode {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Default)]
-pub struct TransitionWithG<T: Numeric, U: Numeric> {
-    pub transition: didp_parser::Transition<T>,
-    pub g: didp_parser::expression::NumericExpression<U>,
-}
-
-impl<T: Numeric, U: Numeric> MaybeApplicable for TransitionWithG<T, U> {
-    fn is_applicable<S: didp_parser::DPState>(
-        &self,
-        state: &S,
-        registry: &didp_parser::TableRegistry,
-    ) -> bool {
-        self.transition.is_applicable(state, registry)
-    }
-}
-
-impl<T: Numeric, U: Numeric> TransitionWithG<T, U> {
-    pub fn eval_cost<S: didp_parser::DPState>(
-        &self,
-        cost: T,
-        state: &S,
-        registry: &didp_parser::TableRegistry,
-    ) -> T {
-        self.transition.eval_cost(cost, state, registry)
-    }
-}
-
-impl<'a, T: Numeric> SuccessorGenerator<'a, TransitionWithG<T, T>> {
-    pub fn new(
-        model: &'a didp_parser::Model<T>,
-        backward: bool,
-    ) -> SuccessorGenerator<'a, TransitionWithG<T, T>> {
-        let transitions = if backward {
-            &model.backward_transitions
-        } else {
-            &model.forward_transitions
-        };
-        let transitions = transitions
-            .iter()
-            .map(|t| {
-                Rc::new(TransitionWithG {
-                    transition: t.clone(),
-                    g: t.cost.clone(),
-                })
-            })
-            .collect();
-        SuccessorGenerator {
-            transitions,
-            registry: &model.table_registry,
-        }
-    }
-}
-
-impl<'a, T: Numeric, U: Numeric + ParseNumericExpression>
-    SuccessorGenerator<'a, TransitionWithG<T, U>>
-where
-    <U as str::FromStr>::Err: fmt::Debug,
-{
-    pub fn with_expressions(
-        model: &'a didp_parser::Model<T>,
-        backward: bool,
-        g_expressions: &FxHashMap<String, String>,
-    ) -> Result<SuccessorGenerator<'a, TransitionWithG<T, U>>, Box<dyn Error>> {
-        let original_transitions = if backward {
-            &model.backward_transitions
-        } else {
-            &model.forward_transitions
-        };
-        let mut transitions = Vec::with_capacity(original_transitions.len());
-        let mut parameters = FxHashMap::default();
-        for t in original_transitions {
-            for (name, value) in t.parameter_names.iter().zip(t.parameter_values.iter()) {
-                parameters.insert(name.clone(), *value);
-            }
-            let g = if let Some(expression) = g_expressions.get(&t.name) {
-                U::parse_expression(
-                    expression.clone(),
-                    &model.state_metadata,
-                    &model.table_registry,
-                    &parameters,
-                )?
-            } else {
-                return Err(
-                    ConfigErr::new(format!("expression for `{}` is undefined", t.name)).into(),
-                );
-            };
-            transitions.push(Rc::new(TransitionWithG {
-                transition: t.clone(),
-                g,
-            }));
-            parameters.clear();
-        }
-        Ok(SuccessorGenerator {
-            transitions,
-            registry: &model.table_registry,
-        })
-    }
-}
-
 #[derive(Debug)]
-pub struct SearchNode<T: Numeric, U: Numeric> {
+pub struct SearchNode<T: Numeric> {
     pub state: StateForSearchNode,
-    pub operator: Option<Rc<TransitionWithG<T, U>>>,
-    pub parent: Option<Rc<SearchNode<T, U>>>,
+    pub operator: Option<Rc<didp_parser::Transition<T>>>,
+    pub parent: Option<Rc<SearchNode<T>>>,
     pub cost: T,
-    pub g: U,
-    pub h: RefCell<Option<U>>,
-    pub f: RefCell<Option<U>>,
     pub closed: RefCell<bool>,
 }
 
-impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for SearchNode<T, U> {
+impl<T: Numeric + PartialOrd> PartialEq for SearchNode<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.f == other.f
+        self.cost == other.cost
     }
 }
 
-impl<T: Numeric, U: Numeric + Ord> Eq for SearchNode<T, U> {}
+impl<T: Numeric + Ord> Eq for SearchNode<T> {}
 
-impl<T: Numeric, U: Numeric + Ord> Ord for SearchNode<T, U> {
+impl<T: Numeric + Ord> Ord for SearchNode<T> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.f.cmp(&other.f)
+        self.cost.cmp(&other.cost)
     }
 }
 
-impl<T: Numeric, U: Numeric + Ord> PartialOrd for SearchNode<T, U> {
+impl<T: Numeric + Ord> PartialOrd for SearchNode<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<T: Numeric, U: Numeric> SearchNode<T, U> {
+impl<T: Numeric> SearchNode<T> {
     pub fn trace_transitions(
         &self,
         base_cost: T,
         model: &didp_parser::Model<T>,
-    ) -> (T, Vec<Rc<TransitionWithG<T, U>>>) {
+    ) -> (T, Vec<Rc<didp_parser::Transition<T>>>) {
         let mut result = Vec::new();
         let mut cost = base_cost;
         if let (Some(mut node), Some(operator)) = (self.parent.as_ref(), self.operator.as_ref()) {
-            cost = operator
-                .transition
-                .eval_cost(cost, &node.state, &model.table_registry);
+            cost = operator.eval_cost(cost, &node.state, &model.table_registry);
             result.push(operator.clone());
             while let (Some(parent), Some(operator)) =
                 (node.parent.as_ref(), node.operator.as_ref())
             {
-                cost = operator
-                    .transition
-                    .eval_cost(cost, &parent.state, &model.table_registry);
+                cost = operator.eval_cost(cost, &parent.state, &model.table_registry);
                 result.push(operator.clone());
                 node = parent;
             }
@@ -314,16 +201,14 @@ impl<T: Numeric, U: Numeric> SearchNode<T, U> {
     }
 }
 
-pub type OpenList<T, U> = priority_queue::PriorityQueue<Rc<SearchNode<T, U>>>;
-
-pub struct SearchNodeRegistry<'a, T: Numeric, U: Numeric> {
-    registry: FxHashMap<Rc<hashable_state::HashableSignatureVariables>, Vec<Rc<SearchNode<T, U>>>>,
+pub struct SearchNodeRegistry<'a, T: Numeric> {
+    registry: FxHashMap<Rc<hashable_state::HashableSignatureVariables>, Vec<Rc<SearchNode<T>>>>,
     metadata: &'a didp_parser::StateMetadata,
     reduce_function: &'a ReduceFunction,
 }
 
-impl<'a, T: Numeric, U: Numeric + Ord> SearchNodeRegistry<'a, T, U> {
-    pub fn new(model: &'a didp_parser::Model<T>) -> SearchNodeRegistry<T, U> {
+impl<'a, T: Numeric + Ord> SearchNodeRegistry<'a, T> {
+    pub fn new(model: &'a didp_parser::Model<T>) -> SearchNodeRegistry<T> {
         SearchNodeRegistry {
             registry: FxHashMap::default(),
             metadata: &model.state_metadata,
@@ -343,10 +228,9 @@ impl<'a, T: Numeric, U: Numeric + Ord> SearchNodeRegistry<'a, T, U> {
         &mut self,
         mut state: StateForSearchNode,
         cost: T,
-        g: U,
-        operator: Option<Rc<TransitionWithG<T, U>>>,
-        parent: Option<Rc<SearchNode<T, U>>>,
-    ) -> Option<Rc<SearchNode<T, U>>> {
+        operator: Option<Rc<didp_parser::Transition<T>>>,
+        parent: Option<Rc<SearchNode<T>>>,
+    ) -> Option<Rc<SearchNode<T>>> {
         let entry = self.registry.entry(state.signature_variables.clone());
         let v = match entry {
             collections::hash_map::Entry::Occupied(entry) => {
@@ -375,26 +259,11 @@ impl<'a, T: Numeric, U: Numeric + Ord> SearchNodeRegistry<'a, T, U> {
                             if !*other.closed.borrow() {
                                 *other.closed.borrow_mut() = true;
                             }
-                            let h = match result.unwrap() {
-                                Ordering::Equal => {
-                                    if let Some(h) = *other.h.borrow() {
-                                        // cached value
-                                        RefCell::new(Some(h))
-                                    } else {
-                                        // dead end
-                                        return None;
-                                    }
-                                }
-                                _ => RefCell::new(None),
-                            };
                             let node = Rc::new(SearchNode {
                                 state,
                                 operator,
                                 parent,
                                 cost,
-                                g,
-                                h,
-                                f: RefCell::new(None),
                                 closed: RefCell::new(false),
                             });
                             *other = node.clone();
@@ -411,9 +280,6 @@ impl<'a, T: Numeric, U: Numeric + Ord> SearchNodeRegistry<'a, T, U> {
             state,
             operator,
             cost,
-            g,
-            h: RefCell::new(None),
-            f: RefCell::new(None),
             parent,
             closed: RefCell::new(false),
         });
@@ -484,12 +350,10 @@ mod tests {
     fn generate_node(
         signature_variables: Rc<hashable_state::HashableSignatureVariables>,
         integer_resource_variables: Vec<Integer>,
-        parent: Option<Rc<SearchNode<Integer, Integer>>>,
-        operator: Option<Rc<TransitionWithG<Integer, Integer>>>,
-        g: Integer,
-        h: Integer,
-        f: Integer,
-    ) -> SearchNode<Integer, Integer> {
+        parent: Option<Rc<SearchNode<Integer>>>,
+        operator: Option<Rc<didp_parser::Transition<Integer>>>,
+        cost: Integer,
+    ) -> SearchNode<Integer> {
         SearchNode {
             state: StateForSearchNode {
                 signature_variables,
@@ -500,10 +364,7 @@ mod tests {
             },
             operator,
             parent,
-            cost: g,
-            g,
-            h: RefCell::new(Some(h)),
-            f: RefCell::new(Some(f)),
+            cost,
             closed: RefCell::new(false),
         }
     }
@@ -857,18 +718,18 @@ mod tests {
     #[test]
     fn search_node_eq() {
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let node1 = generate_node(signature_variables, vec![0, 0, 0], None, None, 1, 1, 2);
+        let node1 = generate_node(signature_variables, vec![0, 0, 0], None, None, 1);
         let signature_variables = generate_signature_variables(vec![1, 2, 3]);
-        let node2 = generate_node(signature_variables, vec![0, 0, 0], None, None, 1, 1, 2);
+        let node2 = generate_node(signature_variables, vec![0, 0, 0], None, None, 1);
         assert_eq!(node1, node2);
     }
 
     #[test]
     fn search_node_neq() {
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let node1 = generate_node(signature_variables, vec![0, 0, 0], None, None, 1, 1, 2);
+        let node1 = generate_node(signature_variables, vec![0, 0, 0], None, None, 1);
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let node2 = generate_node(signature_variables, vec![0, 0, 0], None, None, 1, 2, 3);
+        let node2 = generate_node(signature_variables, vec![0, 0, 0], None, None, 2);
         assert!(node1 < node2);
     }
 
@@ -882,34 +743,23 @@ mod tests {
             None,
             None,
             0,
-            0,
-            0,
         ));
         assert_eq!(node1.trace_transitions(0, &model), (0, Vec::new()));
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let op1 = Rc::new(TransitionWithG {
-            transition: didp_parser::Transition {
-                name: String::from("op1"),
-                cost: didp_parser::expression::NumericExpression::NumericOperation(
-                    didp_parser::expression::NumericOperator::Add,
-                    Box::new(didp_parser::expression::NumericExpression::Cost),
-                    Box::new(didp_parser::expression::NumericExpression::Constant(1)),
-                ),
-                ..Default::default()
-            },
-            g: didp_parser::expression::NumericExpression::NumericOperation(
+        let op1 = Rc::new(didp_parser::Transition {
+            name: String::from("op1"),
+            cost: didp_parser::expression::NumericExpression::NumericOperation(
                 didp_parser::expression::NumericOperator::Add,
                 Box::new(didp_parser::expression::NumericExpression::Cost),
                 Box::new(didp_parser::expression::NumericExpression::Constant(1)),
             ),
+            ..Default::default()
         });
         let node2 = Rc::new(generate_node(
             signature_variables,
             vec![0, 0, 0],
             None,
             Some(op1.clone()),
-            0,
-            0,
             0,
         ));
         assert_eq!(node2.trace_transitions(0, &model), (0, Vec::new()));
@@ -920,8 +770,6 @@ mod tests {
             Some(node1.clone()),
             None,
             0,
-            0,
-            0,
         ));
         assert_eq!(node2.trace_transitions(0, &model), (0, Vec::new()));
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
@@ -931,33 +779,22 @@ mod tests {
             Some(node1),
             Some(op1.clone()),
             0,
-            0,
-            0,
         ));
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let op2 = Rc::new(TransitionWithG {
-            transition: didp_parser::Transition {
-                name: String::from("op2"),
-                cost: didp_parser::expression::NumericExpression::NumericOperation(
-                    didp_parser::expression::NumericOperator::Add,
-                    Box::new(didp_parser::expression::NumericExpression::Cost),
-                    Box::new(didp_parser::expression::NumericExpression::Constant(1)),
-                ),
-                ..Default::default()
-            },
-            g: didp_parser::expression::NumericExpression::NumericOperation(
+        let op2 = Rc::new(didp_parser::Transition {
+            name: String::from("op2"),
+            cost: didp_parser::expression::NumericExpression::NumericOperation(
                 didp_parser::expression::NumericOperator::Add,
                 Box::new(didp_parser::expression::NumericExpression::Cost),
                 Box::new(didp_parser::expression::NumericExpression::Constant(1)),
             ),
+            ..Default::default()
         });
         let node3 = Rc::new(generate_node(
             signature_variables,
             vec![0, 0, 0],
             Some(node2),
             Some(op2.clone()),
-            0,
-            0,
             0,
         ));
         assert_eq!(node3.trace_transitions(0, &model), (2, vec![op1, op2]));
@@ -972,7 +809,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 1, 1, None, None);
+        let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {
@@ -980,8 +817,6 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(node.state, state);
-        assert!(node.h.borrow().is_none());
-        assert!(node.f.borrow().is_none());
         assert!(node.parent.is_none());
         assert_eq!(*node.closed.borrow(), false);
 
@@ -989,7 +824,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 1, 1, None, None);
+        let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {
@@ -997,8 +832,6 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(node.state, state);
-        assert!(node.h.borrow().is_none());
-        assert!(node.f.borrow().is_none());
         assert!(node.parent.is_none());
         assert_eq!(*node.closed.borrow(), false);
 
@@ -1006,7 +839,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![3, 1, 3]),
         };
-        let node = registry.get_node(state, 1, 1, None, None);
+        let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {
@@ -1014,8 +847,6 @@ mod tests {
             resource_variables: generate_resource_variables(vec![3, 1, 3]),
         };
         assert_eq!(node.state, state);
-        assert!(node.h.borrow().is_none());
-        assert!(node.f.borrow().is_none());
         assert!(node.parent.is_none());
         assert!(!*node.closed.borrow());
 
@@ -1023,7 +854,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![0, 1, 3]),
         };
-        let node = registry.get_node(state, 0, 0, None, None);
+        let node = registry.get_node(state, 0, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {
@@ -1031,8 +862,6 @@ mod tests {
             resource_variables: generate_resource_variables(vec![0, 1, 3]),
         };
         assert_eq!(node.state, state);
-        assert!(node.h.borrow().is_none());
-        assert!(node.f.borrow().is_none());
         assert!(node.parent.is_none());
         assert!(!*node.closed.borrow());
     }
@@ -1046,72 +875,49 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        registry.get_node(state, 2, 2, None, None);
+        registry.get_node(state, 2, None, None);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 2, 2, None, None);
+        let node = registry.get_node(state, 2, None, None);
         assert!(node.is_none());
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
         };
-        let node = registry.get_node(state, 2, 2, None, None);
+        let node = registry.get_node(state, 2, None, None);
         assert!(node.is_none());
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 3, 3, None, None);
-        assert!(node.is_none());
-    }
-
-    #[test]
-    fn node_dead_end() {
-        let model = generate_model();
-        let mut registry = SearchNodeRegistry::new(&model);
-
-        let state = StateForSearchNode {
-            signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![1, 2, 3]),
-        };
-        let node = registry.get_node(state, 2, 2, None, None);
-        assert!(node.is_some());
-        let node = node.unwrap();
-        assert!(node.h.borrow().is_none());
-
-        let state = StateForSearchNode {
-            signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![1, 2, 3]),
-        };
-        let node = registry.get_node(state, 1, 1, None, None);
+        let node = registry.get_node(state, 3, None, None);
         assert!(node.is_none());
     }
 
     #[test]
     fn get_dominating_node() {
         let model = generate_model();
-        let mut registry = SearchNodeRegistry::<Integer, Integer>::new(&model);
+        let mut registry = SearchNodeRegistry::<Integer>::new(&model);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node1 = registry.get_node(state, 2, 2, None, None);
+        let node1 = registry.get_node(state, 2, None, None);
         assert!(node1.is_some());
         let node1 = node1.unwrap();
-        *node1.h.borrow_mut() = Some(3);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let op = Rc::new(TransitionWithG::default());
-        let node2 = registry.get_node(state, 1, 1, Some(op), Some(node1.clone()));
+        let op = Rc::new(didp_parser::Transition::default());
+        let node2 = registry.get_node(state, 1, Some(op), Some(node1.clone()));
         assert!(node2.is_some());
         let node2 = node2.unwrap();
         assert_eq!(
@@ -1122,9 +928,7 @@ mod tests {
             node2.state.resource_variables,
             node1.state.resource_variables
         );
-        assert!(node2.g < node1.g);
-        assert_eq!(*node2.h.borrow(), *node1.h.borrow());
-        assert!(node2.f.borrow().is_none());
+        assert!(node2.cost < node1.cost);
         assert!(*node1.closed.borrow());
         assert!(!*node2.closed.borrow());
         assert_ne!(node2.parent, node1.parent);
@@ -1133,7 +937,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![2, 3, 3]),
         };
-        let node3 = registry.get_node(state, 1, 1, None, None);
+        let node3 = registry.get_node(state, 1, None, None);
         assert!(node3.is_some());
         let node3 = node3.unwrap();
         assert_eq!(
@@ -1144,9 +948,7 @@ mod tests {
             node3.state.resource_variables,
             node2.state.resource_variables,
         );
-        assert_eq!(node3.g, node2.g);
-        assert!(node3.h.borrow().is_none());
-        assert!(node3.f.borrow().is_none());
+        assert_eq!(node3.cost, node2.cost);
         assert!(*node2.closed.borrow());
         assert!(!*node3.closed.borrow());
         assert!(node3.parent.is_none());
@@ -1161,7 +963,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 1, 1, None, None);
+        let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {
@@ -1169,8 +971,6 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(node.state, state);
-        assert!(node.h.borrow().is_none());
-        assert!(node.f.borrow().is_none());
         assert!(node.parent.is_none());
         assert_eq!(*node.closed.borrow(), false);
 
@@ -1180,7 +980,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let node = registry.get_node(state, 1, 1, None, None);
+        let node = registry.get_node(state, 1, None, None);
         assert!(node.is_some());
         let node = node.unwrap();
         let state = StateForSearchNode {
@@ -1188,8 +988,6 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(node.state, state);
-        assert!(node.h.borrow().is_none());
-        assert!(node.f.borrow().is_none());
         assert!(node.parent.is_none());
         assert_eq!(*node.closed.borrow(), false);
     }
