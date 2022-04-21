@@ -4,6 +4,8 @@ use crate::variable::Numeric;
 pub enum MathFunction {
     Sqrt,
     Abs,
+    Floor,
+    Ceiling,
 }
 
 impl MathFunction {
@@ -11,6 +13,8 @@ impl MathFunction {
         match self {
             Self::Sqrt => T::from(x.to_continuous().sqrt()),
             Self::Abs => x.abs(),
+            Self::Floor => T::from(x.to_continuous().floor()),
+            Self::Ceiling => T::from(x.to_continuous().ceil()),
         }
     }
 }
@@ -64,6 +68,18 @@ mod tests {
     fn abs() {
         let op = MathFunction::Abs;
         assert_eq!(op.eval(-4.0), 4.0);
+    }
+
+    #[test]
+    fn floor() {
+        let op = MathFunction::Floor;
+        assert_eq!(op.eval(4.5), 4.0);
+    }
+
+    #[test]
+    fn ceiling() {
+        let op = MathFunction::Ceiling;
+        assert_eq!(op.eval(4.5), 5.0);
     }
 
     #[test]

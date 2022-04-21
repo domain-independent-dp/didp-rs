@@ -698,6 +698,16 @@ mod tests {
         let expression: NumericExpression<Integer> =
             NumericExpression::Math(MathFunction::Abs, Box::new(NumericExpression::Constant(-1)));
         assert_eq!(expression.eval(&state, &registry), 1);
+        let expression: NumericExpression<Continuous> = NumericExpression::Math(
+            MathFunction::Floor,
+            Box::new(NumericExpression::Constant(0.5)),
+        );
+        assert_eq!(expression.eval(&state, &registry), 0.0);
+        let expression: NumericExpression<Continuous> = NumericExpression::Math(
+            MathFunction::Ceiling,
+            Box::new(NumericExpression::Constant(0.5)),
+        );
+        assert_eq!(expression.eval(&state, &registry), 1.0);
     }
 
     #[test]

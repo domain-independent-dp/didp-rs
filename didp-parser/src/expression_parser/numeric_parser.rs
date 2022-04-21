@@ -211,6 +211,8 @@ fn parse_math<T: Numeric>(
     match name {
         "sqrt" => Ok(NumericExpression::Math(MathFunction::Sqrt, Box::new(x))),
         "abs" => Ok(NumericExpression::Math(MathFunction::Abs, Box::new(x))),
+        "floor" => Ok(NumericExpression::Math(MathFunction::Floor, Box::new(x))),
+        "ceiling" => Ok(NumericExpression::Math(MathFunction::Ceiling, Box::new(x))),
         _ => Err(ParseErr::new(format!("no such math function `{}`", name))),
     }
 }
@@ -1303,6 +1305,38 @@ mod tests {
             NumericExpression::Math(MathFunction::Abs, Box::new(NumericExpression::Constant(-4)),)
         );
         assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["(", "floor", "4", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_integer_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Math(
+                MathFunction::Floor,
+                Box::new(NumericExpression::Constant(4)),
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["(", "ceiling", "4", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_integer_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Math(
+                MathFunction::Ceiling,
+                Box::new(NumericExpression::Constant(4)),
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
     }
 
     #[test]
@@ -1370,6 +1404,38 @@ mod tests {
             NumericExpression::Math(
                 MathFunction::Abs,
                 Box::new(NumericExpression::Constant(-4.0)),
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["(", "floor", "4.5", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Math(
+                MathFunction::Floor,
+                Box::new(NumericExpression::Constant(4.5)),
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["(", "ceiling", "4.5", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_continuous_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericExpression::Math(
+                MathFunction::Ceiling,
+                Box::new(NumericExpression::Constant(4.5)),
             )
         );
         assert_eq!(rest, &tokens[4..]);
