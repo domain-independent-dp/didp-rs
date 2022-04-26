@@ -162,13 +162,13 @@ where
                         let h = match h {
                             Some(h) => Some(h),
                             None => {
-                                let h = evaluators.h_evaluator.eval(&node.state, model);
+                                let h = evaluators.h_evaluator.eval(&successor.state, model);
                                 *successor.h.borrow_mut() = h;
                                 h
                             }
                         };
                         if let Some(h) = h {
-                            let f = (evaluators.f_evaluator)(g, h, &node.state, model);
+                            let f = (evaluators.f_evaluator)(g, h, &successor.state, model);
                             if let Some(bound) = g_bound {
                                 if !maximize && f >= bound {
                                     continue;
