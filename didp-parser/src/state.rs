@@ -5,8 +5,9 @@ use crate::yaml_util;
 use lazy_static::lazy_static;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Ordering;
+use std::fmt;
 
-pub trait DPState: Clone {
+pub trait DPState: Clone + fmt::Debug {
     fn get_set_variable(&self, i: usize) -> &Set;
     fn get_vector_variable(&self, i: usize) -> &Vector;
     fn get_element_variable(&self, i: usize) -> Element;
