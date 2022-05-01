@@ -161,7 +161,6 @@ where
         if let Some(node) =
             registry.get_node(state, edge.cost, Some(edge.transition), Some(edge.parent))
         {
-            *node.closed.borrow_mut() = true;
             expanded += 1;
             if node.cost > cost_max {
                 cost_max = node.cost;

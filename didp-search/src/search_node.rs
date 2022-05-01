@@ -2,7 +2,6 @@ use crate::hashable_state;
 use didp_parser::variable::{Continuous, Element, Integer, Numeric, Set, Vector};
 use didp_parser::ReduceFunction;
 use rustc_hash::FxHashMap;
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections;
 use std::rc::Rc;
@@ -154,7 +153,6 @@ pub struct SearchNode<T: Numeric> {
     pub operator: Option<Rc<didp_parser::Transition<T>>>,
     pub parent: Option<Rc<SearchNode<T>>>,
     pub cost: T,
-    pub closed: RefCell<bool>,
 }
 
 impl<T: Numeric + PartialOrd> PartialEq for SearchNode<T> {
@@ -256,15 +254,11 @@ impl<'a, T: Numeric + Ord> SearchNodeRegistry<'a, T> {
                                     && cost <= other.cost) =>
                         {
                             // dominating
-                            if !*other.closed.borrow() {
-                                *other.closed.borrow_mut() = true;
-                            }
                             let node = Rc::new(SearchNode {
                                 state,
                                 operator,
                                 parent,
                                 cost,
-                                closed: RefCell::new(false),
                             });
                             *other = node.clone();
                             return Some(node);
@@ -281,7 +275,6 @@ impl<'a, T: Numeric + Ord> SearchNodeRegistry<'a, T> {
             operator,
             cost,
             parent,
-            closed: RefCell::new(false),
         });
         v.push(node.clone());
         Some(node)
@@ -365,7 +358,6 @@ mod tests {
             operator,
             parent,
             cost,
-            closed: RefCell::new(false),
         }
     }
 
@@ -818,7 +810,6 @@ mod tests {
         };
         assert_eq!(node.state, state);
         assert!(node.parent.is_none());
-        assert_eq!(*node.closed.borrow(), false);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
@@ -833,7 +824,6 @@ mod tests {
         };
         assert_eq!(node.state, state);
         assert!(node.parent.is_none());
-        assert_eq!(*node.closed.borrow(), false);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
@@ -848,7 +838,6 @@ mod tests {
         };
         assert_eq!(node.state, state);
         assert!(node.parent.is_none());
-        assert!(!*node.closed.borrow());
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
@@ -863,7 +852,6 @@ mod tests {
         };
         assert_eq!(node.state, state);
         assert!(node.parent.is_none());
-        assert!(!*node.closed.borrow());
     }
 
     #[test]
@@ -929,8 +917,6 @@ mod tests {
             node1.state.resource_variables
         );
         assert!(node2.cost < node1.cost);
-        assert!(*node1.closed.borrow());
-        assert!(!*node2.closed.borrow());
         assert_ne!(node2.parent, node1.parent);
 
         let state = StateForSearchNode {
@@ -949,8 +935,6 @@ mod tests {
             node2.state.resource_variables,
         );
         assert_eq!(node3.cost, node2.cost);
-        assert!(*node2.closed.borrow());
-        assert!(!*node3.closed.borrow());
         assert!(node3.parent.is_none());
     }
 
@@ -972,7 +956,6 @@ mod tests {
         };
         assert_eq!(node.state, state);
         assert!(node.parent.is_none());
-        assert_eq!(*node.closed.borrow(), false);
 
         registry.clear();
 
@@ -989,6 +972,5 @@ mod tests {
         };
         assert_eq!(node.state, state);
         assert!(node.parent.is_none());
-        assert_eq!(*node.closed.borrow(), false);
     }
 }
