@@ -1,10 +1,12 @@
 use crate::priority_queue;
-use crate::search_node::{SearchNodeRegistry, StateForSearchNode};
+use crate::search_node::{SearchNode, SearchNodeRegistry, StateForSearchNode};
 use crate::solver;
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::variable;
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
+use std::rc::Rc;
 use std::str;
 
 #[derive(Default)]
@@ -86,6 +88,33 @@ where
     }
 }
 
+#[derive(Debug)]
+struct DijkstraEdge<T: variable::Numeric + Ord> {
+    cost: T,
+    parent: Rc<SearchNode<T>>,
+    transition: Rc<didp_parser::Transition<T>>,
+}
+
+impl<T: variable::Numeric + Ord> PartialEq for DijkstraEdge<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cost == other.cost
+    }
+}
+
+impl<T: variable::Numeric + Ord> Eq for DijkstraEdge<T> {}
+
+impl<T: variable::Numeric + Ord> Ord for DijkstraEdge<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.cost.cmp(&other.cost)
+    }
+}
+
+impl<T: variable::Numeric + Ord> PartialOrd for DijkstraEdge<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 pub fn dijkstra<'a, T>(
     model: &'a didp_parser::Model<T>,
     generator: SuccessorGenerator<didp_parser::Transition<T>>,
@@ -107,36 +136,51 @@ where
         Some(node) => node,
         None => return None,
     };
-    open.push(initial_node);
+    for transition in generator.applicable_transitions(&initial_node.state) {
+        let cost = transition.eval_cost(
+            initial_node.cost,
+            &initial_node.state,
+            &model.table_registry,
+        );
+        open.push(DijkstraEdge {
+            cost,
+            parent: initial_node.clone(),
+            transition,
+        });
+    }
     let mut expanded = 0;
-    let mut cost_max = cost;
+    let mut cost_max = T::zero();
 
-    while let Some(node) = open.pop() {
-        if *node.closed.borrow() {
+    while let Some(edge) = open.pop() {
+        let state = edge
+            .transition
+            .apply(&edge.parent.state, &model.table_registry);
+        if !model.check_constraints(&state) {
             continue;
         }
-        *node.closed.borrow_mut() = true;
-        expanded += 1;
-        if node.cost > cost_max {
-            cost_max = node.cost;
-            println!("cost = {}, expanded: {}", cost_max, expanded);
-        }
-        if let Some(cost) = model.get_base_cost(&node.state) {
-            println!("Expanded: {}", expanded);
-            return Some(node.trace_transitions(cost, model));
-        }
-        for transition in generator.applicable_transitions(&node.state) {
-            let cost = transition.eval_cost(node.cost, &node.state, &model.table_registry);
-            if primal_bound.is_some() && cost >= primal_bound.unwrap() {
-                continue;
+        if let Some(node) =
+            registry.get_node(state, edge.cost, Some(edge.transition), Some(edge.parent))
+        {
+            *node.closed.borrow_mut() = true;
+            expanded += 1;
+            if node.cost > cost_max {
+                cost_max = node.cost;
+                println!("cost = {}, expanded: {}", cost_max, expanded);
             }
-            let state = transition.apply(&node.state, &model.table_registry);
-            if model.check_constraints(&state) {
-                if let Some(successor) =
-                    registry.get_node(state, cost, Some(transition), Some(node.clone()))
-                {
-                    open.push(successor);
+            if let Some(cost) = model.get_base_cost(&node.state) {
+                println!("Expanded: {}", expanded);
+                return Some(node.trace_transitions(cost, model));
+            }
+            for transition in generator.applicable_transitions(&node.state) {
+                let cost = transition.eval_cost(node.cost, &node.state, &model.table_registry);
+                if primal_bound.is_some() && cost >= primal_bound.unwrap() {
+                    continue;
                 }
+                open.push(DijkstraEdge {
+                    cost,
+                    parent: node.clone(),
+                    transition,
+                });
             }
         }
     }
