@@ -1,10 +1,11 @@
 use crate::bfs_node::{BFSNodeRegistry, TransitionWithG};
 use crate::evaluator;
-use crate::priority_queue;
 use crate::search_node::StateForSearchNode;
 use crate::solver;
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::variable;
+use std::cmp::Reverse;
+use std::collections;
 use std::fmt;
 use std::rc::Rc;
 
@@ -26,7 +27,7 @@ where
     H: evaluator::Evaluator<U>,
     F: Fn(U, U, &StateForSearchNode, &didp_parser::Model<T>) -> U,
 {
-    let mut open = priority_queue::PriorityQueue::new(true);
+    let mut open = collections::BinaryHeap::new();
     let mut registry = BFSNodeRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
@@ -43,11 +44,11 @@ where
     let f = (evaluators.f_evaluator)(g, h, &initial_node.state, model);
     *initial_node.h.borrow_mut() = Some(h);
     *initial_node.f.borrow_mut() = Some(f);
-    open.push(initial_node);
+    open.push(Reverse(initial_node));
     let mut expanded = 0;
     let mut f_max = f;
 
-    while let Some(node) = open.pop() {
+    while let Some(Reverse(node)) = open.pop() {
         if *node.closed.borrow() {
             continue;
         }
@@ -95,7 +96,7 @@ where
                         let f = (evaluators.f_evaluator)(g, h, &successor.state, model);
                         *successor.f.borrow_mut() = Some(f);
                         if g_bound.is_none() || f < g_bound.unwrap() {
-                            open.push(successor);
+                            open.push(Reverse(successor));
                         }
                     }
                 }

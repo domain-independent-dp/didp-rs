@@ -1,9 +1,9 @@
-use crate::priority_queue;
 use crate::search_node::{SearchNode, SearchNodeRegistry, StateForSearchNode};
 use crate::solver;
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::variable;
-use std::cmp::Ordering;
+use std::cmp::{Ordering, Reverse};
+use std::collections;
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
@@ -124,7 +124,7 @@ pub fn dijkstra<'a, T>(
 where
     T: variable::Numeric + Ord + fmt::Display,
 {
-    let mut open = priority_queue::PriorityQueue::new(true);
+    let mut open = collections::BinaryHeap::new();
     let mut registry = SearchNodeRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
@@ -142,16 +142,16 @@ where
             &initial_node.state,
             &model.table_registry,
         );
-        open.push(DijkstraEdge {
+        open.push(Reverse(DijkstraEdge {
             cost,
             parent: initial_node.clone(),
             transition,
-        });
+        }));
     }
     let mut expanded = 0;
     let mut cost_max = T::zero();
 
-    while let Some(edge) = open.pop() {
+    while let Some(Reverse(edge)) = open.pop() {
         let state = edge
             .transition
             .apply(&edge.parent.state, &model.table_registry);
@@ -175,11 +175,11 @@ where
                 if primal_bound.is_some() && cost >= primal_bound.unwrap() {
                     continue;
                 }
-                open.push(DijkstraEdge {
+                open.push(Reverse(DijkstraEdge {
                     cost,
                     parent: node.clone(),
                     transition,
-                });
+                }));
             }
         }
     }
