@@ -1,20 +1,22 @@
-use crate::search_node::{SearchNodeRegistry, StateForSearchNode};
+use crate::lazy_search_node::{LazySearchNode, LazySearchNodeRegistry};
+use crate::search_node::StateForSearchNode;
 use crate::solver;
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::variable;
-use std::cmp::Reverse;
+use std::cmp::{Ordering, Reverse};
 use std::collections;
 use std::error::Error;
 use std::fmt;
+use std::rc::Rc;
 use std::str;
 
 #[derive(Default)]
-pub struct Dijkstra<T> {
+pub struct LazyDijkstra<T> {
     primal_bound: Option<T>,
     registry_capacity: Option<usize>,
 }
 
-impl<T> solver::Solver<T> for Dijkstra<T>
+impl<T> solver::Solver<T> for LazyDijkstra<T>
 where
     T: variable::Numeric + Ord + fmt::Display,
 {
@@ -28,7 +30,7 @@ where
         model: &didp_parser::Model<T>,
     ) -> Result<solver::Solution<T>, Box<dyn Error>> {
         let generator = SuccessorGenerator::<didp_parser::Transition<T>>::new(model, false);
-        Ok(dijkstra(
+        Ok(lazy_dijkstra(
             model,
             generator,
             self.primal_bound,
@@ -37,14 +39,14 @@ where
     }
 }
 
-impl<T: variable::Numeric> Dijkstra<T>
+impl<T: variable::Numeric> LazyDijkstra<T>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    pub fn new(config: &yaml_rust::Yaml) -> Result<Dijkstra<T>, Box<dyn Error>> {
+    pub fn new(config: &yaml_rust::Yaml) -> Result<LazyDijkstra<T>, Box<dyn Error>> {
         let map = match config {
             yaml_rust::Yaml::Hash(map) => map,
-            yaml_rust::Yaml::Null => return Ok(Dijkstra::default()),
+            yaml_rust::Yaml::Null => return Ok(LazyDijkstra::default()),
             _ => {
                 return Err(solver::ConfigErr::new(format!(
                     "expected Hash, but found `{:?}`",
@@ -80,14 +82,41 @@ where
                 .into())
             }
         };
-        Ok(Dijkstra {
+        Ok(LazyDijkstra {
             primal_bound,
             registry_capacity,
         })
     }
 }
 
-pub fn dijkstra<'a, T>(
+#[derive(Debug)]
+struct DijkstraEdge<T: variable::Numeric + Ord> {
+    cost: T,
+    parent: Rc<LazySearchNode<T>>,
+    transition: Rc<didp_parser::Transition<T>>,
+}
+
+impl<T: variable::Numeric + Ord> PartialEq for DijkstraEdge<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cost == other.cost
+    }
+}
+
+impl<T: variable::Numeric + Ord> Eq for DijkstraEdge<T> {}
+
+impl<T: variable::Numeric + Ord> Ord for DijkstraEdge<T> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.cost.cmp(&other.cost)
+    }
+}
+
+impl<T: variable::Numeric + Ord> PartialOrd for DijkstraEdge<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+pub fn lazy_dijkstra<'a, T>(
     model: &'a didp_parser::Model<T>,
     generator: SuccessorGenerator<didp_parser::Transition<T>>,
     primal_bound: Option<T>,
@@ -97,7 +126,7 @@ where
     T: variable::Numeric + Ord + fmt::Display,
 {
     let mut open = collections::BinaryHeap::new();
-    let mut registry = SearchNodeRegistry::new(model);
+    let mut registry = LazySearchNodeRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
     }
@@ -108,36 +137,50 @@ where
         Some(node) => node,
         None => return None,
     };
-    open.push(Reverse(initial_node));
+    for transition in generator.applicable_transitions(&initial_node.state) {
+        let cost = transition.eval_cost(
+            initial_node.cost,
+            &initial_node.state,
+            &model.table_registry,
+        );
+        open.push(Reverse(DijkstraEdge {
+            cost,
+            parent: initial_node.clone(),
+            transition,
+        }));
+    }
     let mut expanded = 0;
     let mut cost_max = T::zero();
 
-    while let Some(Reverse(node)) = open.pop() {
-        if *node.closed.borrow() {
+    while let Some(Reverse(edge)) = open.pop() {
+        let state = edge
+            .transition
+            .apply(&edge.parent.state, &model.table_registry);
+        if !model.check_constraints(&state) {
             continue;
         }
-        *node.closed.borrow_mut() = true;
-        expanded += 1;
-        if node.cost > cost_max {
-            cost_max = node.cost;
-            println!("cost = {}, expanded: {}", cost_max, expanded);
-        }
-        if let Some(cost) = model.get_base_cost(&node.state) {
-            println!("Expanded: {}", expanded);
-            return Some(node.trace_transitions(cost, model));
-        }
-        for transition in generator.applicable_transitions(&node.state) {
-            let cost = transition.eval_cost(node.cost, &node.state, &model.table_registry);
-            if primal_bound.is_some() && cost >= primal_bound.unwrap() {
-                continue;
+        if let Some(node) =
+            registry.get_node(state, edge.cost, Some(edge.transition), Some(edge.parent))
+        {
+            expanded += 1;
+            if node.cost > cost_max {
+                cost_max = node.cost;
+                println!("cost = {}, expanded: {}", cost_max, expanded);
             }
-            let state = transition.apply(&node.state, &model.table_registry);
-            if model.check_constraints(&state) {
-                if let Some(successor) =
-                    registry.get_node(state, cost, Some(transition), Some(node.clone()))
-                {
-                    open.push(Reverse(successor));
+            if let Some(cost) = model.get_base_cost(&node.state) {
+                println!("Expanded: {}", expanded);
+                return Some(node.trace_transitions(cost, model));
+            }
+            for transition in generator.applicable_transitions(&node.state) {
+                let cost = transition.eval_cost(node.cost, &node.state, &model.table_registry);
+                if primal_bound.is_some() && cost >= primal_bound.unwrap() {
+                    continue;
                 }
+                open.push(Reverse(DijkstraEdge {
+                    cost,
+                    parent: node.clone(),
+                    transition,
+                }));
             }
         }
     }

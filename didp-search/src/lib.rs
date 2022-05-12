@@ -10,6 +10,8 @@ pub mod forward_beam_search;
 pub mod forward_bfs;
 pub mod forward_recursion;
 pub mod hashable_state;
+pub mod lazy_dijkstra;
+pub mod lazy_search_node;
 pub mod priority_queue;
 pub mod search_node;
 pub mod solver;

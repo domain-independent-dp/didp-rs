@@ -3,6 +3,7 @@ use crate::expression_astar;
 use crate::expression_beam_search;
 use crate::expression_exist_dfs;
 use crate::forward_recursion;
+use crate::lazy_dijkstra;
 use crate::solver;
 use didp_parser::expression_parser::ParseNumericExpression;
 use didp_parser::variable;
@@ -39,6 +40,7 @@ impl SolverFactory {
         match map.get(&yaml_rust::Yaml::from_str("solver")) {
             Some(yaml_rust::Yaml::String(string)) => match &string[..] {
                 "dijkstra" => Ok(Box::new(dijkstra::Dijkstra::new(&config)?)),
+                "lazy_dijkstra" => Ok(Box::new(lazy_dijkstra::LazyDijkstra::new(&config)?)),
                 "expression_astar" => {
                     Ok(Box::new(expression_astar::ExpressionAstar::new(&config)?))
                 }
