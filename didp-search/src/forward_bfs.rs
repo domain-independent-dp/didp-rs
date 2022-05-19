@@ -41,6 +41,7 @@ where
         None => return None,
     };
     let h = evaluators.h_evaluator.eval(&initial_node.state, model)?;
+    println!("Initial h = {}", h);
     let f = (evaluators.f_evaluator)(g, h, &initial_node.state, model);
     *initial_node.h.borrow_mut() = Some(h);
     *initial_node.f.borrow_mut() = Some(f);
