@@ -192,8 +192,29 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
                 constraints.extend(conditions);
             }
         }
+        if let Some(value) = problem.get(&Yaml::from_str("constraints")) {
+            let array = yaml_util::get_array(value)?;
+            let parameters = FxHashMap::default();
+            for constraint in array {
+                let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
+                    &constraint,
+                    &state_metadata,
+                    &table_registry,
+                    &parameters,
+                )?;
+                let conditions = Self::filter_constraints(conditions)?;
+                constraints.extend(conditions);
+            }
+        }
 
         let mut base_cases = Vec::new();
+        if let Some(array) = domain.get(&yaml_rust::Yaml::from_str("base_cases")) {
+            for base_case in yaml_util::get_array(array)? {
+                let base_case =
+                    BaseCase::load_from_yaml(&base_case, &state_metadata, &table_registry)?;
+                base_cases.push(base_case);
+            }
+        }
         if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("base_cases")) {
             for base_case in yaml_util::get_array(array)? {
                 let base_case =
@@ -217,16 +238,32 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
 
         let mut forward_transitions = Vec::new();
         let mut backward_transitions = Vec::new();
-        for transition in yaml_util::get_array_by_key(&domain, "transitions")? {
-            let (transition, backward) = transition::load_transitions_from_yaml(
-                &transition,
-                &state_metadata,
-                &table_registry,
-            )?;
-            if backward {
-                backward_transitions.extend(transition)
-            } else {
-                forward_transitions.extend(transition)
+        if let Some(array) = domain.get(&yaml_rust::Yaml::from_str("transitions")) {
+            for transition in yaml_util::get_array(array)? {
+                let (transition, backward) = transition::load_transitions_from_yaml(
+                    &transition,
+                    &state_metadata,
+                    &table_registry,
+                )?;
+                if backward {
+                    backward_transitions.extend(transition)
+                } else {
+                    forward_transitions.extend(transition)
+                }
+            }
+        }
+        if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("transitions")) {
+            for transition in yaml_util::get_array(array)? {
+                let (transition, backward) = transition::load_transitions_from_yaml(
+                    &transition,
+                    &state_metadata,
+                    &table_registry,
+                )?;
+                if backward {
+                    backward_transitions.extend(transition)
+                } else {
+                    forward_transitions.extend(transition)
+                }
             }
         }
         if forward_transitions.is_empty() && backward_transitions.is_empty() {
@@ -420,12 +457,16 @@ mod tests {
     fn model_load_from_yaml_ok() {
         let domain = r"
 domain: ADD
-state_variables: [ {name: v, type: integer} ]
+state_variables: [ {name: v1, type: integer}, {name: v2, type: integer} ]
 reduce: min
+base_cases:
+        - [(>= v1 1)]
+constraints:
+        - (>= v1 0)
 transitions:
         - name: add
           effect:
-                v: (+ v 1)
+                v1: (+ v1 1)
           cost: (+ cost 1)
 ";
         let domain = yaml_rust::YamlLoader::load_from_str(domain);
@@ -438,9 +479,17 @@ transitions:
 domain: ADD
 problem: one
 target:
-        v: 0
+        v1: 0
+        v2: 0
 base_cases:
-        - [(>= v 1), (= 0 0)]
+        - [(>= v2 1), (= 0 0)]
+constraints:
+        - (>= v2 0)
+transitions:
+        - name: addv2
+          effect:
+                v2: (+ v2 1)
+          cost: (+ cost 1)
 ";
         let problem = yaml_rust::YamlLoader::load_from_str(problem);
         assert!(problem.is_ok());
@@ -453,53 +502,107 @@ base_cases:
         let model = model.unwrap();
 
         let mut name_to_integer_variable = FxHashMap::default();
-        name_to_integer_variable.insert(String::from("v"), 0);
+        name_to_integer_variable.insert(String::from("v1"), 0);
+        name_to_integer_variable.insert(String::from("v2"), 1);
         let expected = Model {
             domain_name: String::from("ADD"),
             problem_name: String::from("one"),
             state_metadata: state::StateMetadata {
-                integer_variable_names: vec![String::from("v")],
+                integer_variable_names: vec![String::from("v1"), String::from("v2")],
                 name_to_integer_variable,
                 ..Default::default()
             },
             target: state::State {
                 signature_variables: SignatureVariables {
-                    integer_variables: vec![0],
+                    integer_variables: vec![0, 0],
                     ..Default::default()
                 },
                 ..Default::default()
             },
-            base_cases: vec![BaseCase {
-                cost: NumericExpression::Constant(0),
-                conditions: vec![GroundedCondition {
+            constraints: vec![
+                GroundedCondition {
                     condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
                         ComparisonOperator::Ge,
                         NumericExpression::IntegerVariable(0),
-                        NumericExpression::Constant(1),
+                        NumericExpression::Constant(0),
                     ))),
                     ..Default::default()
-                }],
-            }],
-            forward_transitions: vec![Transition {
-                name: String::from("add"),
-                effect: effect::Effect {
-                    integer_effects: vec![(
-                        0,
-                        NumericExpression::NumericOperation(
-                            NumericOperator::Add,
-                            Box::new(NumericExpression::IntegerVariable(0)),
-                            Box::new(NumericExpression::Constant(1)),
-                        ),
-                    )],
+                },
+                GroundedCondition {
+                    condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                        ComparisonOperator::Ge,
+                        NumericExpression::IntegerVariable(1),
+                        NumericExpression::Constant(0),
+                    ))),
                     ..Default::default()
                 },
-                cost: NumericExpression::NumericOperation(
-                    NumericOperator::Add,
-                    Box::new(NumericExpression::Cost),
-                    Box::new(NumericExpression::Constant(1)),
-                ),
-                ..Default::default()
-            }],
+            ],
+            base_cases: vec![
+                BaseCase {
+                    cost: NumericExpression::Constant(0),
+                    conditions: vec![GroundedCondition {
+                        condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                            ComparisonOperator::Ge,
+                            NumericExpression::IntegerVariable(0),
+                            NumericExpression::Constant(1),
+                        ))),
+                        ..Default::default()
+                    }],
+                },
+                BaseCase {
+                    cost: NumericExpression::Constant(0),
+                    conditions: vec![GroundedCondition {
+                        condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                            ComparisonOperator::Ge,
+                            NumericExpression::IntegerVariable(1),
+                            NumericExpression::Constant(1),
+                        ))),
+                        ..Default::default()
+                    }],
+                },
+            ],
+            forward_transitions: vec![
+                Transition {
+                    name: String::from("add"),
+                    effect: effect::Effect {
+                        integer_effects: vec![(
+                            0,
+                            NumericExpression::NumericOperation(
+                                NumericOperator::Add,
+                                Box::new(NumericExpression::IntegerVariable(0)),
+                                Box::new(NumericExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: NumericExpression::NumericOperation(
+                        NumericOperator::Add,
+                        Box::new(NumericExpression::Cost),
+                        Box::new(NumericExpression::Constant(1)),
+                    ),
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("addv2"),
+                    effect: effect::Effect {
+                        integer_effects: vec![(
+                            1,
+                            NumericExpression::NumericOperation(
+                                NumericOperator::Add,
+                                Box::new(NumericExpression::IntegerVariable(1)),
+                                Box::new(NumericExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: NumericExpression::NumericOperation(
+                        NumericOperator::Add,
+                        Box::new(NumericExpression::Cost),
+                        Box::new(NumericExpression::Constant(1)),
+                    ),
+                    ..Default::default()
+                },
+            ],
             ..Default::default()
         };
 
