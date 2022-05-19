@@ -1,6 +1,7 @@
 use crate::dijkstra;
 use crate::expression_astar;
 use crate::expression_beam_search;
+use crate::expression_dfbb;
 use crate::expression_exist_dfs;
 use crate::forward_recursion;
 use crate::lazy_dijkstra;
@@ -50,6 +51,7 @@ impl SolverFactory {
                 "expression_exist_dfs" => Ok(Box::new(
                     expression_exist_dfs::ExpressionExistDfs::new(&config)?,
                 )),
+                "expression_dfbb" => Ok(Box::new(expression_dfbb::ExpressionDFBB::new(&config)?)),
                 "forward_recursion" => {
                     Ok(Box::new(forward_recursion::ForwardRecursion::new(&config)?))
                 }

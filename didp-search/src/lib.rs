@@ -1,9 +1,11 @@
 pub mod bfs_node;
+pub mod dfbb;
 pub mod dijkstra;
 pub mod evaluator;
 pub mod exist_dfs;
 pub mod expression_astar;
 pub mod expression_beam_search;
+pub mod expression_dfbb;
 pub mod expression_evaluator;
 pub mod expression_exist_dfs;
 pub mod forward_beam_search;
