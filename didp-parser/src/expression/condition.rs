@@ -52,7 +52,7 @@ impl Condition {
                 (x, Self::Constant(false)) => x,
                 (Self::Constant(false), y) => y,
                 (Self::Constant(true), _) | (_, Self::Constant(true)) => Self::Constant(true),
-                (x, y) => Self::And(Box::new(x), Box::new(y)),
+                (x, y) => Self::Or(Box::new(x), Box::new(y)),
             },
             Self::Comparison(condition) => match condition.simplify(registry) {
                 Comparison::Constant(value) => Self::Constant(value),
@@ -1655,7 +1655,7 @@ mod tests {
         let expression = Condition::Or(Box::new(x), Box::new(y));
         assert_eq!(
             expression.simplify(&registry),
-            Condition::And(
+            Condition::Or(
                 Box::new(Condition::Comparison(Box::new(Comparison::ComparisonII(
                     ComparisonOperator::Eq,
                     NumericExpression::Constant(0),
