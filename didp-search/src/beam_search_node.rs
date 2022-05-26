@@ -14,51 +14,156 @@ use std::fmt;
 use std::rc::Rc;
 use std::str;
 
-pub struct BFSNode<T: Numeric> {
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct TransitionWithCustomCost<T: Numeric, U: Numeric> {
+    pub transition: didp_parser::Transition<T>,
+    pub g: didp_parser::expression::NumericExpression<U>,
+}
+
+impl<T: Numeric, U: Numeric> MaybeApplicable for TransitionWithCustomCost<T, U> {
+    fn is_applicable<S: didp_parser::DPState>(
+        &self,
+        state: &S,
+        registry: &didp_parser::TableRegistry,
+    ) -> bool {
+        self.transition.is_applicable(state, registry)
+    }
+}
+
+impl<T: Numeric, U: Numeric> TransitionWithCustomCost<T, U> {
+    pub fn eval_cost<S: didp_parser::DPState>(
+        &self,
+        cost: T,
+        state: &S,
+        registry: &didp_parser::TableRegistry,
+    ) -> T {
+        self.transition.eval_cost(cost, state, registry)
+    }
+}
+
+impl<'a, T: Numeric> SuccessorGenerator<'a, TransitionWithCustomCost<T, T>> {
+    pub fn new(
+        model: &'a didp_parser::Model<T>,
+        backward: bool,
+    ) -> SuccessorGenerator<'a, TransitionWithCustomCost<T, T>> {
+        let transitions = if backward {
+            &model.backward_transitions
+        } else {
+            &model.forward_transitions
+        };
+        let transitions = transitions
+            .iter()
+            .map(|t| {
+                Rc::new(TransitionWithCustomCost {
+                    transition: t.clone(),
+                    g: t.cost.clone(),
+                })
+            })
+            .collect();
+        SuccessorGenerator {
+            transitions,
+            registry: &model.table_registry,
+        }
+    }
+}
+
+impl<'a, T: Numeric, U: Numeric + ParseNumericExpression>
+    SuccessorGenerator<'a, TransitionWithCustomCost<T, U>>
+where
+    <U as str::FromStr>::Err: fmt::Debug,
+{
+    pub fn with_expressions(
+        model: &'a didp_parser::Model<T>,
+        backward: bool,
+        g_expressions: &FxHashMap<String, String>,
+    ) -> Result<SuccessorGenerator<'a, TransitionWithCustomCost<T, U>>, Box<dyn Error>> {
+        let original_transitions = if backward {
+            &model.backward_transitions
+        } else {
+            &model.forward_transitions
+        };
+        let mut transitions = Vec::with_capacity(original_transitions.len());
+        let mut parameters = FxHashMap::default();
+        for t in original_transitions {
+            for (name, value) in t.parameter_names.iter().zip(t.parameter_values.iter()) {
+                parameters.insert(name.clone(), *value);
+            }
+            let g = if let Some(expression) = g_expressions.get(&t.name) {
+                U::parse_expression(
+                    expression.clone(),
+                    &model.state_metadata,
+                    &model.table_registry,
+                    &parameters,
+                )?
+            } else {
+                return Err(
+                    ConfigErr::new(format!("expression for `{}` is undefined", t.name)).into(),
+                );
+            };
+            transitions.push(Rc::new(TransitionWithCustomCost {
+                transition: t.clone(),
+                g,
+            }));
+            parameters.clear();
+        }
+        Ok(SuccessorGenerator {
+            transitions,
+            registry: &model.table_registry,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct CustomCostNode<T: Numeric, U: Numeric> {
     pub state: StateForSearchNode,
-    pub operator: Option<Rc<didp_parser::Transition<T>>>,
-    pub parent: Option<Rc<BFSNode<T>>>,
-    pub g: T,
-    pub h: RefCell<Option<T>>,
-    pub f: RefCell<Option<T>>,
+    pub operator: Option<Rc<TransitionWithCustomCost<T, U>>>,
+    pub parent: Option<Rc<CustomCostNode<T, U>>>,
+    pub cost: T,
+    pub g: U,
+    pub h: RefCell<Option<U>>,
+    pub f: RefCell<Option<U>>,
     pub closed: RefCell<bool>,
 }
 
-impl<T: Numeric + PartialOrd> PartialEq for BFSNode<T> {
+impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for CustomCostNode<T, U> {
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f
     }
 }
 
-impl<T: Numeric + Ord> Eq for BFSNode<T> {}
+impl<T: Numeric, U: Numeric + Ord> Eq for CustomCostNode<T, U> {}
 
-impl<T: Numeric + Ord> Ord for BFSNode<T> {
+impl<T: Numeric, U: Numeric + Ord> Ord for CustomCostNode<T, U> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.f.cmp(&other.f)
     }
 }
 
-impl<T: Numeric + Ord> PartialOrd for BFSNode<T> {
+impl<T: Numeric, U: Numeric + Ord> PartialOrd for CustomCostNode<T, U> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<T: Numeric> BFSNode<T> {
+impl<T: Numeric, U: Numeric> CustomCostNode<T, U> {
     pub fn trace_transitions(
         &self,
         base_cost: T,
         model: &didp_parser::Model<T>,
-    ) -> (T, Vec<Rc<didp_parser::Transition<T>>>) {
+    ) -> (T, Vec<Rc<TransitionWithCustomCost<T, U>>>) {
         let mut result = Vec::new();
         let mut cost = base_cost;
         if let (Some(mut node), Some(operator)) = (self.parent.as_ref(), self.operator.as_ref()) {
-            cost = operator.eval_cost(cost, &node.state, &model.table_registry);
+            cost = operator
+                .transition
+                .eval_cost(cost, &node.state, &model.table_registry);
             result.push(operator.clone());
             while let (Some(parent), Some(operator)) =
                 (node.parent.as_ref(), node.operator.as_ref())
             {
-                cost = operator.eval_cost(cost, &parent.state, &model.table_registry);
+                cost = operator
+                    .transition
+                    .eval_cost(cost, &parent.state, &model.table_registry);
                 result.push(operator.clone());
                 node = parent;
             }
@@ -68,15 +173,16 @@ impl<T: Numeric> BFSNode<T> {
     }
 }
 
-pub struct BFSNodeRegistry<'a, T: Numeric, U: Numeric> {
-    registry: FxHashMap<Rc<hashable_state::HashableSignatureVariables>, Vec<Rc<BFSNode<T, U>>>>,
+pub struct CustomCostNodeRegistry<'a, T: Numeric, U: Numeric> {
+    registry:
+        FxHashMap<Rc<hashable_state::HashableSignatureVariables>, Vec<Rc<CustomCostNode<T, U>>>>,
     metadata: &'a didp_parser::StateMetadata,
     reduce_function: &'a ReduceFunction,
 }
 
-impl<'a, T: Numeric, U: Numeric + Ord> BFSNodeRegistry<'a, T, U> {
-    pub fn new(model: &'a didp_parser::Model<T>) -> BFSNodeRegistry<T, U> {
-        BFSNodeRegistry {
+impl<'a, T: Numeric, U: Numeric + Ord> CustomCostNodeRegistry<'a, T, U> {
+    pub fn new(model: &'a didp_parser::Model<T>) -> CustomCostNodeRegistry<T, U> {
+        CustomCostNodeRegistry {
             registry: FxHashMap::default(),
             metadata: &model.state_metadata,
             reduce_function: &model.reduce_function,
@@ -96,9 +202,9 @@ impl<'a, T: Numeric, U: Numeric + Ord> BFSNodeRegistry<'a, T, U> {
         mut state: StateForSearchNode,
         cost: T,
         g: U,
-        operator: Option<Rc<TransitionWithG<T, U>>>,
-        parent: Option<Rc<BFSNode<T, U>>>,
-    ) -> Option<Rc<BFSNode<T, U>>> {
+        operator: Option<Rc<TransitionWithCustomCost<T, U>>>,
+        parent: Option<Rc<CustomCostNode<T, U>>>,
+    ) -> Option<Rc<CustomCostNode<T, U>>> {
         let entry = self.registry.entry(state.signature_variables.clone());
         let v = match entry {
             collections::hash_map::Entry::Occupied(entry) => {
@@ -139,7 +245,7 @@ impl<'a, T: Numeric, U: Numeric + Ord> BFSNodeRegistry<'a, T, U> {
                                 }
                                 _ => RefCell::new(None),
                             };
-                            let node = Rc::new(BFSNode {
+                            let node = Rc::new(CustomCostNode {
                                 state,
                                 operator,
                                 parent,
@@ -159,7 +265,7 @@ impl<'a, T: Numeric, U: Numeric + Ord> BFSNodeRegistry<'a, T, U> {
             }
             collections::hash_map::Entry::Vacant(entry) => entry.insert(Vec::with_capacity(1)),
         };
-        let node = Rc::new(BFSNode {
+        let node = Rc::new(CustomCostNode {
             state,
             operator,
             cost,
@@ -231,13 +337,13 @@ mod tests {
     fn generate_node(
         signature_variables: Rc<hashable_state::HashableSignatureVariables>,
         integer_resource_variables: Vec<Integer>,
-        parent: Option<Rc<BFSNode<Integer, Integer>>>,
-        operator: Option<Rc<TransitionWithG<Integer, Integer>>>,
+        parent: Option<Rc<CustomCostNode<Integer, Integer>>>,
+        operator: Option<Rc<TransitionWithCustomCost<Integer, Integer>>>,
         g: Integer,
         h: Integer,
         f: Integer,
-    ) -> BFSNode<Integer, Integer> {
-        BFSNode {
+    ) -> CustomCostNode<Integer, Integer> {
+        CustomCostNode {
             state: StateForSearchNode {
                 signature_variables,
                 resource_variables: didp_parser::ResourceVariables {
@@ -288,7 +394,7 @@ mod tests {
         ));
         assert_eq!(node1.trace_transitions(0, &model), (0, Vec::new()));
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let op1 = Rc::new(TransitionWithG {
+        let op1 = Rc::new(TransitionWithCustomCost {
             transition: didp_parser::Transition {
                 name: String::from("op1"),
                 cost: didp_parser::expression::NumericExpression::NumericOperation(
@@ -336,7 +442,7 @@ mod tests {
             0,
         ));
         let signature_variables = generate_signature_variables(vec![0, 1, 2]);
-        let op2 = Rc::new(TransitionWithG {
+        let op2 = Rc::new(TransitionWithCustomCost {
             transition: didp_parser::Transition {
                 name: String::from("op2"),
                 cost: didp_parser::expression::NumericExpression::NumericOperation(
@@ -367,7 +473,7 @@ mod tests {
     #[test]
     fn get_new_node() {
         let model = generate_model();
-        let mut registry = BFSNodeRegistry::new(&model);
+        let mut registry = CustomCostNodeRegistry::new(&model);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -441,7 +547,7 @@ mod tests {
     #[test]
     fn node_dominated() {
         let model = generate_model();
-        let mut registry = BFSNodeRegistry::new(&model);
+        let mut registry = CustomCostNodeRegistry::new(&model);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -474,7 +580,7 @@ mod tests {
     #[test]
     fn node_dead_end() {
         let model = generate_model();
-        let mut registry = BFSNodeRegistry::new(&model);
+        let mut registry = CustomCostNodeRegistry::new(&model);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -496,7 +602,7 @@ mod tests {
     #[test]
     fn get_dominating_node() {
         let model = generate_model();
-        let mut registry = BFSNodeRegistry::<Integer, Integer>::new(&model);
+        let mut registry = CustomCostNodeRegistry::<Integer, Integer>::new(&model);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -511,7 +617,7 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let op = Rc::new(TransitionWithG::default());
+        let op = Rc::new(TransitionWithCustomCost::default());
         let node2 = registry.get_node(state, 1, 1, Some(op), Some(node1.clone()));
         assert!(node2.is_some());
         let node2 = node2.unwrap();
@@ -557,7 +663,7 @@ mod tests {
     #[test]
     fn clear() {
         let model = generate_model();
-        let mut registry = BFSNodeRegistry::new(&model);
+        let mut registry = CustomCostNodeRegistry::new(&model);
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),

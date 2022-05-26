@@ -80,13 +80,13 @@ impl<T: Numeric> Transition<T> {
     }
 }
 
-type TransitionsWithDirection<T> = (Vec<Transition<T>>, bool);
+type TransitionsWithFlags<T> = (Vec<Transition<T>>, bool, bool);
 
 pub fn load_transitions_from_yaml<T: Numeric + ParseNumericExpression>(
     value: &yaml_rust::Yaml,
     metadata: &state::StateMetadata,
     registry: &table_registry::TableRegistry,
-) -> Result<TransitionsWithDirection<T>, Box<dyn error::Error>>
+) -> Result<TransitionsWithFlags<T>, Box<dyn error::Error>>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
@@ -94,6 +94,7 @@ where
         static ref PARAMETERS_KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("parameters");
         static ref PRECONDITIONS_KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("preconditions");
         static ref DIRECTION_KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("direction");
+        static ref FORCED_KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("forced");
     }
     let map = yaml_util::get_map(value)?;
     let lifted_name = yaml_util::get_string_by_key(map, "name")?;
@@ -200,8 +201,12 @@ where
         }
         None => false,
     };
+    let forced = match map.get(&FORCED_KEY) {
+        Some(forced) => yaml_util::get_bool(forced)?,
+        None => false,
+    };
 
-    Ok((transitions, backward))
+    Ok((transitions, forced, backward))
 }
 
 #[cfg(test)]
@@ -636,7 +641,7 @@ cost: '0'
             cost: NumericExpression::Constant(0),
             ..Default::default()
         }];
-        assert_eq!(transitions.unwrap(), (expected, false));
+        assert_eq!(transitions.unwrap(), (expected, false, false));
 
         let transition = r"
 name: transition
@@ -660,7 +665,107 @@ cost: '0'
             cost: NumericExpression::Constant(0),
             ..Default::default()
         }];
-        assert_eq!(transitions.unwrap(), (expected, false));
+        assert_eq!(transitions.unwrap(), (expected, false, false));
+
+        let transition = r"
+name: transition
+effect: {e0: '0'}
+cost: '0'
+forced: false
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml(transition, &metadata, &registry);
+        assert!(transitions.is_ok());
+        let expected = vec![Transition {
+            name: String::from("transition"),
+            preconditions: Vec::new(),
+            effect: effect::Effect {
+                element_effects: vec![(0, ElementExpression::Constant(0))],
+                ..Default::default()
+            },
+            cost: NumericExpression::Constant(0),
+            ..Default::default()
+        }];
+        assert_eq!(transitions.unwrap(), (expected, false, false));
+
+        let transition = r"
+name: transition
+effect: {e0: '0'}
+cost: '0'
+forced: true
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml(transition, &metadata, &registry);
+        assert!(transitions.is_ok());
+        let expected = vec![Transition {
+            name: String::from("transition"),
+            preconditions: Vec::new(),
+            effect: effect::Effect {
+                element_effects: vec![(0, ElementExpression::Constant(0))],
+                ..Default::default()
+            },
+            cost: NumericExpression::Constant(0),
+            ..Default::default()
+        }];
+        assert_eq!(transitions.unwrap(), (expected, true, false));
+
+        let transition = r"
+name: transition
+effect: {e0: '0'}
+cost: '0'
+direction: forward
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml(transition, &metadata, &registry);
+        assert!(transitions.is_ok());
+        let expected = vec![Transition {
+            name: String::from("transition"),
+            preconditions: Vec::new(),
+            effect: effect::Effect {
+                element_effects: vec![(0, ElementExpression::Constant(0))],
+                ..Default::default()
+            },
+            cost: NumericExpression::Constant(0),
+            ..Default::default()
+        }];
+        assert_eq!(transitions.unwrap(), (expected, false, false));
+
+        let transition = r"
+name: transition
+effect: {e0: '0'}
+cost: '0'
+direction: backward
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml(transition, &metadata, &registry);
+        assert!(transitions.is_ok());
+        let expected = vec![Transition {
+            name: String::from("transition"),
+            preconditions: Vec::new(),
+            effect: effect::Effect {
+                element_effects: vec![(0, ElementExpression::Constant(0))],
+                ..Default::default()
+            },
+            cost: NumericExpression::Constant(0),
+            ..Default::default()
+        }];
+        assert_eq!(transitions.unwrap(), (expected, false, true));
 
         let transition = r"
 name: transition
@@ -781,7 +886,7 @@ cost: (+ cost (f1 e))
                 ),
             },
         ];
-        assert_eq!(transitions.unwrap(), (expected, false));
+        assert_eq!(transitions.unwrap(), (expected, false, false));
     }
 
     #[test]
@@ -884,6 +989,34 @@ effect:
         ir0: '2'
         ir5: '5'
 cost: (+ cost (f1 e))
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml::<Integer>(transition, &metadata, &registry);
+        assert!(transitions.is_err());
+
+        let transition = r"
+name: transition
+effect: {e0: '0'}
+cost: '0'
+forced: fasle
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml::<Integer>(transition, &metadata, &registry);
+        assert!(transitions.is_err());
+
+        let transition = r"
+name: transition
+effect: {e0: '0'}
+cost: '0'
+direction: both
 ";
         let transition = yaml_rust::YamlLoader::load_from_str(transition);
         assert!(transition.is_ok());

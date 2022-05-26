@@ -71,10 +71,12 @@ pub struct Model<T: variable::Numeric> {
     pub table_registry: table_registry::TableRegistry,
     pub constraints: Vec<GroundedCondition>,
     pub base_cases: Vec<BaseCase<T>>,
-    pub base_states: Vec<BaseState<T>>,
+    pub base_states: Vec<state::State>,
     pub reduce_function: ReduceFunction,
     pub forward_transitions: Vec<Transition<T>>,
+    pub forward_forced_transitions: Vec<Transition<T>>,
     pub backward_transitions: Vec<Transition<T>>,
+    pub backward_forced_transitions: Vec<Transition<T>>,
 }
 
 impl<T: variable::Numeric> Model<T> {
@@ -84,6 +86,64 @@ impl<T: variable::Numeric> Model<T> {
                 .is_satisfied(state, &self.table_registry)
                 .unwrap_or(true)
         })
+    }
+
+    pub fn is_base_case<U: DPState>(&self, state: &U) -> bool {
+        for base_state in &self.base_states {
+            for i in 0..self.state_metadata.number_of_element_variables() {
+                if base_state.get_element_variable(i) != state.get_element_variable(i) {
+                    continue;
+                }
+            }
+            for i in 0..self.state_metadata.number_of_integer_variables() {
+                if base_state.get_integer_variable(i) != state.get_integer_variable(i) {
+                    continue;
+                }
+            }
+            for i in 0..self.state_metadata.number_of_integer_resource_variables() {
+                if base_state.get_integer_resource_variable(i)
+                    != state.get_integer_resource_variable(i)
+                {
+                    continue;
+                }
+            }
+            for i in 0..self.state_metadata.number_of_continuous_variables() {
+                if (base_state.get_continuous_variable(i) - state.get_continuous_variable(i)).abs()
+                    > variable::Continuous::EPSILON
+                {
+                    continue;
+                }
+            }
+            for i in 0..self
+                .state_metadata
+                .number_of_continuous_resource_variables()
+            {
+                if (base_state.get_continuous_resource_variable(i)
+                    - state.get_continuous_resource_variable(i))
+                .abs()
+                    > variable::Continuous::EPSILON
+                {
+                    continue;
+                }
+            }
+            for i in 0..self.state_metadata.number_of_set_variables() {
+                if base_state.get_set_variable(i) != state.get_set_variable(i) {
+                    continue;
+                }
+            }
+            for i in 0..self.state_metadata.number_of_vector_variables() {
+                if base_state.get_vector_variable(i) != state.get_vector_variable(i) {
+                    continue;
+                }
+            }
+            return true;
+        }
+        for base_case in &self.base_cases {
+            if base_case.is_satisfied(state, &self.state_metadata) {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn get_base_cost<U: DPState>(&self, state: &U) -> Option<T> {
@@ -100,6 +160,50 @@ impl<T: variable::Numeric> Model<T> {
             }
         }
         None
+    }
+
+    pub fn apply_forced_transitions_in_place<U: DPState>(
+        &self,
+        state: &mut U,
+        cost: T,
+        backward: bool,
+    ) -> T {
+        let transitions = if backward {
+            &self.backward_forced_transitions
+        } else {
+            &self.forward_forced_transitions
+        };
+        let mut cost = cost;
+        for t in transitions {
+            if t.is_applicable(state, &self.table_registry) {
+                cost = t.eval_cost(cost, state, &self.table_registry);
+                t.apply_in_place(state, &self.table_registry);
+            }
+        }
+        cost
+    }
+
+    pub fn apply_forced_transitions_in_place_with_trace<U: DPState>(
+        &self,
+        state: &mut U,
+        cost: T,
+        backward: bool,
+    ) -> (T, Vec<Transition<T>>) {
+        let transitions = if backward {
+            &self.backward_forced_transitions
+        } else {
+            &self.forward_forced_transitions
+        };
+        let mut trace = vec![];
+        let mut cost = cost;
+        for t in transitions {
+            if t.is_applicable(state, &self.table_registry) {
+                cost = t.eval_cost(cost, state, &self.table_registry);
+                t.apply_in_place(state, &self.table_registry);
+                trace.push(t.clone());
+            }
+        }
+        (cost, trace)
     }
 }
 
@@ -237,15 +341,23 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
         let reduce_function = ReduceFunction::load_from_yaml(reduce_function)?;
 
         let mut forward_transitions = Vec::new();
+        let mut forward_forced_transitions = Vec::new();
         let mut backward_transitions = Vec::new();
+        let mut backward_forced_transitions = Vec::new();
         if let Some(array) = domain.get(&yaml_rust::Yaml::from_str("transitions")) {
             for transition in yaml_util::get_array(array)? {
-                let (transition, backward) = transition::load_transitions_from_yaml(
+                let (transition, forced, backward) = transition::load_transitions_from_yaml(
                     &transition,
                     &state_metadata,
                     &table_registry,
                 )?;
-                if backward {
+                if forced {
+                    if backward {
+                        backward_forced_transitions.extend(transition)
+                    } else {
+                        forward_forced_transitions.extend(transition)
+                    }
+                } else if backward {
                     backward_transitions.extend(transition)
                 } else {
                     forward_transitions.extend(transition)
@@ -254,12 +366,18 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
         }
         if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("transitions")) {
             for transition in yaml_util::get_array(array)? {
-                let (transition, backward) = transition::load_transitions_from_yaml(
+                let (transition, forced, backward) = transition::load_transitions_from_yaml(
                     &transition,
                     &state_metadata,
                     &table_registry,
                 )?;
-                if backward {
+                if forced {
+                    if backward {
+                        backward_forced_transitions.extend(transition)
+                    } else {
+                        forward_forced_transitions.extend(transition)
+                    }
+                } else if backward {
                     backward_transitions.extend(transition)
                 } else {
                     forward_transitions.extend(transition)
@@ -281,7 +399,9 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
             base_states,
             reduce_function,
             forward_transitions,
+            forward_forced_transitions,
             backward_transitions,
+            backward_forced_transitions,
         })
     }
 
@@ -454,6 +574,166 @@ mod tests {
     }
 
     #[test]
+    fn apply_forced_transitions_in_place() {
+        let model = Model {
+            forward_forced_transitions: vec![
+                Transition {
+                    preconditions: vec![GroundedCondition {
+                        condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                            ComparisonOperator::Lt,
+                            NumericExpression::IntegerVariable(0),
+                            NumericExpression::Constant(10),
+                        ))),
+                        ..Default::default()
+                    }],
+                    effect: effect::Effect {
+                        integer_effects: vec![(
+                            0,
+                            NumericExpression::NumericOperation(
+                                NumericOperator::Add,
+                                Box::new(NumericExpression::IntegerVariable(0)),
+                                Box::new(NumericExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: NumericExpression::NumericOperation(
+                        NumericOperator::Add,
+                        Box::new(NumericExpression::Cost),
+                        Box::new(NumericExpression::Constant(1)),
+                    ),
+                    ..Default::default()
+                },
+                Transition {
+                    preconditions: vec![GroundedCondition {
+                        condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                            ComparisonOperator::Lt,
+                            NumericExpression::IntegerVariable(0),
+                            NumericExpression::Constant(5),
+                        ))),
+                        ..Default::default()
+                    }],
+                    effect: effect::Effect {
+                        integer_effects: vec![(
+                            0,
+                            NumericExpression::NumericOperation(
+                                NumericOperator::Add,
+                                Box::new(NumericExpression::IntegerVariable(0)),
+                                Box::new(NumericExpression::Constant(2)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: NumericExpression::NumericOperation(
+                        NumericOperator::Add,
+                        Box::new(NumericExpression::Cost),
+                        Box::new(NumericExpression::Constant(1)),
+                    ),
+                    ..Default::default()
+                },
+            ],
+            backward_forced_transitions: vec![
+                Transition {
+                    preconditions: vec![GroundedCondition {
+                        condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                            ComparisonOperator::Gt,
+                            NumericExpression::IntegerVariable(0),
+                            NumericExpression::Constant(2),
+                        ))),
+                        ..Default::default()
+                    }],
+                    effect: effect::Effect {
+                        integer_effects: vec![(
+                            0,
+                            NumericExpression::NumericOperation(
+                                NumericOperator::Subtract,
+                                Box::new(NumericExpression::IntegerVariable(0)),
+                                Box::new(NumericExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: NumericExpression::NumericOperation(
+                        NumericOperator::Add,
+                        Box::new(NumericExpression::Cost),
+                        Box::new(NumericExpression::Constant(1)),
+                    ),
+                    ..Default::default()
+                },
+                Transition {
+                    preconditions: vec![GroundedCondition {
+                        condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                            ComparisonOperator::Gt,
+                            NumericExpression::IntegerVariable(0),
+                            NumericExpression::Constant(2),
+                        ))),
+                        ..Default::default()
+                    }],
+                    effect: effect::Effect {
+                        integer_effects: vec![(
+                            0,
+                            NumericExpression::NumericOperation(
+                                NumericOperator::Subtract,
+                                Box::new(NumericExpression::IntegerVariable(0)),
+                                Box::new(NumericExpression::Constant(2)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: NumericExpression::NumericOperation(
+                        NumericOperator::Add,
+                        Box::new(NumericExpression::Cost),
+                        Box::new(NumericExpression::Constant(1)),
+                    ),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let mut state = state::State {
+            signature_variables: state::SignatureVariables {
+                integer_variables: vec![0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expected = state::State {
+            signature_variables: state::SignatureVariables {
+                integer_variables: vec![3],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let cost = model.apply_forced_transitions_in_place(&mut state, 0, false);
+        assert_eq!(state, expected);
+        assert_eq!(cost, 2);
+        let (cost, trace) =
+            model.apply_forced_transitions_in_place_with_trace(&mut state, 0, false);
+        assert_eq!(state, expected);
+        assert_eq!(cost, 2);
+        let expected_trace = vec![
+            model.forward_forced_transitions[0].clone(),
+            model.forward_forced_transitions[1].clone(),
+        ];
+        assert_eq!(trace, expected_trace);
+        let expected = state::State {
+            signature_variables: state::SignatureVariables {
+                integer_variables: vec![2],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let cost = model.apply_forced_transitions_in_place(&mut state, 0, true);
+        assert_eq!(state, expected);
+        assert_eq!(cost, 1);
+        let (cost, trace) = model.apply_forced_transitions_in_place_with_trace(&mut state, 0, true);
+        assert_eq!(state, expected);
+        assert_eq!(cost, 1);
+        let expected_trace = vec![model.backward_forced_transitions[0].clone()];
+        assert_eq!(trace, expected_trace);
+    }
+
+    #[test]
     fn model_load_from_yaml_ok() {
         let domain = r"
 domain: ADD
@@ -468,6 +748,12 @@ transitions:
           effect:
                 v1: (+ v1 1)
           cost: (+ cost 1)
+        - name: recover
+          preconditions: [(< v1 0)] 
+          effect:
+                v1: '0'
+          cost: cost
+          forced: true
 ";
         let domain = yaml_rust::YamlLoader::load_from_str(domain);
         assert!(domain.is_ok());
@@ -603,6 +889,23 @@ transitions:
                     ..Default::default()
                 },
             ],
+            forward_forced_transitions: vec![Transition {
+                name: String::from("recover"),
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                        ComparisonOperator::Lt,
+                        NumericExpression::IntegerVariable(0),
+                        NumericExpression::Constant(0),
+                    ))),
+                    ..Default::default()
+                }],
+                effect: effect::Effect {
+                    integer_effects: vec![(0, NumericExpression::Constant(0))],
+                    ..Default::default()
+                },
+                cost: NumericExpression::Cost,
+                ..Default::default()
+            }],
             ..Default::default()
         };
 
@@ -1105,7 +1408,7 @@ table_values:
                     ..Default::default()
                 },
             ],
-            backward_transitions: Vec::new(),
+            ..Default::default()
         };
         assert_eq!(model.domain_name, expected.domain_name);
         assert_eq!(model.problem_name, expected.problem_name);

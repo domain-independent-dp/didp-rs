@@ -1,4 +1,3 @@
-use crate::bfs_node::TransitionWithG;
 use crate::expression_evaluator::ExpressionEvaluator;
 use crate::forward_bfs;
 use crate::search_node::StateForSearchNode;
@@ -30,7 +29,6 @@ pub struct ExpressionAstar<T: variable::Numeric> {
     h_expression: Option<String>,
     f_evaluator_type: FEvaluatorType,
     primal_bound: Option<T>,
-    primal_bound_is_not_g_bound: bool,
     registry_capacity: Option<usize>,
 }
 
@@ -41,7 +39,6 @@ impl<T: variable::Numeric> Default for ExpressionAstar<T> {
             h_expression: None,
             f_evaluator_type: FEvaluatorType::default(),
             primal_bound: None,
-            primal_bound_is_not_g_bound: false,
             registry_capacity: Some(1000000),
         }
     }
@@ -61,30 +58,8 @@ where
         &mut self,
         model: &didp_parser::Model<T>,
     ) -> Result<solver::Solution<T>, Box<dyn Error>> {
-        match self.g_expressions.as_ref() {
-            Some(g_expressions) => {
-                if let Ok(generator) =
-                    SuccessorGenerator::<TransitionWithG<T, variable::Integer>>::with_expressions(
-                        &model,
-                        false,
-                        g_expressions,
-                    )
-                {
-                    self.solve_inner(model, generator)
-                } else {
-                    let generator = SuccessorGenerator::<
-                        TransitionWithG<T, variable::OrderedContinuous>,
-                    >::with_expressions(
-                        &model, false, g_expressions
-                    )?;
-                    self.solve_inner(model, generator)
-                }
-            }
-            None => {
-                let generator = SuccessorGenerator::<TransitionWithG<T, T>>::new(&model, false);
-                self.solve_inner(model, generator)
-            }
-        }
+        let generator = SuccessorGenerator::<didp_parser::Transition<T>>::new(model, false);
+        self.solve_inner(model, generator)
     }
 }
 
@@ -183,18 +158,6 @@ impl<T: variable::Numeric> ExpressionAstar<T> {
                 .into())
             }
         };
-        let primal_bound_is_not_g_bound =
-            match map.get(&yaml_rust::Yaml::from_str("primal_bound_is_not_g_bound")) {
-                Some(yaml_rust::Yaml::Boolean(value)) => *value,
-                None => false,
-                value => {
-                    return Err(solver::ConfigErr::new(format!(
-                        "expected Boolean, but found `{:?}`",
-                        value
-                    ))
-                    .into())
-                }
-            };
         let registry_capacity = match map.get(&yaml_rust::Yaml::from_str("registry_capacity")) {
             Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
             None => Some(1000000),
@@ -211,7 +174,6 @@ impl<T: variable::Numeric> ExpressionAstar<T> {
             h_expression,
             f_evaluator_type,
             primal_bound,
-            primal_bound_is_not_g_bound,
             registry_capacity,
         })
     }
@@ -219,7 +181,7 @@ impl<T: variable::Numeric> ExpressionAstar<T> {
     fn solve_inner<'a, U>(
         &self,
         model: &'a didp_parser::Model<T>,
-        generator: SuccessorGenerator<'a, TransitionWithG<T, U>>,
+        generator: SuccessorGenerator<'a, didp_parser::Transition<T>>,
     ) -> Result<solver::Solution<T>, Box<dyn Error>>
     where
         <U as str::FromStr>::Err: fmt::Debug,
@@ -229,11 +191,6 @@ impl<T: variable::Numeric> ExpressionAstar<T> {
             ExpressionEvaluator::new(h_expression.clone(), &model)?
         } else {
             ExpressionEvaluator::default()
-        };
-        let g_bound = if self.primal_bound_is_not_g_bound {
-            None
-        } else {
-            self.primal_bound.map(U::from)
         };
         let solution = match self.f_evaluator_type {
             FEvaluatorType::Plus => {

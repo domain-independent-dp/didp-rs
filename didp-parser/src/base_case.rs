@@ -13,10 +13,7 @@ use std::fmt;
 use std::str;
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct BaseCase<T: Numeric> {
-    pub conditions: Vec<GroundedCondition>,
-    pub cost: NumericExpression<T>,
-}
+pub struct BaseCase(Vec<GroundedCondition>);
 
 impl<T: Numeric> BaseCase<T> {
     pub fn get_cost<U: state::DPState>(
@@ -33,6 +30,16 @@ impl<T: Numeric> BaseCase<T> {
         } else {
             None
         }
+    }
+
+    pub fn is_satisfied<U: state::DPState>(
+        &self,
+        state: &U,
+        registry: &table_registry::TableRegistry,
+    ) -> bool {
+        self.conditions
+            .iter()
+            .all(|x| x.is_satisfied(state, &registry).unwrap_or(true))
     }
 }
 
