@@ -1,4 +1,4 @@
-use crate::bfs_node::BFSNodeRegistry;
+use crate::bfs_node::{BFSNodeRegistry, TransitionWithG};
 use crate::evaluator;
 use crate::search_node::StateForSearchNode;
 use crate::solver;
@@ -9,22 +9,23 @@ use std::collections;
 use std::fmt;
 use std::rc::Rc;
 
-pub struct BFSEvaluators<'a, T: variable::Numeric, H, F> {
-    pub generator: SuccessorGenerator<'a, didp_parser::Transition<T>>,
+pub struct BFSEvaluators<'a, T: variable::Numeric, U: variable::Numeric, H, F> {
+    pub generator: SuccessorGenerator<'a, TransitionWithG<T, U>>,
     pub h_evaluator: H,
     pub f_evaluator: F,
 }
 
-pub fn forward_bfs<'a, T, H, F>(
+pub fn forward_bfs<'a, T, U, H, F>(
     model: &'a didp_parser::Model<T>,
-    evaluators: &BFSEvaluators<'a, T, H, F>,
-    primal_bound: Option<T>,
+    evaluators: &BFSEvaluators<'a, T, U, H, F>,
+    g_bound: Option<U>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
-    T: variable::Numeric + Ord + fmt::Display,
-    H: evaluator::Evaluator<T>,
-    F: Fn(T, T, &StateForSearchNode, &didp_parser::Model<T>) -> T,
+    T: variable::Numeric,
+    U: variable::Numeric + Ord + fmt::Display,
+    H: evaluator::Evaluator<U>,
+    F: Fn(U, U, &StateForSearchNode, &didp_parser::Model<T>) -> U,
 {
     let mut open = collections::BinaryHeap::new();
     let mut registry = BFSNodeRegistry::new(model);
@@ -69,14 +70,17 @@ where
             return Some((cost, transitions));
         }
         for transition in evaluators.generator.applicable_transitions(&node.state) {
-            let g = transition.eval_cost(node.g, &node.state, &model.table_registry);
+            let g = transition
+                .g
+                .eval_cost(node.g, &node.state, &model.table_registry);
             let cost = transition.eval_cost(node.cost, &node.state, &model.table_registry);
-            if primal_bound.is_some() && g >= primal_bound.unwrap() {
+            if g_bound.is_some() && g >= g_bound.unwrap() {
                 continue;
             }
-            let state = transition.apply(&node.state, &model.table_registry);
+            let state = transition
+                .transition
+                .apply(&node.state, &model.table_registry);
             if model.check_constraints(&state) {
-                let cost = model.apply_forced_transitions_in_place(&mut state, cost, false);
                 if let Some(successor) =
                     registry.get_node(state, cost, g, Some(transition), Some(node.clone()))
                 {

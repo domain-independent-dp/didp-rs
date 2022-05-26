@@ -131,12 +131,8 @@ where
             if primal_bound.is_some() && cost >= primal_bound.unwrap() {
                 continue;
             }
-            let mut state = transition.apply(&node.state, &model.table_registry);
+            let state = transition.apply(&node.state, &model.table_registry);
             if model.check_constraints(&state) {
-                let cost = model.apply_forced_transitions_in_place(&mut state, cost, false);
-                if primal_bound.is_some() && cost >= primal_bound.unwrap() {
-                    continue;
-                }
                 if let Some(successor) =
                     registry.get_node(state, cost, Some(transition), Some(node.clone()))
                 {

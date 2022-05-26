@@ -14,51 +14,200 @@ use std::fmt;
 use std::rc::Rc;
 use std::str;
 
-pub struct BFSNode<T: Numeric> {
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct TransitionWithG<T: Numeric, U: Numeric> {
+    pub transition: didp_parser::Transition<T>,
+    pub g: didp_parser::expression::NumericExpression<U>,
+}
+
+impl<T: Numeric, U: Numeric> MaybeApplicable for TransitionWithG<T, U> {
+    fn is_applicable<S: didp_parser::DPState>(
+        &self,
+        state: &S,
+        registry: &didp_parser::TableRegistry,
+    ) -> bool {
+        self.transition.is_applicable(state, registry)
+    }
+}
+
+impl<T: Numeric, U: Numeric> TransitionWithG<T, U> {
+    pub fn eval_cost<S: didp_parser::DPState>(
+        &self,
+        cost: T,
+        state: &S,
+        registry: &didp_parser::TableRegistry,
+    ) -> T {
+        self.transition.eval_cost(cost, state, registry)
+    }
+}
+
+impl<'a, T: Numeric> SuccessorGenerator<'a, TransitionWithG<T, T>> {
+    pub fn new(
+        model: &'a didp_parser::Model<T>,
+        backward: bool,
+    ) -> SuccessorGenerator<'a, TransitionWithG<T, T>> {
+        let forced_transitions = if backward {
+            &model.backward_forced_transitions
+        } else {
+            &model.forward_forced_transitions
+        };
+        let forced_transitions = forced_transitions
+            .iter()
+            .map(|t| {
+                Rc::new(TransitionWithG {
+                    transition: t.clone(),
+                    g: t.cost.clone(),
+                })
+            })
+            .collect();
+        let transitions = if backward {
+            &model.backward_transitions
+        } else {
+            &model.forward_transitions
+        };
+        let transitions = transitions
+            .iter()
+            .map(|t| {
+                Rc::new(TransitionWithG {
+                    transition: t.clone(),
+                    g: t.cost.clone(),
+                })
+            })
+            .collect();
+        SuccessorGenerator {
+            forced_transitions,
+            transitions,
+            registry: &model.table_registry,
+        }
+    }
+}
+
+impl<'a, T: Numeric, U: Numeric + ParseNumericExpression>
+    SuccessorGenerator<'a, TransitionWithG<T, U>>
+where
+    <U as str::FromStr>::Err: fmt::Debug,
+{
+    pub fn with_expressions(
+        model: &'a didp_parser::Model<T>,
+        backward: bool,
+        g_expressions: &FxHashMap<String, String>,
+    ) -> Result<SuccessorGenerator<'a, TransitionWithG<T, U>>, Box<dyn Error>> {
+        let original_forced_transitions = if backward {
+            &model.backward_forced_transitions
+        } else {
+            &model.forward_forced_transitions
+        };
+        let mut forced_transitions = Vec::with_capacity(original_forced_transitions.len());
+        let mut parameters = FxHashMap::default();
+        for t in original_forced_transitions {
+            for (name, value) in t.parameter_names.iter().zip(t.parameter_values.iter()) {
+                parameters.insert(name.clone(), *value);
+            }
+            let g = if let Some(expression) = g_expressions.get(&t.name) {
+                U::parse_expression(
+                    expression.clone(),
+                    &model.state_metadata,
+                    &model.table_registry,
+                    &parameters,
+                )?
+            } else {
+                return Err(
+                    ConfigErr::new(format!("expression for `{}` is undefined", t.name)).into(),
+                );
+            };
+            forced_transitions.push(Rc::new(TransitionWithG {
+                transition: t.clone(),
+                g,
+            }));
+            parameters.clear();
+        }
+        let original_transitions = if backward {
+            &model.backward_transitions
+        } else {
+            &model.forward_transitions
+        };
+        let mut transitions = Vec::with_capacity(original_transitions.len());
+        for t in original_transitions {
+            for (name, value) in t.parameter_names.iter().zip(t.parameter_values.iter()) {
+                parameters.insert(name.clone(), *value);
+            }
+            let g = if let Some(expression) = g_expressions.get(&t.name) {
+                U::parse_expression(
+                    expression.clone(),
+                    &model.state_metadata,
+                    &model.table_registry,
+                    &parameters,
+                )?
+            } else {
+                return Err(
+                    ConfigErr::new(format!("expression for `{}` is undefined", t.name)).into(),
+                );
+            };
+            transitions.push(Rc::new(TransitionWithG {
+                transition: t.clone(),
+                g,
+            }));
+            parameters.clear();
+        }
+        Ok(SuccessorGenerator {
+            forced_transitions,
+            transitions,
+            registry: &model.table_registry,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub struct BFSNode<T: Numeric, U: Numeric> {
     pub state: StateForSearchNode,
-    pub operator: Option<Rc<didp_parser::Transition<T>>>,
-    pub parent: Option<Rc<BFSNode<T>>>,
-    pub g: T,
-    pub h: RefCell<Option<T>>,
-    pub f: RefCell<Option<T>>,
+    pub operator: Option<Rc<TransitionWithG<T, U>>>,
+    pub parent: Option<Rc<BFSNode<T, U>>>,
+    pub cost: T,
+    pub g: U,
+    pub h: RefCell<Option<U>>,
+    pub f: RefCell<Option<U>>,
     pub closed: RefCell<bool>,
 }
 
-impl<T: Numeric + PartialOrd> PartialEq for BFSNode<T> {
+impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for BFSNode<T, U> {
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f
     }
 }
 
-impl<T: Numeric + Ord> Eq for BFSNode<T> {}
+impl<T: Numeric, U: Numeric + Ord> Eq for BFSNode<T, U> {}
 
-impl<T: Numeric + Ord> Ord for BFSNode<T> {
+impl<T: Numeric, U: Numeric + Ord> Ord for BFSNode<T, U> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.f.cmp(&other.f)
     }
 }
 
-impl<T: Numeric + Ord> PartialOrd for BFSNode<T> {
+impl<T: Numeric, U: Numeric + Ord> PartialOrd for BFSNode<T, U> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<T: Numeric> BFSNode<T> {
+impl<T: Numeric, U: Numeric> BFSNode<T, U> {
     pub fn trace_transitions(
         &self,
         base_cost: T,
         model: &didp_parser::Model<T>,
-    ) -> (T, Vec<Rc<didp_parser::Transition<T>>>) {
+    ) -> (T, Vec<Rc<TransitionWithG<T, U>>>) {
         let mut result = Vec::new();
         let mut cost = base_cost;
         if let (Some(mut node), Some(operator)) = (self.parent.as_ref(), self.operator.as_ref()) {
-            cost = operator.eval_cost(cost, &node.state, &model.table_registry);
+            cost = operator
+                .transition
+                .eval_cost(cost, &node.state, &model.table_registry);
             result.push(operator.clone());
             while let (Some(parent), Some(operator)) =
                 (node.parent.as_ref(), node.operator.as_ref())
             {
-                cost = operator.eval_cost(cost, &parent.state, &model.table_registry);
+                cost = operator
+                    .transition
+                    .eval_cost(cost, &parent.state, &model.table_registry);
                 result.push(operator.clone());
                 node = parent;
             }

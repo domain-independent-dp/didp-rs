@@ -68,9 +68,8 @@ where
         }
         for transition in generator.applicable_transitions(&node.state) {
             let cost = transition.eval_cost(node.cost, &node.state, &model.table_registry);
-            let mut state = transition.apply(&node.state, &model.table_registry);
+            let state = transition.apply(&node.state, &model.table_registry);
             if model.check_constraints(&state) {
-                let cost = model.apply_forced_transitions_in_place(&mut state, cost, false);
                 if let Some(successor) =
                     registry.get_node(state, cost, Some(transition), Some(node.clone()))
                 {

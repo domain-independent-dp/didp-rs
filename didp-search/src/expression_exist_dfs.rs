@@ -1,16 +1,20 @@
+use crate::bfs_node::TransitionWithG;
 use crate::exist_dfs;
 use crate::solver;
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::expression_parser::ParseNumericExpression;
 use didp_parser::variable;
+use rustc_hash::FxHashMap;
 use std::error::Error;
 use std::fmt;
 use std::str;
 
 #[derive(Default)]
 pub struct ExpressionExistDfs<T: variable::Numeric> {
+    g_expressions: Option<FxHashMap<String, String>>,
     maximize: bool,
     primal_bound: Option<T>,
+    primal_bound_is_not_g_bound: bool,
     capacity: Option<usize>,
 }
 
@@ -29,14 +33,65 @@ where
         &mut self,
         model: &didp_parser::Model<T>,
     ) -> Result<solver::Solution<T>, Box<dyn Error>> {
-        let generator = SuccessorGenerator::<didp_parser::Transition<T>>::new(&model, false);
-        Ok(exist_dfs::forward_iterative_exist_dfs(
-            model,
-            &generator,
-            self.primal_bound,
-            self.maximize,
-            self.capacity,
-        ))
+        let solution = match self.g_expressions.as_ref() {
+            Some(g_expressions) => {
+                if let Ok(generator) =
+                    SuccessorGenerator::<TransitionWithG<T, variable::Integer>>::with_expressions(
+                        &model,
+                        false,
+                        g_expressions,
+                    )
+                {
+                    let g_bound = if self.primal_bound_is_not_g_bound {
+                        None
+                    } else {
+                        self.primal_bound.map(|x| x.to_integer())
+                    };
+                    exist_dfs::forward_iterative_exist_dfs(
+                        model,
+                        &generator,
+                        g_bound,
+                        self.maximize,
+                        self.capacity,
+                    )
+                } else {
+                    let generator = SuccessorGenerator::<
+                        TransitionWithG<T, variable::OrderedContinuous>,
+                    >::with_expressions(
+                        &model, false, g_expressions
+                    )?;
+                    let g_bound = if self.primal_bound_is_not_g_bound {
+                        None
+                    } else {
+                        self.primal_bound
+                            .map(|x| ordered_float::OrderedFloat(x.to_continuous()))
+                    };
+                    exist_dfs::forward_iterative_exist_dfs(
+                        model,
+                        &generator,
+                        g_bound,
+                        self.maximize,
+                        self.capacity,
+                    )
+                }
+            }
+            None => {
+                let generator = SuccessorGenerator::<TransitionWithG<T, T>>::new(&model, false);
+                let g_bound = if self.primal_bound_is_not_g_bound {
+                    None
+                } else {
+                    self.primal_bound.map(T::from)
+                };
+                exist_dfs::forward_iterative_exist_dfs(
+                    model,
+                    &generator,
+                    g_bound,
+                    self.maximize,
+                    self.capacity,
+                )
+            }
+        };
+        Ok(solution)
     }
 }
 
@@ -52,6 +107,33 @@ impl<T: variable::Numeric> ExpressionExistDfs<T> {
                 return Err(solver::ConfigErr::new(format!(
                     "expected Hash, but found `{:?}`",
                     config
+                )))
+            }
+        };
+        let g_expressions = match map.get(&yaml_rust::Yaml::from_str("g")) {
+            Some(yaml_rust::Yaml::Hash(map)) => {
+                let mut g_expressions = FxHashMap::default();
+                g_expressions.reserve(map.len());
+                for (key, value) in map.iter() {
+                    match (key, value) {
+                        (yaml_rust::Yaml::String(key), yaml_rust::Yaml::String(value)) => {
+                            g_expressions.insert(key.clone(), value.clone());
+                        }
+                        _ => {
+                            return Err(solver::ConfigErr::new(format!(
+                                "expected (String, String), but found (`{:?}`, `{:?}`)",
+                                key, value
+                            )))
+                        }
+                    }
+                }
+                Some(g_expressions)
+            }
+            None => None,
+            value => {
+                return Err(solver::ConfigErr::new(format!(
+                    "expected Hash, but found `{:?}`",
+                    value
                 )))
             }
         };
@@ -102,8 +184,10 @@ impl<T: variable::Numeric> ExpressionExistDfs<T> {
                 }
             };
         Ok(ExpressionExistDfs {
-            maximize,
+            g_expressions,
             primal_bound,
+            maximize,
+            primal_bound_is_not_g_bound,
             capacity,
         })
     }
