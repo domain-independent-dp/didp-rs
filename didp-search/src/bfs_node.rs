@@ -171,7 +171,7 @@ pub struct BFSNode<T: Numeric, U: Numeric> {
 
 impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for BFSNode<T, U> {
     fn eq(&self, other: &Self) -> bool {
-        self.f == other.f
+        self.f == other.f && self.h == other.h
     }
 }
 
@@ -179,7 +179,10 @@ impl<T: Numeric, U: Numeric + Ord> Eq for BFSNode<T, U> {}
 
 impl<T: Numeric, U: Numeric + Ord> Ord for BFSNode<T, U> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.f.cmp(&other.f)
+        match self.f.cmp(&other.f) {
+            Ordering::Equal => self.h.cmp(&other.h),
+            result => result,
+        }
     }
 }
 
