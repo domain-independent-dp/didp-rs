@@ -112,7 +112,7 @@ where
     *initial_node.f.borrow_mut() = Some(f);
     open.push(initial_node);
     let mut expanded = 0;
-    let mut new_open = priority_queue::PriorityQueue::new(true);
+    let mut new_open = priority_queue::PriorityQueue::new(!maximize);
 
     loop {
         let mut i = 0;
