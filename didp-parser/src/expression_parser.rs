@@ -164,10 +164,10 @@ pub fn parse_condition(
 }
 
 fn tokenize(text: String) -> Vec<String> {
-    text.replace("(", " ( ")
-        .replace(")", " ) ")
-        .replace("|", " | ")
-        .replace("!", " ! ")
+    text.replace('(', " ( ")
+        .replace(')', " ) ")
+        .replace('|', " | ")
+        .replace('!', " ! ")
         .split_whitespace()
         .map(|x| x.to_string())
         .collect()

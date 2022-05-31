@@ -52,7 +52,7 @@ impl GroundedCondition {
                     condition.clone(),
                     metadata,
                     registry,
-                    &parameters,
+                    parameters,
                 )?;
                 Ok(vec![GroundedCondition {
                     condition: condition.simplify(registry),
@@ -94,10 +94,7 @@ impl GroundedCondition {
                     }
                     None => {
                         let condition = expression_parser::parse_condition(
-                            condition,
-                            metadata,
-                            registry,
-                            &parameters,
+                            condition, metadata, registry, parameters,
                         )?;
                         Ok(vec![GroundedCondition {
                             condition: condition.simplify(registry),

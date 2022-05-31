@@ -110,10 +110,10 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
     where
         <T as str::FromStr>::Err: fmt::Debug,
     {
-        let domain = yaml_util::get_map(&domain)?;
-        let domain_name = yaml_util::get_string_by_key(&domain, "domain")?;
-        let problem = yaml_util::get_map(&problem)?;
-        let domain_name2 = yaml_util::get_string_by_key(&problem, "domain")?;
+        let domain = yaml_util::get_map(domain)?;
+        let domain_name = yaml_util::get_string_by_key(domain, "domain")?;
+        let problem = yaml_util::get_map(problem)?;
+        let domain_name2 = yaml_util::get_string_by_key(problem, "domain")?;
         if domain_name != domain_name2 {
             return Err(yaml_util::YamlContentErr::new(format!(
                 "domain mismatch: expected `{}`, but is `{}`",
@@ -121,15 +121,15 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
             ))
             .into());
         }
-        let problem_name = yaml_util::get_string_by_key(&problem, "problem")?;
+        let problem_name = yaml_util::get_string_by_key(problem, "problem")?;
 
-        let variables = yaml_util::get_yaml_by_key(&domain, "state_variables")?;
+        let variables = yaml_util::get_yaml_by_key(domain, "state_variables")?;
         let state_metadata = match (
             domain.get(&Yaml::from_str("objects")),
             problem.get(&Yaml::from_str("object_numbers")),
         ) {
             (Some(objects), Some(object_numbers)) => {
-                state::StateMetadata::load_from_yaml(&objects, variables, object_numbers)?
+                state::StateMetadata::load_from_yaml(objects, variables, object_numbers)?
             }
             (None, None) => {
                 let objects = yaml_rust::Yaml::Array(Vec::new());
@@ -150,7 +150,7 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
             }
         };
 
-        let target = yaml_util::get_yaml_by_key(&problem, "target")?;
+        let target = yaml_util::get_yaml_by_key(problem, "target")?;
         let target = state::State::load_from_yaml(target, &state_metadata)?;
 
         let table_registry = match (
@@ -158,8 +158,8 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
             problem.get(&Yaml::from_str("table_values")),
         ) {
             (Some(tables), Some(table_values)) => table_registry::TableRegistry::load_from_yaml(
-                &tables,
-                &table_values,
+                tables,
+                table_values,
                 &state_metadata,
             )?,
             (None, None) => TableRegistry {
@@ -185,7 +185,7 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
             let parameters = FxHashMap::default();
             for constraint in array {
                 let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
-                    &constraint,
+                    constraint,
                     &state_metadata,
                     &table_registry,
                     &parameters,
@@ -199,7 +199,7 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
             let parameters = FxHashMap::default();
             for constraint in array {
                 let conditions = GroundedCondition::load_grounded_conditions_from_yaml(
-                    &constraint,
+                    constraint,
                     &state_metadata,
                     &table_registry,
                     &parameters,
@@ -213,21 +213,21 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
         if let Some(array) = domain.get(&yaml_rust::Yaml::from_str("base_cases")) {
             for base_case in yaml_util::get_array(array)? {
                 let base_case =
-                    BaseCase::load_from_yaml(&base_case, &state_metadata, &table_registry)?;
+                    BaseCase::load_from_yaml(base_case, &state_metadata, &table_registry)?;
                 base_cases.push(base_case);
             }
         }
         if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("base_cases")) {
             for base_case in yaml_util::get_array(array)? {
                 let base_case =
-                    BaseCase::load_from_yaml(&base_case, &state_metadata, &table_registry)?;
+                    BaseCase::load_from_yaml(base_case, &state_metadata, &table_registry)?;
                 base_cases.push(base_case);
             }
         }
         let mut base_states = Vec::new();
         if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("base_states")) {
             for base_state in yaml_util::get_array(array)? {
-                let base_state = BaseState::load_from_yaml(&base_state, &state_metadata)?;
+                let base_state = BaseState::load_from_yaml(base_state, &state_metadata)?;
                 base_states.push(base_state);
             }
         }
@@ -235,7 +235,7 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
             return Err(ModelErr::new(String::from("no base case or condition")).into());
         }
 
-        let reduce_function = yaml_util::get_yaml_by_key(&domain, "reduce")?;
+        let reduce_function = yaml_util::get_yaml_by_key(domain, "reduce")?;
         let reduce_function = ReduceFunction::load_from_yaml(reduce_function)?;
 
         let mut forward_transitions = Vec::new();
@@ -245,7 +245,7 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
         if let Some(array) = domain.get(&yaml_rust::Yaml::from_str("transitions")) {
             for transition in yaml_util::get_array(array)? {
                 let (transition, forced, backward) = transition::load_transitions_from_yaml(
-                    &transition,
+                    transition,
                     &state_metadata,
                     &table_registry,
                 )?;
@@ -265,7 +265,7 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
         if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("transitions")) {
             for transition in yaml_util::get_array(array)? {
                 let (transition, forced, backward) = transition::load_transitions_from_yaml(
-                    &transition,
+                    transition,
                     &state_metadata,
                     &table_registry,
                 )?;

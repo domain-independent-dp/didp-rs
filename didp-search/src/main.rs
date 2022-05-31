@@ -18,7 +18,7 @@ where
         eprintln!("Error: {:?}", e);
         process::exit(1);
     });
-    let solution = solver.solve(&model).unwrap_or_else(|e| {
+    let solution = solver.solve(model).unwrap_or_else(|e| {
         eprintln!("Error: {:?}", e);
         process::exit(1);
     });

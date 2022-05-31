@@ -44,7 +44,7 @@ where
         &mut self,
         model: &didp_parser::Model<T>,
     ) -> Result<solver::Solution<T>, Box<dyn Error>> {
-        let generator = SuccessorGenerator::<Transition<T>>::new(&model, false);
+        let generator = SuccessorGenerator::<Transition<T>>::new(model, false);
         self.solve_inner(model, generator)
     }
 }
@@ -144,7 +144,7 @@ impl<T: variable::Numeric> ExpressionDFBB<T> {
         T: variable::Numeric + ParseNumericExpression + Ord + fmt::Display,
     {
         let h_evaluator = if let Some(h_expression) = self.h_expression.as_ref() {
-            ExpressionEvaluator::new(h_expression.clone(), &model)?
+            ExpressionEvaluator::new(h_expression.clone(), model)?
         } else {
             ExpressionEvaluator::default()
         };

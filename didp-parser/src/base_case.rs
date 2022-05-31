@@ -27,7 +27,7 @@ impl<T: Numeric> BaseCase<T> {
         let is_satisfied = self
             .conditions
             .iter()
-            .all(|x| x.is_satisfied(state, &registry).unwrap_or(true));
+            .all(|x| x.is_satisfied(state, registry).unwrap_or(true));
         if is_satisfied {
             Some(self.cost.eval(state, registry))
         } else {
@@ -75,9 +75,9 @@ impl<T: Numeric + ParseNumericExpression> BaseCase<T> {
         let mut conditions = Vec::new();
         for condition in array {
             let condition = GroundedCondition::load_grounded_conditions_from_yaml(
-                &condition,
-                &metadata,
-                &registry,
+                condition,
+                metadata,
+                registry,
                 &parameters,
             )?;
             for c in condition {

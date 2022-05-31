@@ -391,7 +391,7 @@ impl<T: Numeric> TableVectorExpression<T> {
                             let set = &set.eval(state, registry);
                             result
                                 .into_iter()
-                                .map(|rr| util::expand_vector_with_set(rr, &set))
+                                .map(|rr| util::expand_vector_with_set(rr, set))
                                 .collect()
                         }
                     };

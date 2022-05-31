@@ -116,8 +116,8 @@ impl<T: variable::Numeric + Ord> PartialOrd for DijkstraEdge<T> {
     }
 }
 
-pub fn lazy_dijkstra<'a, T>(
-    model: &'a didp_parser::Model<T>,
+pub fn lazy_dijkstra<T>(
+    model: &didp_parser::Model<T>,
     generator: SuccessorGenerator<didp_parser::Transition<T>>,
     primal_bound: Option<T>,
     registry_capacity: Option<usize>,

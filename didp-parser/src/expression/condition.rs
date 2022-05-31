@@ -31,7 +31,7 @@ impl Condition {
             Self::And(x, y) => x.eval(state, registry) && y.eval(state, registry),
             Self::Or(x, y) => x.eval(state, registry) || y.eval(state, registry),
             Self::Comparison(condition) => condition.eval(state, registry),
-            Self::Set(set) => set.eval(state, &registry),
+            Self::Set(set) => set.eval(state, registry),
             Self::Table(table) => *table.eval(state, registry, &registry.bool_tables),
         }
     }

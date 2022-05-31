@@ -6,8 +6,8 @@ use didp_parser::variable;
 use didp_parser::ReduceFunction;
 use std::fmt;
 
-pub fn dfbb<'a, T, H, F>(
-    model: &'a didp_parser::Model<T>,
+pub fn dfbb<T, H, F>(
+    model: &didp_parser::Model<T>,
     generator: SuccessorGenerator<didp_parser::Transition<T>>,
     h_evaluator: H,
     f_evaluator: F,
@@ -79,9 +79,5 @@ where
         }
     }
     println!("Expanded: {}", expanded);
-    if let Some(node) = incumbent {
-        Some(node.trace_transitions(cost, model))
-    } else {
-        None
-    }
+    incumbent.map(|node| node.trace_transitions(cost, model))
 }

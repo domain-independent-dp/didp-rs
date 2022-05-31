@@ -453,7 +453,7 @@ impl StateMetadata {
         let mut reserved_names = FxHashSet::default();
         for value in array {
             let map = yaml_util::get_map(value)?;
-            let name = yaml_util::get_string_by_key(&map, "name")?;
+            let name = yaml_util::get_string_by_key(map, "name")?;
             if let Some(name) = reserved_names.get(&name) {
                 return Err(yaml_util::YamlContentErr::new(format!(
                     "parameter name `{}` is already used",
@@ -461,7 +461,7 @@ impl StateMetadata {
                 )));
             }
             reserved_names.insert(name.clone());
-            let object = yaml_util::get_string_by_key(&map, "object")?;
+            let object = yaml_util::get_string_by_key(map, "object")?;
             let (n, set_index, vector_index) = if let Some(i) = self.name_to_object.get(&object) {
                 (self.object_numbers[*i], None, None)
             } else if let Some(i) = self.name_to_set_variable.get(&object) {
@@ -1557,7 +1557,7 @@ cr3: 3
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = metadata.ground_parameters_from_yaml(&yaml);
+        let result = metadata.ground_parameters_from_yaml(yaml);
         assert!(result.is_ok());
         let (parameters, elements_in_set_variable_array, elements_in_vector_variable_array) =
             result.unwrap();
@@ -1586,7 +1586,7 @@ cr3: 3
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = metadata.ground_parameters_from_yaml(&yaml);
+        let result = metadata.ground_parameters_from_yaml(yaml);
         assert!(result.is_ok());
         let (parameters, elements_in_set_variable_array, elements_in_vector_variable_array) =
             result.unwrap();
@@ -1621,7 +1621,7 @@ cr3: 3
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = metadata.ground_parameters_from_yaml(&yaml);
+        let result = metadata.ground_parameters_from_yaml(yaml);
         assert!(result.is_err());
 
         let yaml = yaml_rust::YamlLoader::load_from_str(
@@ -1636,7 +1636,7 @@ cr3: 3
         let yaml = yaml.unwrap();
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
-        let result = metadata.ground_parameters_from_yaml(&yaml);
+        let result = metadata.ground_parameters_from_yaml(yaml);
         assert!(result.is_err());
     }
 

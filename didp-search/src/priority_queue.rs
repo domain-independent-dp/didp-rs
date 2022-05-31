@@ -50,10 +50,7 @@ impl<T: Ord> PriorityQueue<T> {
 
     pub fn pop(&mut self) -> Option<T> {
         if self.reverse {
-            match self.min_heap.pop() {
-                Some(Reverse(node)) => Some(node),
-                None => None,
-            }
+            self.min_heap.pop().map(|node| node.0)
         } else {
             self.max_heap.pop()
         }

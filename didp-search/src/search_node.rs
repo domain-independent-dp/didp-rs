@@ -818,7 +818,7 @@ mod tests {
         };
         assert_eq!(node.state, state);
         assert!(node.parent.is_none());
-        assert_eq!(*node.closed.borrow(), false);
+        assert!(!*node.closed.borrow());
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
@@ -833,7 +833,7 @@ mod tests {
         };
         assert_eq!(node.state, state);
         assert!(node.parent.is_none());
-        assert_eq!(*node.closed.borrow(), false);
+        assert!(!*node.closed.borrow());
 
         let state = StateForSearchNode {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
@@ -972,7 +972,7 @@ mod tests {
         };
         assert_eq!(node.state, state);
         assert!(node.parent.is_none());
-        assert_eq!(*node.closed.borrow(), false);
+        assert!(!*node.closed.borrow());
 
         registry.clear();
 
@@ -989,6 +989,6 @@ mod tests {
         };
         assert_eq!(node.state, state);
         assert!(node.parent.is_none());
-        assert_eq!(*node.closed.borrow(), false);
+        assert!(!*node.closed.borrow());
     }
 }

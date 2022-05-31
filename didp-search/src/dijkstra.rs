@@ -87,8 +87,8 @@ where
     }
 }
 
-pub fn dijkstra<'a, T>(
-    model: &'a didp_parser::Model<T>,
+pub fn dijkstra<T>(
+    model: &didp_parser::Model<T>,
     generator: SuccessorGenerator<didp_parser::Transition<T>>,
     primal_bound: Option<T>,
     registry_capacity: Option<usize>,

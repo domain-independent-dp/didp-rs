@@ -34,7 +34,7 @@ impl<T: Clone> ReferenceExpression<T> {
         tables: &TableData<T>,
     ) -> ReferenceExpression<T> {
         match self {
-            Self::Table(table) => match table.simplify(registry, &tables) {
+            Self::Table(table) => match table.simplify(registry, tables) {
                 TableExpression::Constant(value) => Self::Constant(value),
                 expression => Self::Table(expression),
             },

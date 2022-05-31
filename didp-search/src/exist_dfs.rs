@@ -39,7 +39,7 @@ where
     while let Some((new_g_bound, new_cost, transitions)) = exist_dfs(
         node.clone(),
         model,
-        &generator,
+        generator,
         &mut prob,
         g_bound,
         maximize,
@@ -50,7 +50,7 @@ where
             .map(|t| Rc::new(t.transition.clone()))
             .collect();
         transitions.reverse();
-        let new_cost = solver::compute_solution_cost(new_cost, &transitions, &model.target, &model);
+        let new_cost = solver::compute_solution_cost(new_cost, &transitions, &model.target, model);
         if let Some(current_cost) = cost {
             match model.reduce_function {
                 didp_parser::ReduceFunction::Max if new_cost > current_cost => {

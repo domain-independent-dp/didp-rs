@@ -54,7 +54,7 @@ fn parse_operation<'a, 'b, 'c>(
     registry: &'b table_registry::TableRegistry,
     parameters: &'c FxHashMap<String, usize>,
 ) -> Result<(Condition, &'a [String]), ParseErr> {
-    match &name[..] {
+    match name {
         "not" => {
             let (condition, rest) = parse_expression(tokens, metadata, registry, parameters)?;
             let rest = util::parse_closing(rest)?;

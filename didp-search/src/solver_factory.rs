@@ -142,7 +142,7 @@ where
         let factory = SolverFactory::default();
         let mut solvers = Vec::new();
         for config in solver_configs {
-            solvers.push(factory.create(&config)?);
+            solvers.push(factory.create(config)?);
         }
         Ok(IterativeSearch {
             solvers,

@@ -60,7 +60,7 @@ where
             Some(g_expressions) => {
                 if let Ok(generator) =
                     SuccessorGenerator::<TransitionWithG<T, variable::Integer>>::with_expressions(
-                        &model,
+                        model,
                         false,
                         g_expressions,
                     )
@@ -70,13 +70,13 @@ where
                     let generator = SuccessorGenerator::<
                         TransitionWithG<T, variable::OrderedContinuous>,
                     >::with_expressions(
-                        &model, false, g_expressions
+                        model, false, g_expressions
                     )?;
                     self.solve_inner(model, generator)
                 }
             }
             None => {
-                let generator = SuccessorGenerator::<TransitionWithG<T, T>>::new(&model, false);
+                let generator = SuccessorGenerator::<TransitionWithG<T, T>>::new(model, false);
                 self.solve_inner(model, generator)
             }
         }
@@ -275,7 +275,7 @@ impl<T: variable::Numeric + fmt::Display> ExpressionBeamSearch<T> {
         U: variable::Numeric + ParseNumericExpression + Ord + fmt::Display,
     {
         let h_evaluator = if let Some(h_expression) = self.h_expression.as_ref() {
-            ExpressionEvaluator::new(h_expression.clone(), &model)?
+            ExpressionEvaluator::new(h_expression.clone(), model)?
         } else {
             ExpressionEvaluator::default()
         };

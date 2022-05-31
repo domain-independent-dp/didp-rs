@@ -111,7 +111,7 @@ where
             let mut parameter_names = Vec::with_capacity(array.len());
             for map in array {
                 let map = yaml_util::get_map(map)?;
-                let value = yaml_util::get_string_by_key(&map, "name")?;
+                let value = yaml_util::get_string_by_key(map, "name")?;
                 parameter_names.push(value);
             }
             (result.0, result.1, result.2, parameter_names)
