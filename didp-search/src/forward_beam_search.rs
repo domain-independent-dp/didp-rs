@@ -1,4 +1,4 @@
-use crate::bfs_node::BFSNodeRegistry;
+use crate::bfs_node::{BFSNode, BFSNodeRegistry};
 use crate::evaluator;
 use crate::forward_bfs::BFSEvaluators;
 use crate::priority_queue;
@@ -93,7 +93,7 @@ where
     H: evaluator::Evaluator<U>,
     F: Fn(U, U, &StateForSearchNode, &didp_parser::Model<T>) -> U,
 {
-    let mut open = priority_queue::PriorityQueue::new(!maximize);
+    let mut open = priority_queue::PriorityQueue::new(maximize);
     let mut registry = BFSNodeRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
@@ -112,19 +112,17 @@ where
     *initial_node.f.borrow_mut() = Some(f);
     open.push(initial_node);
     let mut expanded = 0;
-    let mut new_open = priority_queue::PriorityQueue::new(!maximize);
+    let mut new_open = priority_queue::PriorityQueue::<Rc<BFSNode<T, U>>>::new(maximize);
 
     loop {
-        let mut i = 0;
         let mut incumbent = None;
-        while !open.is_empty() && i < beam {
+        while !open.is_empty() {
             let node = open.pop().unwrap();
             if *node.closed.borrow() {
                 continue;
             }
             *node.closed.borrow_mut() = true;
             expanded += 1;
-            i += 1;
             if let Some(cost) = model.get_base_cost(&node.state) {
                 if !maximize || g_bound.is_none() || node.g > g_bound.unwrap() {
                     let (cost, solution) = node.trace_transitions(cost, model);
@@ -174,15 +172,25 @@ where
                                     continue;
                                 }
                             }
-                            *successor.f.borrow_mut() = Some(f);
-                            new_open.push(successor);
+                            if new_open.len() < beam {
+                                *successor.f.borrow_mut() = Some(f);
+                                new_open.push(successor);
+                            } else if let Some(peek) = new_open.peek() {
+                                if (maximize && f > peek.f.borrow().unwrap())
+                                    || (!maximize && f < peek.f.borrow().unwrap())
+                                {
+                                    new_open.pop();
+                                    *successor.f.borrow_mut() = Some(f);
+                                    new_open.push(successor);
+                                }
+                            }
                         }
                     }
                 }
             }
         }
+        println!("Expanded: {}", expanded);
         if let Some((g, cost, transitions)) = incumbent {
-            println!("Expanded: {}", expanded);
             let transitions = transitions
                 .into_iter()
                 .map(|t| Rc::new(t.transition.clone()))
@@ -190,11 +198,9 @@ where
             return Some((g, cost, transitions));
         }
         if new_open.is_empty() {
-            println!("Expanded: {}", expanded);
             return None;
         }
         registry.clear();
-        open.clear();
         mem::swap(&mut open, &mut new_open);
     }
 }
