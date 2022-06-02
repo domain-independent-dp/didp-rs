@@ -1,4 +1,4 @@
-use crate::beam_search_node::{Beam, BeamSearchNode};
+use crate::beam_search_node::{Beam, BeamSearchNode, BeamSearchNodeArgs};
 use crate::evaluator;
 use crate::search_node::trace_transitions;
 use crate::solver;
@@ -6,7 +6,6 @@ use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
 use crate::transition_with_custom_cost::TransitionWithCustomCost;
 use didp_parser::variable;
-use std::cell::RefCell;
 use std::fmt;
 use std::mem;
 use std::rc::Rc;
@@ -90,21 +89,13 @@ where
     let h = h_evaluator.eval(&initial_state, model)?;
     let f = f_evaluator(g, h, &initial_state, model);
     let f = if maximize { -f } else { f };
-    let constructor = |state: StateInRegistry, cost: T, _: Option<&Rc<BeamSearchNode<T, U>>>| {
-        Some(Rc::new(BeamSearchNode {
-            g,
-            f,
-            state,
-            cost,
-            ..Default::default()
-        }))
+    let args = BeamSearchNodeArgs {
+        g,
+        f,
+        parent: None,
+        operator: None,
     };
-    let initial_node = match registry.insert(initial_state, cost, constructor) {
-        Some((node, _)) => node,
-        None => return None,
-    };
-    current_beam.push(initial_node);
-
+    current_beam.insert(&mut registry, initial_state, cost, args);
     let mut expanded = 0;
 
     while !current_beam.is_empty() {
@@ -112,62 +103,56 @@ where
         for node in current_beam.drain() {
             expanded += 1;
             if model.get_base_cost(node.state()).is_some() {
-                if let Some((incumbent_cost, _)) = incumbent {
+                if let Some(cost) = incumbent
+                    .as_ref()
+                    .map(|x: &Rc<BeamSearchNode<T, U>>| x.cost)
+                {
                     match model.reduce_function {
-                        didp_parser::ReduceFunction::Max if cost > incumbent_cost => {
-                            incumbent = Some((cost, node));
+                        didp_parser::ReduceFunction::Max if node.cost > cost => {
+                            incumbent = Some(node);
                         }
-                        didp_parser::ReduceFunction::Min if cost < incumbent_cost => {
-                            incumbent = Some((cost, node));
+                        didp_parser::ReduceFunction::Min if node.cost < cost => {
+                            incumbent = Some(node);
                         }
                         _ => {}
                     }
                 } else {
-                    incumbent = Some((cost, node));
+                    incumbent = Some(node);
                 }
                 continue;
             }
             for transition in generator.applicable_transitions(node.state()) {
-                let g =
-                    transition
-                        .custom_cost
-                        .eval_cost(node.g, node.state(), &model.table_registry);
                 let state = transition
                     .transition
                     .apply(node.state(), &model.table_registry);
                 if model.check_constraints(&state) {
                     if let Some(h) = h_evaluator.eval(&state, model) {
+                        let g = transition.custom_cost.eval_cost(
+                            node.g,
+                            node.state(),
+                            &model.table_registry,
+                        );
                         let f = f_evaluator(g, h, &state, model);
                         let f = if maximize { -f } else { f };
-                        if next_beam.is_eligible(f) {
-                            let cost = transition.transition.eval_cost(
-                                node.cost(),
-                                node.state(),
-                                &model.table_registry,
-                            );
-                            let constructor = |state: StateInRegistry, cost: T, _: Option<&Rc<BeamSearchNode<T, U>>>| {
-                                Some(Rc::new(BeamSearchNode {
-                                    g,
-                                    f,
-                                    state,
-                                    cost,
-                                    parent: Some(node.clone()),
-                                    operator: Some(transition),
-                                    closed: RefCell::new(false),
-                                }))
-                            };
-                            if let Some((successor, _)) = registry.insert(state, cost, constructor)
-                            {
-                                next_beam.push(successor);
-                            }
-                        }
+                        let cost = transition.transition.eval_cost(
+                            node.cost,
+                            node.state(),
+                            &model.table_registry,
+                        );
+                        let args = BeamSearchNodeArgs {
+                            g,
+                            f,
+                            operator: Some(transition),
+                            parent: Some(node.clone()),
+                        };
+                        next_beam.insert(&mut registry, state, cost, args);
                     }
                 }
             }
         }
         println!("Expanded: {}", expanded);
-        if let Some((cost, node)) = incumbent {
-            return Some((cost, trace_transitions(node)));
+        if let Some(node) = incumbent {
+            return Some((node.cost, trace_transitions(node)));
         }
         mem::swap(&mut current_beam, &mut next_beam);
         registry.clear();

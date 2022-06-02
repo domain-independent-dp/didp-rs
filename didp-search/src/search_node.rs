@@ -59,15 +59,6 @@ impl<T: Numeric> StateInformation<T> for Rc<SearchNode<T>> {
     fn cost(&self) -> T {
         self.cost
     }
-
-    fn close(&self) -> bool {
-        if *self.closed.borrow() {
-            true
-        } else {
-            *self.closed.borrow_mut() = true;
-            false
-        }
-    }
 }
 
 impl<T: Numeric> DPSearchNode<T> for Rc<SearchNode<T>> {
@@ -104,26 +95,6 @@ mod tests {
         assert_eq!(node.cost(), 0);
         assert!(node.parent().is_none());
         assert!(node.operator().is_none());
-    }
-
-    #[test]
-    fn search_node_close() {
-        let node = Rc::new(SearchNode {
-            state: StateInRegistry {
-                signature_variables: Rc::new(HashableSignatureVariables {
-                    integer_variables: vec![1, 2, 3],
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            cost: 0,
-            closed: RefCell::new(false),
-            parent: None,
-            operator: None,
-        });
-        assert!(!node.close());
-        assert!(*node.closed.borrow());
-        assert!(node.close());
     }
 
     #[test]

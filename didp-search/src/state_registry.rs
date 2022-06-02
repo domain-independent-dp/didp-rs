@@ -153,8 +153,6 @@ pub trait StateInformation<T: Numeric>: Clone + fmt::Debug {
     fn state(&self) -> &StateInRegistry;
 
     fn cost(&self) -> T;
-
-    fn close(&self) -> bool;
 }
 
 pub struct StateRegistry<'a, T: Numeric, I: StateInformation<T>> {
@@ -216,7 +214,6 @@ impl<'a, T: Numeric, I: StateInformation<T>> StateRegistry<'a, T, I> {
                                     && cost <= other.cost()) =>
                         {
                             // dominating
-                            other.close();
                             if let Some(information) = match result.unwrap() {
                                 // if the same state is saved, reuse some information
                                 Ordering::Equal => constructor(state, cost, Some(other)),
@@ -260,7 +257,6 @@ mod tests {
     #[derive(Debug, PartialEq, Clone)]
     struct MockInformation {
         state: StateInRegistry,
-        closed: RefCell<bool>,
         value: RefCell<Option<i32>>,
     }
 
@@ -271,11 +267,6 @@ mod tests {
 
         fn cost(&self) -> Integer {
             1
-        }
-
-        fn close(&self) -> bool {
-            *self.closed.borrow_mut() = true;
-            false
         }
     }
 
@@ -685,7 +676,6 @@ mod tests {
         let constructor = |state: StateInRegistry, _: Integer, _: Option<&Rc<MockInformation>>| {
             Some(Rc::new(MockInformation {
                 state,
-                closed: RefCell::new(false),
                 value: RefCell::new(None),
             }))
         };
@@ -698,7 +688,6 @@ mod tests {
         };
         assert_eq!(dominated, None);
         assert_eq!(information.state, state);
-        assert!(!*information.closed.borrow());
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
@@ -713,7 +702,6 @@ mod tests {
         };
         assert_eq!(dominated, None);
         assert_eq!(information.state, state);
-        assert!(!*information.closed.borrow());
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
@@ -728,7 +716,6 @@ mod tests {
         };
         assert_eq!(dominated, None);
         assert_eq!(information.state, state);
-        assert!(!*information.closed.borrow());
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
@@ -743,7 +730,6 @@ mod tests {
         };
         assert_eq!(dominated, None);
         assert_eq!(information.state, state);
-        assert!(!*information.closed.borrow());
     }
 
     #[test]
@@ -758,7 +744,6 @@ mod tests {
         let constructor = |state: StateInRegistry, _: Integer, _: Option<&Rc<MockInformation>>| {
             Some(Rc::new(MockInformation {
                 state,
-                closed: RefCell::new(false),
                 value: RefCell::new(None),
             }))
         };
@@ -801,14 +786,12 @@ mod tests {
                     other.value.borrow().map(|value| {
                         Rc::new(MockInformation {
                             state,
-                            closed: RefCell::new(false),
                             value: RefCell::new(Some(value)),
                         })
                     })
                 } else {
                     Some(Rc::new(MockInformation {
                         state,
-                        closed: RefCell::new(false),
                         value: RefCell::new(None),
                     }))
                 }
@@ -833,8 +816,6 @@ mod tests {
             information2.state.resource_variables,
             information1.state.resource_variables
         );
-        assert!(*information1.closed.borrow());
-        assert!(!*information2.closed.borrow());
         assert_eq!(*information2.value.borrow(), Some(10));
         assert_eq!(dominated, Some(information1));
 
@@ -853,8 +834,6 @@ mod tests {
             information3.state.resource_variables,
             information2.state.resource_variables,
         );
-        assert!(*information2.closed.borrow());
-        assert!(!*information3.closed.borrow());
         assert_eq!(*information3.value.borrow(), None);
         assert_eq!(dominated, Some(information2));
     }
@@ -871,7 +850,6 @@ mod tests {
         let constructor = |state: StateInRegistry, _: Integer, _: Option<&Rc<MockInformation>>| {
             Some(Rc::new(MockInformation {
                 state,
-                closed: RefCell::new(false),
                 value: RefCell::new(None),
             }))
         };
@@ -883,7 +861,6 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(information.state, state);
-        assert!(!*information.closed.borrow());
 
         registry.clear();
 
@@ -899,6 +876,5 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(information.state, state);
-        assert!(!*information.closed.borrow());
     }
 }

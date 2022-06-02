@@ -47,15 +47,6 @@ impl<T: Numeric> StateInformation<T> for Rc<BFSNode<T>> {
     fn cost(&self) -> T {
         self.g
     }
-
-    fn close(&self) -> bool {
-        if *self.closed.borrow() {
-            true
-        } else {
-            *self.closed.borrow_mut() = true;
-            false
-        }
-    }
 }
 
 impl<T: Numeric> DPSearchNode<T> for Rc<BFSNode<T>> {
@@ -94,28 +85,6 @@ mod tests {
         assert_eq!(node.cost(), 1);
         assert!(node.parent().is_none());
         assert!(node.operator().is_none());
-    }
-
-    #[test]
-    fn search_node_close() {
-        let node = Rc::new(BFSNode {
-            state: StateInRegistry {
-                signature_variables: Rc::new(HashableSignatureVariables {
-                    integer_variables: vec![1, 2, 3],
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            g: 1,
-            h: RefCell::new(Some(2)),
-            f: RefCell::new(Some(3)),
-            closed: RefCell::new(false),
-            parent: None,
-            operator: None,
-        });
-        assert!(!node.close());
-        assert!(*node.closed.borrow());
-        assert!(node.close());
     }
 
     #[test]

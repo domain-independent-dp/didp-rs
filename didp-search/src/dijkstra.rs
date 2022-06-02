@@ -123,9 +123,10 @@ where
     let mut cost_max = T::zero();
 
     while let Some(Reverse(node)) = open.pop() {
-        if node.close() {
+        if *node.closed.borrow() {
             continue;
         }
+        *node.closed.borrow_mut() = true;
         expanded += 1;
         if node.cost() > cost_max {
             cost_max = node.cost();
@@ -152,7 +153,12 @@ where
                             closed: RefCell::new(false),
                         }))
                     };
-                if let Some((successor, _)) = registry.insert(state, cost, constructor) {
+                if let Some((successor, dominated)) = registry.insert(state, cost, constructor) {
+                    if let Some(dominated) = dominated {
+                        if !*dominated.closed.borrow() {
+                            *dominated.closed.borrow_mut() = true;
+                        }
+                    }
                     open.push(Reverse(successor));
                 }
             }

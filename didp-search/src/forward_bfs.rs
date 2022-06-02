@@ -53,9 +53,10 @@ where
     let mut f_max = f;
 
     while let Some(Reverse(node)) = open.pop() {
-        if node.close() {
+        if *node.closed.borrow() {
             continue;
         }
+        *node.closed.borrow_mut() = true;
         expanded += 1;
         let f = node.f.borrow().unwrap();
         if f > f_max {
@@ -93,7 +94,12 @@ where
                         closed: RefCell::new(false),
                     }))
                 };
-                if let Some((successor, _)) = registry.insert(state, g, constructor) {
+                if let Some((successor, dominated)) = registry.insert(state, g, constructor) {
+                    if let Some(dominated) = dominated {
+                        if !*dominated.closed.borrow() {
+                            *dominated.closed.borrow_mut() = true;
+                        }
+                    }
                     let h = match *successor.h.borrow() {
                         None => h_evaluator.eval(successor.state(), model),
                         h => h,

@@ -40,10 +40,6 @@ impl<T: Numeric> StateInformation<T> for Rc<LazySearchNode<T>> {
     fn cost(&self) -> T {
         self.cost
     }
-
-    fn close(&self) -> bool {
-        false
-    }
 }
 
 impl<T: Numeric> DPSearchNode<T> for Rc<LazySearchNode<T>> {
@@ -79,23 +75,6 @@ mod tests {
         assert_eq!(node.cost(), 0);
         assert!(node.parent().is_none());
         assert!(node.operator().is_none());
-    }
-
-    #[test]
-    fn search_node_close() {
-        let node = Rc::new(LazySearchNode {
-            state: StateInRegistry {
-                signature_variables: Rc::new(HashableSignatureVariables {
-                    integer_variables: vec![1, 2, 3],
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-            cost: 0,
-            parent: None,
-            operator: None,
-        });
-        assert!(!node.close());
     }
 
     #[test]
