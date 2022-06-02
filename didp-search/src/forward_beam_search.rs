@@ -1,10 +1,12 @@
-use crate::bfs_node::{BFSNode, BFSNodeRegistry};
+use crate::beam_search_node::{Beam, BeamSearchNode};
 use crate::evaluator;
-use crate::forward_bfs::BFSEvaluators;
-use crate::priority_queue;
-use crate::search_node::StateForSearchNode;
+use crate::search_node::trace_transitions;
 use crate::solver;
+use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
+use crate::successor_generator::SuccessorGenerator;
+use crate::transition_with_custom_cost::TransitionWithCustomCost;
 use didp_parser::variable;
+use std::cell::RefCell;
 use std::fmt;
 use std::mem;
 use std::rc::Rc;
@@ -12,32 +14,31 @@ use std::str;
 
 pub fn iterative_forward_beam_search<'a, T, U, H, F>(
     model: &'a didp_parser::Model<T>,
-    evaluators: &BFSEvaluators<'a, T, U, H, F>,
-    beams: &[usize],
+    generator: SuccessorGenerator<'a, TransitionWithCustomCost<T, U>>,
+    h_evaluator: H,
+    f_evaluator: F,
+    beam_sizes: &[usize],
     maximize: bool,
-    mut g_bound: Option<U>,
-    discard_g_bound: bool,
-    registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
     T: variable::Numeric + fmt::Display,
-    U: variable::Numeric + Ord + fmt::Display,
+    U: variable::Numeric + Ord,
     <U as str::FromStr>::Err: fmt::Debug,
     H: evaluator::Evaluator<U>,
-    F: Fn(U, U, &StateForSearchNode, &didp_parser::Model<T>) -> U,
+    F: Fn(U, U, &StateInRegistry, &didp_parser::Model<T>) -> U,
 {
     let mut incumbent = Vec::new();
     let mut cost = None;
-    for beam in beams {
+    for beam_size in beam_sizes {
         let result = forward_beam_search(
             model,
-            evaluators,
-            *beam,
+            &generator,
+            &h_evaluator,
+            &f_evaluator,
+            *beam_size,
             maximize,
-            g_bound,
-            registry_capacity,
         );
-        if let Some((new_g_bound, new_cost, new_incumbent)) = result {
+        if let Some((new_cost, new_incumbent)) = result {
             if let Some(current_cost) = cost {
                 match model.reduce_function {
                     didp_parser::ReduceFunction::Max if new_cost > current_cost => {
@@ -57,19 +58,6 @@ where
                 cost = Some(new_cost);
                 println!("New primal bound: {}", new_cost);
             }
-            if !discard_g_bound {
-                if let Some(current_bound) = g_bound {
-                    if (maximize && new_g_bound > current_bound)
-                        || (!maximize && new_g_bound < current_bound)
-                    {
-                        g_bound = Some(new_g_bound);
-                        println!("New g bound: {}", new_g_bound);
-                    }
-                } else {
-                    g_bound = Some(new_g_bound);
-                    println!("New g bound: {}", new_g_bound);
-                }
-            }
         } else {
             println!("Failed to find a solution");
         }
@@ -77,112 +65,100 @@ where
     cost.map(|cost| (cost, incumbent))
 }
 
-pub type BeamSearchSolution<T, U> = Option<(U, T, Vec<Rc<didp_parser::Transition<T>>>)>;
-
 pub fn forward_beam_search<'a, T, U, H, F>(
     model: &'a didp_parser::Model<T>,
-    evaluators: &BFSEvaluators<'a, T, U, H, F>,
-    beam: usize,
+    generator: &SuccessorGenerator<'a, TransitionWithCustomCost<T, U>>,
+    h_evaluator: &H,
+    f_evaluator: &F,
+    beam_size: usize,
     maximize: bool,
-    g_bound: Option<U>,
-    registry_capacity: Option<usize>,
-) -> BeamSearchSolution<T, U>
+) -> solver::Solution<T>
 where
     T: variable::Numeric,
-    U: variable::Numeric + Ord + fmt::Display,
+    U: variable::Numeric + Ord,
     H: evaluator::Evaluator<U>,
-    F: Fn(U, U, &StateForSearchNode, &didp_parser::Model<T>) -> U,
+    F: Fn(U, U, &StateInRegistry, &didp_parser::Model<T>) -> U,
 {
-    let mut open = priority_queue::PriorityQueue::new(maximize);
-    let mut registry = BFSNodeRegistry::new(model);
-    if let Some(capacity) = registry_capacity {
-        registry.reserve(capacity);
-    }
+    let mut current_beam = Beam::new(beam_size);
+    let mut next_beam = Beam::new(beam_size);
+    let mut registry = StateRegistry::new(model);
+    registry.reserve(beam_size);
 
     let cost = T::zero();
     let g = U::zero();
-    let initial_state = StateForSearchNode::new(&model.target);
-    let initial_node = match registry.get_node(initial_state, cost, g, None, None) {
-        Some(node) => node,
+    let initial_state = StateInRegistry::new(&model.target);
+    let h = h_evaluator.eval(&initial_state, model)?;
+    let f = f_evaluator(g, h, &initial_state, model);
+    let f = if maximize { -f } else { f };
+    let constructor = |state: StateInRegistry, cost: T| {
+        Rc::new(BeamSearchNode {
+            g,
+            f,
+            state,
+            cost,
+            ..Default::default()
+        })
+    };
+    let initial_node = match registry.insert(initial_state, cost, constructor) {
+        Some((node, _)) => node,
         None => return None,
     };
-    let h = evaluators.h_evaluator.eval(&initial_node.state, model)?;
-    let f = (evaluators.f_evaluator)(g, h, &initial_node.state, model);
-    *initial_node.h.borrow_mut() = Some(h);
-    *initial_node.f.borrow_mut() = Some(f);
-    open.push(initial_node);
-    let mut expanded = 0;
-    let mut new_open = priority_queue::PriorityQueue::<Rc<BFSNode<T, U>>>::new(maximize);
+    current_beam.push(initial_node);
 
-    loop {
+    let mut expanded = 0;
+
+    while !current_beam.is_empty() {
         let mut incumbent = None;
-        while !open.is_empty() {
-            let node = open.pop().unwrap();
-            if *node.closed.borrow() {
+        for node in current_beam.drain() {
+            expanded += 1;
+            if model.get_base_cost(node.state()).is_some() {
+                if let Some((incumbent_cost, _)) = incumbent {
+                    match model.reduce_function {
+                        didp_parser::ReduceFunction::Max if cost > incumbent_cost => {
+                            incumbent = Some((cost, node));
+                        }
+                        didp_parser::ReduceFunction::Min if cost < incumbent_cost => {
+                            incumbent = Some((cost, node));
+                        }
+                        _ => {}
+                    }
+                } else {
+                    incumbent = Some((cost, node));
+                }
                 continue;
             }
-            *node.closed.borrow_mut() = true;
-            expanded += 1;
-            if let Some(cost) = model.get_base_cost(&node.state) {
-                if !maximize || g_bound.is_none() || node.g > g_bound.unwrap() {
-                    let (cost, solution) = node.trace_transitions(cost, model);
-                    if let Some((_, incumbent_cost, _)) = incumbent {
-                        match model.reduce_function {
-                            didp_parser::ReduceFunction::Max if cost > incumbent_cost => {
-                                incumbent = Some((node.g, cost, solution));
-                            }
-                            didp_parser::ReduceFunction::Min if cost < incumbent_cost => {
-                                incumbent = Some((node.g, cost, solution));
-                            }
-                            _ => {}
-                        }
-                    } else {
-                        incumbent = Some((node.g, cost, solution));
-                    }
-                }
-            }
-            for transition in evaluators.generator.applicable_transitions(&node.state) {
-                let g = transition
-                    .g
-                    .eval_cost(node.g, &node.state, &model.table_registry);
-                let cost = transition.eval_cost(node.cost, &node.state, &model.table_registry);
-                if !maximize && g_bound.is_some() && g >= g_bound.unwrap() {
-                    continue;
-                }
+            for transition in generator.applicable_transitions(node.state()) {
+                let g =
+                    transition
+                        .custom_cost
+                        .eval_cost(node.g, node.state(), &model.table_registry);
                 let state = transition
                     .transition
-                    .apply(&node.state, &model.table_registry);
+                    .apply(node.state(), &model.table_registry);
                 if model.check_constraints(&state) {
-                    if let Some(successor) =
-                        registry.get_node(state, cost, g, Some(transition), Some(node.clone()))
-                    {
-                        let h = *successor.h.borrow();
-                        let h = match h {
-                            Some(h) => Some(h),
-                            None => {
-                                let h = evaluators.h_evaluator.eval(&successor.state, model);
-                                *successor.h.borrow_mut() = h;
-                                h
-                            }
-                        };
-                        if let Some(h) = h {
-                            let f = (evaluators.f_evaluator)(g, h, &successor.state, model);
-                            if let Some(bound) = g_bound {
-                                if !maximize && f >= bound {
-                                    continue;
-                                }
-                            }
-                            if new_open.len() < beam {
-                                *successor.f.borrow_mut() = Some(f);
-                                new_open.push(successor);
-                            } else if let Some(peek) = new_open.peek() {
-                                if (maximize && f > peek.f.borrow().unwrap())
-                                    || (!maximize && f < peek.f.borrow().unwrap())
-                                {
-                                    new_open.pop();
-                                    *successor.f.borrow_mut() = Some(f);
-                                    new_open.push(successor);
-                                }
+                    if let Some(h) = h_evaluator.eval(&state, model) {
+                        let f = f_evaluator(g, h, &state, model);
+                        let f = if maximize { -f } else { f };
+                        if next_beam.is_eligible(f) {
+                            let cost = transition.transition.eval_cost(
+                                node.cost(),
+                                node.state(),
+                                &model.table_registry,
+                            );
+                            let constructor = |state: StateInRegistry, cost: T| {
+                                Rc::new(BeamSearchNode {
+                                    g,
+                                    f,
+                                    state,
+                                    cost,
+                                    parent: Some(node.clone()),
+                                    operator: Some(transition),
+                                    closed: RefCell::new(false),
+                                })
+                            };
+                            if let Some((successor, _)) = registry.insert(state, cost, constructor)
+                            {
+                                next_beam.push(successor);
                             }
                         }
                     }
@@ -190,17 +166,11 @@ where
             }
         }
         println!("Expanded: {}", expanded);
-        if let Some((g, cost, transitions)) = incumbent {
-            let transitions = transitions
-                .into_iter()
-                .map(|t| Rc::new(t.transition.clone()))
-                .collect();
-            return Some((g, cost, transitions));
+        if let Some((cost, node)) = incumbent {
+            return Some((cost, trace_transitions(node)));
         }
-        if new_open.is_empty() {
-            return None;
-        }
+        mem::swap(&mut current_beam, &mut next_beam);
         registry.clear();
-        mem::swap(&mut open, &mut new_open);
     }
+    None
 }

@@ -1,8 +1,8 @@
 use crate::dfbb;
 use crate::expression_astar::FEvaluatorType;
 use crate::expression_evaluator::ExpressionEvaluator;
-use crate::search_node::StateForSearchNode;
 use crate::solver;
+use crate::state_registry::StateInRegistry;
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::expression_parser::ParseNumericExpression;
 use didp_parser::variable;
@@ -45,7 +45,62 @@ where
         model: &didp_parser::Model<T>,
     ) -> Result<solver::Solution<T>, Box<dyn Error>> {
         let generator = SuccessorGenerator::<Transition<T>>::new(model, false);
-        self.solve_inner(model, generator)
+        let h_evaluator = if let Some(h_expression) = self.h_expression.as_ref() {
+            ExpressionEvaluator::new(h_expression.clone(), model)?
+        } else {
+            ExpressionEvaluator::default()
+        };
+        let solution = match self.f_evaluator_type {
+            FEvaluatorType::Plus => {
+                let f_evaluator =
+                    Box::new(|g, h, _: &StateInRegistry, _: &didp_parser::Model<T>| g + h);
+                dfbb::dfbb(
+                    model,
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                    self.primal_bound,
+                    self.registry_capacity,
+                )
+            }
+            FEvaluatorType::Max => {
+                let f_evaluator =
+                    Box::new(|g, h, _: &StateInRegistry, _: &didp_parser::Model<T>| cmp::max(g, h));
+                dfbb::dfbb(
+                    model,
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                    self.primal_bound,
+                    self.registry_capacity,
+                )
+            }
+            FEvaluatorType::Min => {
+                let f_evaluator =
+                    Box::new(|g, h, _: &StateInRegistry, _: &didp_parser::Model<T>| cmp::min(g, h));
+                dfbb::dfbb(
+                    model,
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                    self.primal_bound,
+                    self.registry_capacity,
+                )
+            }
+            FEvaluatorType::Overwrite => {
+                let f_evaluator =
+                    Box::new(|_, h, _: &StateInRegistry, _: &didp_parser::Model<T>| h);
+                dfbb::dfbb(
+                    model,
+                    generator,
+                    h_evaluator,
+                    f_evaluator,
+                    self.primal_bound,
+                    self.registry_capacity,
+                )
+            }
+        };
+        Ok(solution)
     }
 }
 
@@ -132,76 +187,5 @@ impl<T: variable::Numeric> ExpressionDFBB<T> {
             primal_bound,
             registry_capacity,
         })
-    }
-
-    fn solve_inner<'a>(
-        &self,
-        model: &'a didp_parser::Model<T>,
-        generator: SuccessorGenerator<'a, Transition<T>>,
-    ) -> Result<solver::Solution<T>, Box<dyn Error>>
-    where
-        <T as str::FromStr>::Err: fmt::Debug,
-        T: variable::Numeric + ParseNumericExpression + Ord + fmt::Display,
-    {
-        let h_evaluator = if let Some(h_expression) = self.h_expression.as_ref() {
-            ExpressionEvaluator::new(h_expression.clone(), model)?
-        } else {
-            ExpressionEvaluator::default()
-        };
-        let solution = match self.f_evaluator_type {
-            FEvaluatorType::Plus => {
-                let f_evaluator =
-                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| g + h);
-                dfbb::dfbb(
-                    model,
-                    generator,
-                    h_evaluator,
-                    f_evaluator,
-                    self.primal_bound,
-                    self.registry_capacity,
-                )
-            }
-            FEvaluatorType::Max => {
-                let f_evaluator =
-                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| {
-                        cmp::max(g, h)
-                    });
-                dfbb::dfbb(
-                    model,
-                    generator,
-                    h_evaluator,
-                    f_evaluator,
-                    self.primal_bound,
-                    self.registry_capacity,
-                )
-            }
-            FEvaluatorType::Min => {
-                let f_evaluator =
-                    Box::new(|g, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| {
-                        cmp::min(g, h)
-                    });
-                dfbb::dfbb(
-                    model,
-                    generator,
-                    h_evaluator,
-                    f_evaluator,
-                    self.primal_bound,
-                    self.registry_capacity,
-                )
-            }
-            FEvaluatorType::Overwrite => {
-                let f_evaluator =
-                    Box::new(|_, h, _: &StateForSearchNode, _: &didp_parser::Model<T>| h);
-                dfbb::dfbb(
-                    model,
-                    generator,
-                    h_evaluator,
-                    f_evaluator,
-                    self.primal_bound,
-                    self.registry_capacity,
-                )
-            }
-        };
-        Ok(solution)
     }
 }

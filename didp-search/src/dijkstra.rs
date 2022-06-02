@@ -1,11 +1,14 @@
-use crate::search_node::{SearchNodeRegistry, StateForSearchNode};
+use crate::search_node::{trace_transitions, SearchNode};
 use crate::solver;
+use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::variable;
+use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::collections;
 use std::error::Error;
 use std::fmt;
+use std::rc::Rc;
 use std::str;
 
 #[derive(Default)]
@@ -97,15 +100,22 @@ where
     T: variable::Numeric + Ord + fmt::Display,
 {
     let mut open = collections::BinaryHeap::new();
-    let mut registry = SearchNodeRegistry::new(model);
+    let mut registry = StateRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
     }
 
     let cost = T::zero();
-    let initial_state = StateForSearchNode::new(&model.target);
-    let initial_node = match registry.get_node(initial_state, cost, None, None) {
-        Some(node) => node,
+    let initial_state = StateInRegistry::new(&model.target);
+    let constructor = |state: StateInRegistry, cost: T| {
+        Rc::new(SearchNode {
+            state,
+            cost,
+            ..Default::default()
+        })
+    };
+    let initial_node = match registry.insert(initial_state, cost, constructor) {
+        Some((node, _)) => node,
         None => return None,
     };
     open.push(Reverse(initial_node));
@@ -113,29 +123,35 @@ where
     let mut cost_max = T::zero();
 
     while let Some(Reverse(node)) = open.pop() {
-        if *node.closed.borrow() {
+        if node.close() {
             continue;
         }
-        *node.closed.borrow_mut() = true;
         expanded += 1;
-        if node.cost > cost_max {
-            cost_max = node.cost;
+        if node.cost() > cost_max {
+            cost_max = node.cost();
             println!("cost = {}, expanded: {}", cost_max, expanded);
         }
-        if let Some(cost) = model.get_base_cost(&node.state) {
+        if model.get_base_cost(node.state()).is_some() {
             println!("Expanded: {}", expanded);
-            return Some(node.trace_transitions(cost, model));
+            return Some((node.cost(), trace_transitions(node)));
         }
-        for transition in generator.applicable_transitions(&node.state) {
-            let cost = transition.eval_cost(node.cost, &node.state, &model.table_registry);
+        for transition in generator.applicable_transitions(node.state()) {
+            let cost = transition.eval_cost(node.cost(), node.state(), &model.table_registry);
             if primal_bound.is_some() && cost >= primal_bound.unwrap() {
                 continue;
             }
-            let state = transition.apply(&node.state, &model.table_registry);
+            let state = transition.apply(node.state(), &model.table_registry);
             if model.check_constraints(&state) {
-                if let Some(successor) =
-                    registry.get_node(state, cost, Some(transition), Some(node.clone()))
-                {
+                let constructor = |state: StateInRegistry, cost: T| {
+                    Rc::new(SearchNode {
+                        state,
+                        cost,
+                        parent: Some(node.clone()),
+                        operator: Some(transition.clone()),
+                        closed: RefCell::new(false),
+                    })
+                };
+                if let Some((successor, _)) = registry.insert(state, cost, constructor) {
                     open.push(Reverse(successor));
                 }
             }

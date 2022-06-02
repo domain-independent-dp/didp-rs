@@ -1,6 +1,7 @@
-use crate::lazy_search_node::{LazySearchNode, LazySearchNodeRegistry};
-use crate::search_node::StateForSearchNode;
+use crate::lazy_search_node::LazySearchNode;
+use crate::search_node::trace_transitions;
 use crate::solver;
+use crate::state_registry::{StateInRegistry, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::variable;
 use std::cmp::{Ordering, Reverse};
@@ -126,15 +127,22 @@ where
     T: variable::Numeric + Ord + fmt::Display,
 {
     let mut open = collections::BinaryHeap::new();
-    let mut registry = LazySearchNodeRegistry::new(model);
+    let mut registry = StateRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
     }
 
     let cost = T::zero();
-    let initial_state = StateForSearchNode::new(&model.target);
-    let initial_node = match registry.get_node(initial_state, cost, None, None) {
-        Some(node) => node,
+    let initial_state = StateInRegistry::new(&model.target);
+    let constructor = |state: StateInRegistry, cost: T| {
+        Rc::new(LazySearchNode {
+            state,
+            cost,
+            ..Default::default()
+        })
+    };
+    let initial_node = match registry.insert(initial_state, cost, constructor) {
+        Some((node, _)) => node,
         None => return None,
     };
     for transition in generator.applicable_transitions(&initial_node.state) {
@@ -159,17 +167,23 @@ where
         if !model.check_constraints(&state) {
             continue;
         }
-        if let Some(node) =
-            registry.get_node(state, edge.cost, Some(edge.transition), Some(edge.parent))
-        {
+        let constructor = |state: StateInRegistry, cost: T| {
+            Rc::new(LazySearchNode {
+                state,
+                cost,
+                parent: Some(edge.parent),
+                operator: Some(edge.transition),
+            })
+        };
+        if let Some((node, _)) = registry.insert(state, edge.cost, constructor) {
             expanded += 1;
             if node.cost > cost_max {
                 cost_max = node.cost;
                 println!("cost = {}, expanded: {}", cost_max, expanded);
             }
-            if let Some(cost) = model.get_base_cost(&node.state) {
+            if model.get_base_cost(&node.state).is_some() {
                 println!("Expanded: {}", expanded);
-                return Some(node.trace_transitions(cost, model));
+                return Some((node.cost, trace_transitions(node)));
             }
             for transition in generator.applicable_transitions(&node.state) {
                 let cost = transition.eval_cost(node.cost, &node.state, &model.table_registry);

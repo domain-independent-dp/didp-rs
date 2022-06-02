@@ -1,3 +1,4 @@
+pub mod beam_search_node;
 pub mod bfs_node;
 pub mod dfbb;
 pub mod dijkstra;
@@ -18,4 +19,6 @@ pub mod priority_queue;
 pub mod search_node;
 pub mod solver;
 pub mod solver_factory;
+pub mod state_registry;
 pub mod successor_generator;
+pub mod transition_with_custom_cost;

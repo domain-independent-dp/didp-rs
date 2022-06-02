@@ -152,7 +152,7 @@ mod tests {
     use rustc_hash::FxHashMap;
     use std::rc::Rc;
 
-    fn generate_model() -> didp_parser::Model<variable::Integer> {
+    fn generate_model() -> didp_parser::Model<Integer> {
         didp_parser::Model {
             state_metadata: didp_parser::StateMetadata {
                 integer_variable_names: vec![String::from("i0")],
