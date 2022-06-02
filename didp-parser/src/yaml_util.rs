@@ -58,19 +58,6 @@ pub fn get_array(value: &Yaml) -> Result<&Vec<Yaml>, YamlContentErr> {
     }
 }
 
-pub fn get_array_by_key<'a, 'b>(
-    map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-    key: &'b str,
-) -> Result<&'a Vec<Yaml>, YamlContentErr> {
-    match map.get(&Yaml::String(String::from(key))) {
-        Some(value) => get_array(value),
-        None => Err(YamlContentErr::new(format!(
-            "no such key `{}` in yaml",
-            key
-        ))),
-    }
-}
-
 pub fn get_bool(value: &Yaml) -> Result<bool, YamlContentErr> {
     match value {
         Yaml::Boolean(value) => Ok(*value),
@@ -276,35 +263,6 @@ mod tests {
     fn get_array_err() {
         let yaml = Yaml::Integer(0);
         let array = get_array(&yaml);
-        assert!(array.is_err());
-    }
-
-    #[test]
-    fn get_array_by_key_ok() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
-        map.insert(
-            Yaml::String(String::from("array")),
-            Yaml::Array(vec![Yaml::Integer(0), Yaml::Integer(1)]),
-        );
-        let array = get_array_by_key(&map, "array");
-        assert!(array.is_ok());
-        let array = array.unwrap();
-        assert_eq!(array.len(), 2);
-        assert!(matches!(array[0], Yaml::Integer(0)));
-        assert!(matches!(array[1], Yaml::Integer(1)));
-    }
-
-    #[test]
-    fn get_array_by_key_err() {
-        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
-        map.insert(
-            Yaml::String(String::from("array")),
-            Yaml::Array(vec![Yaml::Integer(0), Yaml::Integer(1)]),
-        );
-        map.insert(Yaml::String(String::from("integer")), Yaml::Integer(0));
-        let array = get_array_by_key(&map, "map");
-        assert!(array.is_err());
-        let array = get_array_by_key(&map, "integer");
         assert!(array.is_err());
     }
 

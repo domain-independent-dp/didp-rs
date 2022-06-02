@@ -102,7 +102,7 @@ where
         let mut incumbent = None;
         for node in current_beam.drain() {
             expanded += 1;
-            if model.get_base_cost(node.state()).is_some() {
+            if model.is_goal(node.state()) {
                 if let Some(cost) = incumbent
                     .as_ref()
                     .map(|x: &Rc<BeamSearchNode<T, U>>| x.cost)

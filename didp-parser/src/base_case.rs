@@ -1,71 +1,42 @@
-use crate::expression::{Condition, NumericExpression};
-use crate::expression_parser::ParseNumericExpression;
+use crate::expression::Condition;
 use crate::grounded_condition::GroundedCondition;
 use crate::state;
 use crate::table_registry;
 use crate::util;
-use crate::variable::Numeric;
 use crate::yaml_util;
-use lazy_static::lazy_static;
 use rustc_hash::FxHashMap;
 use std::error::Error;
-use std::fmt;
-use std::str;
 
 #[derive(Debug, PartialEq, Clone, Default)]
-pub struct BaseCase<T: Numeric> {
-    pub conditions: Vec<GroundedCondition>,
-    pub cost: NumericExpression<T>,
-}
+pub struct BaseCase(Vec<GroundedCondition>);
 
-impl<T: Numeric> BaseCase<T> {
-    pub fn get_cost<U: state::DPState>(
+impl BaseCase {
+    pub fn new(conditions: Vec<GroundedCondition>) -> BaseCase {
+        BaseCase(conditions)
+    }
+
+    pub fn is_satisfied<U: state::DPState>(
         &self,
         state: &U,
         registry: &table_registry::TableRegistry,
-    ) -> Option<T> {
-        let is_satisfied = self
-            .conditions
+    ) -> bool {
+        self.0
             .iter()
-            .all(|x| x.is_satisfied(state, registry).unwrap_or(true));
-        if is_satisfied {
-            Some(self.cost.eval(state, registry))
-        } else {
-            None
-        }
+            .all(|x| x.is_satisfied(state, registry).unwrap_or(true))
     }
 }
 
-impl<T: Numeric + ParseNumericExpression> BaseCase<T> {
+impl BaseCase {
     pub fn load_from_yaml(
         value: &yaml_rust::Yaml,
         metadata: &state::StateMetadata,
         registry: &table_registry::TableRegistry,
-    ) -> Result<BaseCase<T>, Box<dyn Error>>
-    where
-        <T as str::FromStr>::Err: fmt::Debug,
-    {
-        lazy_static! {
-            static ref COST_KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("cost");
-        }
-        let (array, cost) = match value {
-            yaml_rust::Yaml::Array(array) => (array, NumericExpression::Constant(T::zero())),
-            yaml_rust::Yaml::Hash(map) => {
-                let array = yaml_util::get_array_by_key(map, "conditions")?;
-                let cost = match map.get(&COST_KEY) {
-                    Some(cost) => {
-                        let cost = yaml_util::get_string(cost)?;
-                        let parameters = FxHashMap::default();
-                        let cost = T::parse_expression(cost, metadata, registry, &parameters)?;
-                        cost.simplify(registry)
-                    }
-                    _ => NumericExpression::Constant(T::zero()),
-                };
-                (array, cost)
-            }
+    ) -> Result<BaseCase, Box<dyn Error>> {
+        let array = match value {
+            yaml_rust::Yaml::Array(array) => array,
             _ => {
                 return Err(yaml_util::YamlContentErr::new(format!(
-                    "expected Array or Hash, found `{:?}`",
+                    "expected Array, found `{:?}`",
                     value
                 ))
                 .into())
@@ -96,7 +67,7 @@ impl<T: Numeric + ParseNumericExpression> BaseCase<T> {
                 }
             }
         }
-        Ok(BaseCase { conditions, cost })
+        Ok(BaseCase(conditions))
     }
 }
 
@@ -142,50 +113,41 @@ mod tests {
     }
 
     #[test]
-    fn get_cost() {
+    fn is_satisfied() {
         let state = generate_state();
         let registry = table_registry::TableRegistry::default();
 
-        let base_case = BaseCase {
-            conditions: vec![GroundedCondition {
+        let base_case = BaseCase::new(vec![GroundedCondition {
+            condition: Condition::Constant(true),
+            ..Default::default()
+        }]);
+        assert!(base_case.is_satisfied(&state, &registry));
+
+        let base_case = BaseCase::new(vec![
+            GroundedCondition {
                 condition: Condition::Constant(true),
                 ..Default::default()
-            }],
-            cost: NumericExpression::Constant(1),
-        };
-        assert_eq!(base_case.get_cost(&state, &registry), Some(1));
-
-        let base_case = BaseCase {
-            conditions: vec![
-                GroundedCondition {
-                    condition: Condition::Constant(true),
-                    ..Default::default()
-                },
-                GroundedCondition {
-                    condition: Condition::Constant(false),
-                    ..Default::default()
-                },
-            ],
-            cost: NumericExpression::Constant(1),
-        };
-        assert_eq!(base_case.get_cost(&state, &registry), None);
+            },
+            GroundedCondition {
+                condition: Condition::Constant(false),
+                ..Default::default()
+            },
+        ]);
+        assert!(!base_case.is_satisfied(&state, &registry));
     }
 
     #[test]
     fn load_from_yaml_ok() {
         let metadata = generate_metadata();
         let registry = table_registry::TableRegistry::default();
-        let expected = BaseCase {
-            conditions: vec![GroundedCondition {
-                condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
-                    ComparisonOperator::Ge,
-                    NumericExpression::IntegerVariable(0),
-                    NumericExpression::Constant(0),
-                ))),
-                ..Default::default()
-            }],
-            cost: NumericExpression::Constant(0),
-        };
+        let expected = BaseCase::new(vec![GroundedCondition {
+            condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                ComparisonOperator::Ge,
+                NumericExpression::IntegerVariable(0),
+                NumericExpression::Constant(0),
+            ))),
+            ..Default::default()
+        }]);
 
         let base_case = yaml_rust::YamlLoader::load_from_str(r"[(>= i0 0)]");
         assert!(base_case.is_ok());
@@ -195,7 +157,7 @@ mod tests {
         assert!(base_case.is_ok());
         assert_eq!(base_case.unwrap(), expected);
 
-        let base_case = yaml_rust::YamlLoader::load_from_str(r"conditions: [(>= i0 0), (= i0 i0)]");
+        let base_case = yaml_rust::YamlLoader::load_from_str(r"[(>= i0 0), (= i0 i0)]");
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
@@ -204,35 +166,18 @@ mod tests {
         assert_eq!(base_case.unwrap(), expected);
 
         let base_case = yaml_rust::YamlLoader::load_from_str(
-            r"
-conditions: [(>= i0 0)]
-cost: '0'
-",
+            r"[{ condition: (is e 1), forall: [ {name: e, object: s0} ] }]",
         );
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
         let base_case = BaseCase::load_from_yaml(&base_case[0], &metadata, &registry);
         assert!(base_case.is_ok());
-        assert_eq!(base_case.unwrap(), expected);
-
-        let base_case = yaml_rust::YamlLoader::load_from_str(
-            r"conditions: [{ condition: (is e 1), forall: [ {name: e, object: s0} ] }]",
-        );
-        assert!(base_case.is_ok());
-        let base_case = base_case.unwrap();
-        assert_eq!(base_case.len(), 1);
-        let base_case =
-            BaseCase::<variable::Integer>::load_from_yaml(&base_case[0], &metadata, &registry);
-        assert!(base_case.is_ok());
-        let expected = BaseCase {
-            conditions: vec![GroundedCondition {
-                condition: Condition::Constant(false),
-                elements_in_set_variable: vec![(0, 0)],
-                ..Default::default()
-            }],
-            cost: NumericExpression::Constant(0),
-        };
+        let expected = BaseCase::new(vec![GroundedCondition {
+            condition: Condition::Constant(false),
+            elements_in_set_variable: vec![(0, 0)],
+            ..Default::default()
+        }]);
         assert_eq!(base_case.unwrap(), expected);
     }
 
@@ -245,17 +190,14 @@ cost: '0'
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            BaseCase::<variable::Integer>::load_from_yaml(&base_case[0], &metadata, &registry);
+        let base_case = BaseCase::load_from_yaml(&base_case[0], &metadata, &registry);
         assert!(base_case.is_err());
 
-        let base_case =
-            yaml_rust::YamlLoader::load_from_str(r"conditions: [(>= i0 0), (= i0 i0), (= 1 2)]");
+        let base_case = yaml_rust::YamlLoader::load_from_str(r"[(>= i0 0), (= i0 i0), (= 1 2)]");
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case =
-            BaseCase::<variable::Integer>::load_from_yaml(&base_case[0], &metadata, &registry);
+        let base_case = BaseCase::load_from_yaml(&base_case[0], &metadata, &registry);
         assert!(base_case.is_err());
     }
 }

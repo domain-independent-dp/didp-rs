@@ -82,7 +82,7 @@ pub fn exist_dfs<T: variable::Numeric>(
     let state = node.state;
     let cost = node.cost;
     *expanded += 1;
-    if model.get_base_cost(&state).is_some() {
+    if model.is_goal(&state) {
         if maximize && primal_bound.is_some() && cost <= primal_bound.unwrap() {
             return None;
         }

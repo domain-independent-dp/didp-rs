@@ -1,6 +1,6 @@
 use crate::expression;
 use crate::expression_parser;
-use crate::expression_parser::ParseNumericExpression;
+use crate::parse_expression_from_yaml::{parse_element_from_yaml, ParesNumericExpressionFromYaml};
 use crate::state;
 use crate::table_registry;
 use crate::variable::{Continuous, Element, Integer};
@@ -35,30 +35,34 @@ impl Effect {
         let mut integer_resource_effects = Vec::new();
         let mut continuous_resource_effects = Vec::new();
         for (variable, effect) in lifted_effects {
-            let effect = yaml_util::get_string(effect)?;
             let variable = yaml_util::get_string(variable)?;
             if let Some(i) = metadata.name_to_set_variable.get(&variable) {
+                let effect = yaml_util::get_string(effect)?;
                 let effect = expression_parser::parse_set(effect, metadata, registry, parameters)?;
                 set_effects.push((*i, effect));
             } else if let Some(i) = metadata.name_to_vector_variable.get(&variable) {
+                let effect = yaml_util::get_string(effect)?;
                 let effect =
                     expression_parser::parse_vector(effect, metadata, registry, parameters)?;
                 vector_effects.push((*i, effect));
             } else if let Some(i) = metadata.name_to_element_variable.get(&variable) {
-                let effect =
-                    expression_parser::parse_element(effect, metadata, registry, parameters)?;
+                let effect = parse_element_from_yaml(effect, metadata, registry, parameters)?;
                 element_effects.push((*i, effect));
             } else if let Some(i) = metadata.name_to_integer_variable.get(&variable) {
-                let effect = Integer::parse_expression(effect, metadata, registry, parameters)?;
+                let effect =
+                    Integer::parse_expression_from_yaml(effect, metadata, registry, parameters)?;
                 integer_effects.push((*i, effect.simplify(registry)));
             } else if let Some(i) = metadata.name_to_integer_resource_variable.get(&variable) {
-                let effect = Integer::parse_expression(effect, metadata, registry, parameters)?;
+                let effect =
+                    Integer::parse_expression_from_yaml(effect, metadata, registry, parameters)?;
                 integer_resource_effects.push((*i, effect.simplify(registry)));
             } else if let Some(i) = metadata.name_to_continuous_variable.get(&variable) {
-                let effect = Continuous::parse_expression(effect, metadata, registry, parameters)?;
+                let effect =
+                    Continuous::parse_expression_from_yaml(effect, metadata, registry, parameters)?;
                 continuous_effects.push((*i, effect.simplify(registry)));
             } else if let Some(i) = metadata.name_to_continuous_resource_variable.get(&variable) {
-                let effect = Continuous::parse_expression(effect, metadata, registry, parameters)?;
+                let effect =
+                    Continuous::parse_expression_from_yaml(effect, metadata, registry, parameters)?;
                 continuous_resource_effects.push((*i, effect.simplify(registry)));
             } else {
                 return Err(yaml_util::YamlContentErr::new(format!(
@@ -242,9 +246,9 @@ mod tests {
  e0: e
  s0: (add e s0)
  p0: (push e p0)
- i0: '1'
+ i0: 1
  ir0: '2'
- c0: '1.0'
+ c0: 1.0
  cr0: '2.0'
 ";
         let effect = yaml_rust::YamlLoader::load_from_str(effect);

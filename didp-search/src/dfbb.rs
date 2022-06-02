@@ -51,7 +51,7 @@ where
         }
         *node.closed.borrow_mut() = true;
         expanded += 1;
-        if model.get_base_cost(node.state()).is_some()
+        if model.is_goal(node.state())
             && (primal_bound.is_none()
                 || ((model.reduce_function == ReduceFunction::Min
                     && node.cost() < primal_bound.unwrap())

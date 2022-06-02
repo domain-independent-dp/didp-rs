@@ -1,7 +1,7 @@
 use crate::effect;
 use crate::expression;
-use crate::expression_parser::ParseNumericExpression;
 use crate::grounded_condition;
+use crate::parse_expression_from_yaml::ParesNumericExpressionFromYaml;
 use crate::state;
 use crate::state::DPState;
 use crate::table_registry;
@@ -82,7 +82,7 @@ impl<T: Numeric> Transition<T> {
 
 type TransitionsWithFlags<T> = (Vec<Transition<T>>, bool, bool);
 
-pub fn load_transitions_from_yaml<T: Numeric + ParseNumericExpression>(
+pub fn load_transitions_from_yaml<T: Numeric + ParesNumericExpressionFromYaml>(
     value: &yaml_rust::Yaml,
     metadata: &state::StateMetadata,
     registry: &table_registry::TableRegistry,
@@ -124,8 +124,8 @@ where
         ),
     };
 
-    let effect = yaml_util::get_yaml_by_key(map, "effect")?;
-    let lifted_cost = yaml_util::get_string_by_key(map, "cost")?;
+    let effect = map.get(&yaml_rust::Yaml::String(String::from("effect")));
+    let lifted_cost = map.get(&yaml_rust::Yaml::String(String::from("cost")));
     let lifted_preconditions = match map.get(&PRECONDITIONS_KEY) {
         Some(lifted_preconditions) => Some(yaml_util::get_array(lifted_preconditions)?),
         None => None,
@@ -169,8 +169,16 @@ where
             }
             None => Vec::new(),
         };
-        let effect = effect::Effect::load_from_yaml(effect, metadata, registry, &parameters)?;
-        let cost = T::parse_expression(lifted_cost.clone(), metadata, registry, &parameters)?;
+        let effect = match effect {
+            Some(effect) => {
+                effect::Effect::load_from_yaml(effect, metadata, registry, &parameters)?
+            }
+            None => effect::Effect::default(),
+        };
+        let cost = match lifted_cost {
+            Some(cost) => T::parse_expression_from_yaml(cost, metadata, registry, &parameters)?,
+            None => expression::NumericExpression::Cost,
+        };
         let cost = cost.simplify(registry);
 
         transitions.push(Transition {
@@ -622,8 +630,27 @@ mod tests {
         let transition = r"
 name: transition
 preconditions: [(>= (f2 0 1) 10)]
-effect: {e0: '0'}
-cost: '0'
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml::<Integer>(transition, &metadata, &registry);
+        let expected = vec![Transition {
+            name: String::from("transition"),
+            preconditions: Vec::new(),
+            effect: effect::Effect::default(),
+            cost: NumericExpression::Cost,
+            ..Default::default()
+        }];
+        assert_eq!(transitions.unwrap(), (expected, false, false));
+
+        let transition = r"
+name: transition
+preconditions: [(>= (f2 0 1) 10)]
+effect: {e0: 0}
+cost: 0
 ";
         let transition = yaml_rust::YamlLoader::load_from_str(transition);
         assert!(transition.is_ok());
@@ -907,45 +934,6 @@ effect:
         i0: '1'
         ir0: '2'
 cost: (+ cost (f1 e))
-";
-        let transition = yaml_rust::YamlLoader::load_from_str(transition);
-        assert!(transition.is_ok());
-        let transition = transition.unwrap();
-        assert_eq!(transition.len(), 1);
-        let transition = &transition[0];
-        let transitions = load_transitions_from_yaml::<Integer>(transition, &metadata, &registry);
-        assert!(transitions.is_err());
-
-        let transition = r"
-name: transition
-parameters:
-        - name: e
-          object: s0
-preconditions:
-        - (>= (f2 e0 e) 10)
-cost: (+ cost (f1 e))
-";
-        let transition = yaml_rust::YamlLoader::load_from_str(transition);
-        assert!(transition.is_ok());
-        let transition = transition.unwrap();
-        assert_eq!(transition.len(), 1);
-        let transition = &transition[0];
-        let transitions = load_transitions_from_yaml::<Integer>(transition, &metadata, &registry);
-        assert!(transitions.is_err());
-
-        let transition = r"
-name: transition
-parameters:
-        - name: e
-          object: s0
-preconditions:
-        - (>= (f2 e0 e) 10)
-effect:
-        e0: e
-        s0: (add e s0)
-        p0: (push e p0)
-        i0: '1'
-        ir0: '2'
 ";
         let transition = yaml_rust::YamlLoader::load_from_str(transition);
         assert!(transition.is_ok());

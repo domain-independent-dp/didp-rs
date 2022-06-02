@@ -86,8 +86,8 @@ pub fn forward_recursion<T: variable::Numeric>(
     expanded: &mut i32,
 ) -> Option<T> {
     *expanded += 1;
-    if let Some(cost) = model.get_base_cost(&state) {
-        return Some(cost);
+    if model.is_goal(&state) {
+        return Some(T::zero());
     }
     if let Some((cost, _)) = memo.get(&state) {
         return *cost;

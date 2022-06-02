@@ -63,7 +63,7 @@ where
             f_max = f;
             println!("f = {}, expanded: {}", f, expanded);
         }
-        if model.get_base_cost(node.state()).is_some() {
+        if model.is_goal(node.state()) {
             println!("Expanded: {}", expanded);
             return Some((node.g, trace_transitions(node)));
         }

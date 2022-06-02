@@ -191,6 +191,51 @@ impl DPState for State {
 }
 
 impl State {
+    pub fn is_satisfied<U: DPState>(&self, state: &U, metadata: &StateMetadata) -> bool {
+        for i in 0..metadata.number_of_element_variables() {
+            if self.get_element_variable(i) != state.get_element_variable(i) {
+                return false;
+            }
+        }
+        for i in 0..metadata.number_of_integer_variables() {
+            if self.get_integer_variable(i) != state.get_integer_variable(i) {
+                return false;
+            }
+        }
+        for i in 0..metadata.number_of_integer_resource_variables() {
+            if self.get_integer_resource_variable(i) != state.get_integer_resource_variable(i) {
+                return false;
+            }
+        }
+        for i in 0..metadata.number_of_continuous_variables() {
+            if (self.get_continuous_variable(i) - state.get_continuous_variable(i)).abs()
+                > Continuous::EPSILON
+            {
+                return false;
+            }
+        }
+        for i in 0..metadata.number_of_continuous_resource_variables() {
+            if (self.get_continuous_resource_variable(i)
+                - state.get_continuous_resource_variable(i))
+            .abs()
+                > Continuous::EPSILON
+            {
+                return false;
+            }
+        }
+        for i in 0..metadata.number_of_set_variables() {
+            if self.get_set_variable(i) != state.get_set_variable(i) {
+                return false;
+            }
+        }
+        for i in 0..metadata.number_of_vector_variables() {
+            if self.get_vector_variable(i) != state.get_vector_variable(i) {
+                return false;
+            }
+        }
+        true
+    }
+
     pub fn load_from_yaml(
         value: &yaml_rust::Yaml,
         metadata: &StateMetadata,
@@ -1638,6 +1683,42 @@ cr3: 3
         let yaml = &yaml[0];
         let result = metadata.ground_parameters_from_yaml(yaml);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn is_satisfied() {
+        let state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![1],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut name_to_integer_variable = FxHashMap::default();
+        name_to_integer_variable.insert(String::from("i0"), 0);
+        let metadata = StateMetadata {
+            integer_variable_names: vec![String::from("i0")],
+            name_to_integer_variable,
+            ..Default::default()
+        };
+
+        let base_state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![1],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(base_state.is_satisfied(&state, &metadata));
+
+        let base_state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![2],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(!base_state.is_satisfied(&state, &metadata));
     }
 
     #[test]

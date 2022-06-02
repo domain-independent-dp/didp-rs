@@ -5,11 +5,11 @@ use std::str;
 use yaml_rust::Yaml;
 
 mod base_case;
-mod base_state;
 mod effect;
 pub mod expression;
 pub mod expression_parser;
 mod grounded_condition;
+mod parse_expression_from_yaml;
 mod state;
 pub mod table;
 mod table_data;
@@ -20,7 +20,6 @@ pub mod variable;
 mod yaml_util;
 
 pub use base_case::BaseCase;
-pub use base_state::BaseState;
 pub use effect::Effect;
 pub use expression_parser::ParseErr;
 pub use grounded_condition::GroundedCondition;
@@ -70,8 +69,8 @@ pub struct Model<T: variable::Numeric> {
     pub target: state::State,
     pub table_registry: table_registry::TableRegistry,
     pub constraints: Vec<GroundedCondition>,
-    pub base_cases: Vec<BaseCase<T>>,
-    pub base_states: Vec<BaseState<T>>,
+    pub base_cases: Vec<BaseCase>,
+    pub base_states: Vec<State>,
     pub reduce_function: ReduceFunction,
     pub forward_transitions: Vec<Transition<T>>,
     pub forward_forced_transitions: Vec<Transition<T>>,
@@ -88,24 +87,18 @@ impl<T: variable::Numeric> Model<T> {
         })
     }
 
-    pub fn get_base_cost<U: DPState>(&self, state: &U) -> Option<T> {
-        for base_state in &self.base_states {
-            let cost = base_state.get_cost(state, &self.state_metadata);
-            if cost.is_some() {
-                return cost;
-            }
-        }
-        for base_case in &self.base_cases {
-            let cost = base_case.get_cost(state, &self.table_registry);
-            if cost.is_some() {
-                return cost;
-            }
-        }
-        None
+    pub fn is_goal<U: DPState>(&self, state: &U) -> bool {
+        self.base_cases
+            .iter()
+            .any(|case| case.is_satisfied(state, &self.table_registry))
+            || self
+                .base_states
+                .iter()
+                .any(|base| base.is_satisfied(state, &self.state_metadata))
     }
 }
 
-impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> {
+impl<T: variable::Numeric + parse_expression_from_yaml::ParesNumericExpressionFromYaml> Model<T> {
     pub fn load_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model<T>, Box<dyn Error>>
     where
         <T as str::FromStr>::Err: fmt::Debug,
@@ -227,7 +220,7 @@ impl<T: variable::Numeric + expression_parser::ParseNumericExpression> Model<T> 
         let mut base_states = Vec::new();
         if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("base_states")) {
             for base_state in yaml_util::get_array(array)? {
-                let base_state = BaseState::load_from_yaml(base_state, &state_metadata)?;
+                let base_state = state::State::load_from_yaml(base_state, &state_metadata)?;
                 base_states.push(base_state);
             }
         }
@@ -430,45 +423,33 @@ mod tests {
     }
 
     #[test]
-    fn get_base_cost() {
+    fn is_goal() {
         let state = state::State::default();
-        let model = Model {
-            base_cases: vec![BaseCase {
-                conditions: vec![GroundedCondition {
-                    condition: Condition::Constant(true),
-                    ..Default::default()
-                }],
-                cost: NumericExpression::Constant(0),
-            }],
+        let model = Model::<variable::Integer> {
+            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+                condition: Condition::Constant(true),
+                ..Default::default()
+            }])],
             ..Default::default()
         };
-        assert_eq!(model.get_base_cost(&state), Some(0));
-        let model = Model {
-            base_cases: vec![BaseCase {
-                conditions: vec![GroundedCondition {
-                    condition: Condition::Constant(false),
-                    ..Default::default()
-                }],
-                cost: NumericExpression::Constant(0),
-            }],
+        assert!(model.is_goal(&state));
+        let model = Model::<variable::Integer> {
+            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+                condition: Condition::Constant(false),
+                ..Default::default()
+            }])],
             ..Default::default()
         };
-        assert_eq!(model.get_base_cost(&state), None);
-        let model = Model {
-            base_cases: vec![BaseCase {
-                conditions: vec![GroundedCondition {
-                    condition: Condition::Constant(false),
-                    ..Default::default()
-                }],
-                cost: NumericExpression::Constant(0),
-            }],
-            base_states: vec![BaseState {
-                state: state::State::default(),
-                cost: 1,
-            }],
+        assert!(!model.is_goal(&state));
+        let model = Model::<variable::Integer> {
+            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+                condition: Condition::Constant(false),
+                ..Default::default()
+            }])],
+            base_states: vec![state::State::default()],
             ..Default::default()
         };
-        assert_eq!(model.get_base_cost(&state), Some(1));
+        assert!(model.is_goal(&state));
     }
 
     #[test]
@@ -562,28 +543,22 @@ transitions:
                 },
             ],
             base_cases: vec![
-                BaseCase {
-                    cost: NumericExpression::Constant(0),
-                    conditions: vec![GroundedCondition {
-                        condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
-                            ComparisonOperator::Ge,
-                            NumericExpression::IntegerVariable(0),
-                            NumericExpression::Constant(1),
-                        ))),
-                        ..Default::default()
-                    }],
-                },
-                BaseCase {
-                    cost: NumericExpression::Constant(0),
-                    conditions: vec![GroundedCondition {
-                        condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
-                            ComparisonOperator::Ge,
-                            NumericExpression::IntegerVariable(1),
-                            NumericExpression::Constant(1),
-                        ))),
-                        ..Default::default()
-                    }],
-                },
+                BaseCase::new(vec![GroundedCondition {
+                    condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                        ComparisonOperator::Ge,
+                        NumericExpression::IntegerVariable(0),
+                        NumericExpression::Constant(1),
+                    ))),
+                    ..Default::default()
+                }]),
+                BaseCase::new(vec![GroundedCondition {
+                    condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                        ComparisonOperator::Ge,
+                        NumericExpression::IntegerVariable(1),
+                        NumericExpression::Constant(1),
+                    ))),
+                    ..Default::default()
+                }]),
             ],
             forward_transitions: vec![
                 Transition {
@@ -667,12 +642,10 @@ transitions:
           direction: backward
           effect:
                 v: (+ v 1)
-          cost: cost
         - name: two
           direction: backward
           effect:
                 v: (+ v 2)
-          cost: cost
 ";
         let domain = yaml_rust::YamlLoader::load_from_str(domain);
         assert!(domain.is_ok());
@@ -686,8 +659,8 @@ problem: Fibonacci10
 target:
         v: 10
 base_states:
-        - state: { v: 0 }
-        - state: { v: 1 }
+        - { v: 0 }
+        - { v: 1 }
 ";
         let problem = yaml_rust::YamlLoader::load_from_str(problem);
         assert!(problem.is_ok());
@@ -717,25 +690,19 @@ base_states:
                 ..Default::default()
             },
             base_states: vec![
-                BaseState {
-                    state: state::State {
-                        signature_variables: SignatureVariables {
-                            integer_variables: vec![0],
-                            ..Default::default()
-                        },
+                state::State {
+                    signature_variables: SignatureVariables {
+                        integer_variables: vec![0],
                         ..Default::default()
                     },
-                    cost: 0,
+                    ..Default::default()
                 },
-                BaseState {
-                    state: state::State {
-                        signature_variables: SignatureVariables {
-                            integer_variables: vec![1],
-                            ..Default::default()
-                        },
+                state::State {
+                    signature_variables: SignatureVariables {
+                        integer_variables: vec![1],
                         ..Default::default()
                     },
-                    cost: 0,
+                    ..Default::default()
                 },
             ],
             reduce_function: ReduceFunction::Sum,
@@ -950,24 +917,21 @@ table_values:
                 ))),
                 ..Default::default()
             }],
-            base_cases: vec![BaseCase {
-                cost: NumericExpression::Constant(0),
-                conditions: vec![
-                    GroundedCondition {
-                        condition: Condition::Set(Box::new(SetCondition::IsEmpty(
-                            SetExpression::Reference(ReferenceExpression::Variable(0)),
-                        ))),
-                        ..Default::default()
-                    },
-                    GroundedCondition {
-                        condition: Condition::Set(Box::new(SetCondition::Eq(
-                            ElementExpression::Variable(0),
-                            ElementExpression::Constant(0),
-                        ))),
-                        ..Default::default()
-                    },
-                ],
-            }],
+            base_cases: vec![BaseCase::new(vec![
+                GroundedCondition {
+                    condition: Condition::Set(Box::new(SetCondition::IsEmpty(
+                        SetExpression::Reference(ReferenceExpression::Variable(0)),
+                    ))),
+                    ..Default::default()
+                },
+                GroundedCondition {
+                    condition: Condition::Set(Box::new(SetCondition::Eq(
+                        ElementExpression::Variable(0),
+                        ElementExpression::Constant(0),
+                    ))),
+                    ..Default::default()
+                },
+            ])],
             base_states: Vec::new(),
             reduce_function: ReduceFunction::Min,
             forward_transitions: vec![
@@ -1677,17 +1641,14 @@ base_cases:
                 },
                 ..Default::default()
             },
-            base_cases: vec![BaseCase {
-                cost: NumericExpression::Constant(0),
-                conditions: vec![GroundedCondition {
-                    condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
-                        ComparisonOperator::Ge,
-                        NumericExpression::IntegerVariable(0),
-                        NumericExpression::Constant(1),
-                    ))),
-                    ..Default::default()
-                }],
-            }],
+            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+                condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                    ComparisonOperator::Ge,
+                    NumericExpression::IntegerVariable(0),
+                    NumericExpression::Constant(1),
+                ))),
+                ..Default::default()
+            }])],
             forward_transitions: vec![Transition {
                 name: String::from("add"),
                 effect: effect::Effect {
@@ -1763,17 +1724,14 @@ base_cases:
                 },
                 ..Default::default()
             },
-            base_cases: vec![BaseCase {
-                cost: NumericExpression::Constant(ordered_float::OrderedFloat(0.0)),
-                conditions: vec![GroundedCondition {
-                    condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
-                        ComparisonOperator::Ge,
-                        NumericExpression::IntegerVariable(0),
-                        NumericExpression::Constant(1),
-                    ))),
-                    ..Default::default()
-                }],
-            }],
+            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+                condition: Condition::Comparison(Box::new(Comparison::ComparisonII(
+                    ComparisonOperator::Ge,
+                    NumericExpression::IntegerVariable(0),
+                    NumericExpression::Constant(1),
+                ))),
+                ..Default::default()
+            }])],
             forward_transitions: vec![Transition {
                 name: String::from("add"),
                 effect: effect::Effect {
