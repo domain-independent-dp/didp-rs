@@ -134,12 +134,12 @@ where
 
     let cost = T::zero();
     let initial_state = StateInRegistry::new(&model.target);
-    let constructor = |state: StateInRegistry, cost: T| {
-        Rc::new(LazySearchNode {
+    let constructor = |state: StateInRegistry, cost: T, _: Option<&Rc<LazySearchNode<T>>>| {
+        Some(Rc::new(LazySearchNode {
             state,
             cost,
             ..Default::default()
-        })
+        }))
     };
     let initial_node = match registry.insert(initial_state, cost, constructor) {
         Some((node, _)) => node,
@@ -167,13 +167,13 @@ where
         if !model.check_constraints(&state) {
             continue;
         }
-        let constructor = |state: StateInRegistry, cost: T| {
-            Rc::new(LazySearchNode {
+        let constructor = |state: StateInRegistry, cost: T, _: Option<&Rc<LazySearchNode<T>>>| {
+            Some(Rc::new(LazySearchNode {
                 state,
                 cost,
                 parent: Some(edge.parent),
                 operator: Some(edge.transition),
-            })
+            }))
         };
         if let Some((node, _)) = registry.insert(state, edge.cost, constructor) {
             expanded += 1;

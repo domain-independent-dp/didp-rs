@@ -90,14 +90,14 @@ where
     let h = h_evaluator.eval(&initial_state, model)?;
     let f = f_evaluator(g, h, &initial_state, model);
     let f = if maximize { -f } else { f };
-    let constructor = |state: StateInRegistry, cost: T| {
-        Rc::new(BeamSearchNode {
+    let constructor = |state: StateInRegistry, cost: T, _: Option<&Rc<BeamSearchNode<T, U>>>| {
+        Some(Rc::new(BeamSearchNode {
             g,
             f,
             state,
             cost,
             ..Default::default()
-        })
+        }))
     };
     let initial_node = match registry.insert(initial_state, cost, constructor) {
         Some((node, _)) => node,
@@ -145,8 +145,8 @@ where
                                 node.state(),
                                 &model.table_registry,
                             );
-                            let constructor = |state: StateInRegistry, cost: T| {
-                                Rc::new(BeamSearchNode {
+                            let constructor = |state: StateInRegistry, cost: T, _: Option<&Rc<BeamSearchNode<T, U>>>| {
+                                Some(Rc::new(BeamSearchNode {
                                     g,
                                     f,
                                     state,
@@ -154,7 +154,7 @@ where
                                     parent: Some(node.clone()),
                                     operator: Some(transition),
                                     closed: RefCell::new(false),
-                                })
+                                }))
                             };
                             if let Some((successor, _)) = registry.insert(state, cost, constructor)
                             {

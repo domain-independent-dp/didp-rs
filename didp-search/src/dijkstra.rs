@@ -107,12 +107,12 @@ where
 
     let cost = T::zero();
     let initial_state = StateInRegistry::new(&model.target);
-    let constructor = |state: StateInRegistry, cost: T| {
-        Rc::new(SearchNode {
+    let constructor = |state: StateInRegistry, cost: T, _: Option<&Rc<SearchNode<T>>>| {
+        Some(Rc::new(SearchNode {
             state,
             cost,
             ..Default::default()
-        })
+        }))
     };
     let initial_node = match registry.insert(initial_state, cost, constructor) {
         Some((node, _)) => node,
@@ -142,15 +142,16 @@ where
             }
             let state = transition.apply(node.state(), &model.table_registry);
             if model.check_constraints(&state) {
-                let constructor = |state: StateInRegistry, cost: T| {
-                    Rc::new(SearchNode {
-                        state,
-                        cost,
-                        parent: Some(node.clone()),
-                        operator: Some(transition.clone()),
-                        closed: RefCell::new(false),
-                    })
-                };
+                let constructor =
+                    |state: StateInRegistry, cost: T, _: Option<&Rc<SearchNode<T>>>| {
+                        Some(Rc::new(SearchNode {
+                            state,
+                            cost,
+                            parent: Some(node.clone()),
+                            operator: Some(transition.clone()),
+                            closed: RefCell::new(false),
+                        }))
+                    };
                 if let Some((successor, _)) = registry.insert(state, cost, constructor) {
                     open.push(Reverse(successor));
                 }

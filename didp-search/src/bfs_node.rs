@@ -8,8 +8,8 @@ use std::rc::Rc;
 #[derive(Debug, Default)]
 pub struct BFSNode<T: Numeric> {
     pub g: T,
-    pub h: T,
-    pub f: T,
+    pub h: RefCell<Option<T>>,
+    pub f: RefCell<Option<T>>,
     pub state: StateInRegistry,
     pub operator: Option<Rc<didp_parser::Transition<T>>>,
     pub parent: Option<Rc<BFSNode<T>>>,
@@ -84,8 +84,8 @@ mod tests {
                 ..Default::default()
             },
             g: 1,
-            h: 2,
-            f: 3,
+            h: RefCell::new(Some(2)),
+            f: RefCell::new(Some(3)),
             closed: RefCell::new(false),
             parent: None,
             operator: None,
@@ -107,8 +107,8 @@ mod tests {
                 ..Default::default()
             },
             g: 1,
-            h: 2,
-            f: 3,
+            h: RefCell::new(Some(2)),
+            f: RefCell::new(Some(3)),
             closed: RefCell::new(false),
             parent: None,
             operator: None,
@@ -129,8 +129,8 @@ mod tests {
                 ..Default::default()
             },
             g: 1,
-            h: 2,
-            f: 3,
+            h: RefCell::new(Some(2)),
+            f: RefCell::new(Some(3)),
             closed: RefCell::new(false),
             parent: None,
             operator: None,
@@ -144,8 +144,8 @@ mod tests {
                 ..Default::default()
             },
             g: 1,
-            h: 2,
-            f: 3,
+            h: RefCell::new(Some(2)),
+            f: RefCell::new(Some(3)),
             closed: RefCell::new(false),
             parent: None,
             operator: None,
@@ -160,8 +160,8 @@ mod tests {
                 ..Default::default()
             },
             g: 2,
-            h: 2,
-            f: 4,
+            h: RefCell::new(Some(2)),
+            f: RefCell::new(Some(4)),
             closed: RefCell::new(false),
             parent: None,
             operator: None,
@@ -176,8 +176,8 @@ mod tests {
                 ..Default::default()
             },
             g: 0,
-            h: 3,
-            f: 3,
+            h: RefCell::new(Some(3)),
+            f: RefCell::new(Some(3)),
             closed: RefCell::new(false),
             parent: None,
             operator: None,

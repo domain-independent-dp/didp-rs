@@ -5,6 +5,7 @@ use rustc_hash::FxHashMap;
 use std::cmp::Ordering;
 use std::collections;
 use std::fmt;
+use std::mem;
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -181,12 +182,15 @@ impl<'a, T: Numeric, I: StateInformation<T>> StateRegistry<'a, T, I> {
         self.registry.clear();
     }
 
-    pub fn insert<F: FnOnce(StateInRegistry, T) -> I>(
+    pub fn insert<F>(
         &mut self,
         mut state: StateInRegistry,
         cost: T,
         constructor: F,
-    ) -> Option<(I, bool)> {
+    ) -> Option<(I, Option<I>)>
+    where
+        F: FnOnce(StateInRegistry, T, Option<&I>) -> Option<I>,
+    {
         let entry = self.registry.entry(state.signature_variables.clone());
         let v = match entry {
             collections::hash_map::Entry::Occupied(entry) => {
@@ -213,9 +217,17 @@ impl<'a, T: Numeric, I: StateInformation<T>> StateRegistry<'a, T, I> {
                         {
                             // dominating
                             other.close();
-                            let information = constructor(state, cost);
-                            *other = information.clone();
-                            return Some((information, true));
+                            if let Some(information) = match result.unwrap() {
+                                // if the same state is saved, reuse some information
+                                Ordering::Equal => constructor(state, cost, Some(other)),
+                                _ => constructor(state, cost, None),
+                            } {
+                                let mut tmp = information.clone();
+                                mem::swap(other, &mut tmp);
+                                return Some((information, Some(tmp)));
+                            } else {
+                                return None;
+                            }
                         }
                         _ => {}
                     }
@@ -224,9 +236,12 @@ impl<'a, T: Numeric, I: StateInformation<T>> StateRegistry<'a, T, I> {
             }
             collections::hash_map::Entry::Vacant(entry) => entry.insert(Vec::with_capacity(1)),
         };
-        let information = constructor(state, cost);
-        v.push(information.clone());
-        Some((information, false))
+        if let Some(information) = constructor(state, cost, None) {
+            v.push(information.clone());
+            Some((information, None))
+        } else {
+            None
+        }
     }
 }
 
@@ -242,10 +257,11 @@ mod tests {
     use rustc_hash::FxHashMap;
     use std::cell::RefCell;
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug, PartialEq, Clone)]
     struct MockInformation {
         state: StateInRegistry,
         closed: RefCell<bool>,
+        value: RefCell<Option<i32>>,
     }
 
     impl StateInformation<Integer> for Rc<MockInformation> {
@@ -666,20 +682,21 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let constructor = |state: StateInRegistry, _: Integer| {
-            Rc::new(MockInformation {
+        let constructor = |state: StateInRegistry, _: Integer, _: Option<&Rc<MockInformation>>| {
+            Some(Rc::new(MockInformation {
                 state,
                 closed: RefCell::new(false),
-            })
+                value: RefCell::new(None),
+            }))
         };
         let information = registry.insert(state, 1, &constructor);
         assert!(information.is_some());
-        let (information, dominate) = information.unwrap();
+        let (information, dominated) = information.unwrap();
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        assert!(!dominate);
+        assert_eq!(dominated, None);
         assert_eq!(information.state, state);
         assert!(!*information.closed.borrow());
 
@@ -689,12 +706,12 @@ mod tests {
         };
         let information = registry.insert(state, 1, &constructor);
         assert!(information.is_some());
-        let (information, dominate) = information.unwrap();
+        let (information, dominated) = information.unwrap();
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        assert!(!dominate);
+        assert_eq!(dominated, None);
         assert_eq!(information.state, state);
         assert!(!*information.closed.borrow());
 
@@ -704,12 +721,12 @@ mod tests {
         };
         let information = registry.insert(state, 1, &constructor);
         assert!(information.is_some());
-        let (information, dominate) = information.unwrap();
+        let (information, dominated) = information.unwrap();
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![3, 1, 3]),
         };
-        assert!(!dominate);
+        assert_eq!(dominated, None);
         assert_eq!(information.state, state);
         assert!(!*information.closed.borrow());
 
@@ -719,12 +736,12 @@ mod tests {
         };
         let information = registry.insert(state, 0, &constructor);
         assert!(information.is_some());
-        let (information, dominate) = information.unwrap();
+        let (information, dominated) = information.unwrap();
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![0, 1, 3]),
         };
-        assert!(!dominate);
+        assert_eq!(dominated, None);
         assert_eq!(information.state, state);
         assert!(!*information.closed.borrow());
     }
@@ -738,11 +755,12 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let constructor = |state: StateInRegistry, _: Integer| {
-            Rc::new(MockInformation {
+        let constructor = |state: StateInRegistry, _: Integer, _: Option<&Rc<MockInformation>>| {
+            Some(Rc::new(MockInformation {
                 state,
                 closed: RefCell::new(false),
-            })
+                value: RefCell::new(None),
+            }))
         };
         registry.insert(state, 1, &constructor);
 
@@ -777,15 +795,28 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let constructor = |state: StateInRegistry, _: Integer| {
-            Rc::new(MockInformation {
-                state,
-                closed: RefCell::new(false),
-            })
-        };
+        let constructor =
+            |state: StateInRegistry, _: Integer, other: Option<&Rc<MockInformation>>| {
+                if let Some(other) = other {
+                    other.value.borrow().map(|value| {
+                        Rc::new(MockInformation {
+                            state,
+                            closed: RefCell::new(false),
+                            value: RefCell::new(Some(value)),
+                        })
+                    })
+                } else {
+                    Some(Rc::new(MockInformation {
+                        state,
+                        closed: RefCell::new(false),
+                        value: RefCell::new(None),
+                    }))
+                }
+            };
         let information1 = registry.insert(state, 1, &constructor);
         assert!(information1.is_some());
         let (information1, _) = information1.unwrap();
+        *information1.value.borrow_mut() = Some(10);
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -793,8 +824,7 @@ mod tests {
         };
         let information2 = registry.insert(state, 0, &constructor);
         assert!(information2.is_some());
-        let (information2, dominate) = information2.unwrap();
-        assert!(dominate);
+        let (information2, dominated) = information2.unwrap();
         assert_eq!(
             information2.state.signature_variables,
             information1.state.signature_variables
@@ -805,6 +835,8 @@ mod tests {
         );
         assert!(*information1.closed.borrow());
         assert!(!*information2.closed.borrow());
+        assert_eq!(*information2.value.borrow(), Some(10));
+        assert_eq!(dominated, Some(information1));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -812,8 +844,7 @@ mod tests {
         };
         let information3 = registry.insert(state, 0, &constructor);
         assert!(information3.is_some());
-        let (information3, dominate) = information3.unwrap();
-        assert!(dominate);
+        let (information3, dominated) = information3.unwrap();
         assert_eq!(
             information3.state.signature_variables,
             information2.state.signature_variables
@@ -824,6 +855,8 @@ mod tests {
         );
         assert!(*information2.closed.borrow());
         assert!(!*information3.closed.borrow());
+        assert_eq!(*information3.value.borrow(), None);
+        assert_eq!(dominated, Some(information2));
     }
 
     #[test]
@@ -835,11 +868,12 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let constructor = |state: StateInRegistry, _: Integer| {
-            Rc::new(MockInformation {
+        let constructor = |state: StateInRegistry, _: Integer, _: Option<&Rc<MockInformation>>| {
+            Some(Rc::new(MockInformation {
                 state,
                 closed: RefCell::new(false),
-            })
+                value: RefCell::new(None),
+            }))
         };
         let information = registry.insert(state, 1, &constructor);
         assert!(information.is_some());

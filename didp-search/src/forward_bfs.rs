@@ -35,14 +35,14 @@ where
     let h = h_evaluator.eval(&initial_state, model)?;
     println!("Initial h = {}", h);
     let f = f_evaluator(g, h, &initial_state, model);
-    let constructor = |state: StateInRegistry, g: T| {
-        Rc::new(BFSNode {
+    let constructor = |state: StateInRegistry, g: T, _: Option<&Rc<BFSNode<T>>>| {
+        Some(Rc::new(BFSNode {
             state,
             g,
-            h,
-            f,
+            h: RefCell::new(Some(h)),
+            f: RefCell::new(Some(f)),
             ..Default::default()
-        })
+        }))
     };
     let initial_node = match registry.insert(initial_state, g, constructor) {
         Some((node, _)) => node,
@@ -57,7 +57,7 @@ where
             continue;
         }
         expanded += 1;
-        let f = node.f;
+        let f = node.f.borrow().unwrap();
         if f > f_max {
             f_max = f;
             println!("f = {}, expanded: {}", f, expanded);
@@ -73,23 +73,38 @@ where
             }
             let state = transition.apply(node.state(), &model.table_registry);
             if model.check_constraints(&state) {
-                if let Some(h) = h_evaluator.eval(&state, model) {
-                    let f = f_evaluator(g, h, &state, model);
-                    if g_bound.is_some() && f >= g_bound.unwrap() {
-                        continue;
-                    }
-                    let constructor = |state: StateInRegistry, g: T| {
-                        Rc::new(BFSNode {
-                            state,
-                            g,
-                            h,
-                            f,
-                            parent: Some(node.clone()),
-                            operator: Some(transition),
-                            closed: RefCell::new(false),
-                        })
+                let constructor = |state: StateInRegistry, g: T, other: Option<&Rc<BFSNode<T>>>| {
+                    // use a cached h-value
+                    let h = if let Some(other) = other {
+                        match *other.h.borrow() {
+                            None => return None,
+                            h => h,
+                        }
+                    } else {
+                        None
                     };
-                    if let Some((successor, _)) = registry.insert(state, g, constructor) {
+                    Some(Rc::new(BFSNode {
+                        state,
+                        g,
+                        h: RefCell::new(h),
+                        f: RefCell::new(None),
+                        parent: Some(node.clone()),
+                        operator: Some(transition),
+                        closed: RefCell::new(false),
+                    }))
+                };
+                if let Some((successor, _)) = registry.insert(state, g, constructor) {
+                    let h = match *successor.h.borrow() {
+                        None => h_evaluator.eval(successor.state(), model),
+                        h => h,
+                    };
+                    if let Some(h) = h {
+                        let f = f_evaluator(g, h, successor.state(), model);
+                        if g_bound.is_some() && f >= g_bound.unwrap() {
+                            continue;
+                        }
+                        *successor.h.borrow_mut() = Some(h);
+                        *successor.f.borrow_mut() = Some(f);
                         open.push(Reverse(successor));
                     }
                 }
