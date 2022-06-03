@@ -74,7 +74,7 @@ fn main() {
         process::exit(1);
     });
     let problem = yaml_rust::YamlLoader::load_from_str(&problem).unwrap_or_else(|e| {
-        eprintln!("Coundn't read a problem file: {:?}", e);
+        eprintln!("Couldn't read a problem file: {:?}", e);
         process::exit(1);
     });
     assert_eq!(problem.len(), 1);
@@ -84,14 +84,14 @@ fn main() {
         process::exit(1);
     });
     let config = yaml_rust::YamlLoader::load_from_str(&config).unwrap_or_else(|e| {
-        eprintln!("Coundn't read a config file: {:?}", e);
+        eprintln!("Cou;dn't read a config file: {:?}", e);
         process::exit(1);
     });
     assert_eq!(config.len(), 1);
     let config = &config[0];
     let model =
         didp_parser::CostWrappedModel::load_from_yaml(domain, problem).unwrap_or_else(|e| {
-            eprintln!("Coundn't load a model: {:?}", e);
+            eprintln!("Couldn't load a model: {:?}", e);
             process::exit(1);
         });
     match model {
