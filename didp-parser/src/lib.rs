@@ -104,17 +104,9 @@ impl<T: variable::Numeric + parse_expression_from_yaml::ParesNumericExpressionFr
         <T as str::FromStr>::Err: fmt::Debug,
     {
         let domain = yaml_util::get_map(domain)?;
-        let domain_name = yaml_util::get_string_by_key(domain, "domain")?;
+        let domain_name = yaml_util::get_string_by_key_or_default(domain, "domain", "")?;
         let problem = yaml_util::get_map(problem)?;
-        let domain_name2 = yaml_util::get_string_by_key(problem, "domain")?;
-        if domain_name != domain_name2 {
-            return Err(yaml_util::YamlContentErr::new(format!(
-                "domain mismatch: expected `{}`, but is `{}`",
-                domain_name, domain_name2
-            ))
-            .into());
-        }
-        let problem_name = yaml_util::get_string_by_key(problem, "problem")?;
+        let problem_name = yaml_util::get_string_by_key_or_default(problem, "problem", "")?;
 
         let variables = yaml_util::get_yaml_by_key(domain, "state_variables")?;
         let state_metadata = match (

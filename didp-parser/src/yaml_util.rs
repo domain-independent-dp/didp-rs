@@ -200,6 +200,17 @@ pub fn get_string_by_key(
     }
 }
 
+pub fn get_string_by_key_or_default(
+    map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
+    key: &str,
+    default: &str,
+) -> Result<String, YamlContentErr> {
+    match map.get(&Yaml::String(String::from(key))) {
+        Some(value) => get_string(value),
+        None => Ok(default.to_string()),
+    }
+}
+
 fn parse_string_array(array: &[Yaml]) -> Result<Vec<String>, YamlContentErr> {
     let mut result = Vec::with_capacity(array.len());
     for v in array {
@@ -493,6 +504,29 @@ mod tests {
         map.insert(Yaml::String(String::from("bool")), Yaml::Boolean(true));
         let result = get_string_by_key(&map, "array");
         assert!(result.is_err());
+        let result = get_string_by_key(&map, "bool");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn get_string_by_key_or_default_ok() {
+        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        map.insert(
+            Yaml::String(String::from("string")),
+            Yaml::String(String::from("0")),
+        );
+        let result = get_string_by_key_or_default(&map, "string", "default");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), String::from("0"));
+        let result = get_string_by_key_or_default(&map, "none", "default");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), String::from("default"));
+    }
+
+    #[test]
+    fn get_string_by_key_or_default_err() {
+        let mut map = linked_hash_map::LinkedHashMap::<Yaml, Yaml>::new();
+        map.insert(Yaml::String(String::from("bool")), Yaml::Boolean(true));
         let result = get_string_by_key(&map, "bool");
         assert!(result.is_err());
     }
