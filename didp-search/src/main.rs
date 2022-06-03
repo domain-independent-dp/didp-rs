@@ -8,6 +8,13 @@ use std::process;
 use std::str;
 use std::time::Instant;
 
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 fn solve<T>(model: &didp_parser::Model<T>, config: &yaml_rust::Yaml)
 where
     T: 'static + variable::Numeric + ParseNumericExpression + Ord + fmt::Display,

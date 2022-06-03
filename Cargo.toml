@@ -4,3 +4,7 @@ members = [
     "didp-parser",
     "didp-search",
 ]
+
+[profile.release]
+lto = true
+codegen-units = 1
