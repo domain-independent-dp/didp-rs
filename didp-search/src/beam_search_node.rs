@@ -19,6 +19,7 @@ pub struct BeamSearchNode<T: Numeric, U: Numeric> {
 }
 
 impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for BeamSearchNode<T, U> {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f
     }
@@ -27,28 +28,33 @@ impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for BeamSearchNode<T, U> {
 impl<T: Numeric, U: Numeric + Ord> Eq for BeamSearchNode<T, U> {}
 
 impl<T: Numeric, U: Numeric + Ord> Ord for BeamSearchNode<T, U> {
+    #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
         self.f.cmp(&other.f)
     }
 }
 
 impl<T: Numeric, U: Numeric + Ord> PartialOrd for BeamSearchNode<T, U> {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl<T: Numeric, U: Numeric> StateInformation<T> for Rc<BeamSearchNode<T, U>> {
+    #[inline]
     fn state(&self) -> &StateInRegistry {
         &self.state
     }
 
+    #[inline]
     fn cost(&self) -> T {
         self.cost
     }
 }
 
 impl<T: Numeric, U: Numeric> DPSearchNode<T> for Rc<BeamSearchNode<T, U>> {
+    #[inline]
     fn parent(&self) -> Option<Self> {
         self.parent.as_ref().cloned()
     }

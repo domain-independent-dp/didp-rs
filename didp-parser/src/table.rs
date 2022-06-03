@@ -6,22 +6,26 @@ use rustc_hash::FxHashMap;
 pub struct Table1D<T>(Vec<T>);
 
 impl<T> Table1D<T> {
+    #[inline]
     pub fn new(vector: Vec<T>) -> Table1D<T> {
         Table1D(vector)
     }
 
+    #[inline]
     pub fn get(&self, x: Element) -> &T {
         &self.0[x]
     }
 }
 
 impl<T: Copy> Table1D<T> {
+    #[inline]
     pub fn eval(&self, x: Element) -> T {
         self.0[x]
     }
 }
 
 impl<T: Numeric> Table1D<T> {
+    #[inline]
     pub fn sum<I>(&self, x: I) -> T
     where
         I: Iterator<Item = Element>,
@@ -68,22 +72,26 @@ where
 pub struct Table2D<T>(Vec<Vec<T>>);
 
 impl<T> Table2D<T> {
+    #[inline]
     pub fn new(vector: Vec<Vec<T>>) -> Table2D<T> {
         Table2D(vector)
     }
 
+    #[inline]
     pub fn get(&self, x: Element, y: Element) -> &T {
         &self.0[x][y]
     }
 }
 
 impl<T: Copy> Table2D<T> {
+    #[inline]
     pub fn eval(&self, x: Element, y: Element) -> T {
         self.0[x][y]
     }
 }
 
 impl<T: Numeric> Table2D<T> {
+    #[inline]
     pub fn sum<I, J>(&self, x: I, y: J) -> T
     where
         I: Iterator<Item = Element>,
@@ -92,6 +100,7 @@ impl<T: Numeric> Table2D<T> {
         x.map(|x| self.sum_y(x, y.clone())).sum()
     }
 
+    #[inline]
     pub fn sum_x<I>(&self, x: I, y: Element) -> T
     where
         I: Iterator<Item = Element>,
@@ -99,6 +108,7 @@ impl<T: Numeric> Table2D<T> {
         x.map(|x| self.eval(x, y)).sum()
     }
 
+    #[inline]
     pub fn sum_y<I>(&self, x: Element, y: I) -> T
     where
         I: Iterator<Item = Element>,
@@ -147,22 +157,26 @@ where
 pub struct Table3D<T>(Vec<Vec<Vec<T>>>);
 
 impl<T> Table3D<T> {
+    #[inline]
     pub fn new(vector: Vec<Vec<Vec<T>>>) -> Table3D<T> {
         Table3D(vector)
     }
 
+    #[inline]
     pub fn get(&self, x: Element, y: Element, z: Element) -> &T {
         &self.0[x][y][z]
     }
 }
 
 impl<T: Copy> Table3D<T> {
+    #[inline]
     pub fn eval(&self, x: Element, y: Element, z: Element) -> T {
         self.0[x][y][z]
     }
 }
 
 impl<T: Numeric> Table3D<T> {
+    #[inline]
     pub fn sum<I, J, K>(&self, x: I, y: J, z: K) -> T
     where
         I: Iterator<Item = Element>,
@@ -172,6 +186,7 @@ impl<T: Numeric> Table3D<T> {
         x.map(|x| self.sum_yz(x, y.clone(), z.clone())).sum()
     }
 
+    #[inline]
     pub fn sum_x<I>(&self, x: I, y: Element, z: Element) -> T
     where
         I: Iterator<Item = Element>,
@@ -179,6 +194,7 @@ impl<T: Numeric> Table3D<T> {
         x.map(|x| self.eval(x, y, z)).sum()
     }
 
+    #[inline]
     pub fn sum_y<I>(&self, x: Element, y: I, z: Element) -> T
     where
         I: Iterator<Item = Element>,
@@ -186,6 +202,7 @@ impl<T: Numeric> Table3D<T> {
         y.map(|y| self.eval(x, y, z)).sum()
     }
 
+    #[inline]
     pub fn sum_z<I>(&self, x: Element, y: Element, z: I) -> T
     where
         I: Iterator<Item = Element>,
@@ -193,6 +210,7 @@ impl<T: Numeric> Table3D<T> {
         z.map(|z| self.eval(x, y, z)).sum()
     }
 
+    #[inline]
     pub fn sum_xy<I, J>(&self, x: I, y: J, z: Element) -> T
     where
         I: Iterator<Item = Element>,
@@ -201,6 +219,7 @@ impl<T: Numeric> Table3D<T> {
         x.map(|x| self.sum_y(x, y.clone(), z)).sum()
     }
 
+    #[inline]
     pub fn sum_xz<I, J>(&self, x: I, y: Element, z: J) -> T
     where
         I: Iterator<Item = Element>,
@@ -209,6 +228,7 @@ impl<T: Numeric> Table3D<T> {
         x.map(|x| self.sum_z(x, y, z.clone())).sum()
     }
 
+    #[inline]
     pub fn sum_yz<I, J>(&self, x: Element, y: I, z: J) -> T
     where
         I: Iterator<Item = Element>,
@@ -265,6 +285,7 @@ pub struct Table<T> {
 }
 
 impl<T> Table<T> {
+    #[inline]
     pub fn new(map: FxHashMap<Vec<Element>, T>, default: T) -> Table<T> {
         Table { map, default }
     }

@@ -1,6 +1,7 @@
 use crate::variable::{Element, Set};
 use std::iter;
 
+#[inline]
 pub fn expand_vector_with_set(vector: Vec<Vec<Element>>, set: &Set) -> Vec<Vec<Element>> {
     vector
         .into_iter()
@@ -16,6 +17,7 @@ pub fn expand_vector_with_set(vector: Vec<Vec<Element>>, set: &Set) -> Vec<Vec<E
         .collect()
 }
 
+#[inline]
 pub fn expand_vector_with_slice(vector: Vec<Vec<Element>>, slice: &[Element]) -> Vec<Vec<Element>> {
     vector
         .into_iter()

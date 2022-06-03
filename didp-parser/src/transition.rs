@@ -46,10 +46,12 @@ impl<T: Numeric> Transition<T> {
             .all(|c| c.is_satisfied(state, registry).unwrap_or(true))
     }
 
+    #[inline]
     pub fn apply<S: DPState>(&self, state: &S, registry: &table_registry::TableRegistry) -> S {
         state.apply_effect(&self.effect, registry)
     }
 
+    #[inline]
     pub fn apply_in_place<S: DPState>(
         &self,
         state: &mut S,
@@ -58,6 +60,7 @@ impl<T: Numeric> Transition<T> {
         state.apply_effect_in_place(&self.effect, registry)
     }
 
+    #[inline]
     pub fn eval_cost<S: DPState>(
         &self,
         cost: T,

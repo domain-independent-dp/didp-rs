@@ -11,10 +11,12 @@ use std::error::Error;
 pub struct BaseCase(Vec<GroundedCondition>);
 
 impl BaseCase {
+    #[inline]
     pub fn new(conditions: Vec<GroundedCondition>) -> BaseCase {
         BaseCase(conditions)
     }
 
+    #[inline]
     pub fn is_satisfied<U: state::DPState>(
         &self,
         state: &U,

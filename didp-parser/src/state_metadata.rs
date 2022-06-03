@@ -6,9 +6,6 @@ use lazy_static::lazy_static;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Ordering;
 
-pub trait DPState {
-
-
 #[derive(Debug, PartialEq, Clone, Eq, Default)]
 pub struct StateMetadata {
     pub object_names: Vec<String>,
@@ -43,58 +40,72 @@ pub struct StateMetadata {
 }
 
 impl StateMetadata {
+    #[inline]
     pub fn number_of_objects(&self) -> usize {
         self.object_names.len()
     }
 
+    #[inline]
     pub fn number_of_set_variables(&self) -> usize {
         self.set_variable_names.len()
     }
 
+    #[inline]
     pub fn number_of_vector_variables(&self) -> usize {
         self.vector_variable_names.len()
     }
 
+    #[inline]
     pub fn number_of_element_variables(&self) -> usize {
         self.element_variable_names.len()
     }
 
+    #[inline]
     pub fn number_of_integer_variables(&self) -> usize {
         self.integer_variable_names.len()
     }
 
+    #[inline]
     pub fn number_of_continuous_variables(&self) -> usize {
         self.continuous_variable_names.len()
     }
 
+    #[inline]
     pub fn number_of_integer_resource_variables(&self) -> usize {
         self.integer_resource_variable_names.len()
     }
 
+    #[inline]
     pub fn number_of_continuous_resource_variables(&self) -> usize {
         self.continuous_resource_variable_names.len()
     }
 
+    #[inline]
     pub fn set_variable_capacity(&self, i: usize) -> usize {
         self.object_numbers[self.set_variable_to_object[i]]
     }
 
+    #[inline]
     pub fn set_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers[self.set_variable_to_object[self.name_to_set_variable[name]]]
     }
 
+    #[inline]
     pub fn vector_variable_capacity(&self, i: usize) -> usize {
         self.object_numbers[self.vector_variable_to_object[i]]
     }
 
+    #[inline]
     pub fn vector_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers[self.vector_variable_to_object[self.name_to_vector_variable[name]]]
     }
 
+    #[inline]
     pub fn element_variable_capacity(&self, i: usize) -> usize {
         self.object_numbers[self.element_variable_to_object[i]]
     }
 
+    #[inline]
     pub fn element_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers[self.element_variable_to_object[self.name_to_element_variable[name]]]
     }

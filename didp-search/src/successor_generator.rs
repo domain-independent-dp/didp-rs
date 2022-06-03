@@ -12,6 +12,7 @@ pub trait MaybeApplicable: fmt::Debug {
 }
 
 impl<T: variable::Numeric> MaybeApplicable for Transition<T> {
+    #[inline]
     fn is_applicable<U: didp_parser::DPState>(
         &self,
         state: &U,
@@ -88,6 +89,7 @@ impl<'a, T: MaybeApplicable> SuccessorGenerator<'a, T> {
         result
     }
 
+    #[inline]
     pub fn applicable_transitions<'b, U: didp_parser::DPState>(
         &'a self,
         state: &'b U,

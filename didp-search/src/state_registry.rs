@@ -140,6 +140,7 @@ impl didp_parser::DPState for StateInRegistry {
         }
     }
 
+    #[inline]
     fn apply_effect_in_place(
         &mut self,
         effect: &didp_parser::Effect,
@@ -163,6 +164,7 @@ pub struct StateRegistry<'a, T: Numeric, I: StateInformation<T>> {
 }
 
 impl<'a, T: Numeric, I: StateInformation<T>> StateRegistry<'a, T, I> {
+    #[inline]
     pub fn new(model: &'a didp_parser::Model<T>) -> StateRegistry<T, I> {
         StateRegistry {
             registry: FxHashMap::default(),
@@ -172,10 +174,12 @@ impl<'a, T: Numeric, I: StateInformation<T>> StateRegistry<'a, T, I> {
         }
     }
 
+    #[inline]
     pub fn reserve(&mut self, capacity: usize) {
         self.registry.reserve(capacity);
     }
 
+    #[inline]
     pub fn clear(&mut self) {
         self.registry.clear();
     }

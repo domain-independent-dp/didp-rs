@@ -17,6 +17,7 @@ pub struct BFSNode<T: Numeric> {
 }
 
 impl<T: Numeric + PartialOrd> PartialEq for BFSNode<T> {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f && self.h == other.h
     }
@@ -34,26 +35,31 @@ impl<T: Numeric + Ord> Ord for BFSNode<T> {
 }
 
 impl<T: Numeric + Ord> PartialOrd for BFSNode<T> {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl<T: Numeric> StateInformation<T> for Rc<BFSNode<T>> {
+    #[inline]
     fn state(&self) -> &StateInRegistry {
         &self.state
     }
 
+    #[inline]
     fn cost(&self) -> T {
         self.g
     }
 }
 
 impl<T: Numeric> DPSearchNode<T> for Rc<BFSNode<T>> {
+    #[inline]
     fn parent(&self) -> Option<Self> {
         self.parent.as_ref().cloned()
     }
 
+    #[inline]
     fn operator(&self) -> Option<Rc<didp_parser::Transition<T>>> {
         self.operator.as_ref().cloned()
     }

@@ -15,6 +15,7 @@ pub struct TransitionWithCustomCost<T: Numeric, U: Numeric> {
 }
 
 impl<T: Numeric, U: Numeric> MaybeApplicable for TransitionWithCustomCost<T, U> {
+    #[inline]
     fn is_applicable<S: didp_parser::DPState>(
         &self,
         state: &S,
