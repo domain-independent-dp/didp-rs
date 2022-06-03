@@ -1,15 +1,24 @@
-use crate::hashable_state;
 use crate::solver;
+use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
 use didp_parser::variable;
 use didp_parser::Transition;
-use rustc_hash::FxHashMap;
 use std::fmt;
 
-#[derive(Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct DFSNode<T: variable::Numeric> {
-    pub state: hashable_state::HashableState,
+    pub state: StateInRegistry,
     pub cost: T,
+}
+
+impl<T: variable::Numeric> StateInformation<T> for DFSNode<T> {
+    fn cost(&self) -> T {
+        self.cost
+    }
+
+    fn state(&self) -> &StateInRegistry {
+        &self.state
+    }
 }
 
 pub fn forward_iterative_exist_dfs<T>(
@@ -23,13 +32,13 @@ where
     T: variable::Numeric + fmt::Display,
 {
     let mut expanded = 0;
-    let mut prob = FxHashMap::default();
+    let mut prob = StateRegistry::new(model);
     if let Some(capacity) = capacity {
         prob.reserve(capacity);
     };
     let mut incumbent = Vec::new();
     let node = DFSNode {
-        state: hashable_state::HashableState::new(&model.target),
+        state: StateInRegistry::new(&model.target),
         cost: T::zero(),
     };
     while let Some((new_cost, transitions)) = exist_dfs(
@@ -74,7 +83,7 @@ pub fn exist_dfs<T: variable::Numeric>(
     node: DFSNode<T>,
     model: &didp_parser::Model<T>,
     generator: &SuccessorGenerator<Transition<T>>,
-    prob: &mut FxHashMap<hashable_state::HashableState, T>,
+    prob: &mut StateRegistry<T, DFSNode<T>>,
     primal_bound: Option<T>,
     maximize: bool,
     expanded: &mut u32,
@@ -88,12 +97,8 @@ pub fn exist_dfs<T: variable::Numeric>(
         }
         return Some((cost, Vec::new()));
     }
-    if let Some(other_cost) = prob.get(&state) {
-        if (maximize && cost <= *other_cost) || (!maximize && cost >= *other_cost) {
-            return None;
-        } else {
-            prob.remove(&state);
-        }
+    if prob.get(&state, cost).is_some() {
+        return None;
     }
     for transition in generator.applicable_transitions(&state) {
         let cost = transition.eval_cost(cost, &state, &model.table_registry);
@@ -121,6 +126,8 @@ pub fn exist_dfs<T: variable::Numeric>(
             }
         }
     }
-    prob.insert(state, cost);
+    let constructor =
+        |state: StateInRegistry, cost: T, _: Option<&DFSNode<T>>| Some(DFSNode { state, cost });
+    prob.insert(state, cost, constructor);
     None
 }
