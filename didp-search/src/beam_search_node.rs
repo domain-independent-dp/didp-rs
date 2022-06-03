@@ -134,12 +134,12 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U> {
                     if let Some(node) = self.queue.pop() {
                         *node.in_beam.borrow_mut() = false;
                         self.size -= 1;
+                        let mut peek = self.queue.peek();
+                        while peek.map_or(false, |node| !*node.in_beam.borrow()) {
+                            self.queue.pop();
+                            peek = self.queue.peek();
+                        }
                     }
-                }
-                let mut peek = self.queue.peek();
-                while peek.map_or(false, |node| !*node.in_beam.borrow()) {
-                    self.queue.pop();
-                    peek = self.queue.peek();
                 }
                 self.queue.push(node);
                 self.size += 1;
