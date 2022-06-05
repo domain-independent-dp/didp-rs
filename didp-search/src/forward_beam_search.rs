@@ -63,7 +63,7 @@ where
                 }
             }
             _ => {
-                println!("Failed to find a solution;")
+                println!("Failed to find a solution.")
             }
         }
         if time_out {

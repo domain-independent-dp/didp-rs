@@ -90,7 +90,7 @@ fn main() {
         process::exit(1);
     });
     let config = yaml_rust::YamlLoader::load_from_str(&config).unwrap_or_else(|e| {
-        eprintln!("Cou;dn't read a config file: {:?}", e);
+        eprintln!("Couldn't read a config file: {:?}", e);
         process::exit(1);
     });
     assert_eq!(config.len(), 1);
