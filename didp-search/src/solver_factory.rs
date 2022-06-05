@@ -86,8 +86,14 @@ impl<T: variable::Numeric + fmt::Display> solver::Solver<T> for IterativeSearch<
                 solver.set_primal_bound(bound);
             }
             if let Some(time_keeper) = time_keeper.as_ref() {
-                let time_limit = time_keeper.remaining_time_limit();
-                solver.set_time_limit(time_limit.as_secs());
+                let time_limit = time_keeper.remaining_time_limit().as_secs();
+                if let Some(current_limit) = solver.get_time_limit() {
+                    if time_limit < current_limit {
+                        solver.set_time_limit(time_limit);
+                    }
+                } else {
+                    solver.set_time_limit(time_limit);
+                }
             }
             let result = solver.solve(model)?;
             if let Some(bound) = result.cost {
@@ -109,6 +115,16 @@ impl<T: variable::Numeric + fmt::Display> solver::Solver<T> for IterativeSearch<
     #[inline]
     fn set_time_limit(&mut self, time_limit: u64) {
         self.parameters.time_limit = Some(time_limit)
+    }
+
+    #[inline]
+    fn get_primal_bound(&self) -> Option<T> {
+        self.parameters.primal_bound
+    }
+
+    #[inline]
+    fn get_time_limit(&self) -> Option<u64> {
+        self.parameters.time_limit
     }
 }
 

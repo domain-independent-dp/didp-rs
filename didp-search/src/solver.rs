@@ -108,6 +108,10 @@ pub trait Solver<T: variable::Numeric> {
     fn set_primal_bound(&mut self, _: T) {}
 
     fn set_time_limit(&mut self, _: u64);
+
+    fn get_primal_bound(&self) -> Option<T>;
+
+    fn get_time_limit(&self) -> Option<u64>;
 }
 
 pub fn compute_solution_cost<T: variable::Numeric, U: didp_parser::DPState>(

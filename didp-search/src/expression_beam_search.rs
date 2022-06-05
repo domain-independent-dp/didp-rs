@@ -77,6 +77,16 @@ where
     fn set_time_limit(&mut self, time_limit: u64) {
         self.parameters.time_limit = Some(time_limit)
     }
+
+    #[inline]
+    fn get_primal_bound(&self) -> Option<T> {
+        self.parameters.primal_bound
+    }
+
+    #[inline]
+    fn get_time_limit(&self) -> Option<u64> {
+        self.parameters.time_limit
+    }
 }
 
 impl<T: variable::Numeric + fmt::Display> ExpressionBeamSearch<T> {
