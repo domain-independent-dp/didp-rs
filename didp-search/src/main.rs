@@ -38,14 +38,14 @@ where
         if solution.is_optimal {
             println!("optimal cost: {}", cost);
         } else if let Some(bound) = solution.best_bound {
-            println!("bound: {}", bound);
+            println!("best bound: {}", bound);
         }
     } else if solution.is_infeasible {
         println!("The problem is infeasible.");
     } else {
         println!("Could not find a solution.");
         if let Some(bound) = solution.best_bound {
-            println!("bound: {}", bound);
+            println!("best bound: {}", bound);
         }
     }
 }
