@@ -18,6 +18,7 @@ pub fn iterative_forward_beam_search<'a, T, U, H, F>(
     f_evaluator: F,
     beam_sizes: &[usize],
     maximize: bool,
+    parameters: solver::SolverParameters<T>,
 ) -> solver::Solution<T>
 where
     T: variable::Numeric + fmt::Display,
@@ -26,43 +27,57 @@ where
     H: evaluator::Evaluator<U>,
     F: Fn(U, U, &StateInRegistry, &didp_parser::Model<T>) -> U,
 {
+    let time_keeper = parameters.time_limit.map(solver::TimeKeeper::new);
     let mut incumbent = Vec::new();
     let mut cost = None;
     for beam_size in beam_sizes {
-        let result = forward_beam_search(
+        let (result, time_out) = forward_beam_search(
             model,
             &generator,
             &h_evaluator,
             &f_evaluator,
             *beam_size,
             maximize,
+            &time_keeper,
         );
-        if let Some((new_cost, new_incumbent)) = result {
-            if let Some(current_cost) = cost {
-                match model.reduce_function {
-                    didp_parser::ReduceFunction::Max if new_cost > current_cost => {
-                        incumbent = new_incumbent;
-                        cost = Some(new_cost);
-                        println!("New primal bound: {}", new_cost);
+        match result {
+            Some((new_cost, new_incumbent)) => {
+                if let Some(current_cost) = cost {
+                    match model.reduce_function {
+                        didp_parser::ReduceFunction::Max if new_cost > current_cost => {
+                            incumbent = new_incumbent;
+                            cost = Some(new_cost);
+                            println!("New primal bound: {}", new_cost);
+                        }
+                        didp_parser::ReduceFunction::Min if new_cost < current_cost => {
+                            incumbent = new_incumbent;
+                            cost = Some(new_cost);
+                            println!("New primal bound: {}", new_cost);
+                        }
+                        _ => {}
                     }
-                    didp_parser::ReduceFunction::Min if new_cost < current_cost => {
-                        incumbent = new_incumbent;
-                        cost = Some(new_cost);
-                        println!("New primal bound: {}", new_cost);
-                    }
-                    _ => {}
+                } else {
+                    incumbent = new_incumbent;
+                    cost = Some(new_cost);
+                    println!("New primal bound: {}", new_cost);
                 }
-            } else {
-                incumbent = new_incumbent;
-                cost = Some(new_cost);
-                println!("New primal bound: {}", new_cost);
             }
-        } else {
-            println!("Failed to find a solution");
+            _ => {
+                println!("Failed to find a solution;")
+            }
+        }
+        if time_out {
+            break;
         }
     }
-    cost.map(|cost| (cost, incumbent))
+    solver::Solution {
+        cost,
+        transitions: incumbent,
+        ..Default::default()
+    }
 }
+
+type BeamSearchResult<T> = (Option<(T, Vec<Rc<didp_parser::Transition<T>>>)>, bool);
 
 pub fn forward_beam_search<'a, T, U, H, F>(
     model: &'a didp_parser::Model<T>,
@@ -71,7 +86,8 @@ pub fn forward_beam_search<'a, T, U, H, F>(
     f_evaluator: &F,
     beam_size: usize,
     maximize: bool,
-) -> solver::Solution<T>
+    time_keeper: &Option<solver::TimeKeeper>,
+) -> BeamSearchResult<T>
 where
     T: variable::Numeric,
     U: variable::Numeric + Ord,
@@ -86,7 +102,11 @@ where
     let cost = T::zero();
     let g = U::zero();
     let initial_state = StateInRegistry::new(&model.target);
-    let h = h_evaluator.eval(&initial_state, model)?;
+    let h = h_evaluator.eval(&initial_state, model);
+    if h.is_none() {
+        return (None, false);
+    }
+    let h = h.unwrap();
     let f = f_evaluator(g, h, &initial_state, model);
     let f = if maximize { -f } else { f };
     let args = BeamSearchNodeArgs {
@@ -121,6 +141,15 @@ where
                 }
                 continue;
             }
+            if time_keeper
+                .as_ref()
+                .map_or(false, |time_keeper| time_keeper.check_time_limit())
+            {
+                return (
+                    incumbent.map(|node| (node.cost(), trace_transitions(node))),
+                    true,
+                );
+            }
             for transition in generator.applicable_transitions(node.state()) {
                 let state = transition
                     .transition
@@ -152,10 +181,10 @@ where
         }
         println!("Expanded: {}", expanded);
         if let Some(node) = incumbent {
-            return Some((node.cost, trace_transitions(node)));
+            return (Some((node.cost(), trace_transitions(node))), false);
         }
         mem::swap(&mut current_beam, &mut next_beam);
         registry.clear();
     }
-    None
+    (None, false)
 }

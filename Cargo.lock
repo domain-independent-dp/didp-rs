@@ -43,6 +43,7 @@ version = "0.1.0"
 dependencies = [
  "didp-parser",
  "fixedbitset",
+ "linked-hash-map",
  "ordered-float",
  "rustc-hash",
  "tikv-jemallocator",

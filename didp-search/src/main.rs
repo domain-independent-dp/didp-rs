@@ -29,22 +29,28 @@ where
         eprintln!("Error: {:?}", e);
         process::exit(1);
     });
-    match solution {
-        Some((cost, transitions)) => {
-            println!("transitions:");
-            for transition in transitions {
-                println!("{}", transition.get_full_name());
-            }
-            println!("cost: {}", cost);
+    if let Some(cost) = solution.cost {
+        println!("transitions:");
+        for transition in solution.transitions {
+            println!("{}", transition.get_full_name());
         }
-        None => {
-            println!("no solution");
+        println!("cost: {}", cost);
+        if solution.is_optimal {
+            println!("optimal cost: {}", cost);
+        } else if let Some(bound) = solution.best_bound {
+            println!("bound: {}", bound);
+        }
+    } else if solution.is_infeasible {
+        println!("The problem is infeasible.");
+    } else {
+        println!("Could not find a solution.");
+        if let Some(bound) = solution.best_bound {
+            println!("bound: {}", bound);
         }
     }
 }
 
 fn main() {
-    let start = Instant::now();
     let mut args = env::args();
     args.next();
     let domain = args.next().unwrap_or_else(|| {
@@ -94,10 +100,11 @@ fn main() {
             eprintln!("Couldn't load a model: {:?}", e);
             process::exit(1);
         });
+    let start = Instant::now();
     match model {
         didp_parser::CostWrappedModel::Integer(model) => solve(&model, config),
         didp_parser::CostWrappedModel::OrderedContinuous(model) => solve(&model, config),
     }
     let stop = Instant::now();
-    println!("Time: {:?}", stop.duration_since(start));
+    println!("search time: {:?}", stop.duration_since(start));
 }

@@ -16,7 +16,7 @@ pub fn forward_bfs<T, H, F>(
     generator: SuccessorGenerator<didp_parser::Transition<T>>,
     h_evaluator: H,
     f_evaluator: F,
-    g_bound: Option<T>,
+    parameters: solver::SolverParameters<T>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
@@ -24,6 +24,8 @@ where
     H: evaluator::Evaluator<T>,
     F: Fn(T, T, &StateInRegistry, &didp_parser::Model<T>) -> T,
 {
+    let time_keeper = parameters.time_limit.map(solver::TimeKeeper::new);
+    let g_bound = parameters.primal_bound;
     let mut open = collections::BinaryHeap::new();
     let mut registry = StateRegistry::new(model);
     if let Some(capacity) = registry_capacity {
@@ -32,7 +34,14 @@ where
 
     let g = T::zero();
     let initial_state = StateInRegistry::new(&model.target);
-    let h = h_evaluator.eval(&initial_state, model)?;
+    let h = h_evaluator.eval(&initial_state, model);
+    if h.is_none() {
+        return solver::Solution {
+            is_infeasible: true,
+            ..Default::default()
+        };
+    }
+    let h = h.unwrap();
     println!("Initial h = {}", h);
     let f = f_evaluator(g, h, &initial_state, model);
     let constructor = |state: StateInRegistry, g: T, _: Option<&Rc<BFSNode<T>>>| {
@@ -44,10 +53,7 @@ where
             ..Default::default()
         }))
     };
-    let initial_node = match registry.insert(initial_state, g, constructor) {
-        Some((node, _)) => node,
-        None => return None,
-    };
+    let (initial_node, _) = registry.insert(initial_state, g, constructor).unwrap();
     open.push(Reverse(initial_node));
     let mut expanded = 0;
     let mut f_max = f;
@@ -65,7 +71,21 @@ where
         }
         if model.is_goal(node.state()) {
             println!("Expanded: {}", expanded);
-            return Some((node.g, trace_transitions(node)));
+            return solver::Solution {
+                cost: Some(node.g),
+                is_optimal: true,
+                transitions: trace_transitions(node),
+                ..Default::default()
+            };
+        }
+        if time_keeper
+            .as_ref()
+            .map_or(false, |time_keeper| time_keeper.check_time_limit())
+        {
+            return solver::Solution {
+                best_bound: Some(f_max),
+                ..Default::default()
+            };
         }
         for transition in generator.applicable_transitions(node.state()) {
             let g = transition.eval_cost(node.g, node.state(), &model.table_registry);
@@ -118,5 +138,8 @@ where
         }
     }
     println!("Expanded: {}", expanded);
-    None
+    solver::Solution {
+        is_infeasible: true,
+        ..Default::default()
+    }
 }

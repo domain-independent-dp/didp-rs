@@ -14,7 +14,7 @@ pub fn dfbb<T, H, F>(
     generator: SuccessorGenerator<didp_parser::Transition<T>>,
     h_evaluator: H,
     f_evaluator: F,
-    mut primal_bound: Option<T>,
+    parameters: solver::SolverParameters<T>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
@@ -22,6 +22,8 @@ where
     H: evaluator::Evaluator<T>,
     F: Fn(T, T, &StateInRegistry, &didp_parser::Model<T>) -> T,
 {
+    let time_keeper = parameters.time_limit.map(solver::TimeKeeper::new);
+    let mut primal_bound = parameters.primal_bound;
     let mut open = Vec::new();
     let mut registry = StateRegistry::new(model);
     if let Some(capacity) = registry_capacity {
@@ -37,13 +39,11 @@ where
             ..Default::default()
         }))
     };
-    let initial_node = match registry.insert(initial_state, cost, constructor) {
-        Some((node, _)) => node,
-        None => return None,
-    };
+    let (initial_node, _) = registry.insert(initial_state, cost, constructor).unwrap();
     open.push(initial_node);
     let mut expanded = 0;
     let mut incumbent = None;
+    let mut best_bound = None;
 
     while let Some(node) = open.pop() {
         if *node.closed.borrow() {
@@ -71,10 +71,29 @@ where
                     || (model.reduce_function == ReduceFunction::Max && f <= bound)
                 {
                     continue;
+                } else if best_bound.map_or(false, |dual_bound| {
+                    (model.reduce_function == ReduceFunction::Min && f > dual_bound)
+                        || (model.reduce_function == ReduceFunction::Max && f < dual_bound)
+                }) {
+                    best_bound = Some(f);
                 }
             } else {
                 continue;
             }
+        }
+        if time_keeper
+            .as_ref()
+            .map_or(false, |time_keeper| time_keeper.check_time_limit())
+        {
+            println!("Expanded: {}", expanded);
+            return incumbent
+                .clone()
+                .map_or_else(solver::Solution::default, |node| solver::Solution {
+                    cost: Some(node.cost()),
+                    best_bound,
+                    transitions: incumbent.map_or_else(Vec::new, |node| trace_transitions(node)),
+                    ..Default::default()
+                });
         }
         for transition in generator.applicable_transitions(node.state()) {
             let cost = transition.eval_cost(node.cost(), node.state(), &model.table_registry);
@@ -102,5 +121,16 @@ where
         }
     }
     println!("Expanded: {}", expanded);
-    incumbent.map(|node| (node.cost(), trace_transitions(node)))
+    incumbent.map_or_else(
+        || solver::Solution {
+            is_infeasible: true,
+            ..Default::default()
+        },
+        |node| solver::Solution {
+            cost: Some(node.cost()),
+            is_optimal: true,
+            transitions: trace_transitions(node),
+            ..Default::default()
+        },
+    )
 }

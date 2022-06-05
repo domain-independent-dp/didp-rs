@@ -70,7 +70,7 @@ impl SolverFactory {
 
 pub struct IterativeSearch<T: variable::Numeric> {
     solvers: Vec<Box<dyn solver::Solver<T>>>,
-    primal_bound: Option<T>,
+    parameters: solver::SolverParameters<T>,
 }
 
 impl<T: variable::Numeric + fmt::Display> solver::Solver<T> for IterativeSearch<T> {
@@ -78,20 +78,37 @@ impl<T: variable::Numeric + fmt::Display> solver::Solver<T> for IterativeSearch<
         &mut self,
         model: &didp_parser::Model<T>,
     ) -> Result<solver::Solution<T>, Box<dyn Error>> {
-        let mut cost = self.primal_bound;
-        let mut transitions = Vec::new();
+        let time_keeper = self.parameters.time_limit.map(solver::TimeKeeper::new);
+        let mut primal_bound = self.parameters.primal_bound;
+        let mut solution = solver::Solution::default();
         for solver in &mut self.solvers {
-            solver.set_primal_bound(cost);
+            if let Some(bound) = primal_bound {
+                solver.set_primal_bound(bound);
+            }
+            if let Some(time_keeper) = time_keeper.as_ref() {
+                let time_limit = time_keeper.remaining_time_limit();
+                solver.set_time_limit(time_limit.as_secs());
+            }
             let result = solver.solve(model)?;
-            if let Some((bound, incumbent)) = result {
+            if let Some(bound) = result.cost {
                 println!("New primal bound: {}", bound);
-                cost = Some(bound);
-                transitions = incumbent;
+                primal_bound = Some(bound);
+                solution = result;
             } else {
                 println!("Failed to find a solution");
             }
         }
-        Ok(cost.map(|cost| (cost, transitions)))
+        Ok(solution)
+    }
+
+    #[inline]
+    fn set_primal_bound(&mut self, primal_bound: T) {
+        self.parameters.primal_bound = Some(primal_bound)
+    }
+
+    #[inline]
+    fn set_time_limit(&mut self, time_limit: u64) {
+        self.parameters.time_limit = Some(time_limit)
     }
 }
 
@@ -113,22 +130,7 @@ where
                 .into())
             }
         };
-        let primal_bound = match map.get(&yaml_rust::Yaml::from_str("primal_bound")) {
-            Some(yaml_rust::Yaml::Integer(value)) => {
-                Some(T::from_integer(*value as variable::Integer))
-            }
-            Some(yaml_rust::Yaml::Real(value)) => Some(value.parse().map_err(|e| {
-                solver::ConfigErr::new(format!("could not parse {} as a number: {:?}", value, e))
-            })?),
-            None => None,
-            value => {
-                return Err(solver::ConfigErr::new(format!(
-                    "expected Integer, but found `{:?}`",
-                    value
-                ))
-                .into())
-            }
-        };
+        let parameters = solver::SolverParameters::parse_from_map(map)?;
         let solver_configs = match map.get(&yaml_rust::Yaml::from_str("solvers")) {
             Some(yaml_rust::Yaml::Array(array)) => array,
             value => {
@@ -146,7 +148,7 @@ where
         }
         Ok(IterativeSearch {
             solvers,
-            primal_bound,
+            parameters,
         })
     }
 }

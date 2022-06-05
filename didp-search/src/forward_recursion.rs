@@ -10,11 +10,12 @@ use std::rc::Rc;
 use std::str;
 
 #[derive(Default)]
-pub struct ForwardRecursion {
+pub struct ForwardRecursion<T> {
     memo_capacity: Option<usize>,
+    parameters: solver::SolverParameters<T>,
 }
 
-impl<T: variable::Numeric> solver::Solver<T> for ForwardRecursion
+impl<T: variable::Numeric> solver::Solver<T> for ForwardRecursion<T>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
@@ -22,6 +23,7 @@ where
         &mut self,
         model: &didp_parser::Model<T>,
     ) -> Result<solver::Solution<T>, Box<dyn Error>> {
+        let time_keeper = self.parameters.time_limit.map(solver::TimeKeeper::new);
         let generator = successor_generator::SuccessorGenerator::<Transition<T>>::new(model, false);
         let mut memo = FxHashMap::default();
         if let Some(capacity) = self.memo_capacity {
@@ -29,7 +31,14 @@ where
         }
         let mut expanded = 0;
         let state = hashable_state::HashableState::new(&model.target);
-        let cost = forward_recursion(state, model, &generator, &mut memo, &mut expanded);
+        let cost = forward_recursion(
+            state,
+            model,
+            &generator,
+            &mut memo,
+            &time_keeper,
+            &mut expanded,
+        );
         let mut transitions = Vec::new();
         match model.reduce_function {
             didp_parser::ReduceFunction::Max | didp_parser::ReduceFunction::Min
@@ -45,12 +54,33 @@ where
             _ => {}
         }
         println!("Expanded: {}", expanded);
-        Ok(cost.map(|cost| (cost, transitions)))
+        Ok(solver::Solution {
+            cost,
+            transitions,
+            is_optimal: cost.is_some()
+                && (model.reduce_function == didp_parser::ReduceFunction::Max
+                    || model.reduce_function == didp_parser::ReduceFunction::Min),
+            is_infeasible: cost.is_none(),
+            ..Default::default()
+        })
+    }
+
+    #[inline]
+    fn set_primal_bound(&mut self, primal_bound: T) {
+        self.parameters.primal_bound = Some(primal_bound)
+    }
+
+    #[inline]
+    fn set_time_limit(&mut self, time_limit: u64) {
+        self.parameters.time_limit = Some(time_limit)
     }
 }
 
-impl ForwardRecursion {
-    pub fn new(config: &yaml_rust::Yaml) -> Result<ForwardRecursion, solver::ConfigErr> {
+impl<T: variable::Numeric> ForwardRecursion<T> {
+    pub fn new(config: &yaml_rust::Yaml) -> Result<ForwardRecursion<T>, solver::ConfigErr>
+    where
+        <T as str::FromStr>::Err: fmt::Debug,
+    {
         let map = match config {
             yaml_rust::Yaml::Hash(map) => map,
             yaml_rust::Yaml::Null => return Ok(ForwardRecursion::default()),
@@ -71,7 +101,11 @@ impl ForwardRecursion {
                 )))
             }
         };
-        Ok(ForwardRecursion { memo_capacity })
+        let parameters = solver::SolverParameters::parse_from_map(map)?;
+        Ok(ForwardRecursion {
+            memo_capacity,
+            parameters,
+        })
     }
 }
 
@@ -83,6 +117,7 @@ pub fn forward_recursion<T: variable::Numeric>(
     model: &didp_parser::Model<T>,
     generator: &successor_generator::SuccessorGenerator<Transition<T>>,
     memo: &mut StateMemo<T>,
+    time_keeper: &Option<solver::TimeKeeper>,
     expanded: &mut i32,
 ) -> Option<T> {
     *expanded += 1;
@@ -92,12 +127,19 @@ pub fn forward_recursion<T: variable::Numeric>(
     if let Some((cost, _)) = memo.get(&state) {
         return *cost;
     }
+    if time_keeper
+        .as_ref()
+        .map_or(false, |time_keeper| time_keeper.check_time_limit())
+    {
+        return None;
+    }
     let mut cost = None;
     let mut best_transition = None;
     for transition in generator.applicable_transitions(&state) {
         let successor = transition.apply(&state, &model.table_registry);
         if model.check_constraints(&successor) {
-            let successor_cost = forward_recursion(successor, model, generator, memo, expanded);
+            let successor_cost =
+                forward_recursion(successor, model, generator, memo, time_keeper, expanded);
             if let Some(successor_cost) = successor_cost {
                 let current_cost =
                     transition.eval_cost(successor_cost, &state, &model.table_registry);

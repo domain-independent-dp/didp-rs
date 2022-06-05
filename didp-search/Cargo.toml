@@ -10,6 +10,7 @@ edition = "2021"
 ordered-float = "3.0.0"
 fixedbitset = "0.4.1"
 didp-parser = { path = "../didp-parser" }
+linked-hash-map = "0.5.4"
 rustc-hash = "1.1.0"
 yaml-rust = "0.4.5"
 

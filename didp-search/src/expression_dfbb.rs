@@ -15,7 +15,7 @@ use std::str;
 pub struct ExpressionDFBB<T: variable::Numeric> {
     h_expression: Option<String>,
     f_evaluator_type: FEvaluatorType,
-    primal_bound: Option<T>,
+    parameters: solver::SolverParameters<T>,
     registry_capacity: Option<usize>,
 }
 
@@ -24,7 +24,7 @@ impl<T: variable::Numeric> Default for ExpressionDFBB<T> {
         ExpressionDFBB {
             h_expression: None,
             f_evaluator_type: FEvaluatorType::default(),
-            primal_bound: None,
+            parameters: solver::SolverParameters::default(),
             registry_capacity: Some(1000000),
         }
     }
@@ -35,11 +35,6 @@ where
     T: variable::Numeric + ParseNumericExpression + Ord + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    #[inline]
-    fn set_primal_bound(&mut self, primal_bound: Option<T>) {
-        self.primal_bound = primal_bound
-    }
-
     fn solve(
         &mut self,
         model: &didp_parser::Model<T>,
@@ -59,7 +54,7 @@ where
                     generator,
                     h_evaluator,
                     f_evaluator,
-                    self.primal_bound,
+                    self.parameters,
                     self.registry_capacity,
                 )
             }
@@ -71,7 +66,7 @@ where
                     generator,
                     h_evaluator,
                     f_evaluator,
-                    self.primal_bound,
+                    self.parameters,
                     self.registry_capacity,
                 )
             }
@@ -83,7 +78,7 @@ where
                     generator,
                     h_evaluator,
                     f_evaluator,
-                    self.primal_bound,
+                    self.parameters,
                     self.registry_capacity,
                 )
             }
@@ -95,12 +90,22 @@ where
                     generator,
                     h_evaluator,
                     f_evaluator,
-                    self.primal_bound,
+                    self.parameters,
                     self.registry_capacity,
                 )
             }
         };
         Ok(solution)
+    }
+
+    #[inline]
+    fn set_primal_bound(&mut self, primal_bound: T) {
+        self.parameters.primal_bound = Some(primal_bound)
+    }
+
+    #[inline]
+    fn set_time_limit(&mut self, time_limit: u64) {
+        self.parameters.time_limit = Some(time_limit)
     }
 }
 
@@ -154,22 +159,7 @@ impl<T: variable::Numeric> ExpressionDFBB<T> {
                 .into())
             }
         };
-        let primal_bound = match map.get(&yaml_rust::Yaml::from_str("primal_bound")) {
-            Some(yaml_rust::Yaml::Integer(value)) => {
-                Some(T::from_integer(*value as variable::Integer))
-            }
-            Some(yaml_rust::Yaml::Real(value)) => Some(value.parse().map_err(|e| {
-                solver::ConfigErr::new(format!("could not parse {} as a number: {:?}", value, e))
-            })?),
-            None => None,
-            value => {
-                return Err(solver::ConfigErr::new(format!(
-                    "expected Integer, but found `{:?}`",
-                    value
-                ))
-                .into())
-            }
-        };
+        let parameters = solver::SolverParameters::parse_from_map(map)?;
         let registry_capacity = match map.get(&yaml_rust::Yaml::from_str("registry_capacity")) {
             Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
             None => Some(1000000),
@@ -184,7 +174,7 @@ impl<T: variable::Numeric> ExpressionDFBB<T> {
         Ok(ExpressionDFBB {
             h_expression,
             f_evaluator_type,
-            primal_bound,
+            parameters,
             registry_capacity,
         })
     }

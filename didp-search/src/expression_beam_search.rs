@@ -13,15 +13,16 @@ use std::error::Error;
 use std::fmt;
 use std::str;
 
-pub struct ExpressionBeamSearch {
+pub struct ExpressionBeamSearch<T> {
     g_expressions: Option<FxHashMap<String, String>>,
     h_expression: Option<String>,
     f_evaluator_type: FEvaluatorType,
     beam_sizes: Vec<usize>,
     maximize: bool,
+    parameters: solver::SolverParameters<T>,
 }
 
-impl Default for ExpressionBeamSearch {
+impl<T: Default> Default for ExpressionBeamSearch<T> {
     fn default() -> Self {
         ExpressionBeamSearch {
             g_expressions: None,
@@ -29,11 +30,12 @@ impl Default for ExpressionBeamSearch {
             f_evaluator_type: FEvaluatorType::default(),
             beam_sizes: vec![10000],
             maximize: false,
+            parameters: solver::SolverParameters::default(),
         }
     }
 }
 
-impl<T> solver::Solver<T> for ExpressionBeamSearch
+impl<T> solver::Solver<T> for ExpressionBeamSearch<T>
 where
     T: variable::Numeric + ParseNumericExpression + Ord + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
@@ -65,10 +67,23 @@ where
             }
         }
     }
+
+    #[inline]
+    fn set_primal_bound(&mut self, primal_bound: T) {
+        self.parameters.primal_bound = Some(primal_bound)
+    }
+
+    #[inline]
+    fn set_time_limit(&mut self, time_limit: u64) {
+        self.parameters.time_limit = Some(time_limit)
+    }
 }
 
-impl ExpressionBeamSearch {
-    pub fn new(config: &yaml_rust::Yaml) -> Result<ExpressionBeamSearch, Box<dyn Error>> {
+impl<T: variable::Numeric + fmt::Display> ExpressionBeamSearch<T> {
+    pub fn new(config: &yaml_rust::Yaml) -> Result<ExpressionBeamSearch<T>, Box<dyn Error>>
+    where
+        <T as str::FromStr>::Err: fmt::Debug,
+    {
         let map = match config {
             yaml_rust::Yaml::Hash(map) => map,
             yaml_rust::Yaml::Null => return Ok(ExpressionBeamSearch::default()),
@@ -183,16 +198,18 @@ impl ExpressionBeamSearch {
             }
             None => false,
         };
+        let parameters = solver::SolverParameters::parse_from_map(map)?;
         Ok(ExpressionBeamSearch {
             g_expressions,
             h_expression,
             f_evaluator_type,
             beam_sizes,
             maximize,
+            parameters,
         })
     }
 
-    fn solve_inner<'a, T: variable::Numeric + fmt::Display, U>(
+    fn solve_inner<'a, U>(
         &self,
         model: &'a didp_parser::Model<T>,
         generator: SuccessorGenerator<'a, TransitionWithCustomCost<T, U>>,
@@ -217,6 +234,7 @@ impl ExpressionBeamSearch {
                     f_evaluator,
                     &self.beam_sizes,
                     self.maximize,
+                    self.parameters,
                 )
             }
             FEvaluatorType::Max => {
@@ -229,6 +247,7 @@ impl ExpressionBeamSearch {
                     f_evaluator,
                     &self.beam_sizes,
                     self.maximize,
+                    self.parameters,
                 )
             }
             FEvaluatorType::Min => {
@@ -241,6 +260,7 @@ impl ExpressionBeamSearch {
                     f_evaluator,
                     &self.beam_sizes,
                     self.maximize,
+                    self.parameters,
                 )
             }
             FEvaluatorType::Overwrite => {
@@ -253,6 +273,7 @@ impl ExpressionBeamSearch {
                     f_evaluator,
                     &self.beam_sizes,
                     self.maximize,
+                    self.parameters,
                 )
             }
         };

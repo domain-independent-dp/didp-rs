@@ -13,7 +13,7 @@ use std::str;
 
 #[derive(Default)]
 pub struct Dijkstra<T> {
-    primal_bound: Option<T>,
+    parameters: solver::SolverParameters<T>,
     registry_capacity: Option<usize>,
 }
 
@@ -21,11 +21,6 @@ impl<T> solver::Solver<T> for Dijkstra<T>
 where
     T: variable::Numeric + Ord + fmt::Display,
 {
-    #[inline]
-    fn set_primal_bound(&mut self, primal_bound: Option<T>) {
-        self.primal_bound = primal_bound
-    }
-
     fn solve(
         &mut self,
         model: &didp_parser::Model<T>,
@@ -34,9 +29,19 @@ where
         Ok(dijkstra(
             model,
             generator,
-            self.primal_bound,
+            self.parameters,
             self.registry_capacity,
         ))
+    }
+
+    #[inline]
+    fn set_primal_bound(&mut self, primal_bound: T) {
+        self.parameters.primal_bound = Some(primal_bound)
+    }
+
+    #[inline]
+    fn set_time_limit(&mut self, time_limit: u64) {
+        self.parameters.time_limit = Some(time_limit)
     }
 }
 
@@ -56,22 +61,7 @@ where
                 .into())
             }
         };
-        let primal_bound = match map.get(&yaml_rust::Yaml::from_str("primal_bound")) {
-            Some(yaml_rust::Yaml::Integer(value)) => {
-                Some(T::from_integer(*value as variable::Integer))
-            }
-            Some(yaml_rust::Yaml::Real(value)) => Some(value.parse().map_err(|e| {
-                solver::ConfigErr::new(format!("could not parse {} as a number: {:?}", value, e))
-            })?),
-            None => None,
-            value => {
-                return Err(solver::ConfigErr::new(format!(
-                    "expected Integer, but found `{:?}`",
-                    value
-                ))
-                .into())
-            }
-        };
+        let parameters = solver::SolverParameters::parse_from_map(map)?;
         let registry_capacity = match map.get(&yaml_rust::Yaml::from_str("registry_capacity")) {
             Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
             None => Some(1000000),
@@ -84,7 +74,7 @@ where
             }
         };
         Ok(Dijkstra {
-            primal_bound,
+            parameters,
             registry_capacity,
         })
     }
@@ -93,12 +83,14 @@ where
 pub fn dijkstra<T>(
     model: &didp_parser::Model<T>,
     generator: SuccessorGenerator<didp_parser::Transition<T>>,
-    primal_bound: Option<T>,
+    parameters: solver::SolverParameters<T>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
 where
     T: variable::Numeric + Ord + fmt::Display,
 {
+    let time_keeper = parameters.time_limit.map(solver::TimeKeeper::new);
+    let primal_bound = parameters.primal_bound;
     let mut open = collections::BinaryHeap::new();
     let mut registry = StateRegistry::new(model);
     if let Some(capacity) = registry_capacity {
@@ -114,10 +106,7 @@ where
             ..Default::default()
         }))
     };
-    let initial_node = match registry.insert(initial_state, cost, constructor) {
-        Some((node, _)) => node,
-        None => return None,
-    };
+    let (initial_node, _) = registry.insert(initial_state, cost, constructor).unwrap();
     open.push(Reverse(initial_node));
     let mut expanded = 0;
     let mut cost_max = T::zero();
@@ -134,7 +123,22 @@ where
         }
         if model.is_goal(node.state()) {
             println!("Expanded: {}", expanded);
-            return Some((node.cost(), trace_transitions(node)));
+            return solver::Solution {
+                cost: Some(node.cost()),
+                is_optimal: true,
+                transitions: trace_transitions(node),
+                ..Default::default()
+            };
+        }
+        if time_keeper
+            .as_ref()
+            .map_or(false, |time_keeper| time_keeper.check_time_limit())
+        {
+            println!("Expanded: {}", expanded);
+            return solver::Solution {
+                best_bound: Some(cost_max),
+                ..Default::default()
+            };
         }
         for transition in generator.applicable_transitions(node.state()) {
             let cost = transition.eval_cost(node.cost(), node.state(), &model.table_registry);
@@ -165,5 +169,8 @@ where
         }
     }
     println!("Expanded: {}", expanded);
-    None
+    solver::Solution {
+        is_infeasible: true,
+        ..Default::default()
+    }
 }

@@ -10,7 +10,7 @@ use std::str;
 #[derive(Default)]
 pub struct ExpressionExistDfs<T: variable::Numeric> {
     maximize: bool,
-    primal_bound: Option<T>,
+    parameters: solver::SolverParameters<T>,
     capacity: Option<usize>,
 }
 
@@ -20,11 +20,6 @@ where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     #[inline]
-    fn set_primal_bound(&mut self, bound: Option<T>) {
-        self.primal_bound = bound;
-    }
-
-    #[inline]
     fn solve(
         &mut self,
         model: &didp_parser::Model<T>,
@@ -33,10 +28,20 @@ where
         Ok(exist_dfs::forward_iterative_exist_dfs(
             model,
             &generator,
-            self.primal_bound,
+            self.parameters,
             self.maximize,
             self.capacity,
         ))
+    }
+
+    #[inline]
+    fn set_primal_bound(&mut self, primal_bound: T) {
+        self.parameters.primal_bound = Some(primal_bound)
+    }
+
+    #[inline]
+    fn set_time_limit(&mut self, time_limit: u64) {
+        self.parameters.time_limit = Some(time_limit)
     }
 }
 
@@ -65,21 +70,7 @@ impl<T: variable::Numeric> ExpressionExistDfs<T> {
                 )))
             }
         };
-        let primal_bound = match map.get(&yaml_rust::Yaml::from_str("primal_bound")) {
-            Some(yaml_rust::Yaml::Integer(value)) => {
-                Some(T::from_integer(*value as variable::Integer))
-            }
-            Some(yaml_rust::Yaml::Real(value)) => Some(value.parse().map_err(|e| {
-                solver::ConfigErr::new(format!("could not parse {} as a number: {:?}", value, e))
-            })?),
-            None => None,
-            value => {
-                return Err(solver::ConfigErr::new(format!(
-                    "expected Integer, but found `{:?}`",
-                    value
-                )))
-            }
-        };
+        let parameters = solver::SolverParameters::parse_from_map(map)?;
         let maximize = match map.get(&yaml_rust::Yaml::from_str("maximize")) {
             Some(yaml_rust::Yaml::Boolean(value)) => *value,
             Some(value) => {
@@ -91,8 +82,8 @@ impl<T: variable::Numeric> ExpressionExistDfs<T> {
             None => false,
         };
         Ok(ExpressionExistDfs {
-            primal_bound,
             maximize,
+            parameters,
             capacity,
         })
     }

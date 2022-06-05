@@ -2,8 +2,8 @@ use didp_parser::variable;
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
-
-pub type Solution<T> = Option<(T, Vec<Rc<didp_parser::Transition<T>>>)>;
+use std::str;
+use std::time;
 
 #[derive(Debug, Clone)]
 pub struct ConfigErr(String);
@@ -20,16 +20,97 @@ impl fmt::Display for ConfigErr {
     }
 }
 
+pub struct TimeKeeper {
+    time_limit: time::Duration,
+    start: time::Instant,
+}
+
+impl TimeKeeper {
+    pub fn new(time_limit: u64) -> TimeKeeper {
+        TimeKeeper {
+            time_limit: time::Duration::new(time_limit, 0),
+            start: time::Instant::now(),
+        }
+    }
+
+    pub fn remaining_time_limit(&self) -> time::Duration {
+        self.time_limit - (time::Instant::now() - self.start)
+    }
+
+    pub fn check_time_limit(&self) -> bool {
+        if time::Instant::now() - self.start > self.time_limit {
+            println!("Reached time limit.");
+            true
+        } else {
+            false
+        }
+    }
+}
+
 impl Error for ConfigErr {}
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SolverParameters<T> {
+    pub primal_bound: Option<T>,
+    pub time_limit: Option<u64>,
+}
+
+impl<T: variable::Numeric> SolverParameters<T> {
+    pub fn parse_from_map(
+        map: &linked_hash_map::LinkedHashMap<yaml_rust::Yaml, yaml_rust::Yaml>,
+    ) -> Result<SolverParameters<T>, ConfigErr>
+    where
+        <T as str::FromStr>::Err: fmt::Debug,
+    {
+        let primal_bound = match map.get(&yaml_rust::Yaml::from_str("primal_bound")) {
+            Some(yaml_rust::Yaml::Integer(value)) => {
+                Some(T::from_integer(*value as variable::Integer))
+            }
+            Some(yaml_rust::Yaml::Real(value)) => Some(value.parse().map_err(|e| {
+                ConfigErr::new(format!("could not parse {} as a number: {:?}", value, e))
+            })?),
+            None => None,
+            value => {
+                return Err(ConfigErr::new(format!(
+                    "expected Integer or Real, but found `{:?}`",
+                    value
+                )))
+            }
+        };
+        let time_limit = match map.get(&yaml_rust::Yaml::from_str("time_limit")) {
+            Some(yaml_rust::Yaml::Integer(value)) => Some(*value as u64),
+            None => None,
+            value => {
+                return Err(ConfigErr::new(format!(
+                    "expected Integer, but found `{:?}`",
+                    value
+                )))
+            }
+        };
+        Ok(SolverParameters {
+            primal_bound,
+            time_limit,
+        })
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Solution<T: variable::Numeric> {
+    pub cost: Option<T>,
+    pub best_bound: Option<T>,
+    pub is_optimal: bool,
+    pub is_infeasible: bool,
+    pub transitions: Vec<Rc<didp_parser::Transition<T>>>,
+}
 
 pub trait Solver<T: variable::Numeric> {
-    fn set_primal_bound(&mut self, _: Option<T>) {}
-
     fn solve(&mut self, model: &didp_parser::Model<T>) -> Result<Solution<T>, Box<dyn Error>>;
+
+    fn set_primal_bound(&mut self, _: T) {}
+
+    fn set_time_limit(&mut self, _: u64);
 }
 
 pub fn compute_solution_cost<T: variable::Numeric, U: didp_parser::DPState>(
-    base_cost: T,
     transitions: &[Rc<didp_parser::Transition<T>>],
     state: &U,
     model: &didp_parser::Model<T>,
@@ -45,7 +126,7 @@ pub fn compute_solution_cost<T: variable::Numeric, U: didp_parser::DPState>(
     state_sequence.reverse();
     let mut transitions: Vec<Rc<didp_parser::Transition<T>>> = transitions.to_vec();
     transitions.reverse();
-    let mut cost = base_cost;
+    let mut cost = T::zero();
     for (state, t) in state_sequence.into_iter().zip(transitions) {
         cost = t.eval_cost(cost, &state, &model.table_registry);
     }
@@ -129,7 +210,7 @@ mod tests {
             }),
         ];
         assert_eq!(
-            compute_solution_cost(0, &transitions, &model.target, &model),
+            compute_solution_cost(&transitions, &model.target, &model),
             4
         );
     }
