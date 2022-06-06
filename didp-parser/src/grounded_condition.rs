@@ -208,26 +208,6 @@ mod tests {
         assert_eq!(condition.is_satisfied(&state, &registry), Some(true));
 
         let condition = GroundedCondition {
-            condition: Condition::Set(Box::new(SetCondition::Ne(
-                ElementExpression::Constant(0),
-                ElementExpression::Constant(0),
-            ))),
-            elements_in_set_variable: vec![(0, 0), (0, 0)],
-            elements_in_vector_variable: vec![],
-        };
-        assert_eq!(condition.is_satisfied(&state, &registry), Some(false));
-
-        let condition = GroundedCondition {
-            condition: Condition::Set(Box::new(SetCondition::Ne(
-                ElementExpression::Constant(0),
-                ElementExpression::Constant(1),
-            ))),
-            elements_in_set_variable: vec![(0, 1), (0, 0)],
-            elements_in_vector_variable: vec![],
-        };
-        assert!(condition.is_satisfied(&state, &registry).is_none());
-
-        let condition = GroundedCondition {
             condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -322,7 +302,7 @@ condition: (and (is_in e0 s0) true)
         assert_eq!(conditions.unwrap(), expected);
 
         let condition = r"
-condition: (is 0 e)
+condition: (= 0 e)
 forall:
         - name: e
           object: s0

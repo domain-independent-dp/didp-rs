@@ -338,7 +338,7 @@ pub fn parse_set_expression<'a, 'b, 'c>(
         .split_first()
         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     match &token[..] {
-        "!" => {
+        "~" => {
             let (expression, rest) = parse_set_expression(rest, metadata, registry, parameters)?;
             Ok((SetExpression::Complement(Box::new(expression)), rest))
         }
@@ -1711,7 +1711,7 @@ mod tests {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
-        let tokens: Vec<String> = ["!", "s2", "s1", ")", "e0", ")"]
+        let tokens: Vec<String> = ["~", "s2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -1733,14 +1733,14 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["!", "e2", "s1", ")", "e0", ")"]
+        let tokens: Vec<String> = ["~", "e2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["!", "n2", "s1", ")", "e0", ")"]
+        let tokens: Vec<String> = ["~", "n2", "s1", ")", "e0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();

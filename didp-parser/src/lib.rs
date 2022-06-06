@@ -807,7 +807,7 @@ target:
         location: 0
         time: 0
 base_cases:
-        - [(is_empty unvisited), (is location 0)]
+        - [(is_empty unvisited), (= location 0)]
 table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
         due_date: {0: 10000, 1: 2, 2: 2}
@@ -917,7 +917,8 @@ table_values:
                     ..Default::default()
                 },
                 GroundedCondition {
-                    condition: Condition::Set(Box::new(SetCondition::Eq(
+                    condition: Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                        ComparisonOperator::Eq,
                         ElementExpression::Variable(0),
                         ElementExpression::Constant(0),
                     ))),

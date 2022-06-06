@@ -804,7 +804,7 @@ parameters:
           object: s0
 preconditions:
         - (>= (f2 e0 e) 10)
-        - (is_not e 2)
+        - (!= e 2)
 effect:
         e0: e
         s0: (add e s0)

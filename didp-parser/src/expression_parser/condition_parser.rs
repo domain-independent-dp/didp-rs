@@ -5,7 +5,6 @@ use super::util::ParseErr;
 use crate::expression::{Comparison, ComparisonOperator, Condition, SetCondition};
 use crate::state;
 use crate::table_registry;
-use crate::variable;
 use rustc_hash::FxHashMap;
 
 pub fn parse_expression<'a, 'b, 'c>(
@@ -72,20 +71,6 @@ fn parse_operation<'a, 'b, 'c>(
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Or(Box::new(x), Box::new(y)), rest))
         }
-        "is" => {
-            let (x, rest) =
-                element_parser::parse_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok((Condition::Set(Box::new(SetCondition::Eq(x, y))), rest))
-        }
-        "is_not" => {
-            let (x, rest) =
-                element_parser::parse_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok((Condition::Set(Box::new(SetCondition::Ne(x, y))), rest))
-        }
         "is_in" => {
             let (element, rest) =
                 element_parser::parse_expression(tokens, metadata, registry, parameters)?;
@@ -133,37 +118,51 @@ fn parse_comparison<'a, 'b, 'c>(
         _ => return Err(ParseErr::new(format!("no such operator `{}`", operator))),
     };
 
-    if let Ok((x, rest)) = numeric_parser::parse_integer_expression::<variable::Integer>(
-        tokens, metadata, registry, parameters,
-    ) {
-        if let Ok((y, rest)) = numeric_parser::parse_integer_expression::<variable::Integer>(
-            rest, metadata, registry, parameters,
-        ) {
+    if let Ok((x, rest)) =
+        numeric_parser::parse_integer_expression(tokens, metadata, registry, parameters)
+    {
+        if let Ok((y, rest)) =
+            numeric_parser::parse_integer_expression(rest, metadata, registry, parameters)
+        {
             let rest = util::parse_closing(rest)?;
             Ok((Comparison::ComparisonII(operator, x, y), rest))
-        } else {
-            let (y, rest) = numeric_parser::parse_continuous_expression::<variable::Continuous>(
-                rest, metadata, registry, parameters,
-            )?;
+        } else if let Ok((y, rest)) =
+            numeric_parser::parse_continuous_expression(rest, metadata, registry, parameters)
+        {
             let rest = util::parse_closing(rest)?;
             Ok((Comparison::ComparisonIC(operator, x, y), rest))
+        } else {
+            let (x, rest) =
+                element_parser::parse_expression(tokens, metadata, registry, parameters)?;
+            let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let rest = util::parse_closing(rest)?;
+            Ok((Comparison::ComparisonEE(operator, x, y), rest))
         }
-    } else {
-        let (x, rest) = numeric_parser::parse_continuous_expression::<variable::Continuous>(
-            tokens, metadata, registry, parameters,
-        )?;
-        if let Ok((y, rest)) = numeric_parser::parse_integer_expression::<variable::Integer>(
-            rest, metadata, registry, parameters,
-        ) {
+    } else if let Ok((x, rest)) =
+        numeric_parser::parse_continuous_expression(tokens, metadata, registry, parameters)
+    {
+        if let Ok((y, rest)) =
+            numeric_parser::parse_integer_expression(rest, metadata, registry, parameters)
+        {
             let rest = util::parse_closing(rest)?;
             Ok((Comparison::ComparisonCI(operator, x, y), rest))
-        } else {
-            let (y, rest) = numeric_parser::parse_continuous_expression::<variable::Continuous>(
-                rest, metadata, registry, parameters,
-            )?;
+        } else if let Ok((y, rest)) =
+            numeric_parser::parse_continuous_expression(rest, metadata, registry, parameters)
+        {
             let rest = util::parse_closing(rest)?;
             Ok((Comparison::ComparisonCC(operator, x, y), rest))
+        } else {
+            let (x, rest) =
+                element_parser::parse_expression(tokens, metadata, registry, parameters)?;
+            let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
+            let rest = util::parse_closing(rest)?;
+            Ok((Comparison::ComparisonEE(operator, x, y), rest))
         }
+    } else {
+        let (x, rest) = element_parser::parse_expression(tokens, metadata, registry, parameters)?;
+        let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        Ok((Comparison::ComparisonEE(operator, x, y), rest))
     }
 }
 
@@ -627,6 +626,40 @@ mod tests {
             )))
         );
         assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "=", "2", "e0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Eq,
+                ElementExpression::Constant(2),
+                ElementExpression::Variable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "=", "e2", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Eq,
+                ElementExpression::Variable(2),
+                ElementExpression::Constant(0),
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
     }
 
     #[test]
@@ -635,7 +668,7 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", "=", "2", "e0", ")", ")"]
+        let tokens: Vec<String> = ["(", "=", "2", "g0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -730,6 +763,40 @@ mod tests {
             )))
         );
         assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "!=", "2", "e0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Ne,
+                ElementExpression::Constant(2),
+                ElementExpression::Variable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "!=", "e2", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Ne,
+                ElementExpression::Variable(2),
+                ElementExpression::Constant(0),
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
     }
 
     #[test]
@@ -738,7 +805,7 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", "!=", "2", "e0", ")", ")"]
+        let tokens: Vec<String> = ["(", "!=", "2", "g0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -833,6 +900,40 @@ mod tests {
             )))
         );
         assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", ">", "2", "e0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Gt,
+                ElementExpression::Constant(2),
+                ElementExpression::Variable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", ">", "e2", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Gt,
+                ElementExpression::Variable(2),
+                ElementExpression::Constant(0),
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
     }
 
     #[test]
@@ -841,7 +942,7 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", ">", "2", "e0", ")", ")"]
+        let tokens: Vec<String> = ["(", ">", "2", "g0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -936,6 +1037,40 @@ mod tests {
             )))
         );
         assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", ">=", "2", "e0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Ge,
+                ElementExpression::Constant(2),
+                ElementExpression::Variable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", ">=", "e2", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Ge,
+                ElementExpression::Variable(2),
+                ElementExpression::Constant(0),
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
     }
 
     #[test]
@@ -944,7 +1079,7 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", ">=", "2", "e0", ")", ")"]
+        let tokens: Vec<String> = ["(", ">=", "2", "g0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -1039,6 +1174,40 @@ mod tests {
             )))
         );
         assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "<", "2", "e0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Lt,
+                ElementExpression::Constant(2),
+                ElementExpression::Variable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "<", "e2", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Lt,
+                ElementExpression::Variable(2),
+                ElementExpression::Constant(0),
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
     }
 
     #[test]
@@ -1047,7 +1216,7 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", "<", "2", "e0", ")", ")"]
+        let tokens: Vec<String> = ["(", "<", "2", "g0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -1141,6 +1310,40 @@ mod tests {
             )))
         );
         assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "<=", "2", "e0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Le,
+                ElementExpression::Constant(2),
+                ElementExpression::Variable(0)
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+
+        let tokens: Vec<String> = ["(", "<=", "e2", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Comparison(Box::new(Comparison::ComparisonEE(
+                ComparisonOperator::Le,
+                ElementExpression::Variable(2),
+                ElementExpression::Constant(0),
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
     }
 
     #[test]
@@ -1149,7 +1352,7 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", "<=", "2", "e0", ")", ")"]
+        let tokens: Vec<String> = ["(", "<=", "2", "g0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -1164,120 +1367,6 @@ mod tests {
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "<=", "2", "i0", "i1", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_is_ok() {
-        let metadata = generate_metadata();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "is", "2", "e0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            Condition::Set(Box::new(SetCondition::Eq(
-                ElementExpression::Constant(2),
-                ElementExpression::Variable(0)
-            )))
-        );
-        assert_eq!(rest, &tokens[5..]);
-    }
-
-    #[test]
-    fn parse_is_err() {
-        let metadata = generate_metadata();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "is", "e0", "s1", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = ["(", "is", "i0", "e1", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = ["(", "is", "0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = ["(", "is", "0", "e1", "e2", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_is_not_ok() {
-        let metadata = generate_metadata();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "is_not", "2", "e0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            Condition::Set(Box::new(SetCondition::Ne(
-                ElementExpression::Constant(2),
-                ElementExpression::Variable(0)
-            )))
-        );
-        assert_eq!(rest, &tokens[5..]);
-    }
-
-    #[test]
-    fn parse_is_not_err() {
-        let metadata = generate_metadata();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "is_not", "e0", "s1", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = ["(", "is_not", "i0", "e1", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = ["(", "is_not", "0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = ["(", "is_not", "0", "e1", "e2", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();

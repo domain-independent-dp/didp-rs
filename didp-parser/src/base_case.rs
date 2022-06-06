@@ -168,7 +168,7 @@ mod tests {
         assert_eq!(base_case.unwrap(), expected);
 
         let base_case = yaml_rust::YamlLoader::load_from_str(
-            r"[{ condition: (is e 1), forall: [ {name: e, object: s0} ] }]",
+            r"[{ condition: (= e 1), forall: [ {name: e, object: s0} ] }]",
         );
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();

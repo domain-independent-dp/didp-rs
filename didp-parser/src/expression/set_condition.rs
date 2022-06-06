@@ -6,8 +6,6 @@ use crate::table_registry::TableRegistry;
 #[derive(Debug, PartialEq, Clone)]
 pub enum SetCondition {
     Constant(bool),
-    Eq(ElementExpression, ElementExpression),
-    Ne(ElementExpression, ElementExpression),
     IsIn(ElementExpression, SetExpression),
     IsSubset(SetExpression, SetExpression),
     IsEmpty(SetExpression),
@@ -17,8 +15,6 @@ impl SetCondition {
     pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> bool {
         match self {
             Self::Constant(value) => *value,
-            Self::Eq(x, y) => x.eval(state, registry) == y.eval(state, registry),
-            Self::Ne(x, y) => x.eval(state, registry) != y.eval(state, registry),
             Self::IsIn(element, SetExpression::Reference(set)) => {
                 let f = |i| state.get_set_variable(i);
                 let set = set.eval(state, registry, &f, &registry.set_tables);
@@ -53,24 +49,6 @@ impl SetCondition {
 
     pub fn simplify(&self, registry: &TableRegistry) -> SetCondition {
         match self {
-            Self::Eq(x, y) => match (x.simplify(registry), y.simplify(registry)) {
-                (ElementExpression::Constant(x), ElementExpression::Constant(y)) => {
-                    Self::Constant(x == y)
-                }
-                (ElementExpression::Variable(x), ElementExpression::Variable(y)) if x == y => {
-                    Self::Constant(true)
-                }
-                (x, y) => Self::Eq(x, y),
-            },
-            Self::Ne(x, y) => match (x.simplify(registry), y.simplify(registry)) {
-                (ElementExpression::Constant(x), ElementExpression::Constant(y)) => {
-                    Self::Constant(x != y)
-                }
-                (ElementExpression::Variable(x), ElementExpression::Variable(y)) if x == y => {
-                    Self::Constant(false)
-                }
-                (x, y) => Self::Ne(x, y),
-            },
             Self::IsIn(element, set) => {
                 match (element.simplify(registry), set.simplify(registry)) {
                     (
@@ -140,66 +118,6 @@ mod tests {
 
         let expression = SetCondition::Constant(false);
         assert!(!expression.eval(&state, &registry));
-    }
-
-    #[test]
-    fn eq_eval() {
-        let state = generate_state();
-        let registry = TableRegistry::default();
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Constant(1),
-            ElementExpression::Constant(1),
-        );
-        assert!(expression.eval(&state, &registry));
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(1),
-        );
-        assert!(!expression.eval(&state, &registry));
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Constant(1),
-            ElementExpression::Variable(0),
-        );
-        assert!(expression.eval(&state, &registry));
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Constant(0),
-            ElementExpression::Variable(0),
-        );
-        assert!(!expression.eval(&state, &registry));
-    }
-
-    #[test]
-    fn ne_eval() {
-        let state = generate_state();
-        let registry = TableRegistry::default();
-
-        let expression = SetCondition::Ne(
-            ElementExpression::Constant(1),
-            ElementExpression::Constant(1),
-        );
-        assert!(!expression.eval(&state, &registry));
-
-        let expression = SetCondition::Ne(
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(1),
-        );
-        assert!(expression.eval(&state, &registry));
-
-        let expression = SetCondition::Ne(
-            ElementExpression::Constant(1),
-            ElementExpression::Variable(0),
-        );
-        assert!(!expression.eval(&state, &registry));
-
-        let expression = SetCondition::Ne(
-            ElementExpression::Constant(0),
-            ElementExpression::Variable(0),
-        );
-        assert!(expression.eval(&state, &registry));
     }
 
     #[test]
@@ -513,82 +431,6 @@ mod tests {
         assert_eq!(expression.simplify(&registry), expression);
 
         let expression = SetCondition::Constant(false);
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
-    fn eq_simplify() {
-        let registry = TableRegistry::default();
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Constant(1),
-            ElementExpression::Constant(1),
-        );
-        assert_eq!(expression.simplify(&registry), SetCondition::Constant(true));
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(1),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            SetCondition::Constant(false)
-        );
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Variable(1),
-            ElementExpression::Variable(1),
-        );
-        assert_eq!(expression.simplify(&registry), SetCondition::Constant(true));
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Variable(0),
-            ElementExpression::Variable(1),
-        );
-        assert_eq!(expression.simplify(&registry), expression);
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Constant(1),
-            ElementExpression::Variable(0),
-        );
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
-    fn ne_simplify() {
-        let registry = TableRegistry::default();
-
-        let expression = SetCondition::Ne(
-            ElementExpression::Constant(1),
-            ElementExpression::Constant(1),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            SetCondition::Constant(false)
-        );
-
-        let expression = SetCondition::Ne(
-            ElementExpression::Constant(0),
-            ElementExpression::Constant(1),
-        );
-        assert_eq!(expression.simplify(&registry), SetCondition::Constant(true));
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Variable(1),
-            ElementExpression::Variable(1),
-        );
-        assert_eq!(expression.simplify(&registry), SetCondition::Constant(true));
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Variable(0),
-            ElementExpression::Variable(1),
-        );
-        assert_eq!(expression.simplify(&registry), expression);
-
-        let expression = SetCondition::Eq(
-            ElementExpression::Constant(1),
-            ElementExpression::Variable(0),
-        );
         assert_eq!(expression.simplify(&registry), expression);
     }
 
