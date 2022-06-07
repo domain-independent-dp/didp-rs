@@ -1,0 +1,10 @@
+solver: expression_astar
+config:
+   h: >
+      (max (max (ceiling (/ (- (sum weight unpacked) residual) capacity))
+                (- (+ (sum lb2-weight1 unpacked)
+                      (ceiling (sum lb2-weight2 unpacked)))
+                   (if (>= residual (/ capacity 2)) 1.0 0.0)))
+           (- (ceiling (sum lb3-weight unpacked))
+              (if (>= residual (/ capacity 3)) 1.0 0.0)))
+   time_limit: 1800

@@ -1,0 +1,7 @@
+solver: iterative
+config:
+  solvers:
+    - solver: expression_beam
+      config:
+        beam: [5, 10, 15]
+    - solver: dijkstra
