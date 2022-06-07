@@ -55,7 +55,6 @@ transitions:
       - name: j
         object: unpacked
     preconditions:
-      - (> (weight j) residual)
       - (<= bin-number j)
       - forall:
           - name: k
