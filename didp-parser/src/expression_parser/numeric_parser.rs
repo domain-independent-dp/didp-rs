@@ -829,6 +829,19 @@ mod tests {
         name_to_element_variable.insert(String::from("e3"), 3);
         let element_variable_to_object = vec![0, 0, 0, 0];
 
+        let element_resource_variable_names = vec![
+            String::from("er0"),
+            String::from("er1"),
+            String::from("er2"),
+            String::from("er3"),
+        ];
+        let mut name_to_element_resource_variable = FxHashMap::default();
+        name_to_element_resource_variable.insert(String::from("er0"), 0);
+        name_to_element_resource_variable.insert(String::from("er1"), 1);
+        name_to_element_resource_variable.insert(String::from("er2"), 2);
+        name_to_element_resource_variable.insert(String::from("er3"), 3);
+        let element_resource_variable_to_object = vec![0, 0, 0, 0];
+
         let integer_variable_names = vec![
             String::from("i0"),
             String::from("i1"),
@@ -894,6 +907,10 @@ mod tests {
             name_to_integer_variable,
             continuous_variable_names,
             name_to_continuous_variable,
+            element_resource_variable_names,
+            name_to_element_resource_variable,
+            element_resource_variable_to_object,
+            element_less_is_better: vec![false, false, true, false],
             integer_resource_variable_names,
             name_to_integer_resource_variable,
             integer_less_is_better: vec![false, false, true, false],

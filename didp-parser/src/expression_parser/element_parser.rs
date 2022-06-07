@@ -65,6 +65,7 @@ pub fn parse_expression<'a>(
                 token,
                 &registry.element_tables.name_to_constant,
                 &metadata.name_to_element_variable,
+                &metadata.name_to_element_resource_variable,
                 parameters,
             )?;
             Ok((element, rest))
@@ -105,6 +106,7 @@ fn parse_atom(
     token: &str,
     name_to_constant: &FxHashMap<String, Element>,
     name_to_variable: &FxHashMap<String, usize>,
+    name_to_resource_variable: &FxHashMap<String, usize>,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<ElementExpression, ParseErr> {
     if let Some(v) = parameters.get(token) {
@@ -113,6 +115,8 @@ fn parse_atom(
         Ok(ElementExpression::Constant(*v))
     } else if let Some(i) = name_to_variable.get(token) {
         Ok(ElementExpression::Variable(*i))
+    } else if let Some(i) = name_to_resource_variable.get(token) {
+        Ok(ElementExpression::ResourceVariable(*i))
     } else {
         let v: Element = token.parse().map_err(|e| {
             ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
@@ -586,6 +590,19 @@ mod tests {
         name_to_element_variable.insert(String::from("e3"), 3);
         let element_variable_to_object = vec![0, 0, 0, 0];
 
+        let element_resource_variable_names = vec![
+            String::from("er0"),
+            String::from("er1"),
+            String::from("er2"),
+            String::from("er3"),
+        ];
+        let mut name_to_element_resource_variable = FxHashMap::default();
+        name_to_element_resource_variable.insert(String::from("er0"), 0);
+        name_to_element_resource_variable.insert(String::from("er1"), 1);
+        name_to_element_resource_variable.insert(String::from("er2"), 2);
+        name_to_element_resource_variable.insert(String::from("er3"), 3);
+        let element_resource_variable_to_object = vec![0, 0, 0, 0];
+
         let integer_variable_names = vec![
             String::from("n0"),
             String::from("n1"),
@@ -613,6 +630,10 @@ mod tests {
             element_variable_to_object,
             integer_variable_names,
             name_to_integer_variable,
+            element_resource_variable_names,
+            name_to_element_resource_variable,
+            element_resource_variable_to_object,
+            element_less_is_better: vec![false, false, true, false],
             ..Default::default()
         }
     }
@@ -750,6 +771,16 @@ mod tests {
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, ElementExpression::Variable(1));
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["er1", ")", "1", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, ElementExpression::ResourceVariable(1));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["11", ")", "1", ")"]

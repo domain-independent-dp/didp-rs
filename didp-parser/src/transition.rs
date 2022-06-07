@@ -235,92 +235,56 @@ mod tests {
         let mut name_to_object = FxHashMap::default();
         name_to_object.insert("object".to_string(), 0);
 
-        let set_variable_names = vec![
-            String::from("s0"),
-            String::from("s1"),
-            String::from("s2"),
-            String::from("s3"),
-        ];
+        let set_variable_names = vec![String::from("s0"), String::from("s1")];
         let mut name_to_set_variable = FxHashMap::default();
         name_to_set_variable.insert(String::from("s0"), 0);
         name_to_set_variable.insert(String::from("s1"), 1);
-        name_to_set_variable.insert(String::from("s2"), 2);
-        name_to_set_variable.insert(String::from("s3"), 3);
-        let set_variable_to_object = vec![0, 0, 0, 0];
+        let set_variable_to_object = vec![0, 0];
 
-        let vector_variable_names = vec![
-            "p0".to_string(),
-            "p1".to_string(),
-            "p2".to_string(),
-            "p3".to_string(),
-        ];
+        let vector_variable_names = vec!["p0".to_string(), "p1".to_string()];
         let mut name_to_vector_variable = FxHashMap::default();
         name_to_vector_variable.insert("p0".to_string(), 0);
         name_to_vector_variable.insert("p1".to_string(), 1);
-        name_to_vector_variable.insert("p2".to_string(), 2);
-        name_to_vector_variable.insert("p3".to_string(), 3);
-        let vector_variable_to_object = vec![0, 0, 0, 0];
+        let vector_variable_to_object = vec![0, 0];
 
-        let element_variable_names = vec![
-            "e0".to_string(),
-            "e1".to_string(),
-            "e2".to_string(),
-            "e3".to_string(),
-        ];
+        let element_variable_names = vec!["e0".to_string(), "e1".to_string()];
         let mut name_to_element_variable = FxHashMap::default();
         name_to_element_variable.insert("e0".to_string(), 0);
         name_to_element_variable.insert("e1".to_string(), 1);
-        name_to_element_variable.insert("e2".to_string(), 2);
-        name_to_element_variable.insert("e3".to_string(), 3);
-        let element_variable_to_object = vec![0, 0, 0, 0];
+        let element_variable_to_object = vec![0, 0];
 
-        let integer_variable_names = vec![
-            "i0".to_string(),
-            "i1".to_string(),
-            "i2".to_string(),
-            "i3".to_string(),
-        ];
+        let element_resource_variable_names =
+            vec!["er0".to_string(), "er1".to_string(), "er2".to_string()];
+        let mut name_to_element_resource_variable = FxHashMap::default();
+        name_to_element_resource_variable.insert("er0".to_string(), 0);
+        name_to_element_resource_variable.insert("er1".to_string(), 1);
+        let element_resource_variable_to_object = vec![0, 0];
+
+        let integer_variable_names = vec!["i0".to_string(), "i1".to_string(), "i2".to_string()];
         let mut name_to_integer_variable = FxHashMap::default();
         name_to_integer_variable.insert("i0".to_string(), 0);
         name_to_integer_variable.insert("i1".to_string(), 1);
         name_to_integer_variable.insert("i2".to_string(), 2);
-        name_to_integer_variable.insert("i3".to_string(), 3);
 
-        let integer_resource_variable_names = vec![
-            "ir0".to_string(),
-            "ir1".to_string(),
-            "ir2".to_string(),
-            "ir3".to_string(),
-        ];
+        let integer_resource_variable_names =
+            vec!["ir0".to_string(), "ir1".to_string(), "ir2".to_string()];
         let mut name_to_integer_resource_variable = FxHashMap::default();
         name_to_integer_resource_variable.insert("ir0".to_string(), 0);
         name_to_integer_resource_variable.insert("ir1".to_string(), 1);
         name_to_integer_resource_variable.insert("ir2".to_string(), 2);
-        name_to_integer_resource_variable.insert("ir3".to_string(), 3);
 
-        let continuous_variable_names = vec![
-            "c0".to_string(),
-            "c1".to_string(),
-            "c2".to_string(),
-            "c3".to_string(),
-        ];
+        let continuous_variable_names = vec!["c0".to_string(), "c1".to_string(), "c2".to_string()];
         let mut name_to_continuous_variable = FxHashMap::default();
         name_to_continuous_variable.insert("c0".to_string(), 0);
         name_to_continuous_variable.insert("c1".to_string(), 1);
         name_to_continuous_variable.insert("c2".to_string(), 2);
-        name_to_continuous_variable.insert("c3".to_string(), 3);
 
-        let continuous_resource_variable_names = vec![
-            "cr0".to_string(),
-            "cr1".to_string(),
-            "cr2".to_string(),
-            "cr3".to_string(),
-        ];
+        let continuous_resource_variable_names =
+            vec!["cr0".to_string(), "cr1".to_string(), "cr2".to_string()];
         let mut name_to_continuous_resource_variable = FxHashMap::default();
         name_to_continuous_resource_variable.insert("cr0".to_string(), 0);
         name_to_continuous_resource_variable.insert("cr1".to_string(), 1);
         name_to_continuous_resource_variable.insert("cr2".to_string(), 2);
-        name_to_continuous_resource_variable.insert("cr3".to_string(), 3);
 
         state::StateMetadata {
             object_names,
@@ -339,12 +303,16 @@ mod tests {
             name_to_integer_variable,
             continuous_variable_names,
             name_to_continuous_variable,
+            element_resource_variable_names,
+            name_to_element_resource_variable,
+            element_resource_variable_to_object,
+            element_less_is_better: vec![false, false],
             integer_resource_variable_names,
             name_to_integer_resource_variable,
-            integer_less_is_better: vec![false, false, true, false],
+            integer_less_is_better: vec![false, false, true],
             continuous_resource_variable_names,
             name_to_continuous_resource_variable,
-            continuous_less_is_better: vec![false, false, true, false],
+            continuous_less_is_better: vec![false, false, true],
         }
     }
 
@@ -388,6 +356,7 @@ mod tests {
                 continuous_variables: vec![1.0, 2.0, 3.0],
             },
             resource_variables: state::ResourceVariables {
+                element_variables: vec![0, 1],
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![4.0, 5.0, 6.0],
             },
@@ -527,6 +496,8 @@ mod tests {
             Box::new(NumericExpression::ContinuousVariable(1)),
             Box::new(NumericExpression::Constant(2.0)),
         );
+        let element_resource_effect1 = ElementExpression::Constant(1);
+        let element_resource_effect2 = ElementExpression::Constant(0);
         let integer_resource_effect1 = NumericExpression::NumericOperation(
             NumericOperator::Add,
             Box::new(NumericExpression::IntegerResourceVariable(0)),
@@ -555,6 +526,10 @@ mod tests {
                 element_effects: vec![(0, element_effect1), (1, element_effect2)],
                 integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
                 continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+                element_resource_effects: vec![
+                    (0, element_resource_effect1),
+                    (1, element_resource_effect2),
+                ],
                 integer_resource_effects: vec![
                     (0, integer_resource_effect1),
                     (1, integer_resource_effect2),
@@ -587,6 +562,7 @@ mod tests {
                 continuous_variables: vec![0.0, 4.0, 3.0],
             },
             resource_variables: state::ResourceVariables {
+                element_variables: vec![1, 0],
                 integer_variables: vec![5, 2, 6],
                 continuous_variables: vec![5.0, 2.5, 6.0],
             },

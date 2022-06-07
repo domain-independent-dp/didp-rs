@@ -485,6 +485,7 @@ mod tests {
                 continuous_variables: vec![1.0, 2.0, 3.0],
             },
             resource_variables: state::ResourceVariables {
+                element_variables: vec![0, 1, 2],
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![4.0, 5.0, 6.0],
             },

@@ -1,6 +1,6 @@
 use crate::effect;
 use crate::table_registry;
-use crate::variable::{Continuous, Element, Integer, Numeric, Set, Vector};
+use crate::variable::{Continuous, Element, Integer, Set, Vector};
 use crate::yaml_util;
 use lazy_static::lazy_static;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -13,6 +13,7 @@ pub trait DPState: Clone + fmt::Debug {
     fn get_element_variable(&self, i: usize) -> Element;
     fn get_integer_variable(&self, i: usize) -> Integer;
     fn get_continuous_variable(&self, i: usize) -> Continuous;
+    fn get_element_resource_variable(&self, i: usize) -> Element;
     fn get_integer_resource_variable(&self, i: usize) -> Integer;
     fn get_continuous_resource_variable(&self, i: usize) -> Continuous;
     fn apply_effect(
@@ -38,6 +39,7 @@ pub struct SignatureVariables {
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct ResourceVariables {
+    pub element_variables: Vec<Element>,
     pub integer_variables: Vec<Integer>,
     pub continuous_variables: Vec<Continuous>,
 }
@@ -72,6 +74,11 @@ impl DPState for State {
     #[inline]
     fn get_continuous_variable(&self, i: usize) -> Continuous {
         self.signature_variables.continuous_variables[i]
+    }
+
+    #[inline]
+    fn get_element_resource_variable(&self, i: usize) -> Element {
+        self.resource_variables.element_variables[i]
     }
 
     #[inline]
@@ -135,6 +142,11 @@ impl DPState for State {
             continuous_variables[e.0] = e.1.eval(self, registry);
         }
 
+        let mut element_resource_variables = self.resource_variables.element_variables.clone();
+        for e in &effect.element_resource_effects {
+            element_resource_variables[e.0] = e.1.eval(self, registry);
+        }
+
         let mut integer_resource_variables = self.resource_variables.integer_variables.clone();
         for e in &effect.integer_resource_effects {
             integer_resource_variables[e.0] = e.1.eval(self, registry);
@@ -155,6 +167,7 @@ impl DPState for State {
                 continuous_variables,
             },
             resource_variables: ResourceVariables {
+                element_variables: element_resource_variables,
                 integer_variables: integer_resource_variables,
                 continuous_variables: continuous_resource_variables,
             },
@@ -181,6 +194,9 @@ impl DPState for State {
         for e in &effect.continuous_effects {
             self.signature_variables.continuous_variables[e.0] = e.1.eval(self, registry);
         }
+        for e in &effect.element_resource_effects {
+            self.resource_variables.element_variables[e.0] = e.1.eval(self, registry);
+        }
         for e in &effect.integer_resource_effects {
             self.resource_variables.integer_variables[e.0] = e.1.eval(self, registry);
         }
@@ -194,6 +210,11 @@ impl State {
     pub fn is_satisfied<U: DPState>(&self, state: &U, metadata: &StateMetadata) -> bool {
         for i in 0..metadata.number_of_element_variables() {
             if self.get_element_variable(i) != state.get_element_variable(i) {
+                return false;
+            }
+        }
+        for i in 0..metadata.number_of_element_resource_variables() {
+            if self.get_element_resource_variable(i) != state.get_element_resource_variable(i) {
                 return false;
             }
         }
@@ -256,8 +277,16 @@ impl State {
             vector_variables.push(vector);
         }
         let mut element_variables = Vec::with_capacity(metadata.element_variable_names.len());
-        for name in &metadata.element_variable_names {
+        for (variable_id, name) in metadata.element_variable_names.iter().enumerate() {
             let element = yaml_util::get_usize_by_key(value, name)?;
+            let object_id = metadata.element_variable_to_object[variable_id];
+            let capacity = metadata.object_numbers[object_id];
+            if element >= capacity {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "value `{}` for `{}` is out of the bound of `{}`, which has only {} objects",
+                    element, name, metadata.object_names[object_id], capacity,
+                )));
+            }
             element_variables.push(element);
         }
         let mut integer_variables = Vec::with_capacity(metadata.integer_variable_names.len());
@@ -269,6 +298,20 @@ impl State {
         for name in &metadata.continuous_variable_names {
             let value = yaml_util::get_numeric_by_key(value, name)?;
             continuous_variables.push(value);
+        }
+        let mut element_resource_variables =
+            Vec::with_capacity(metadata.element_resource_variable_names.len());
+        for (variable_id, name) in metadata.element_resource_variable_names.iter().enumerate() {
+            let element = yaml_util::get_usize_by_key(value, name)?;
+            let object_id = metadata.element_resource_variable_to_object[variable_id];
+            let capacity = metadata.object_numbers[object_id];
+            if element >= capacity {
+                return Err(yaml_util::YamlContentErr::new(format!(
+                    "value `{}` for `{}` is out of the bound of `{}`, which has only {} objects",
+                    element, name, metadata.object_names[object_id], capacity,
+                )));
+            }
+            element_resource_variables.push(element);
         }
         let mut integer_resource_variables =
             Vec::with_capacity(metadata.integer_resource_variable_names.len());
@@ -291,6 +334,7 @@ impl State {
                 continuous_variables,
             },
             resource_variables: ResourceVariables {
+                element_variables: element_resource_variables,
                 integer_variables: integer_resource_variables,
                 continuous_variables: continuous_resource_variables,
             },
@@ -322,6 +366,11 @@ pub struct StateMetadata {
     pub continuous_variable_names: Vec<String>,
     pub name_to_continuous_variable: FxHashMap<String, usize>,
 
+    pub element_resource_variable_names: Vec<String>,
+    pub name_to_element_resource_variable: FxHashMap<String, usize>,
+    pub element_resource_variable_to_object: Vec<usize>,
+    pub element_less_is_better: Vec<bool>,
+
     pub integer_resource_variable_names: Vec<String>,
     pub name_to_integer_resource_variable: FxHashMap<String, usize>,
     pub integer_less_is_better: Vec<bool>,
@@ -332,60 +381,90 @@ pub struct StateMetadata {
 }
 
 impl StateMetadata {
+    #[inline]
     pub fn number_of_objects(&self) -> usize {
         self.object_names.len()
     }
 
+    #[inline]
     pub fn number_of_set_variables(&self) -> usize {
         self.set_variable_names.len()
     }
 
+    #[inline]
     pub fn number_of_vector_variables(&self) -> usize {
         self.vector_variable_names.len()
     }
 
+    #[inline]
     pub fn number_of_element_variables(&self) -> usize {
         self.element_variable_names.len()
     }
 
+    #[inline]
     pub fn number_of_integer_variables(&self) -> usize {
         self.integer_variable_names.len()
     }
 
+    #[inline]
     pub fn number_of_continuous_variables(&self) -> usize {
         self.continuous_variable_names.len()
     }
 
+    #[inline]
+    pub fn number_of_element_resource_variables(&self) -> usize {
+        self.element_resource_variable_names.len()
+    }
+
+    #[inline]
     pub fn number_of_integer_resource_variables(&self) -> usize {
         self.integer_resource_variable_names.len()
     }
 
+    #[inline]
     pub fn number_of_continuous_resource_variables(&self) -> usize {
         self.continuous_resource_variable_names.len()
     }
 
+    #[inline]
     pub fn set_variable_capacity(&self, i: usize) -> usize {
         self.object_numbers[self.set_variable_to_object[i]]
     }
 
+    #[inline]
     pub fn set_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers[self.set_variable_to_object[self.name_to_set_variable[name]]]
     }
 
+    #[inline]
     pub fn vector_variable_capacity(&self, i: usize) -> usize {
         self.object_numbers[self.vector_variable_to_object[i]]
     }
 
+    #[inline]
     pub fn vector_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers[self.vector_variable_to_object[self.name_to_vector_variable[name]]]
     }
 
+    #[inline]
     pub fn element_variable_capacity(&self, i: usize) -> usize {
         self.object_numbers[self.element_variable_to_object[i]]
     }
 
+    #[inline]
     pub fn element_variable_capacity_by_name(&self, name: &str) -> usize {
         self.object_numbers[self.element_variable_to_object[self.name_to_element_variable[name]]]
+    }
+
+    #[inline]
+    pub fn element_resource_variable_capacity(&self, i: usize) -> usize {
+        self.object_numbers[self.element_resource_variable_to_object[i]]
+    }
+
+    #[inline]
+    pub fn element_resource_variable_capacity_by_name(&self, name: &str) -> usize {
+        self.object_numbers
+            [self.element_resource_variable_to_object[self.name_to_element_resource_variable[name]]]
     }
 
     pub fn get_name_set(&self) -> FxHashSet<String> {
@@ -408,6 +487,9 @@ impl StateMetadata {
         for name in &self.continuous_variable_names {
             name_set.insert(name.clone());
         }
+        for name in &self.element_resource_variable_names {
+            name_set.insert(name.clone());
+        }
         for name in &self.integer_resource_variable_names {
             name_set.insert(name.clone());
         }
@@ -419,6 +501,10 @@ impl StateMetadata {
 
     pub fn dominance<U: DPState>(&self, a: &U, b: &U) -> Option<Ordering> {
         let status = Some(Ordering::Equal);
+        let x = |i| a.get_element_resource_variable(i);
+        let y = |i| b.get_element_resource_variable(i);
+        let status = Self::compare_resource_variables(&x, &y, &self.element_less_is_better, status);
+        status?;
         let x = |i| a.get_integer_resource_variable(i);
         let y = |i| b.get_integer_resource_variable(i);
         let status = Self::compare_resource_variables(&x, &y, &self.integer_less_is_better, status);
@@ -428,7 +514,7 @@ impl StateMetadata {
         Self::compare_resource_variables(&x, &y, &self.continuous_less_is_better, status)
     }
 
-    fn compare_resource_variables<T: Numeric, F, G>(
+    fn compare_resource_variables<T: PartialOrd, F, G>(
         x: &F,
         y: &G,
         less_is_better: &[bool],
@@ -599,6 +685,10 @@ impl StateMetadata {
         let mut name_to_integer_variable = FxHashMap::default();
         let mut continuous_variable_names = Vec::new();
         let mut name_to_continuous_variable = FxHashMap::default();
+        let mut element_resource_variable_names = Vec::new();
+        let mut name_to_element_resource_variable = FxHashMap::default();
+        let mut element_resource_variable_to_object = Vec::new();
+        let mut element_less_is_better = Vec::new();
         let mut integer_resource_variable_names = Vec::new();
         let mut name_to_integer_resource_variable = FxHashMap::default();
         let mut integer_less_is_better = Vec::new();
@@ -631,12 +721,22 @@ impl StateMetadata {
                     name_to_vector_variable.insert(name.clone(), vector_variable_names.len());
                     vector_variable_names.push(name);
                 }
-                "element" => {
-                    let id = Self::get_object_id(map, &name_to_object)?;
-                    element_variable_to_object.push(id);
-                    name_to_element_variable.insert(name.clone(), element_variable_names.len());
-                    element_variable_names.push(name);
-                }
+                "element" => match Self::get_less_is_better(map)? {
+                    Some(value) => {
+                        let id = Self::get_object_id(map, &name_to_object)?;
+                        element_resource_variable_to_object.push(id);
+                        name_to_element_resource_variable
+                            .insert(name.clone(), element_resource_variable_names.len());
+                        element_resource_variable_names.push(name);
+                        element_less_is_better.push(value);
+                    }
+                    None => {
+                        let id = Self::get_object_id(map, &name_to_object)?;
+                        element_variable_to_object.push(id);
+                        name_to_element_variable.insert(name.clone(), element_variable_names.len());
+                        element_variable_names.push(name);
+                    }
+                },
                 "integer" => match Self::get_less_is_better(map)? {
                     Some(value) => {
                         name_to_integer_resource_variable
@@ -688,6 +788,10 @@ impl StateMetadata {
             name_to_integer_variable,
             continuous_variable_names,
             name_to_continuous_variable,
+            element_resource_variable_names,
+            name_to_element_resource_variable,
+            element_resource_variable_to_object,
+            element_less_is_better,
             integer_resource_variable_names,
             name_to_integer_resource_variable,
             integer_less_is_better,
@@ -836,6 +940,19 @@ mod tests {
         name_to_continuous_variable.insert(String::from("c2"), 2);
         name_to_continuous_variable.insert(String::from("c3"), 3);
 
+        let element_resource_variable_names = vec![
+            String::from("er0"),
+            String::from("er1"),
+            String::from("er2"),
+            String::from("er3"),
+        ];
+        let mut name_to_element_resource_variable = FxHashMap::default();
+        name_to_element_resource_variable.insert(String::from("er0"), 0);
+        name_to_element_resource_variable.insert(String::from("er1"), 1);
+        name_to_element_resource_variable.insert(String::from("er2"), 2);
+        name_to_element_resource_variable.insert(String::from("er3"), 3);
+        let element_resource_variable_to_object = vec![0, 0, 0, 1];
+
         let integer_resource_variable_names = vec![
             String::from("ir0"),
             String::from("ir1"),
@@ -877,6 +994,10 @@ mod tests {
             name_to_integer_variable,
             continuous_variable_names,
             name_to_continuous_variable,
+            element_resource_variable_names,
+            name_to_element_resource_variable,
+            element_resource_variable_to_object,
+            element_less_is_better: vec![false, false, true, false],
             integer_resource_variable_names,
             name_to_integer_resource_variable,
             integer_less_is_better: vec![false, false, true, false],
@@ -903,7 +1024,7 @@ p3: []
 e0: 0
 e1: 1
 e2: 2
-e3: 3
+e3: 0
 i0: 0
 i1: 1
 i2: 2
@@ -912,6 +1033,10 @@ c0: 0
 c1: 1
 c2: 2
 c3: 3
+er0: 0
+er1: 1
+er2: 2
+er3: 0
 ir0: 0
 ir1: 1
 ir2: 2
@@ -927,7 +1052,6 @@ cr3: 3
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
         let state = State::load_from_yaml(yaml, &metadata);
-        assert!(state.is_ok());
         let mut s0 = Set::with_capacity(10);
         s0.insert(0);
         s0.insert(2);
@@ -941,16 +1065,22 @@ cr3: 3
             signature_variables: SignatureVariables {
                 set_variables: vec![s0, s1, s2, s3],
                 vector_variables: vec![vec![0, 2], vec![0, 1], vec![0], vec![]],
-                element_variables: vec![0, 1, 2, 3],
+                element_variables: vec![0, 1, 2, 0],
                 integer_variables: vec![0, 1, 2, 3],
                 continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
             },
             resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2, 0],
                 integer_variables: vec![0, 1, 2, 3],
                 continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
             },
         };
         assert_eq!(state.unwrap(), expected);
+    }
+
+    #[test]
+    fn state_load_from_yaml_err() {
+        let metadata = generate_metadata();
 
         let yaml = yaml_rust::YamlLoader::load_from_str(
             r"
@@ -964,8 +1094,11 @@ p2: [0]
 p3: []
 e0: 0
 e1: 1
-e2: 2
-e3: 3
+e3: 0
+er0: 0
+er1: 1
+er2: 1
+er3: 0
 i0: 0
 i1: 1
 i2: 2
@@ -989,13 +1122,8 @@ cr3: 3
         assert_eq!(yaml.len(), 1);
         let yaml = &yaml[0];
         let state = State::load_from_yaml(yaml, &metadata);
-        assert!(state.is_ok());
-        assert_eq!(state.unwrap(), expected);
-    }
+        assert!(state.is_err());
 
-    #[test]
-    fn state_load_from_yaml_err() {
-        let metadata = generate_metadata();
         let yaml = yaml_rust::YamlLoader::load_from_str(
             r"
 s0: [0, 2]
@@ -1008,7 +1136,55 @@ p2: [0]
 p3: []
 e0: 0
 e1: 1
+e2: 1
 e3: 3
+er0: 0
+er1: 1
+er2: 1
+er3: 0
+i0: 0
+i1: 1
+i2: 2
+i3: 3
+c0: 0
+c1: 1
+c2: 2
+c3: 3
+ir0: 0
+ir1: 1
+ir2: 2
+ir3: 3
+cr0: 0
+cr1: 1
+cr2: 2
+cr3: 3
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let state = State::load_from_yaml(yaml, &metadata);
+        assert!(state.is_err());
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+s0: [0, 2]
+s1: [0, 1]
+s2: [0]
+s3: []
+p0: [0, 2]
+p1: [0, 1]
+p2: [0]
+p3: []
+e0: 0
+e1: 1
+e2: 1
+e3: 0
+er0: 0
+er1: 1
+er2: 1
+er3: 3
 i0: 0
 i1: 1
 i2: 2
@@ -1155,6 +1331,10 @@ cr3: 3
         expected.insert(String::from("e1"));
         expected.insert(String::from("e2"));
         expected.insert(String::from("e3"));
+        expected.insert(String::from("er0"));
+        expected.insert(String::from("er1"));
+        expected.insert(String::from("er2"));
+        expected.insert(String::from("er3"));
         expected.insert(String::from("i0"));
         expected.insert(String::from("i1"));
         expected.insert(String::from("i2"));
@@ -1191,6 +1371,7 @@ cr3: 3
                 continuous_variables: vec![1.0, 2.0, 3.0],
             },
             resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2],
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![4.0, 5.0, 6.0],
             },
@@ -1207,6 +1388,9 @@ cr3: 3
         assert_eq!(state.get_continuous_variable(0), 1.0);
         assert_eq!(state.get_continuous_variable(1), 2.0);
         assert_eq!(state.get_continuous_variable(2), 3.0);
+        assert_eq!(state.get_element_resource_variable(0), 0);
+        assert_eq!(state.get_element_resource_variable(1), 1);
+        assert_eq!(state.get_element_resource_variable(2), 2);
         assert_eq!(state.get_integer_resource_variable(0), 4);
         assert_eq!(state.get_integer_resource_variable(1), 5);
         assert_eq!(state.get_integer_resource_variable(2), 6);
@@ -1232,6 +1416,7 @@ cr3: 3
                 continuous_variables: vec![1.0, 2.0, 3.0],
             },
             resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2],
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![4.0, 5.0, 6.0],
             },
@@ -1281,6 +1466,8 @@ cr3: 3
             Box::new(NumericExpression::ContinuousVariable(1)),
             Box::new(NumericExpression::Constant(2.0)),
         );
+        let element_resource_effect1 = ElementExpression::Constant(1);
+        let element_resource_effect2 = ElementExpression::Constant(0);
         let integer_resource_effect1 = NumericExpression::NumericOperation(
             NumericOperator::Add,
             Box::new(NumericExpression::IntegerResourceVariable(0)),
@@ -1307,6 +1494,10 @@ cr3: 3
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
             integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
             continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+            element_resource_effects: vec![
+                (0, element_resource_effect1),
+                (1, element_resource_effect2),
+            ],
             integer_resource_effects: vec![
                 (0, integer_resource_effect1),
                 (1, integer_resource_effect2),
@@ -1332,6 +1523,7 @@ cr3: 3
                 continuous_variables: vec![0.0, 4.0, 3.0],
             },
             resource_variables: ResourceVariables {
+                element_variables: vec![1, 0, 2],
                 integer_variables: vec![5, 2, 6],
                 continuous_variables: vec![5.0, 2.5, 6.0],
             },
@@ -1357,6 +1549,7 @@ cr3: 3
                 continuous_variables: vec![1.0, 2.0, 3.0],
             },
             resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2],
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![4.0, 5.0, 6.0],
             },
@@ -1406,6 +1599,8 @@ cr3: 3
             Box::new(NumericExpression::ContinuousVariable(1)),
             Box::new(NumericExpression::Constant(2.0)),
         );
+        let element_resource_effect1 = ElementExpression::Constant(1);
+        let element_resource_effect2 = ElementExpression::Constant(0);
         let integer_resource_effect1 = NumericExpression::NumericOperation(
             NumericOperator::Add,
             Box::new(NumericExpression::IntegerResourceVariable(0)),
@@ -1432,6 +1627,10 @@ cr3: 3
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
             integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
             continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+            element_resource_effects: vec![
+                (0, element_resource_effect1),
+                (1, element_resource_effect2),
+            ],
             integer_resource_effects: vec![
                 (0, integer_resource_effect1),
                 (1, integer_resource_effect2),
@@ -1457,6 +1656,7 @@ cr3: 3
                 continuous_variables: vec![0.0, 4.0, 3.0],
             },
             resource_variables: ResourceVariables {
+                element_variables: vec![1, 0, 2],
                 integer_variables: vec![5, 2, 6],
                 continuous_variables: vec![5.0, 2.5, 6.0],
             },
@@ -1471,6 +1671,7 @@ cr3: 3
 
         let a = State {
             resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2, 0],
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
             },
@@ -1478,6 +1679,7 @@ cr3: 3
         };
         let b = State {
             resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2, 0],
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
             },
@@ -1487,6 +1689,18 @@ cr3: 3
 
         let b = State {
             resource_variables: ResourceVariables {
+                element_variables: vec![0, 0, 3, 0],
+                integer_variables: vec![1, 2, 2, 0],
+                continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
+            },
+            ..Default::default()
+        };
+        assert_eq!(metadata.dominance(&a, &b), Some(Ordering::Greater));
+        assert_eq!(metadata.dominance(&b, &a), Some(Ordering::Less));
+
+        let b = State {
+            resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2, 0],
                 integer_variables: vec![1, 1, 3, 0],
                 continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
             },
@@ -1497,6 +1711,7 @@ cr3: 3
 
         let b = State {
             resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2, 0],
                 integer_variables: vec![1, 3, 3, 0],
                 continuous_variables: vec![0.0, 0.0, 0.0, 0.0],
             },
@@ -1506,6 +1721,7 @@ cr3: 3
 
         let a = State {
             resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2, 0],
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
             },
@@ -1513,6 +1729,7 @@ cr3: 3
         };
         let b = State {
             resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2, 0],
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![1.0, 1.0, 3.0, 0.0],
             },
@@ -1523,6 +1740,7 @@ cr3: 3
 
         let b = State {
             resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2, 0],
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![1.0, 3.0, 4.0, 0.0],
             },
@@ -1533,10 +1751,34 @@ cr3: 3
 
     #[test]
     #[should_panic]
+    fn dominance_element_length_panic() {
+        let metadata = generate_metadata();
+        let a = State {
+            resource_variables: ResourceVariables {
+                element_variables: vec![1, 2, 3],
+                integer_variables: vec![1, 2, 2, 2],
+                continuous_variables: vec![],
+            },
+            ..Default::default()
+        };
+        let b = State {
+            resource_variables: ResourceVariables {
+                element_variables: vec![1, 2, 3, 0],
+                integer_variables: vec![1, 2, 2, 2],
+                continuous_variables: vec![],
+            },
+            ..Default::default()
+        };
+        metadata.dominance(&b, &a);
+    }
+
+    #[test]
+    #[should_panic]
     fn dominance_integer_length_panic() {
         let metadata = generate_metadata();
         let a = State {
             resource_variables: ResourceVariables {
+                element_variables: vec![],
                 integer_variables: vec![1, 2, 2],
                 continuous_variables: vec![],
             },
@@ -1544,6 +1786,7 @@ cr3: 3
         };
         let b = State {
             resource_variables: ResourceVariables {
+                element_variables: vec![],
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![],
             },
@@ -1558,6 +1801,7 @@ cr3: 3
         let metadata = generate_metadata();
         let a = State {
             resource_variables: ResourceVariables {
+                element_variables: vec![],
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![1.0, 2.0, 2.0, 0.0],
             },
@@ -1565,6 +1809,7 @@ cr3: 3
         };
         let b = State {
             resource_variables: ResourceVariables {
+                element_variables: vec![],
                 integer_variables: vec![1, 2, 2, 0],
                 continuous_variables: vec![1.0, 1.0, 3.0],
             },
@@ -1806,6 +2051,22 @@ cr3: 3
   type: continuous
 - name: c3
   type: continuous
+- name: er0
+  type: element 
+  object: object
+  preference: greater
+- name: er1
+  type: element
+  object: object
+  preference: greater
+- name: er2
+  type: element
+  object: object
+  preference: less
+- name: er3
+  type: element
+  object: small
+  preference: greater
 - name: ir0
   type: integer
   preference: greater

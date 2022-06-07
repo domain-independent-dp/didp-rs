@@ -28,6 +28,7 @@ impl HashableSignatureVariables {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
 pub struct HashableResourceVariables {
+    pub element_variables: Vec<Element>,
     pub integer_variables: Vec<Integer>,
     pub continuous_variables: Vec<OrderedContinuous>,
 }
@@ -35,6 +36,7 @@ pub struct HashableResourceVariables {
 impl HashableResourceVariables {
     pub fn new(variables: &didp_parser::ResourceVariables) -> HashableResourceVariables {
         HashableResourceVariables {
+            element_variables: variables.element_variables.clone(),
             integer_variables: variables.integer_variables.clone(),
             continuous_variables: variables
                 .continuous_variables
@@ -84,6 +86,11 @@ impl didp_parser::DPState for HashableState {
     #[inline]
     fn get_continuous_variable(&self, i: usize) -> Continuous {
         self.signature_variables.continuous_variables[i].into_inner()
+    }
+
+    #[inline]
+    fn get_element_resource_variable(&self, i: usize) -> Element {
+        self.resource_variables.element_variables[i]
     }
 
     #[inline]
@@ -147,6 +154,11 @@ impl didp_parser::DPState for HashableState {
             continuous_variables[e.0] = OrderedFloat(e.1.eval(self, registry));
         }
 
+        let mut element_resource_variables = self.resource_variables.element_variables.clone();
+        for e in &effect.element_resource_effects {
+            element_resource_variables[e.0] = e.1.eval(self, registry);
+        }
+
         let mut integer_resource_variables = self.resource_variables.integer_variables.clone();
         for e in &effect.integer_resource_effects {
             integer_resource_variables[e.0] = e.1.eval(self, registry);
@@ -167,6 +179,7 @@ impl didp_parser::DPState for HashableState {
                 continuous_variables,
             },
             resource_variables: HashableResourceVariables {
+                element_variables: element_resource_variables,
                 integer_variables: integer_resource_variables,
                 continuous_variables: continuous_resource_variables,
             },
@@ -193,6 +206,9 @@ impl didp_parser::DPState for HashableState {
         for e in &effect.continuous_effects {
             self.signature_variables.continuous_variables[e.0] =
                 OrderedFloat(e.1.eval(self, registry));
+        }
+        for e in &effect.element_resource_effects {
+            self.resource_variables.element_variables[e.0] = e.1.eval(self, registry);
         }
         for e in &effect.integer_resource_effects {
             self.resource_variables.integer_variables[e.0] = e.1.eval(self, registry);
@@ -277,6 +293,7 @@ mod tests {
     #[test]
     fn hashable_resouce_variables() {
         let resource_variables = didp_parser::ResourceVariables {
+            element_variables: vec![],
             integer_variables: vec![4, 5, 6],
             continuous_variables: vec![4.0, 5.0, 6.0],
         };
@@ -308,6 +325,7 @@ mod tests {
                 continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
             },
             resource_variables: HashableResourceVariables {
+                element_variables: vec![0, 1],
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
             },
@@ -324,6 +342,8 @@ mod tests {
         assert_eq!(state.get_continuous_variable(0), 1.0);
         assert_eq!(state.get_continuous_variable(1), 2.0);
         assert_eq!(state.get_continuous_variable(2), 3.0);
+        assert_eq!(state.get_element_resource_variable(0), 0);
+        assert_eq!(state.get_element_resource_variable(1), 1);
         assert_eq!(state.get_integer_resource_variable(0), 4);
         assert_eq!(state.get_integer_resource_variable(1), 5);
         assert_eq!(state.get_integer_resource_variable(2), 6);
@@ -339,6 +359,7 @@ mod tests {
                 continuous_variables: vec![1.0, 2.0, 3.0],
             },
             resource_variables: didp_parser::ResourceVariables {
+                element_variables: vec![],
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![4.0, 5.0, 6.0],
             },
@@ -380,6 +401,7 @@ mod tests {
                 continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
             },
             resource_variables: HashableResourceVariables {
+                element_variables: vec![],
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
             },
@@ -455,6 +477,7 @@ mod tests {
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
             integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
             continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+            element_resource_effects: vec![],
             integer_resource_effects: vec![
                 (0, integer_resource_effect1),
                 (1, integer_resource_effect2),
@@ -480,6 +503,7 @@ mod tests {
                 continuous_variables: vec![OrderedFloat(0.0), OrderedFloat(4.0), OrderedFloat(3.0)],
             },
             resource_variables: HashableResourceVariables {
+                element_variables: vec![],
                 integer_variables: vec![5, 2, 6],
                 continuous_variables: vec![OrderedFloat(5.0), OrderedFloat(2.5), OrderedFloat(6.0)],
             },
@@ -505,6 +529,7 @@ mod tests {
                 continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
             },
             resource_variables: HashableResourceVariables {
+                element_variables: vec![0, 1],
                 integer_variables: vec![4, 5, 6],
                 continuous_variables: vec![OrderedFloat(4.0), OrderedFloat(5.0), OrderedFloat(6.0)],
             },
@@ -554,6 +579,8 @@ mod tests {
             Box::new(NumericExpression::ContinuousVariable(1)),
             Box::new(NumericExpression::Constant(2.0)),
         );
+        let element_resource_effect1 = ElementExpression::Constant(1);
+        let element_resource_effect2 = ElementExpression::Constant(0);
         let integer_resource_effect1 = NumericExpression::NumericOperation(
             NumericOperator::Add,
             Box::new(NumericExpression::IntegerResourceVariable(0)),
@@ -580,6 +607,10 @@ mod tests {
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
             integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
             continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+            element_resource_effects: vec![
+                (0, element_resource_effect1),
+                (1, element_resource_effect2),
+            ],
             integer_resource_effects: vec![
                 (0, integer_resource_effect1),
                 (1, integer_resource_effect2),
@@ -605,6 +636,7 @@ mod tests {
                 continuous_variables: vec![OrderedFloat(0.0), OrderedFloat(4.0), OrderedFloat(3.0)],
             },
             resource_variables: HashableResourceVariables {
+                element_variables: vec![1, 0],
                 integer_variables: vec![5, 2, 6],
                 continuous_variables: vec![OrderedFloat(5.0), OrderedFloat(2.5), OrderedFloat(6.0)],
             },

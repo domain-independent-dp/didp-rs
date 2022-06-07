@@ -15,6 +15,7 @@ pub struct Effect {
     pub element_effects: Vec<(usize, expression::ElementExpression)>,
     pub integer_effects: Vec<(usize, expression::NumericExpression<Integer>)>,
     pub continuous_effects: Vec<(usize, expression::NumericExpression<Continuous>)>,
+    pub element_resource_effects: Vec<(usize, expression::ElementExpression)>,
     pub integer_resource_effects: Vec<(usize, expression::NumericExpression<Integer>)>,
     pub continuous_resource_effects: Vec<(usize, expression::NumericExpression<Continuous>)>,
 }
@@ -32,6 +33,7 @@ impl Effect {
         let mut element_effects = Vec::new();
         let mut integer_effects = Vec::new();
         let mut continuous_effects = Vec::new();
+        let mut element_resource_effects = Vec::new();
         let mut integer_resource_effects = Vec::new();
         let mut continuous_resource_effects = Vec::new();
         for (variable, effect) in lifted_effects {
@@ -48,6 +50,9 @@ impl Effect {
             } else if let Some(i) = metadata.name_to_element_variable.get(&variable) {
                 let effect = parse_element_from_yaml(effect, metadata, registry, parameters)?;
                 element_effects.push((*i, effect));
+            } else if let Some(i) = metadata.name_to_element_resource_variable.get(&variable) {
+                let effect = parse_element_from_yaml(effect, metadata, registry, parameters)?;
+                element_resource_effects.push((*i, effect));
             } else if let Some(i) = metadata.name_to_integer_variable.get(&variable) {
                 let effect =
                     Integer::parse_expression_from_yaml(effect, metadata, registry, parameters)?;
@@ -78,6 +83,7 @@ impl Effect {
             element_effects,
             integer_effects,
             continuous_effects,
+            element_resource_effects,
             integer_resource_effects,
             continuous_resource_effects,
         })
@@ -136,6 +142,19 @@ mod tests {
         name_to_element_variable.insert("e2".to_string(), 2);
         name_to_element_variable.insert("e3".to_string(), 3);
         let element_variable_to_object = vec![0, 0, 0, 0];
+
+        let element_resource_variable_names = vec![
+            "er0".to_string(),
+            "er1".to_string(),
+            "er2".to_string(),
+            "er3".to_string(),
+        ];
+        let mut name_to_element_resource_variable = FxHashMap::default();
+        name_to_element_resource_variable.insert("er0".to_string(), 0);
+        name_to_element_resource_variable.insert("er1".to_string(), 1);
+        name_to_element_resource_variable.insert("er2".to_string(), 2);
+        name_to_element_resource_variable.insert("er3".to_string(), 3);
+        let element_resource_variable_to_object = vec![0, 0, 0, 0];
 
         let integer_variable_names = vec![
             "i0".to_string(),
@@ -202,6 +221,10 @@ mod tests {
             name_to_integer_variable,
             continuous_variable_names,
             name_to_continuous_variable,
+            element_resource_variable_names,
+            name_to_element_resource_variable,
+            element_resource_variable_to_object,
+            element_less_is_better: vec![false, false, true, true],
             integer_resource_variable_names,
             name_to_integer_resource_variable,
             integer_less_is_better: vec![false, false, true, false],
@@ -247,6 +270,7 @@ mod tests {
  s0: (add e s0)
  p0: (push e p0)
  i0: 1
+ er0: 1
  ir0: '2'
  c0: 1.0
  cr0: '2.0'
@@ -278,6 +302,7 @@ mod tests {
             )],
             element_effects: vec![(0, ElementExpression::Constant(0))],
             integer_effects: vec![(0, NumericExpression::Constant(1))],
+            element_resource_effects: vec![(0, ElementExpression::Constant(1))],
             integer_resource_effects: vec![(0, NumericExpression::Constant(2))],
             continuous_effects: vec![(0, NumericExpression::Constant(1.0))],
             continuous_resource_effects: vec![(0, NumericExpression::Constant(2.0))],
@@ -287,6 +312,28 @@ mod tests {
 
     #[test]
     fn load_from_yaml_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let mut parameters = FxHashMap::default();
+        parameters.insert(String::from("e"), 0);
+
+        let effect = r"
+ e0: f
+ s0: (add e s0)
+ p0: (push e p0)
+ i0: '1'
+ er0: -1
+ ir0: '2'
+ c0: '1.0'
+ cr0: '2.0'
+";
+        let effect = yaml_rust::YamlLoader::load_from_str(effect);
+        assert!(effect.is_ok());
+        let effect = effect.unwrap();
+        assert_eq!(effect.len(), 1);
+        let effect = &effect[0];
+        let effect = Effect::load_from_yaml(effect, &metadata, &registry, &parameters);
+        assert!(effect.is_err());
         let metadata = generate_metadata();
         let registry = generate_registry();
         let mut parameters = FxHashMap::default();

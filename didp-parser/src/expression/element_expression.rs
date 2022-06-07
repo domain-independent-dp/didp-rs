@@ -10,6 +10,7 @@ use crate::variable::{Element, Set, Vector};
 pub enum ElementExpression {
     Constant(Element),
     Variable(usize),
+    ResourceVariable(usize),
     NumericOperation(
         NumericOperator,
         Box<ElementExpression>,
@@ -30,6 +31,7 @@ impl ElementExpression {
         match self {
             Self::Constant(x) => *x,
             Self::Variable(i) => state.get_element_variable(*i),
+            Self::ResourceVariable(i) => state.get_element_resource_variable(*i),
             Self::NumericOperation(op, x, y) => {
                 op.eval(x.eval(state, registry), y.eval(state, registry))
             }
@@ -592,7 +594,10 @@ mod tests {
                 element_variables: vec![1],
                 ..Default::default()
             },
-            ..Default::default()
+            resource_variables: ResourceVariables {
+                element_variables: vec![2],
+                ..Default::default()
+            },
         }
     }
 
@@ -610,6 +615,14 @@ mod tests {
         let registry = generate_registry();
         let expression = ElementExpression::Variable(0);
         assert_eq!(expression.eval(&state, &registry), 1);
+    }
+
+    #[test]
+    fn element_resource_variable_eval() {
+        let state = generate_state();
+        let registry = generate_registry();
+        let expression = ElementExpression::ResourceVariable(0);
+        assert_eq!(expression.eval(&state, &registry), 2);
     }
 
     #[test]
@@ -684,6 +697,13 @@ mod tests {
     fn element_variable_simplify() {
         let registry = generate_registry();
         let expression = ElementExpression::Variable(0);
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn element_resource_variable_simplify() {
+        let registry = generate_registry();
+        let expression = ElementExpression::ResourceVariable(0);
         assert_eq!(expression.simplify(&registry), expression);
     }
 
