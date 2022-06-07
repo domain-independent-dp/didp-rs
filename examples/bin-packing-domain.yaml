@@ -11,6 +11,7 @@ state_variables:
   - name: bin-number
     type: element
     object: item
+    preference: less
 tables:
   - name: capacity
     type: continuous
