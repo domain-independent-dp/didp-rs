@@ -1,3 +1,1 @@
 solver: expression_exist_dfs
-config:
-    time_limit: 10

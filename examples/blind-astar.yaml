@@ -1,1 +1,3 @@
 solver: expression_astar
+config:
+    time_limit: 1800
