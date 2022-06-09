@@ -44,7 +44,7 @@ transitions:
         object: unpacked
     preconditions:
       - (<= (weight j) residual)
-      - (<= (- bin-number 1) j)
+      - (>= j (- bin-number 1))
     effect:
       unpacked: (remove j unpacked)
       residual: (- residual (weight j))
@@ -55,11 +55,11 @@ transitions:
       - name: j
         object: unpacked
     preconditions:
-      - (<= bin-number j)
+      - (>= j bin-number)
       - forall:
           - name: k
             object: unpacked
-        condition: (> (weight k) residual)
+        condition: (and (> (weight k) residual) (>= k bin-number))
     effect:
       unpacked: (remove j unpacked)
       residual: (- capacity (weight j))
