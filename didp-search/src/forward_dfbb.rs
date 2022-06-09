@@ -58,7 +58,7 @@ where
                     || (model.reduce_function == ReduceFunction::Max
                         && node.cost() > primal_bound.unwrap())))
         {
-            println!("New primal bound: {}", node.cost());
+            println!("New primal bound: {}, expanded: {}", node.cost(), expanded);
             primal_bound = Some(node.cost());
             incumbent = Some(node);
             continue;
