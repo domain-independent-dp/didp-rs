@@ -12,7 +12,7 @@ use std::rc::Rc;
 pub fn dfbb<T, H, F>(
     model: &didp_parser::Model<T>,
     generator: SuccessorGenerator<didp_parser::Transition<T>>,
-    h_evaluator: H,
+    h_evaluator: Option<H>,
     f_evaluator: F,
     parameters: solver::SolverParameters<T>,
     registry_capacity: Option<usize>,
@@ -63,7 +63,7 @@ where
             incumbent = Some(node);
             continue;
         }
-        if let Some(bound) = primal_bound {
+        if let (Some(bound), Some(h_evaluator)) = (primal_bound, h_evaluator.as_ref()) {
             let h = h_evaluator.eval(node.state(), model);
             if let Some(h) = h {
                 let f = f_evaluator(node.cost(), h, node.state(), model);

@@ -1,6 +1,6 @@
-use crate::dfbb;
 use crate::expression_astar::FEvaluatorType;
 use crate::expression_evaluator::ExpressionEvaluator;
+use crate::forward_dfbb;
 use crate::solver;
 use crate::state_registry::StateInRegistry;
 use crate::successor_generator::SuccessorGenerator;
@@ -41,15 +41,15 @@ where
     ) -> Result<solver::Solution<T>, Box<dyn Error>> {
         let generator = SuccessorGenerator::<Transition<T>>::new(model, false);
         let h_evaluator = if let Some(h_expression) = self.h_expression.as_ref() {
-            ExpressionEvaluator::new(h_expression.clone(), model)?
+            Some(ExpressionEvaluator::new(h_expression.clone(), model)?)
         } else {
-            ExpressionEvaluator::default()
+            None
         };
         let solution = match self.f_evaluator_type {
             FEvaluatorType::Plus => {
                 let f_evaluator =
                     Box::new(|g, h, _: &StateInRegistry, _: &didp_parser::Model<T>| g + h);
-                dfbb::dfbb(
+                forward_dfbb::dfbb(
                     model,
                     generator,
                     h_evaluator,
@@ -61,7 +61,7 @@ where
             FEvaluatorType::Max => {
                 let f_evaluator =
                     Box::new(|g, h, _: &StateInRegistry, _: &didp_parser::Model<T>| cmp::max(g, h));
-                dfbb::dfbb(
+                forward_dfbb::dfbb(
                     model,
                     generator,
                     h_evaluator,
@@ -73,7 +73,7 @@ where
             FEvaluatorType::Min => {
                 let f_evaluator =
                     Box::new(|g, h, _: &StateInRegistry, _: &didp_parser::Model<T>| cmp::min(g, h));
-                dfbb::dfbb(
+                forward_dfbb::dfbb(
                     model,
                     generator,
                     h_evaluator,
@@ -85,7 +85,7 @@ where
             FEvaluatorType::Overwrite => {
                 let f_evaluator =
                     Box::new(|_, h, _: &StateInRegistry, _: &didp_parser::Model<T>| h);
-                dfbb::dfbb(
+                forward_dfbb::dfbb(
                     model,
                     generator,
                     h_evaluator,

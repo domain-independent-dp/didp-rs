@@ -1,6 +1,5 @@
 pub mod beam_search_node;
 pub mod bfs_node;
-pub mod dfbb;
 pub mod dijkstra;
 pub mod evaluator;
 pub mod exist_dfs;
@@ -11,6 +10,7 @@ pub mod expression_evaluator;
 pub mod expression_exist_dfs;
 pub mod forward_beam_search;
 pub mod forward_bfs;
+pub mod forward_dfbb;
 pub mod forward_recursion;
 pub mod hashable_state;
 pub mod lazy_dijkstra;
