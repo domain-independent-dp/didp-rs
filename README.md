@@ -59,7 +59,7 @@ cargo run --release examples/graph-clear-domain.yaml examples/graph-clear-planar
 ```
 
 ## Model Problems
-Please read [the user guide](./user-guide.md) to learn how to model a problem.
+Please read [the guide for DyPDL](./dypdl-guide.md) to learn how to model a problem.
 
 ## Develop DIDP
 
