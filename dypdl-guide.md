@@ -16,7 +16,7 @@ To solve a problem using the DIDP solver, you need to create three files, `domai
     - [constraints](#constraints)
     - [base_cases](#basecases)
     - [reduce](#reduce)
-    - [transitions](#transition)
+    - [transitions](#transitions)
 - [Problem YAML](#problem-yaml)
     - [domain](#domain-1)
     - [problem](#problem)
