@@ -213,7 +213,7 @@ It returns the sum of values in table `<table name>` with indices specified by t
 It takes the sum over all elements in the cartesian product of the arguments.
 
 For example, suppose that a table named `table1` is 3-dimensional.
-`(sum set1 2 set2)` where `set1 = { 0, 1 }` and `set2 = { 3, 4 }` returns the sum of `(table1 0 2 3)`, `(table1 0 2 4)`, `(table1 1 2 3)`, and `(table1 1 2 4)`.
+`(sum table1 set1 2 set2)` where `set1 = { 0, 1 }` and `set2 = { 3, 4 }` returns the sum of `(table1 0 2 3)`, `(table1 0 2 4)`, `(table1 1 2 3)`, and `(table1 1 2 4)`.
 
 ### Variable
 ```
