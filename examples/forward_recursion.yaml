@@ -1,0 +1,3 @@
+solver: forward_recursion
+config:
+    memo_capacity: 1000000

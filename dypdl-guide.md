@@ -1,6 +1,6 @@
-# DIDP User Guide
+# User Guide for DyPDL
 
-This document explains how to model a combinatorial optimization problem as a DIDP model.
+This document explains how to model a combinatorial optimization problem as a DP model using our language, Dynamic Programming Problem Definition Language (DyPDL).
 
 To solve a problem using the DIDP solver, you need to create three files, `domain.yaml`, `problem.yaml`, and `config.yaml`.
 
@@ -270,6 +270,9 @@ For the syntax of an expression, see [the expression guide](./expression-guide.m
 
 `cost` is required, and the value is a string describing the cost expression.
 In the cost expressoin, in addition to state variables and tables, you can use `cost`, which represnets the cost of the transformed state by the transition.
+If continuous immediate values, variables and tables are used, the cost expression is parsed as a continuous expression.
+Otherwise, it is parsed as an integer expression.
+Even if the cost is integer, if you use a continuous lower bound in the solver, make it contiuous by using continuous immidiate values, tables, and variables.
 
 ### Example
 
