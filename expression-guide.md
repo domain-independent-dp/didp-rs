@@ -2,6 +2,23 @@
 
 This document describes the syntax of expressions, which are used to describe base cases, constraints, and transitions.
 
+## TIPS
+When writing a long expression, you can use multiple lines by placing `>` before a string.
+For example,
+
+```yaml
+solver: expression_astar
+config:
+   h: >
+      (max (max (ceiling (/ (- (sum time uncompleted) idle-time) cycle-time))
+                (- (+ (sum lb2-weight1 uncompleted)
+                      (ceiling (sum lb2-weight2 uncompleted)))
+                   (if (>= idle-time (/ cycle-time 2)) 1.0 0.0)))
+           (- (ceiling (sum lb3-weight uncompleted))
+              (if (>= idle-time (/ cycle-time 3)) 1.0 0.0)))
+```
+
+
 ## Table of Contents
 
 - [Element Expression](#element-expression)

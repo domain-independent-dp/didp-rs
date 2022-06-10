@@ -13,6 +13,19 @@ The features of solvers are summarized in the following table.
 |[exist_dfs](#existdfs)|`(+ <numeric expression> cost)`, `(max <numeric expression> cost)`|`min`, `max`|yes|
 |[expression_beam](#expressionbeam)|`(+ <numeric expression> cost)`, `(max <numeric expression> cost)`|`min`, `max`|no|
 
+## Common Config
+
+A config YAML file must have key `solver`, whose value is the name of a solver.
+Solver specific configurations are described in a map under `config` key.
+You can specify `time_limit` in all solvers.
+If `time_limit` seconds passed, a solver returns the best solution and/or bound found so far.
+
+```yaml
+solver: <solver name>
+config:
+    time_limit: <nonnegative integer>
+```
+
 ## forward_recursion
 It computes the objective value using recursion while memoizing encountered states.
 This is a naive dynamic programming algorithm.
