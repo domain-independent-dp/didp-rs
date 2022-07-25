@@ -1,0 +1,68 @@
+domain: SALBP1
+objects:
+  - task
+state_variables:
+  - name: uncompleted
+    type: set
+    object: task
+  - name: idle-time
+    type: integer
+    preference: greater
+tables:
+  - name: cycle-time
+    type: integer
+  - name: time
+    type: integer
+    args:
+      - task
+  - name: predecessors
+    type: set
+    object: task
+    args:
+      - task
+    default: []
+  - name: lb2-weight1
+    type: integer
+    args:
+      - task
+    default: 0
+  - name: lb2-weight2
+    type: continuous
+    args:
+      - task
+    default: 0.0
+  - name: lb3-weight
+    type: continuous
+    args:
+      - task
+    default: 0.0
+base_cases:
+  - - (is_empty uncompleted)
+reduce: min
+cost_type: integer
+transitions:
+  - name: do-task
+    parameters:
+      - name: t
+        object: uncompleted
+    preconditions:
+      - (is_empty (intersection uncompleted (predecessors t)))
+      - (<= (time t) idle-time)
+    effect:
+      uncompleted: (remove t uncompleted)
+      idle-time: (- idle-time (time t))
+    cost: cost
+  - name: open-new-station
+    forced: true
+    preconditions:
+      - forall:
+          - name: t
+            object: uncompleted
+        condition: (or (> (time t) idle-time) (> |(intersection uncompleted (predecessors t))| 0) )
+    effect:
+      idle-time: cycle-time
+    cost: (+ cost 1)
+dual_bounds:
+  - (ceil (/ (- (sum time uncompleted) idle-time) cycle-time))
+  - (- (+ (sum lb2-weight1 uncompleted) (ceil (sum lb2-weight2 uncompleted))) (if (>= idle-time (/ cycle-time 2.0)) 1 0))
+  - (- (ceil (sum lb3-weight uncompleted)) (if (>= idle-time (/ cycle-time 3.0)) 1 0))

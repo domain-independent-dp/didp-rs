@@ -1,8 +1,10 @@
 [workspace]
 
 members = [
-    "didp-parser",
-    "didp-search",
+    "dypdl",
+    "didp-yaml",
+    "dypdl-heuristic-search",
+    "dypy",
 ]
 
 [profile.release]

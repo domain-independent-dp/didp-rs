@@ -1,0 +1,21 @@
+[package]
+name = "dypy"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "dypy"
+crate-type = ["cdylib"]
+
+[dependencies]
+dypdl = { path = "../dypdl" }
+dypdl-heuristic-search = { path = "../dypdl-heuristic-search" }
+rustc-hash = "1.1.0"
+
+[dependencies.pyo3]
+version = "0.16.5"
+
+[features]
+extension-module = ["pyo3/extension-module"]
+default = ["extension-module"]

@@ -1,0 +1,72 @@
+domain: BPP
+objects:
+  - item
+state_variables:
+  - name: unpacked
+    type: set
+    object: item
+  - name: residual
+    type: integer
+    preference: greater
+  - name: bin-number
+    type: element
+    object: item
+    preference: less
+tables:
+  - name: capacity
+    type: integer
+  - name: weight
+    type: integer
+    args:
+      - item
+  - name: lb2-weight1
+    type: integer
+    args:
+      - item
+    default: 0
+  - name: lb2-weight2
+    type: continuous
+    args:
+      - item
+    default: 0.0
+  - name: lb3-weight
+    type: continuous
+    args:
+      - item
+    default: 0.0
+base_cases:
+  - - (is_empty unpacked)
+reduce: min
+cost_type: integer
+transitions:
+  - name: pack
+    parameters:
+      - name: i
+        object: unpacked
+    preconditions:
+      - (<= (weight i) residual)
+      - (>= (+ i 1) bin-number)
+    effect:
+      unpacked: (remove i unpacked)
+      residual: (- residual (weight i))
+    cost: cost
+  - name: open-and-pack
+    forced: true
+    parameters:
+      - name: i
+        object: unpacked
+    preconditions:
+      - (>= i bin-number)
+      - forall:
+          - name: j
+            object: unpacked
+        condition: (> (weight j) residual)
+    effect:
+      unpacked: (remove i unpacked)
+      residual: (- capacity (weight i))
+      bin-number: (+ 1 bin-number)
+    cost: (+ cost 1)
+dual_bounds:
+  - (ceil (/ (- (sum weight unpacked) residual) capacity))
+  - (- (+ (sum lb2-weight1 unpacked) (ceil (sum lb2-weight2 unpacked))) (if (>= residual (/ capacity 2.0)) 1 0))
+  - (- (ceil (sum lb3-weight unpacked)) (if (>= residual (/ capacity 3.0)) 1 0))
