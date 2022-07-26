@@ -41,9 +41,9 @@ pub mod prelude {
         SetExpression, VectorExpression,
     };
     pub use super::{
-        AccessPreference, AccessTarget, AddEffect, CheckExpression, CheckVariable, Continuous,
-        ContinuousResourceVariable, ContinuousVariable, CostExpression, CostType, Element,
-        ElementResourceVariable, ElementVariable, GetObjectTypeOf, Integer,
+        AccessPreference, AccessTarget, AddDualBound, AddEffect, CheckExpression, CheckVariable,
+        Continuous, ContinuousResourceVariable, ContinuousVariable, CostExpression, CostType,
+        Element, ElementResourceVariable, ElementVariable, GetObjectTypeOf, Integer,
         IntegerResourceVariable, IntegerVariable, Model, ObjectType, ReduceFunction,
         ResourceVariables, Set, SetVariable, SignatureVariables, State, StateMetadata,
         Table1DHandle, Table2DHandle, Table3DHandle, TableHandle, TableInterface, Transition,

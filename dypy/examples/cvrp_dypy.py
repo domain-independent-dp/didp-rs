@@ -9,7 +9,7 @@ import dypy as dp
 import read_tsplib
 
 
-def solve(n, nodes, edges, capacity, demand, k):
+def solve(n, nodes, edges, capacity, demand, k, time_limit=None):
     model = dp.Model()
     customer = model.add_object_type(number=n)
     unvisited = model.add_set_var(object_type=customer, target=[i for i in range(1, n)])
@@ -25,37 +25,37 @@ def solve(n, nodes, edges, capacity, demand, k):
 
     for i in range(1, n):
         visit = dp.Transition(
-            "visit {}".format(i),
+            name="visit {}".format(i),
             cost=dp.IntExpr.state_cost() + distance[location, i],
-            preconditions=[unvisited.contains(i), load + demand[i] <= capacity],
             effects=[
                 (unvisited, unvisited.remove(i)),
                 (location, i),
                 (load, load + demand[i]),
             ],
+            preconditions=[unvisited.contains(i), load + demand[i] <= capacity],
         )
         model.add_transition(visit)
         visit_via_depot = dp.Transition(
-            "visit_via_depot {}".format(i),
-            preconditions=[unvisited.contains(i), vehicles < k],
+            name="visit {} via depot".format(i),
             cost=dp.IntExpr.state_cost() + distance[location, 0] + distance[0, i],
             effects=[
                 (unvisited, unvisited.remove(i)),
                 (location, i),
                 (load, demand[i]),
             ],
+            preconditions=[unvisited.contains(i), vehicles < k],
         )
         model.add_transition(visit_via_depot)
 
     return_to_depot = dp.Transition(
-        "return",
+        name="return",
         cost=dp.IntExpr.state_cost() + distance[location, 0],
-        preconditions=[unvisited.is_empty(), location != 0],
         effects=[(location, 0)],
+        preconditions=[unvisited.is_empty(), location != 0],
     )
     model.add_transition(return_to_depot)
 
-    solver = dp.CAASDy(time_limit=1800)
+    solver = dp.CAASDy(time_limit=time_limit)
     solution = solver.solve(model)
 
     for t in solution.transitions:
@@ -68,6 +68,7 @@ def solve(n, nodes, edges, capacity, demand, k):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=str)
+    parser.add_argument("--time-out", default=1800, type=int)
     args = parser.parse_args()
 
     name = os.path.basename(args.input)
@@ -83,4 +84,4 @@ if __name__ == "__main__":
         _,
         _,
     ) = read_tsplib.read_cvrp(args.input)
-    problem = solve(n, nodes, edges, capacity, demand, k)
+    problem = solve(n, nodes, edges, capacity, demand, k, time_limit=args.time_out)

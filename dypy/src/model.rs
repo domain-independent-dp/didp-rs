@@ -1,6 +1,6 @@
 use super::expression::*;
 use super::table::*;
-use super::transition::TransitionPy;
+use super::transition::{CostUnion, TransitionPy};
 use dypdl::prelude::*;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
@@ -207,13 +207,13 @@ impl IntoPy<Py<PyAny>> for SetTableUnion {
 
 #[derive(FromPyObject, Debug, Clone, PartialEq, Eq)]
 pub enum BoolTableArgUnion {
-    #[pyo3(transparent, annotation = "list[unsigned int]")]
+    #[pyo3(transparent, annotation = "list[bool]")]
     Table1D(Vec<bool>),
-    #[pyo3(transparent, annotation = "list[list[unsigned int]]")]
+    #[pyo3(transparent, annotation = "list[list[bool]]")]
     Table2D(Vec<Vec<bool>>),
-    #[pyo3(transparent, annotation = "list[list[list[unsigned int]]]")]
+    #[pyo3(transparent, annotation = "list[list[list[bool]]]")]
     Table3D(Vec<Vec<Vec<bool>>>),
-    #[pyo3(transparent, annotation = "dict[list[unsigned int], unsigned int]")]
+    #[pyo3(transparent, annotation = "dict[list[unsigned int], bool]")]
     Table(FxHashMap<Vec<Element>, bool>),
 }
 
@@ -1353,6 +1353,32 @@ impl ModelPy {
             self.0.add_backward_transition(transition.into())
         } else {
             self.0.add_forward_transition(transition.into())
+        };
+        match result {
+            Ok(_) => Ok(()),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// add_dual_bound(bound)
+    ///
+    /// Adds a dual bound to the model.
+    ///
+    /// Parameters
+    /// ----------
+    /// bound: IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, or float
+    ///     Expression to compute a dual bound.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If `bound` is invalid.
+    ///     E.g., it uses a variable not included in the model or the cost of the transitioned state.
+    ///     If the cost type of model is integer, and `bound` is `FloatExpr`, `FloatVar`, `FloatResourceVar`, or `float`.
+    fn add_dual_bound(&mut self, bound: CostUnion) -> PyResult<()> {
+        let result = match bound {
+            CostUnion::Int(bound) => self.0.add_dual_bound(IntegerExpression::from(bound)),
+            CostUnion::Float(bound) => self.0.add_dual_bound(ContinuousExpression::from(bound)),
         };
         match result {
             Ok(_) => Ok(()),
@@ -4902,6 +4928,52 @@ mod tests {
         let result = model.add_transition(t, true, true);
         assert!(result.is_err());
         assert_eq!(model, snapshot);
+    }
+
+    #[test]
+    fn add_int_dual_bound_ok() {
+        let mut model = ModelPy::new_py(false, false);
+        assert!(model
+            .add_dual_bound(CostUnion::Int(IntUnion::Const(0)))
+            .is_ok());
+        assert_eq!(
+            model.0.dual_bounds,
+            vec![CostExpression::Integer(IntegerExpression::Constant(0))]
+        );
+    }
+
+    #[test]
+    fn add_int_dual_bound_err() {
+        let mut model = ModelPy::new_py(false, false);
+        assert!(model
+            .add_dual_bound(CostUnion::Float(FloatUnion::Const(1.5)))
+            .is_err());
+        assert_eq!(model.0.dual_bounds, vec![]);
+    }
+
+    #[test]
+    fn add_float_dual_bound_ok() {
+        let mut model = ModelPy::new_py(false, true);
+        assert!(model
+            .add_dual_bound(CostUnion::Float(FloatUnion::Const(1.5)))
+            .is_ok());
+        assert_eq!(
+            model.0.dual_bounds,
+            vec![CostExpression::Continuous(ContinuousExpression::Constant(
+                1.5
+            ))]
+        );
+    }
+
+    #[test]
+    fn add_float_dual_bound_err() {
+        let mut model = ModelPy::new_py(false, false);
+        assert!(model
+            .add_dual_bound(CostUnion::Float(FloatUnion::Expr(FloatExprPy::new(
+                ContinuousExpression::Cost
+            ))))
+            .is_err());
+        assert_eq!(model.0.dual_bounds, vec![]);
     }
 
     #[test]
