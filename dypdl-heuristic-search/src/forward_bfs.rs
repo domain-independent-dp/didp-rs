@@ -110,10 +110,7 @@ where
                 let constructor = |state: StateInRegistry, g: T, other: Option<&Rc<BFSNode<T>>>| {
                     // use a cached h-value
                     let h = if let Some(other) = other {
-                        match *other.h.borrow() {
-                            None => return None,
-                            h => h,
-                        }
+                        *other.h.borrow()
                     } else {
                         None
                     };
