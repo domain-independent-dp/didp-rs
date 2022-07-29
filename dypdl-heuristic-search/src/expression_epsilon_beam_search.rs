@@ -39,6 +39,8 @@ pub struct ExpressionEpsilonBeamSearch<T> {
     pub maximize: bool,
     /// Epsilon.
     pub epsilon: f64,
+    /// Random seed.
+    pub seed: u64,
     /// Common parameters for heuristic search solvers.
     pub parameters: solver::SolverParameters<T>,
 }
@@ -106,7 +108,8 @@ impl<T> ExpressionEpsilonBeamSearch<T> {
         <U as str::FromStr>::Err: fmt::Debug,
         U: variable_type::Numeric + Ord + fmt::Display + 'static,
     {
-        let beam_constructor = |capacity: usize| EpsilonBeam::new(capacity, self.epsilon);
+        let beam_constructor =
+            |capacity: usize| EpsilonBeam::new(capacity, self.epsilon, self.seed);
         let solution = match self.f_evaluator_type {
             FEvaluatorType::Plus => {
                 let f_evaluator =

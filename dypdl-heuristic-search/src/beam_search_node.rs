@@ -95,11 +95,6 @@ pub struct BeamBase<T: Numeric, U: Numeric + Ord> {
 }
 
 impl<T: Numeric, U: Numeric + Ord> BeamBase<T, U> {
-    /// Returns true if no state in beam and false otherwise.
-    pub fn is_empty(&self) -> bool {
-        self.queue.is_empty() && self.pool.is_empty()
-    }
-
     /// Removes nodes from the beam, returning all removed nodes as an iterator.
     pub fn drain(&mut self) -> NodesInBeam<'_, T, U> {
         NodesInBeam {
@@ -124,10 +119,7 @@ impl<'a, T: Numeric, U: Numeric> Iterator for NodesInBeam<'a, T, U> {
         if self.pool_mode {
             match self.pool_iter.next() {
                 Some(node) if !*node.in_beam.borrow() => self.next(),
-                node => {
-                    println!("node");
-                    node
-                }
+                node => node,
             }
         } else {
             match self.queue_iter.next() {
@@ -136,10 +128,7 @@ impl<'a, T: Numeric, U: Numeric> Iterator for NodesInBeam<'a, T, U> {
                     self.pool_mode = true;
                     self.next()
                 }
-                node => {
-                    println!("node");
-                    node
-                }
+                node => node,
             }
         }
     }
@@ -200,7 +189,7 @@ impl<T: Numeric, U: Numeric + Ord> NormalBeam<T, U> {
 
 impl<T: Numeric, U: Numeric + Ord> Beam<T, U> for NormalBeam<T, U> {
     fn is_empty(&self) -> bool {
-        self.beam.is_empty()
+        self.size == 0
     }
 
     fn capacity(&self) -> usize {
@@ -208,8 +197,7 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U> for NormalBeam<T, U> {
     }
 
     fn drain(&mut self) -> NodesInBeam<'_, T, U> {
-        println!("capacity: {}", self.capacity);
-        println!("size: {}", self.size);
+        self.size = 0;
         self.beam.drain()
     }
 
@@ -254,8 +242,10 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U> for NormalBeam<T, U> {
                 if self.size == self.capacity {
                     self.pop();
                 }
-                self.beam.queue.push(node);
-                self.size += 1;
+                if self.size < self.capacity {
+                    self.beam.queue.push(node);
+                    self.size += 1;
+                }
             }
         }
     }

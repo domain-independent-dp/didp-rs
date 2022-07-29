@@ -1408,7 +1408,8 @@ impl ExpressionEpsilonBeamSearchPy {
         primal_bound = "None",
         time_limit = "None",
         quiet = "false",
-        float_cost = "false"
+        float_cost = "false",
+        seed = "42"
     )]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -1424,6 +1425,7 @@ impl ExpressionEpsilonBeamSearchPy {
         quiet: bool,
         float_custom_cost: bool,
         float_cost: bool,
+        seed: u64,
     ) -> PyResult<ExpressionEpsilonBeamSearchPy> {
         let custom_cost_type = if float_custom_cost {
             CostType::Continuous
@@ -1458,6 +1460,7 @@ impl ExpressionEpsilonBeamSearchPy {
                 beam_sizes,
                 maximize,
                 epsilon,
+                seed,
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound,
                     time_limit,
@@ -1479,6 +1482,7 @@ impl ExpressionEpsilonBeamSearchPy {
                 beam_sizes,
                 maximize,
                 epsilon,
+                seed,
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound,
                     time_limit,

@@ -59,5 +59,6 @@ fn dypy(_: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<heuristic_search_solver::IBDFSPy>()?;
     m.add_class::<heuristic_search_solver::ForwardRecursionPy>()?;
     m.add_class::<heuristic_search_solver::ExpressionBeamSearchPy>()?;
+    m.add_class::<heuristic_search_solver::ExpressionEpsilonBeamSearchPy>()?;
     Ok(())
 }
