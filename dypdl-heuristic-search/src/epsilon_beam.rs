@@ -2,7 +2,6 @@ use super::beam_search_node::*;
 use crate::state_registry::{StateInRegistry, StateRegistry};
 use dypdl::variable_type::Numeric;
 use rand::{Rng, SeedableRng};
-use rand_xoshiro;
 use std::cell::RefCell;
 use std::collections;
 use std::mem;
