@@ -1,4 +1,4 @@
-use crate::beam_search_node::{Beam, BeamSearchNode, BeamSearchNodeArgs};
+use crate::beam_search_node::{self, BeamSearchNode, BeamSearchNodeArgs};
 use crate::evaluator;
 use crate::search_node::trace_transitions;
 use crate::solver;
@@ -12,12 +12,17 @@ use std::mem;
 use std::rc::Rc;
 use std::str;
 
+pub struct EvaluatorsForBeamSearch<H, F> {
+    pub h_evaluator: H,
+    pub f_evaluator: F,
+}
+
 /// Performs multiple iterations of forward beam search using given beam sizes.
-pub fn iterative_forward_beam_search<'a, T, U, H, F>(
+pub fn iterative_forward_beam_search<'a, T, U, B, C, H, F>(
     model: &'a dypdl::Model,
     generator: &'a SuccessorGenerator<'a, TransitionWithCustomCost>,
-    h_evaluator: &H,
-    f_evaluator: F,
+    evaluators: &EvaluatorsForBeamSearch<H, F>,
+    beam_constructor: &C,
     beam_sizes: &[usize],
     maximize: bool,
     parameters: solver::SolverParameters<T>,
@@ -26,6 +31,8 @@ where
     T: variable_type::Numeric + fmt::Display,
     U: variable_type::Numeric + Ord,
     <U as str::FromStr>::Err: fmt::Debug,
+    B: beam_search_node::Beam<T, U>,
+    C: Fn(usize) -> B,
     H: evaluator::Evaluator,
     F: Fn(U, U, &StateInRegistry, &dypdl::Model) -> U,
 {
@@ -36,16 +43,16 @@ where
     let mut expanded = 0;
     let mut generated = 0;
     for beam_size in beam_sizes {
+        let beam_constructor = || beam_constructor(*beam_size);
         let parameters = BeamSearchParameters {
-            beam_size: *beam_size,
             maximize,
             quiet: parameters.quiet,
         };
         let (result, time_out) = forward_beam_search(
             model,
             generator,
-            h_evaluator,
-            &f_evaluator,
+            &beam_constructor,
+            evaluators,
             parameters,
             &time_keeper,
         );
@@ -100,8 +107,6 @@ where
 
 /// Arguments for beam search.
 pub struct BeamSearchParameters {
-    /// Beam size.
-    beam_size: usize,
     /// Maximize or not.
     maximize: bool,
     /// Suppress log output or not.
@@ -110,30 +115,33 @@ pub struct BeamSearchParameters {
 
 /// Performs beam search.
 ///
-/// The f-value, the prioarity of a node, is computed by f_evaluator, which is a function of the g-value, the h-value, and the state.
+/// The f-value, the priority of a node, is computed by f_evaluator, which is a function of the g-value, the h-value, and the state.
 /// The h-value is computed by h_evaluator.
 /// At each depth, the top beam_size nodes minimizing (maximizing) the f-values are kept if maximize = false (true).
-pub fn forward_beam_search<'a, T, U, H, F>(
+pub fn forward_beam_search<'a, T, U, B, C, H, F>(
     model: &'a dypdl::Model,
     generator: &SuccessorGenerator<'a, TransitionWithCustomCost>,
-    h_evaluator: &H,
-    f_evaluator: &F,
+    beam_constructor: &C,
+    evaluators: &EvaluatorsForBeamSearch<H, F>,
     parameters: BeamSearchParameters,
     time_keeper: &Option<solver::TimeKeeper>,
 ) -> (Solution<T>, bool)
 where
     T: variable_type::Numeric,
     U: variable_type::Numeric + Ord,
+    B: beam_search_node::Beam<T, U>,
+    C: Fn() -> B,
     H: evaluator::Evaluator,
     F: Fn(U, U, &StateInRegistry, &dypdl::Model) -> U,
 {
-    let beam_size = parameters.beam_size;
+    let h_evaluator = &evaluators.h_evaluator;
+    let f_evaluator = &evaluators.f_evaluator;
     let maximize = parameters.maximize;
     let quiet = parameters.quiet;
-    let mut current_beam = Beam::new(beam_size);
-    let mut next_beam = Beam::new(beam_size);
+    let mut current_beam = beam_constructor();
+    let mut next_beam = beam_constructor();
     let mut registry = StateRegistry::new(model);
-    registry.reserve(beam_size);
+    registry.reserve(current_beam.capacity());
 
     let cost = T::zero();
     let g = U::zero();

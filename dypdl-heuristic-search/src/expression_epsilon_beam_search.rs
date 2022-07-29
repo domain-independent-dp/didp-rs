@@ -1,5 +1,5 @@
 use super::caasdy::FEvaluatorType;
-use crate::beam_search_node::NormalBeam;
+use crate::epsilon_beam::EpsilonBeam;
 use crate::expression_evaluator::ExpressionEvaluator;
 use crate::forward_beam_search;
 use crate::solver;
@@ -13,11 +13,16 @@ use std::error::Error;
 use std::fmt;
 use std::str;
 
-/// Beam search solver using expressions to compute heuristic values.
+/// Epsilon beam search solver using expressions to compute heuristic values.
 ///
+/// Epsilon beam search inserts a node into the beam regardless of its heuristic value
+/// with the probability of epsilon.
+/// Such a node is kept in a separated list from other nodes.
+/// When the beam is full, a node having the worst heuristic value is removed.
+/// If the beam only contains randomly selected nodes, a node is randomly removed.
 /// This solver does not have a guarantee for optimality.
 #[derive(Debug, PartialEq, Clone)]
-pub struct ExpressionBeamSearch<T> {
+pub struct ExpressionEpsilonBeamSearch<T> {
     /// Cost expressions defining how to compute g-values for each transition.
     pub custom_costs: Vec<dypdl::CostExpression>,
     /// Cost expressions defining how to compute g-values for each forced transition.
@@ -32,11 +37,13 @@ pub struct ExpressionBeamSearch<T> {
     pub beam_sizes: Vec<usize>,
     /// Maximize or not.
     pub maximize: bool,
+    /// Epsilon.
+    pub epsilon: f64,
     /// Common parameters for heuristic search solvers.
     pub parameters: solver::SolverParameters<T>,
 }
 
-impl<T> solver::Solver<T> for ExpressionBeamSearch<T>
+impl<T> solver::Solver<T> for ExpressionEpsilonBeamSearch<T>
 where
     T: variable_type::Numeric + Ord + fmt::Display + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
@@ -88,7 +95,7 @@ where
     }
 }
 
-impl<T> ExpressionBeamSearch<T> {
+impl<T> ExpressionEpsilonBeamSearch<T> {
     fn solve_inner<U>(
         &self,
         model: &dypdl::Model,
@@ -99,7 +106,7 @@ impl<T> ExpressionBeamSearch<T> {
         <U as str::FromStr>::Err: fmt::Debug,
         U: variable_type::Numeric + Ord + fmt::Display + 'static,
     {
-        let beam_constructor = NormalBeam::new;
+        let beam_constructor = |capacity: usize| EpsilonBeam::new(capacity, self.epsilon);
         let solution = match self.f_evaluator_type {
             FEvaluatorType::Plus => {
                 let f_evaluator =

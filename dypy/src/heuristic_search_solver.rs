@@ -3,8 +3,8 @@ use crate::transition::{CostUnion, TransitionPy};
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{
-    CAASDy, Dijkstra, DualBoundDFBB, ExpressionBeamSearch, ExpressionEvaluator, FEvaluatorType,
-    ForwardRecursion, LazyDijkstra, Solution, Solver, IBDFS,
+    CAASDy, Dijkstra, DualBoundDFBB, ExpressionBeamSearch, ExpressionEpsilonBeamSearch,
+    ExpressionEvaluator, FEvaluatorType, ForwardRecursion, LazyDijkstra, Solution, Solver, IBDFS,
 };
 use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
@@ -1265,6 +1265,220 @@ impl ExpressionBeamSearchPy {
                 custom_cost_type: Some(custom_cost_type),
                 beam_sizes,
                 maximize,
+                parameters: dypdl_heuristic_search::SolverParameters {
+                    primal_bound,
+                    time_limit,
+                    quiet,
+                },
+            })))
+        }
+    }
+
+    /// solve(model)
+    ///
+    /// Tries to solve a DyPDL model.
+    ///
+    /// Parameters
+    /// ----------
+    /// model: Model
+    ///     DyPDL model.
+    ///
+    /// Returns
+    /// -------
+    /// Solution
+    ///     Solution.
+    ///
+    /// Raises
+    /// ------
+    /// TypeError
+    ///     If a continuous/integer cost model is given to a integer/continuous cost solver.
+    #[pyo3(text_signature = "(model)")]
+    fn solve(&mut self, model: &ModelPy) -> PyResult<SolutionPy> {
+        self.0.solve(model)
+    }
+
+    /// int, float, or None : Primal bound.
+    #[setter]
+    fn set_primal_bound(&mut self, bound: &PyAny) -> PyResult<()> {
+        self.0.set_primal_bound(bound)
+    }
+
+    #[getter]
+    fn get_primal_bound(&self) -> Option<WrappedCost> {
+        self.0.get_primal_bound()
+    }
+
+    /// int or None : Time limit.
+    #[setter]
+    fn set_time_limit(&mut self, limit: u64) {
+        self.0.set_time_limit(limit)
+    }
+
+    #[getter]
+    fn get_time_limit(&self) -> Option<u64> {
+        self.0.get_time_limit()
+    }
+
+    /// bool : Suppress output or not.
+    #[setter]
+    fn set_quiet(&mut self, is_quiet: bool) {
+        self.0.set_quiet(is_quiet)
+    }
+
+    #[getter]
+    fn get_quiet(&self) -> bool {
+        self.0.get_quiet()
+    }
+}
+
+/// Epsilon Beam search solver using expressions to compute heuristic values.
+///
+/// Epsilon beam search inserts a node into the beam regardless of its heuristic value
+/// with the probability of epsilon.
+/// Such a node is kept in a separated list from other nodes.
+/// When the beam is full, a node having the worst heuristic value is removed.
+/// If the beam only contains randomly selected nodes, a node is randomly removed.
+/// This solver does not have a guarantee for optimality.
+///
+/// Parameters
+/// ----------
+/// beam_sizes: list of int
+///     Sequence of beam sizes.
+///     The solver sequentially performs beam search with the beam size of `b` for each `b` in `beam_sizes`.
+/// epsilon: bool
+///     Epsilon.
+/// model: Model
+///     DyPDL model to solve.
+/// h_evaluator: IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, float, or None, default: None
+///     Expression to compute an h-value.
+/// custom_cost_dict: dict[str, Union[IntExpr|IntVar|IntResourceVar|FloatExpr|FloatVar|FloatResourceVar|int|float]] or None, default: None
+///     Expressions to compute g-values.
+///     A g-value is the cost of the path from the target state to the current state.
+///     A key is the name of a transition, and the value is an expression to comptue a g-value.
+///     An expression can use `IntExpr.state_cost()` or `FloatExpr.state_cost()`, which returns the current g-value.
+///     If the name of a transition is not included, its cost expression is used.
+///     If `None`, the cost expressoins are used for all transitions.
+/// f_operator: FOperator, default: FOperator.Plus
+///     Operator to combine a g-value and the dual bound to compute the f-value.
+///     This solver keeps top `b` best nodes with regard to f-values at each depth.
+/// maximize: bool, default: False
+///     Maximize f-values or not.
+///     Greater f-values are better if `True`, and smaller are better if `False`.
+/// float_custom_cost: bool, default: False
+///     Use continuous values for g-, h-, and f-values.
+/// primal_bound: int, float, or None, default: None
+///     Primal bound.
+/// time_limit: int or None, default: None
+///     Time limit.
+/// quiet: bool, default: False
+///     Suppress the log output or not.
+/// initial_registry_capacity: int, default: 1000000
+///     The initial size of the data structure storing all generated states.
+/// float_cost: bool, default: False
+///     Use continuous values for costs.
+///
+/// Raises
+/// ------
+/// TypeError
+///     If `primal_bound` is `float` and `float_cost=False`.
+///     If `float_custom_cost=False` and `h_evaluator` or a value in `custom_cost_dict` is `FloatExpr`, `FloatVar`, `FloatResouceVar`, or `float`.
+/// OverflowError
+///     If a value in `beam_sizes`, `time_limit`, or `initial_registry_capacity` is negative.
+#[pyclass(name = "ExpressionEpsilonBeamSearch")]
+#[pyo3(
+    text_signature = "(beam_sizes, epsilon, model, h_evaluator=None, custom_cost_dict=None, float_custom_cost=False, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, float_cost=False)"
+)]
+#[derive(Debug, PartialEq, Clone)]
+pub struct ExpressionEpsilonBeamSearchPy(
+    WrappedSolver<
+        ExpressionEpsilonBeamSearch<Integer>,
+        ExpressionEpsilonBeamSearch<OrderedContinuous>,
+    >,
+);
+
+#[pymethods]
+impl ExpressionEpsilonBeamSearchPy {
+    #[new]
+    #[args(
+        custom_cost_dict = "None",
+        h_evaluator = "None",
+        f_operator = "FOperator::Plus",
+        maximize = "false",
+        float_custom_cost = "false",
+        primal_bound = "None",
+        time_limit = "None",
+        quiet = "false",
+        float_cost = "false"
+    )]
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        beam_sizes: Vec<usize>,
+        epsilon: f64,
+        model: &ModelPy,
+        custom_cost_dict: Option<HashMap<String, CostUnion>>,
+        h_evaluator: Option<CostUnion>,
+        f_operator: FOperator,
+        maximize: bool,
+        primal_bound: Option<&PyAny>,
+        time_limit: Option<u64>,
+        quiet: bool,
+        float_custom_cost: bool,
+        float_cost: bool,
+    ) -> PyResult<ExpressionEpsilonBeamSearchPy> {
+        let custom_cost_type = if float_custom_cost {
+            CostType::Continuous
+        } else {
+            CostType::Integer
+        };
+        let custom_cost_dict = custom_cost_dict.unwrap_or_default();
+        let (custom_costs, forced_custom_costs) =
+            ExpressionBeamSearchPy::create_custom_cost_vectors(
+                model,
+                custom_cost_type,
+                &custom_cost_dict,
+            )?;
+        let h_evaluator =
+            ExpressionBeamSearchPy::create_h_evaluator(model, custom_cost_type, h_evaluator)?;
+        let f_evaluator_type = FEvaluatorType::from(f_operator);
+
+        if float_cost {
+            let primal_bound = if let Some(primal_bound) = primal_bound {
+                Some(OrderedContinuous::from(
+                    primal_bound.extract::<Continuous>()?,
+                ))
+            } else {
+                None
+            };
+            Ok(Self(WrappedSolver::Float(ExpressionEpsilonBeamSearch {
+                custom_costs,
+                forced_custom_costs,
+                h_evaluator,
+                f_evaluator_type,
+                custom_cost_type: Some(custom_cost_type),
+                beam_sizes,
+                maximize,
+                epsilon,
+                parameters: dypdl_heuristic_search::SolverParameters {
+                    primal_bound,
+                    time_limit,
+                    quiet,
+                },
+            })))
+        } else {
+            let primal_bound = if let Some(primal_bound) = primal_bound {
+                Some(primal_bound.extract()?)
+            } else {
+                None
+            };
+            Ok(Self(WrappedSolver::Int(ExpressionEpsilonBeamSearch {
+                custom_costs,
+                forced_custom_costs,
+                h_evaluator,
+                f_evaluator_type,
+                custom_cost_type: Some(custom_cost_type),
+                beam_sizes,
+                maximize,
+                epsilon,
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound,
                     time_limit,

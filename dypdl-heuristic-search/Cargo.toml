@@ -9,3 +9,4 @@ edition = "2021"
 ordered-float = "3.0.0"
 dypdl = { path = "../dypdl" }
 rustc-hash = "1.1.0"
+rand = "0.8.5"

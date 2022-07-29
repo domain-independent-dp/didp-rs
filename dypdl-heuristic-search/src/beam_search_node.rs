@@ -85,43 +85,152 @@ pub struct BeamSearchNodeArgs<T: Numeric, U: Numeric> {
     pub parent: Option<Rc<BeamSearchNode<T, U>>>,
 }
 
-/// Beam for beam search.
-pub struct Beam<T: Numeric, U: Numeric + Ord> {
-    /// Number of nodes in the beam.
-    pub size: usize,
-    beam_size: usize,
-    queue: collections::BinaryHeap<Rc<BeamSearchNode<T, U>>>,
+/// Common structure of beam.
+#[derive(Debug, Clone)]
+pub struct BeamBase<T: Numeric, U: Numeric + Ord> {
+    /// Priority queue to store nodes.
+    pub queue: collections::BinaryHeap<Rc<BeamSearchNode<T, U>>>,
+    /// Vector to store nodes.
+    pub pool: Vec<Rc<BeamSearchNode<T, U>>>,
 }
 
-impl<T: Numeric, U: Numeric + Ord> Beam<T, U> {
-    pub fn new(beam_size: usize) -> Beam<T, U> {
-        Beam {
-            size: 0,
-            beam_size,
-            queue: collections::BinaryHeap::with_capacity(beam_size),
-        }
-    }
-
+impl<T: Numeric, U: Numeric + Ord> BeamBase<T, U> {
     /// Returns true if no state in beam and false otherwise.
-    pub fn is_empty(&mut self) -> bool {
-        self.queue.is_empty()
+    pub fn is_empty(&self) -> bool {
+        self.queue.is_empty() && self.pool.is_empty()
     }
 
     /// Removes nodes from the beam, returning all removed nodes as an iterator.
     pub fn drain(&mut self) -> NodesInBeam<'_, T, U> {
-        self.size = 0;
-        NodesInBeam(self.queue.drain())
+        NodesInBeam {
+            queue_iter: self.queue.drain(),
+            pool_iter: self.pool.drain(..),
+            pool_mode: false,
+        }
     }
+}
+
+/// An draining iterator for `Beam<T, U>`
+pub struct NodesInBeam<'a, T: Numeric, U: Numeric> {
+    queue_iter: collections::binary_heap::Drain<'a, Rc<BeamSearchNode<T, U>>>,
+    pool_iter: std::vec::Drain<'a, Rc<BeamSearchNode<T, U>>>,
+    pool_mode: bool,
+}
+
+impl<'a, T: Numeric, U: Numeric> Iterator for NodesInBeam<'a, T, U> {
+    type Item = Rc<BeamSearchNode<T, U>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.pool_mode {
+            match self.pool_iter.next() {
+                Some(node) if !*node.in_beam.borrow() => self.next(),
+                node => {
+                    println!("node");
+                    node
+                }
+            }
+        } else {
+            match self.queue_iter.next() {
+                Some(node) if !*node.in_beam.borrow() => self.next(),
+                None => {
+                    self.pool_mode = true;
+                    self.next()
+                }
+                node => {
+                    println!("node");
+                    node
+                }
+            }
+        }
+    }
+}
+
+pub trait Beam<T: Numeric, U: Numeric + Ord> {
+    /// Returns true if no state in beam and false otherwise.
+    fn is_empty(&self) -> bool;
+
+    /// Returns the capacity of the beam.
+    fn capacity(&self) -> usize;
+
+    // Remove a node from the beam.
+    fn pop(&mut self) -> Option<Rc<BeamSearchNode<T, U>>>;
+
+    /// Removes nodes from the beam, returning all removed nodes as an iterator.
+    fn drain(&mut self) -> NodesInBeam<'_, T, U>;
 
     /// Crate a node from a state and insert it into the beam.
-    pub fn insert<'a>(
+    fn insert(
         &mut self,
-        registry: &mut StateRegistry<'a, T, Rc<BeamSearchNode<T, U>>>,
+        registry: &mut StateRegistry<'_, T, Rc<BeamSearchNode<T, U>>>,
+        state: StateInRegistry,
+        cost: T,
+        args: BeamSearchNodeArgs<T, U>,
+    );
+}
+
+/// Beam for beam search.
+#[derive(Debug, Clone)]
+pub struct NormalBeam<T: Numeric, U: Numeric + Ord> {
+    /// Capacity of the beam, or the beam size.
+    pub capacity: usize,
+    size: usize,
+    beam: BeamBase<T, U>,
+}
+
+impl<T: Numeric, U: Numeric + Ord> NormalBeam<T, U> {
+    pub fn new(capacity: usize) -> NormalBeam<T, U> {
+        NormalBeam {
+            capacity,
+            size: 0,
+            beam: BeamBase {
+                queue: collections::BinaryHeap::with_capacity(capacity),
+                pool: vec![],
+            },
+        }
+    }
+
+    fn clean_garbage(&mut self) {
+        let mut peek = self.beam.queue.peek();
+        while peek.map_or(false, |node| !*node.in_beam.borrow()) {
+            self.beam.queue.pop();
+            peek = self.beam.queue.peek();
+        }
+    }
+}
+
+impl<T: Numeric, U: Numeric + Ord> Beam<T, U> for NormalBeam<T, U> {
+    fn is_empty(&self) -> bool {
+        self.beam.is_empty()
+    }
+
+    fn capacity(&self) -> usize {
+        self.capacity
+    }
+
+    fn drain(&mut self) -> NodesInBeam<'_, T, U> {
+        println!("capacity: {}", self.capacity);
+        println!("size: {}", self.size);
+        self.beam.drain()
+    }
+
+    fn pop(&mut self) -> Option<Rc<BeamSearchNode<T, U>>> {
+        self.beam.queue.pop().map(|node| {
+            *node.in_beam.borrow_mut() = false;
+            self.size -= 1;
+            self.clean_garbage();
+            node
+        })
+    }
+
+    fn insert(
+        &mut self,
+        registry: &mut StateRegistry<'_, T, Rc<BeamSearchNode<T, U>>>,
         state: StateInRegistry,
         cost: T,
         args: BeamSearchNodeArgs<T, U>,
     ) {
-        if self.size < self.beam_size || self.queue.peek().map_or(true, |node| args.f < node.f) {
+        if self.size < self.capacity || self.beam.queue.peek().map_or(true, |node| args.f < node.f)
+        {
             let constructor =
                 |state: StateInRegistry, cost: T, _: Option<&Rc<BeamSearchNode<T, U>>>| {
                     Some(Rc::new(BeamSearchNode {
@@ -139,43 +248,15 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U> {
                     if *dominated.in_beam.borrow() {
                         *dominated.in_beam.borrow_mut() = false;
                         self.size -= 1;
+                        self.clean_garbage();
                     }
                 }
-                let mut peek = self.queue.peek();
-                while peek.map_or(false, |node| !*node.in_beam.borrow()) {
-                    self.queue.pop();
-                    peek = self.queue.peek();
+                if self.size == self.capacity {
+                    self.pop();
                 }
-                if self.size == self.beam_size {
-                    if let Some(node) = self.queue.pop() {
-                        *node.in_beam.borrow_mut() = false;
-                        self.size -= 1;
-                        let mut peek = self.queue.peek();
-                        while peek.map_or(false, |node| !*node.in_beam.borrow()) {
-                            self.queue.pop();
-                            peek = self.queue.peek();
-                        }
-                    }
-                }
-                self.queue.push(node);
+                self.beam.queue.push(node);
                 self.size += 1;
             }
-        }
-    }
-}
-
-/// An draining iterator for `Beam<T, U>`
-pub struct NodesInBeam<'a, T: Numeric, U: Numeric>(
-    collections::binary_heap::Drain<'a, Rc<BeamSearchNode<T, U>>>,
-);
-
-impl<'a, T: Numeric, U: Numeric> Iterator for NodesInBeam<'a, T, U> {
-    type Item = Rc<BeamSearchNode<T, U>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next() {
-            Some(node) if !*node.in_beam.borrow() => self.next(),
-            node => node,
         }
     }
 }
@@ -260,10 +341,27 @@ mod tests {
     }
 
     #[test]
-    fn beam_is_empty() {
+    fn normal_beam_capacity() {
         let model = dypdl::Model::default();
         let mut registry = StateRegistry::new(&model);
-        let mut beam = Beam::new(2);
+        let mut beam = NormalBeam::new(2);
+        assert_eq!(beam.capacity(), 2);
+        let state = StateInRegistry::default();
+        let cost = 0;
+        let args = BeamSearchNodeArgs {
+            g: 0,
+            f: 1,
+            ..Default::default()
+        };
+        beam.insert(&mut registry, state, cost, args);
+        assert_eq!(beam.capacity(), 2);
+    }
+
+    #[test]
+    fn normal_beam_is_empty() {
+        let model = dypdl::Model::default();
+        let mut registry = StateRegistry::new(&model);
+        let mut beam = NormalBeam::new(2);
         assert!(beam.is_empty());
         let state = StateInRegistry::default();
         let cost = 0;
@@ -277,10 +375,87 @@ mod tests {
     }
 
     #[test]
-    fn beam_drain() {
+    fn normal_beam_pop() {
         let model = dypdl::Model::default();
         let mut registry = StateRegistry::new(&model);
-        let mut beam = Beam::new(1);
+        let mut beam = NormalBeam::new(1);
+
+        let peek = beam.pop();
+        assert_eq!(peek, None);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![1, 2, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 1;
+        let args = BeamSearchNodeArgs {
+            g: 0,
+            f: 2,
+            ..Default::default()
+        };
+        beam.insert(&mut registry, state, cost, args);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![1, 2, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 0;
+        let args = BeamSearchNodeArgs {
+            g: 0,
+            f: 1,
+            ..Default::default()
+        };
+        beam.insert(&mut registry, state, cost, args);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![2, 3, 4],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 0;
+        let args = BeamSearchNodeArgs {
+            g: 0,
+            f: 2,
+            ..Default::default()
+        };
+        beam.insert(&mut registry, state, cost, args);
+
+        let peek = beam.pop();
+        assert_eq!(
+            peek,
+            Some(Rc::new(BeamSearchNode {
+                state: StateInRegistry {
+                    signature_variables: Rc::new(HashableSignatureVariables {
+                        integer_variables: vec![2, 3, 4],
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                cost: 0,
+                g: 0,
+                f: 1,
+                operator: None,
+                parent: None,
+                in_beam: RefCell::new(false)
+            }))
+        );
+        let peek = beam.pop();
+        assert_eq!(peek, None);
+    }
+
+    #[test]
+    fn normal_beam_drain() {
+        let model = dypdl::Model::default();
+        let mut registry = StateRegistry::new(&model);
+        let mut beam = NormalBeam::new(1);
 
         let state = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
