@@ -2,7 +2,7 @@
 //!
 //! A libarary for heuristic search solvers for DyPDL.
 
-mod beam_search_node;
+mod beam;
 mod bfs_node;
 mod caasdy;
 mod dijkstra;
@@ -27,7 +27,7 @@ mod state_registry;
 mod successor_generator;
 mod transition_with_custom_cost;
 
-pub use beam_search_node::{BeamSearchNode, BeamSearchNodeArgs, NormalBeam};
+pub use beam::{BeamSearchNodeArgs, NormalBeam, NormalBeamSearchNode};
 pub use caasdy::{CAASDy, FEvaluatorType};
 pub use dijkstra::{dijkstra, Dijkstra};
 pub use dual_bound_dfbb::DualBoundDFBB;

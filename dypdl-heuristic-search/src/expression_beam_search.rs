@@ -1,5 +1,5 @@
 use super::caasdy::FEvaluatorType;
-use crate::beam_search_node::NormalBeam;
+use crate::beam::NormalBeam;
 use crate::expression_evaluator::ExpressionEvaluator;
 use crate::forward_beam_search;
 use crate::solver;

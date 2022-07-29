@@ -7,11 +7,29 @@ use std::cmp::Ordering;
 use std::collections;
 use std::rc::Rc;
 
+/// Trait to check if it is included in the beam.
+pub trait InBeam {
+    /// Returns if it is included in the queue.
+    fn in_queue(&self) -> bool;
+
+    /// Returns if it is included in the pool.
+    fn in_pool(&self) -> bool;
+}
+
+/// Trait to get g and f-values.
+pub trait PrioritizedNode<T> {
+    /// Returns the g-value.
+    fn g(&self) -> T;
+
+    /// Returns the f-value.
+    fn f(&self) -> T;
+}
+
 /// Search node for beam search.
 ///
-/// Nodes totaly ordered by their f-values.
+/// Nodes totally ordered by their f-values.
 #[derive(Debug, Default)]
-pub struct BeamSearchNode<T: Numeric, U: Numeric> {
+pub struct NormalBeamSearchNode<T: Numeric, U: Numeric> {
     /// g-value.
     pub g: U,
     /// f-value.
@@ -23,35 +41,55 @@ pub struct BeamSearchNode<T: Numeric, U: Numeric> {
     /// Transition applied to reach this node.
     pub operator: Option<Rc<TransitionWithCustomCost>>,
     /// Parent node.
-    pub parent: Option<Rc<BeamSearchNode<T, U>>>,
+    pub parent: Option<Rc<NormalBeamSearchNode<T, U>>>,
     /// If included in a beam.
     pub in_beam: RefCell<bool>,
 }
 
-impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for BeamSearchNode<T, U> {
+impl<T: Numeric, U: Numeric> InBeam for Rc<NormalBeamSearchNode<T, U>> {
+    fn in_queue(&self) -> bool {
+        *self.in_beam.borrow()
+    }
+
+    fn in_pool(&self) -> bool {
+        false
+    }
+}
+
+impl<T: Numeric, U: Numeric> PrioritizedNode<U> for Rc<NormalBeamSearchNode<T, U>> {
+    fn g(&self) -> U {
+        self.g
+    }
+
+    fn f(&self) -> U {
+        self.f
+    }
+}
+
+impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for NormalBeamSearchNode<T, U> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f
     }
 }
 
-impl<T: Numeric, U: Numeric + Ord> Eq for BeamSearchNode<T, U> {}
+impl<T: Numeric, U: Numeric + Ord> Eq for NormalBeamSearchNode<T, U> {}
 
-impl<T: Numeric, U: Numeric + Ord> Ord for BeamSearchNode<T, U> {
+impl<T: Numeric, U: Numeric + Ord> Ord for NormalBeamSearchNode<T, U> {
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
         self.f.cmp(&other.f)
     }
 }
 
-impl<T: Numeric, U: Numeric + Ord> PartialOrd for BeamSearchNode<T, U> {
+impl<T: Numeric, U: Numeric + Ord> PartialOrd for NormalBeamSearchNode<T, U> {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<T: Numeric, U: Numeric> StateInformation<T> for Rc<BeamSearchNode<T, U>> {
+impl<T: Numeric, U: Numeric> StateInformation<T> for Rc<NormalBeamSearchNode<T, U>> {
     #[inline]
     fn state(&self) -> &StateInRegistry {
         &self.state
@@ -63,7 +101,7 @@ impl<T: Numeric, U: Numeric> StateInformation<T> for Rc<BeamSearchNode<T, U>> {
     }
 }
 
-impl<T: Numeric, U: Numeric> DPSearchNode<T> for Rc<BeamSearchNode<T, U>> {
+impl<T: Numeric, U: Numeric> DPSearchNode<T> for Rc<NormalBeamSearchNode<T, U>> {
     #[inline]
     fn parent(&self) -> Option<Self> {
         self.parent.as_ref().cloned()
@@ -78,26 +116,26 @@ impl<T: Numeric, U: Numeric> DPSearchNode<T> for Rc<BeamSearchNode<T, U>> {
 
 /// Parameters to create a beam search node.
 #[derive(Debug, Default)]
-pub struct BeamSearchNodeArgs<T: Numeric, U: Numeric> {
-    pub g: U,
-    pub f: U,
+pub struct BeamSearchNodeArgs<T: Numeric, U: Ord> {
+    pub g: T,
+    pub f: T,
     pub operator: Option<Rc<TransitionWithCustomCost>>,
-    pub parent: Option<Rc<BeamSearchNode<T, U>>>,
+    pub parent: Option<U>,
 }
 
 /// Common structure of beam.
 #[derive(Debug, Clone)]
-pub struct BeamBase<T: Numeric, U: Numeric + Ord> {
+pub struct BeamBase<T: Ord> {
     /// Priority queue to store nodes.
-    pub queue: collections::BinaryHeap<Rc<BeamSearchNode<T, U>>>,
+    pub queue: collections::BinaryHeap<T>,
     /// Vector to store nodes.
-    pub pool: Vec<Rc<BeamSearchNode<T, U>>>,
+    pub pool: Vec<T>,
 }
 
-impl<T: Numeric, U: Numeric + Ord> BeamBase<T, U> {
+impl<T: InBeam + Ord> BeamBase<T> {
     /// Removes nodes from the beam, returning all removed nodes as an iterator.
-    pub fn drain(&mut self) -> NodesInBeam<'_, T, U> {
-        NodesInBeam {
+    pub fn drain(&mut self) -> BeamDrain<'_, T> {
+        BeamDrain {
             queue_iter: self.queue.drain(),
             pool_iter: self.pool.drain(..),
             pool_mode: false,
@@ -105,25 +143,25 @@ impl<T: Numeric, U: Numeric + Ord> BeamBase<T, U> {
     }
 }
 
-/// An draining iterator for `Beam<T, U>`
-pub struct NodesInBeam<'a, T: Numeric, U: Numeric> {
-    queue_iter: collections::binary_heap::Drain<'a, Rc<BeamSearchNode<T, U>>>,
-    pool_iter: std::vec::Drain<'a, Rc<BeamSearchNode<T, U>>>,
+/// An draining iterator for `BeamBeam<T>`
+pub struct BeamDrain<'a, T: InBeam + Ord> {
+    queue_iter: collections::binary_heap::Drain<'a, T>,
+    pool_iter: std::vec::Drain<'a, T>,
     pool_mode: bool,
 }
 
-impl<'a, T: Numeric, U: Numeric> Iterator for NodesInBeam<'a, T, U> {
-    type Item = Rc<BeamSearchNode<T, U>>;
+impl<'a, T: InBeam + Ord> Iterator for BeamDrain<'a, T> {
+    type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.pool_mode {
             match self.pool_iter.next() {
-                Some(node) if !*node.in_beam.borrow() => self.next(),
+                Some(node) if !node.in_pool() => self.next(),
                 node => node,
             }
         } else {
             match self.queue_iter.next() {
-                Some(node) if !*node.in_beam.borrow() => self.next(),
+                Some(node) if !node.in_queue() => self.next(),
                 None => {
                     self.pool_mode = true;
                     self.next()
@@ -134,26 +172,23 @@ impl<'a, T: Numeric, U: Numeric> Iterator for NodesInBeam<'a, T, U> {
     }
 }
 
-pub trait Beam<T: Numeric, U: Numeric + Ord> {
+pub trait Beam<T: Numeric, U: Numeric + Ord, V: InBeam + Ord + StateInformation<T>> {
     /// Returns true if no state in beam and false otherwise.
     fn is_empty(&self) -> bool;
 
     /// Returns the capacity of the beam.
     fn capacity(&self) -> usize;
 
-    // Remove a node from the beam.
-    fn pop(&mut self) -> Option<Rc<BeamSearchNode<T, U>>>;
-
     /// Removes nodes from the beam, returning all removed nodes as an iterator.
-    fn drain(&mut self) -> NodesInBeam<'_, T, U>;
+    fn drain(&mut self) -> BeamDrain<'_, V>;
 
     /// Crate a node from a state and insert it into the beam.
     fn insert(
         &mut self,
-        registry: &mut StateRegistry<'_, T, Rc<BeamSearchNode<T, U>>>,
+        registry: &mut StateRegistry<'_, T, V>,
         state: StateInRegistry,
         cost: T,
-        args: BeamSearchNodeArgs<T, U>,
+        args: BeamSearchNodeArgs<U, V>,
     );
 }
 
@@ -163,7 +198,7 @@ pub struct NormalBeam<T: Numeric, U: Numeric + Ord> {
     /// Capacity of the beam, or the beam size.
     pub capacity: usize,
     size: usize,
-    beam: BeamBase<T, U>,
+    beam: BeamBase<Rc<NormalBeamSearchNode<T, U>>>,
 }
 
 impl<T: Numeric, U: Numeric + Ord> NormalBeam<T, U> {
@@ -178,6 +213,15 @@ impl<T: Numeric, U: Numeric + Ord> NormalBeam<T, U> {
         }
     }
 
+    fn pop(&mut self) -> Option<Rc<NormalBeamSearchNode<T, U>>> {
+        self.beam.queue.pop().map(|node| {
+            *node.in_beam.borrow_mut() = false;
+            self.size -= 1;
+            self.clean_garbage();
+            node
+        })
+    }
+
     fn clean_garbage(&mut self) {
         let mut peek = self.beam.queue.peek();
         while peek.map_or(false, |node| !*node.in_beam.borrow()) {
@@ -187,7 +231,7 @@ impl<T: Numeric, U: Numeric + Ord> NormalBeam<T, U> {
     }
 }
 
-impl<T: Numeric, U: Numeric + Ord> Beam<T, U> for NormalBeam<T, U> {
+impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<NormalBeamSearchNode<T, U>>> for NormalBeam<T, U> {
     fn is_empty(&self) -> bool {
         self.size == 0
     }
@@ -196,32 +240,23 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U> for NormalBeam<T, U> {
         self.capacity
     }
 
-    fn drain(&mut self) -> NodesInBeam<'_, T, U> {
+    fn drain(&mut self) -> BeamDrain<'_, Rc<NormalBeamSearchNode<T, U>>> {
         self.size = 0;
         self.beam.drain()
     }
 
-    fn pop(&mut self) -> Option<Rc<BeamSearchNode<T, U>>> {
-        self.beam.queue.pop().map(|node| {
-            *node.in_beam.borrow_mut() = false;
-            self.size -= 1;
-            self.clean_garbage();
-            node
-        })
-    }
-
     fn insert(
         &mut self,
-        registry: &mut StateRegistry<'_, T, Rc<BeamSearchNode<T, U>>>,
+        registry: &mut StateRegistry<'_, T, Rc<NormalBeamSearchNode<T, U>>>,
         state: StateInRegistry,
         cost: T,
-        args: BeamSearchNodeArgs<T, U>,
+        args: BeamSearchNodeArgs<U, Rc<NormalBeamSearchNode<T, U>>>,
     ) {
         if self.size < self.capacity || self.beam.queue.peek().map_or(true, |node| args.f < node.f)
         {
             let constructor =
-                |state: StateInRegistry, cost: T, _: Option<&Rc<BeamSearchNode<T, U>>>| {
-                    Some(Rc::new(BeamSearchNode {
+                |state: StateInRegistry, cost: T, _: Option<&Rc<NormalBeamSearchNode<T, U>>>| {
+                    Some(Rc::new(NormalBeamSearchNode {
                         g: args.g,
                         f: args.f,
                         state,
@@ -258,7 +293,7 @@ mod tests {
 
     #[test]
     fn search_node_getter() {
-        let node = Rc::new(BeamSearchNode {
+        let node = Rc::new(NormalBeamSearchNode {
             state: StateInRegistry {
                 signature_variables: Rc::new(HashableSignatureVariables {
                     integer_variables: vec![1, 2, 3],
@@ -281,7 +316,7 @@ mod tests {
 
     #[test]
     fn search_node_cmp() {
-        let node1 = BeamSearchNode {
+        let node1 = NormalBeamSearchNode {
             state: StateInRegistry {
                 signature_variables: Rc::new(HashableSignatureVariables {
                     integer_variables: vec![1, 2, 3],
@@ -296,7 +331,7 @@ mod tests {
             parent: None,
             operator: None,
         };
-        let node2 = BeamSearchNode {
+        let node2 = NormalBeamSearchNode {
             state: StateInRegistry {
                 signature_variables: Rc::new(HashableSignatureVariables {
                     integer_variables: vec![4, 2, 3],
@@ -312,7 +347,7 @@ mod tests {
             operator: None,
         };
         assert_eq!(node1, node2);
-        let node2 = BeamSearchNode {
+        let node2 = NormalBeamSearchNode {
             state: StateInRegistry {
                 signature_variables: Rc::new(HashableSignatureVariables {
                     integer_variables: vec![4, 2, 3],
@@ -421,7 +456,7 @@ mod tests {
         let peek = beam.pop();
         assert_eq!(
             peek,
-            Some(Rc::new(BeamSearchNode {
+            Some(Rc::new(NormalBeamSearchNode {
                 state: StateInRegistry {
                     signature_variables: Rc::new(HashableSignatureVariables {
                         integer_variables: vec![2, 3, 4],
@@ -495,7 +530,7 @@ mod tests {
         let mut iter = beam.drain();
         assert_eq!(
             iter.next(),
-            Some(Rc::new(BeamSearchNode {
+            Some(Rc::new(NormalBeamSearchNode {
                 state: StateInRegistry {
                     signature_variables: Rc::new(HashableSignatureVariables {
                         integer_variables: vec![2, 3, 4],

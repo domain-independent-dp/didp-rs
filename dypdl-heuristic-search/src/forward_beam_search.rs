@@ -1,6 +1,6 @@
-use crate::beam_search_node::{self, BeamSearchNode, BeamSearchNodeArgs};
+use crate::beam::{Beam, BeamSearchNodeArgs, InBeam, PrioritizedNode};
 use crate::evaluator;
-use crate::search_node::trace_transitions;
+use crate::search_node::{trace_transitions, DPSearchNode};
 use crate::solver;
 use crate::solver::Solution;
 use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
@@ -9,7 +9,6 @@ use crate::transition_with_custom_cost::TransitionWithCustomCost;
 use dypdl::variable_type;
 use std::fmt;
 use std::mem;
-use std::rc::Rc;
 use std::str;
 
 pub struct EvaluatorsForBeamSearch<H, F> {
@@ -18,7 +17,7 @@ pub struct EvaluatorsForBeamSearch<H, F> {
 }
 
 /// Performs multiple iterations of forward beam search using given beam sizes.
-pub fn iterative_forward_beam_search<'a, T, U, B, C, H, F>(
+pub fn iterative_forward_beam_search<'a, T, U, V, B, C, H, F>(
     model: &'a dypdl::Model,
     generator: &'a SuccessorGenerator<'a, TransitionWithCustomCost>,
     evaluators: &EvaluatorsForBeamSearch<H, F>,
@@ -31,7 +30,8 @@ where
     T: variable_type::Numeric + fmt::Display,
     U: variable_type::Numeric + Ord,
     <U as str::FromStr>::Err: fmt::Debug,
-    B: beam_search_node::Beam<T, U>,
+    V: DPSearchNode<T> + InBeam + Ord + StateInformation<T> + PrioritizedNode<U>,
+    B: Beam<T, U, V>,
     C: Fn(usize) -> B,
     H: evaluator::Evaluator,
     F: Fn(U, U, &StateInRegistry, &dypdl::Model) -> U,
@@ -118,7 +118,7 @@ pub struct BeamSearchParameters {
 /// The f-value, the priority of a node, is computed by f_evaluator, which is a function of the g-value, the h-value, and the state.
 /// The h-value is computed by h_evaluator.
 /// At each depth, the top beam_size nodes minimizing (maximizing) the f-values are kept if maximize = false (true).
-pub fn forward_beam_search<'a, T, U, B, C, H, F>(
+pub fn forward_beam_search<'a, T, U, V, B, C, H, F>(
     model: &'a dypdl::Model,
     generator: &SuccessorGenerator<'a, TransitionWithCustomCost>,
     beam_constructor: &C,
@@ -129,7 +129,8 @@ pub fn forward_beam_search<'a, T, U, B, C, H, F>(
 where
     T: variable_type::Numeric,
     U: variable_type::Numeric + Ord,
-    B: beam_search_node::Beam<T, U>,
+    V: DPSearchNode<T> + InBeam + Ord + StateInformation<T> + PrioritizedNode<U>,
+    B: Beam<T, U, V>,
     C: Fn() -> B,
     H: evaluator::Evaluator,
     F: Fn(U, U, &StateInRegistry, &dypdl::Model) -> U,
@@ -168,15 +169,12 @@ where
         for node in current_beam.drain() {
             expanded += 1;
             if model.is_goal(node.state()) {
-                if let Some(cost) = incumbent
-                    .as_ref()
-                    .map(|x: &Rc<BeamSearchNode<T, U>>| x.cost)
-                {
+                if let Some(cost) = incumbent.as_ref().map(|x: &V| x.cost()) {
                     match model.reduce_function {
-                        dypdl::ReduceFunction::Max if node.cost > cost => {
+                        dypdl::ReduceFunction::Max if node.cost() > cost => {
                             incumbent = Some(node);
                         }
-                        dypdl::ReduceFunction::Min if node.cost < cost => {
+                        dypdl::ReduceFunction::Min if node.cost() < cost => {
                             incumbent = Some(node);
                         }
                         _ => {}
@@ -215,14 +213,14 @@ where
                 if model.check_constraints(&state) {
                     if let Some(h) = h_evaluator.eval(&state, model) {
                         let g = transition.custom_cost.eval_cost(
-                            node.g,
+                            node.g(),
                             node.state(),
                             &model.table_registry,
                         );
                         let f = f_evaluator(g, h, &state, model);
                         let f = if maximize { -f } else { f };
                         let cost = transition.transition.eval_cost(
-                            node.cost,
+                            node.cost(),
                             node.state(),
                             &model.table_registry,
                         );
