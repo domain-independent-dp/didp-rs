@@ -3,10 +3,12 @@
 //! A libarary for heuristic search solvers for DyPDL.
 
 mod beam;
+mod bfdfbb;
 mod bfs_node;
 mod caasdy;
 mod cyclic_bfs;
 mod dijkstra;
+mod dual_bound_bfdfbb;
 mod dual_bound_cbfs;
 mod dual_bound_dfbb;
 mod epsilon_beam;
@@ -32,6 +34,7 @@ mod transition_with_custom_cost;
 pub use beam::{BeamSearchNodeArgs, NormalBeam, NormalBeamSearchNode};
 pub use caasdy::{CAASDy, FEvaluatorType};
 pub use dijkstra::{dijkstra, Dijkstra};
+pub use dual_bound_bfdfbb::DualBoundBFDFBB;
 pub use dual_bound_cbfs::DualBoundCBFS;
 pub use dual_bound_dfbb::DualBoundDFBB;
 pub use evaluator::Evaluator;
