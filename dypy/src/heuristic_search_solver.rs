@@ -193,7 +193,7 @@ where
 ///
 /// `Overwrite`: f = h
 #[pyclass(name = "FOperator")]
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum FOperator {
     Plus,
     Max,

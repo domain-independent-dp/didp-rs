@@ -31,7 +31,7 @@ pub enum ResourceVarUnion {
     Float(FloatResourceVarPy),
 }
 
-#[derive(FromPyObject, Debug, PartialEq, Clone, Copy)]
+#[derive(FromPyObject, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ObjectVarUnion {
     #[pyo3(transparent, annotation = "ElementVar")]
     Element(ElementVarPy),
@@ -169,7 +169,7 @@ impl ElementExprPy {
 /// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int` is applied, a condition is returned.
 /// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`) with an `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int` is applied, a new `ElementExpr` is returned.
 #[pyclass(name = "ElementVar")]
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ElementVarPy(ElementVariable);
 
 impl From<ElementVarPy> for ElementVariable {
@@ -260,7 +260,7 @@ impl ElementVarPy {
 /// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int` is applied, a condition is returned.
 /// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`) with an `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int` is applied, a new `ElementExpr` is returned.
 #[pyclass(name = "ElementResourceVar")]
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ElementResourceVarPy(ElementResourceVariable);
 
 impl From<ElementResourceVarPy> for ElementResourceVariable {
@@ -640,7 +640,7 @@ impl SetExprPy {
 /// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a `SetExpr`, `SetVar`, or `SetConst` is applied, a condition is returned.
 /// If an operator (`+`, `-`, `&`, `^`, `|`) with a `SetExpr`, `SetVar`, or `SetConst` is applied, a new `SetExpr` is returned.
 #[pyclass(name = "SetVar")]
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct SetVarPy(SetVariable);
 
 impl From<SetVarPy> for SetVariable {

@@ -3,7 +3,7 @@ use num_traits::{Num, Signed};
 use std::iter::{Product, Sum};
 
 /// Unary arithmetic operator.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum UnaryOperator {
     /// Negative
     Neg,
@@ -28,7 +28,7 @@ impl UnaryOperator {
 }
 
 /// Unary arithmetic operator specific to continuous values.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ContinuousUnaryOperator {
     Sqrt,
 }
@@ -49,7 +49,7 @@ impl ContinuousUnaryOperator {
 }
 
 /// Operator to convert a continuous value to an integer value.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum CastOperator {
     // Floor.
     Floor,
@@ -160,9 +160,9 @@ impl BinaryOperator {
     }
 }
 
-/// Binary arithmetic opeartor specific to continuous values.
+/// Binary arithmetic operator specific to continuous values.
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ContinuousBinaryOperator {
     Pow,
     Log,
@@ -226,7 +226,7 @@ impl ContinuousBinaryOperator {
 }
 
 /// Operator to reduce a vector to a single value.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ReduceOperator {
     Sum,
     Product,

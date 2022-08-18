@@ -55,7 +55,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::panic;
 
 /// Type of numeric values to represent the costs of states.
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CostType {
     Integer,
     Continuous,
@@ -69,7 +69,7 @@ impl Default for CostType {
 }
 
 /// How to compute the value of a state given applicable transitions.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ReduceFunction {
     /// Minimum of the evaluation values of the cost expressions of applicable transitions.
     Min,
