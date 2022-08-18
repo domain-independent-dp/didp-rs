@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 /// Performs best-first search.
 ///
-/// The f-value, the prioarity of a node, is computed by f_evaluator, which is a function of the g-value, the h-value, and the state.
+/// The f-value, the priority of a node, is computed by f_evaluator, which is a function of the g-value, the h-value, and the state.
 /// The h-value is computed by h_evaluator.
 /// A node minimizes the f-value is expanded at each step.
 pub fn forward_bfs<T, H, F>(

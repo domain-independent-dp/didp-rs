@@ -2,6 +2,7 @@
 
 mod caasdy;
 mod dijkstra;
+mod dual_bound_cbfs;
 mod dual_bound_dfbb;
 mod expression_beam_search;
 mod expression_evaluator;
@@ -61,6 +62,7 @@ impl SolverFactory {
                 )?)),
                 "ibdfs" => Ok(Box::new(ibdfs::load_from_yaml(&config)?)),
                 "dual_bound_dfbb" => Ok(Box::new(dual_bound_dfbb::load_from_yaml(&config)?)),
+                "dual_bound_cbfs" => Ok(Box::new(dual_bound_cbfs::load_from_yaml(&config)?)),
                 "forward_recursion" => Ok(Box::new(forward_recursion::load_from_yaml(&config)?)),
                 "iterative" => Ok(Box::new(iterative_search::load_from_yaml(&config, model)?)),
                 value => {

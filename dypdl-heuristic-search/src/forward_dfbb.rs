@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 /// Performs depth-first branch-and-bound.
 ///
-/// The f-value, the prioarity of a node, is computed by f_evaluator, which is a function of the g-value, the h-value, and the state.
+/// The f-value, the priority of a node, is computed by f_evaluator, which is a function of the g-value, the h-value, and the state.
 /// The h-value is computed by h_evaluator.
 /// The f-value is used as a dual bound to prune a node.
 pub fn dfbb<T, H, F>(
