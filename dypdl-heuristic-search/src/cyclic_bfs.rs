@@ -168,7 +168,7 @@ where
                             }
                             *successor.h.borrow_mut() = Some(h);
                             *successor.f.borrow_mut() = Some(f);
-                            if i + 1 >= open.len() {
+                            while i + 1 >= open.len() {
                                 open.push(collections::BinaryHeap::new());
                             }
                             open[i + 1].push(Reverse(successor));
