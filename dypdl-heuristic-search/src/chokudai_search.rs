@@ -180,7 +180,7 @@ where
             }
             j += 1;
         }
-        if no_node {
+        if no_node && i + 1 == open.len() {
             break;
         } else if goal_found || i + 1 == open.len() {
             i = 0;
