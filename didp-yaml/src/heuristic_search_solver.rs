@@ -5,6 +5,7 @@ mod dijkstra;
 mod dual_bound_bfdfbb;
 mod dual_bound_cbfs;
 mod dual_bound_chokudai_search;
+mod dual_bound_dbdfs;
 mod dual_bound_dds;
 mod dual_bound_dfbb;
 mod expression_beam_search;
@@ -68,6 +69,7 @@ impl SolverFactory {
                 "dual_bound_bfdfbb" => Ok(Box::new(dual_bound_bfdfbb::load_from_yaml(&config)?)),
                 "dual_bound_cbfs" => Ok(Box::new(dual_bound_cbfs::load_from_yaml(&config)?)),
                 "dual_bound_dds" => Ok(Box::new(dual_bound_dds::load_from_yaml(&config)?)),
+                "dual_bound_dbdfs" => Ok(Box::new(dual_bound_dbdfs::load_from_yaml(&config)?)),
                 "dual_bound_chokudai" => Ok(Box::new(dual_bound_chokudai_search::load_from_yaml(
                     &config,
                 )?)),

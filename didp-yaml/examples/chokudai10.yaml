@@ -1,0 +1,4 @@
+solver: dual_bound_chokudai
+config:
+    width: 10
+    time_limit: 1800

@@ -70,7 +70,6 @@ where
 
     loop {
         if let Some(Reverse(node)) = open[i].pop() {
-            no_node = false;
             if *node.closed.borrow() {
                 continue;
             }
@@ -79,112 +78,110 @@ where
             let f = node.f.borrow().unwrap();
             if primal_bound.is_some() && f >= primal_bound.unwrap() {
                 open[i].clear();
-                if i + 1 < open.len() {
-                    i += 1;
-                } else {
+            } else {
+                if no_node {
+                    no_node = false;
+                }
+                if model.is_goal(node.state()) {
+                    if !parameters.quiet {
+                        println!("New primal bound: {}, expanded: {}", node.cost(), expanded);
+                    }
+                    if node.cost() == best_bound {
+                        return solver::Solution {
+                            cost: Some(node.cost()),
+                            is_optimal: true,
+                            transitions: trace_transitions(node),
+                            expanded,
+                            generated,
+                            ..Default::default()
+                        };
+                    }
+                    primal_bound = Some(node.cost());
+                    incumbent = Some(node);
                     i = 0;
                     no_node = true;
-                }
-                continue;
-            }
-            if model.is_goal(node.state()) {
-                if !parameters.quiet {
-                    println!("New primal bound: {}, expanded: {}", node.cost(), expanded);
-                }
-                if node.cost() == best_bound {
-                    return solver::Solution {
-                        cost: Some(node.cost()),
-                        is_optimal: true,
-                        transitions: trace_transitions(node),
-                        expanded,
-                        generated,
-                        ..Default::default()
-                    };
-                }
-                primal_bound = Some(node.cost());
-                incumbent = Some(node);
-                i = 0;
-                no_node = true;
-                continue;
-            }
-            if time_keeper
-                .as_ref()
-                .map_or(false, |time_keeper| time_keeper.check_time_limit())
-            {
-                if !parameters.quiet {
-                    println!("Expanded: {}", expanded);
-                }
-                return incumbent
-                    .clone()
-                    .map_or_else(solver::Solution::default, |node| solver::Solution {
-                        cost: Some(node.cost()),
-                        best_bound: Some(best_bound),
-                        transitions: incumbent
-                            .map_or_else(Vec::new, |node| trace_transitions(node)),
-                        expanded,
-                        generated,
-                        ..Default::default()
-                    });
-            }
-            for transition in generator.applicable_transitions(node.state()) {
-                let g = transition.eval_cost(node.g, node.state(), &model.table_registry);
-                if primal_bound.is_some() && g >= primal_bound.unwrap() {
                     continue;
                 }
-                let state = transition.apply(node.state(), &model.table_registry);
-                if model.check_constraints(&state) {
-                    let constructor =
-                        |state: StateInRegistry, g: T, other: Option<&Rc<BFSNode<T>>>| {
-                            // use a cached h-value
-                            let h = if let Some(other) = other {
-                                *other.h.borrow()
-                            } else {
-                                None
+                if time_keeper
+                    .as_ref()
+                    .map_or(false, |time_keeper| time_keeper.check_time_limit())
+                {
+                    if !parameters.quiet {
+                        println!("Expanded: {}", expanded);
+                    }
+                    return incumbent
+                        .clone()
+                        .map_or_else(solver::Solution::default, |node| solver::Solution {
+                            cost: Some(node.cost()),
+                            best_bound: Some(best_bound),
+                            transitions: incumbent
+                                .map_or_else(Vec::new, |node| trace_transitions(node)),
+                            expanded,
+                            generated,
+                            ..Default::default()
+                        });
+                }
+                for transition in generator.applicable_transitions(node.state()) {
+                    let g = transition.eval_cost(node.g, node.state(), &model.table_registry);
+                    if primal_bound.is_some() && g >= primal_bound.unwrap() {
+                        continue;
+                    }
+                    let state = transition.apply(node.state(), &model.table_registry);
+                    if model.check_constraints(&state) {
+                        let constructor =
+                            |state: StateInRegistry, g: T, other: Option<&Rc<BFSNode<T>>>| {
+                                // use a cached h-value
+                                let h = if let Some(other) = other {
+                                    *other.h.borrow()
+                                } else {
+                                    None
+                                };
+                                Some(Rc::new(BFSNode {
+                                    state,
+                                    g,
+                                    h: RefCell::new(h),
+                                    f: RefCell::new(None),
+                                    parent: Some(node.clone()),
+                                    operator: Some(transition),
+                                    closed: RefCell::new(false),
+                                }))
                             };
-                            Some(Rc::new(BFSNode {
-                                state,
-                                g,
-                                h: RefCell::new(h),
-                                f: RefCell::new(None),
-                                parent: Some(node.clone()),
-                                operator: Some(transition),
-                                closed: RefCell::new(false),
-                            }))
-                        };
-                    if let Some((successor, dominated)) = registry.insert(state, g, constructor) {
-                        if let Some(dominated) = dominated {
-                            if !*dominated.closed.borrow() {
-                                *dominated.closed.borrow_mut() = true;
+                        if let Some((successor, dominated)) = registry.insert(state, g, constructor)
+                        {
+                            if let Some(dominated) = dominated {
+                                if !*dominated.closed.borrow() {
+                                    *dominated.closed.borrow_mut() = true;
+                                }
                             }
-                        }
-                        let h = match *successor.h.borrow() {
-                            None => h_evaluator.eval(successor.state(), model),
-                            h => h,
-                        };
-                        if let Some(h) = h {
-                            let f = f_evaluator(g, h, successor.state(), model);
-                            if primal_bound.is_some() && f >= primal_bound.unwrap() {
-                                continue;
+                            let h = match *successor.h.borrow() {
+                                None => h_evaluator.eval(successor.state(), model),
+                                h => h,
+                            };
+                            if let Some(h) = h {
+                                let f = f_evaluator(g, h, successor.state(), model);
+                                if primal_bound.is_some() && f >= primal_bound.unwrap() {
+                                    continue;
+                                }
+                                *successor.h.borrow_mut() = Some(h);
+                                *successor.f.borrow_mut() = Some(f);
+                                while i + 1 >= open.len() {
+                                    open.push(collections::BinaryHeap::new());
+                                }
+                                open[i + 1].push(Reverse(successor));
+                                generated += 1;
                             }
-                            *successor.h.borrow_mut() = Some(h);
-                            *successor.f.borrow_mut() = Some(f);
-                            while i + 1 >= open.len() {
-                                open.push(collections::BinaryHeap::new());
-                            }
-                            open[i + 1].push(Reverse(successor));
-                            generated += 1;
                         }
                     }
                 }
             }
         }
-        if i + 1 < open.len() {
-            i += 1;
-        } else if no_node {
+        if no_node && i + 1 == open.len() {
             break;
-        } else {
+        } else if i + 1 == open.len() {
             i = 0;
             no_node = true;
+        } else {
+            i += 1;
         }
     }
     incumbent.map_or_else(

@@ -74,9 +74,6 @@ where
         let mut goal_found = false;
         while j < width && !open[i].is_empty() {
             let node = open[i].pop().unwrap().0;
-            if no_node {
-                no_node = false;
-            }
             if *node.closed.borrow() {
                 continue;
             }
@@ -85,14 +82,10 @@ where
             let f = node.f.borrow().unwrap();
             if primal_bound.is_some() && f >= primal_bound.unwrap() {
                 open[i].clear();
-                if i + 1 < open.len() {
-                    i += 1;
-                } else {
-                    i = 0;
-                    no_node = true;
-                }
-                j = 0;
-                continue;
+                break;
+            }
+            if no_node {
+                no_node = false;
             }
             if model.is_goal(node.state()) {
                 if !parameters.quiet {
@@ -187,13 +180,13 @@ where
             }
             j += 1;
         }
-        if !goal_found && i + 1 < open.len() {
-            i += 1;
-        } else if !goal_found && no_node {
+        if no_node {
             break;
-        } else {
+        } else if goal_found || i + 1 == open.len() {
             i = 0;
             no_node = true;
+        } else {
+            i += 1;
         }
     }
     incumbent.map_or_else(
