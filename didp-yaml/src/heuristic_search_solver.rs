@@ -8,6 +8,7 @@ mod dual_bound_chokudai_search;
 mod dual_bound_dbdfs;
 mod dual_bound_dds;
 mod dual_bound_dfbb;
+mod dual_bound_lookahead_bfs;
 mod expression_beam_search;
 mod expression_evaluator;
 mod forward_recursion;
@@ -73,6 +74,9 @@ impl SolverFactory {
                 "dual_bound_chokudai" => Ok(Box::new(dual_bound_chokudai_search::load_from_yaml(
                     &config,
                 )?)),
+                "dual_bound_lookahead_bfs" => {
+                    Ok(Box::new(dual_bound_lookahead_bfs::load_from_yaml(&config)?))
+                }
                 "forward_recursion" => Ok(Box::new(forward_recursion::load_from_yaml(&config)?)),
                 "iterative" => Ok(Box::new(iterative_search::load_from_yaml(&config, model)?)),
                 value => {

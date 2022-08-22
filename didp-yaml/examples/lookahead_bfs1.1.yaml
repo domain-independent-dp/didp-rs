@@ -1,0 +1,4 @@
+solver: dual_bound_lookahead_bfs
+config:
+    bound_ratio: 1.1
+    time_limit: 1800
