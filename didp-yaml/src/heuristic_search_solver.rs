@@ -9,6 +9,7 @@ mod dual_bound_dbdfs;
 mod dual_bound_dds;
 mod dual_bound_dfbb;
 mod dual_bound_lookahead_bfs;
+mod dual_bound_weighted_astar;
 mod expression_beam_search;
 mod expression_evaluator;
 mod forward_recursion;
@@ -66,6 +67,9 @@ impl SolverFactory {
                     &config, model,
                 )?)),
                 "ibdfs" => Ok(Box::new(ibdfs::load_from_yaml(&config)?)),
+                "dual_bound_weighted_astar" => Ok(Box::new(
+                    dual_bound_weighted_astar::load_from_yaml(&config)?,
+                )),
                 "dual_bound_dfbb" => Ok(Box::new(dual_bound_dfbb::load_from_yaml(&config)?)),
                 "dual_bound_bfdfbb" => Ok(Box::new(dual_bound_bfdfbb::load_from_yaml(&config)?)),
                 "dual_bound_cbfs" => Ok(Box::new(dual_bound_cbfs::load_from_yaml(&config)?)),
