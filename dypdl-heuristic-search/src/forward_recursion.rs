@@ -104,7 +104,7 @@ where
 type StateMemo<T> =
     FxHashMap<hashable_state::HashableState, (Option<T>, Option<Rc<dypdl::Transition>>)>;
 
-/// Performs a naive recursion while memoizing all encoutered states.
+/// Performs a naive recursion while memoizing all encountered states.
 pub fn forward_recursion<T: variable_type::Numeric>(
     state: hashable_state::HashableState,
     model: &dypdl::Model,
