@@ -1,11 +1,11 @@
+use crate::bfs_lifo_open_list::BFSLIFOOpenList;
 use crate::lazy_search_node::LazySearchNode;
 use crate::search_node::trace_transitions;
 use crate::solver;
 use crate::state_registry::{StateInRegistry, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
 use dypdl::variable_type;
-use std::cmp::{Ordering, Reverse};
-use std::collections;
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
@@ -44,12 +44,12 @@ where
     }
 
     #[inline]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.parameters.time_limit
     }
 
     #[inline]
-    fn set_time_limit(&mut self, time_limit: u64) {
+    fn set_time_limit(&mut self, time_limit: f64) {
         self.parameters.time_limit = Some(time_limit)
     }
 
@@ -109,9 +109,12 @@ pub fn lazy_dijkstra<T>(
 where
     T: variable_type::Numeric + Ord + fmt::Display,
 {
-    let time_keeper = parameters.time_limit.map(solver::TimeKeeper::new);
+    let time_keeper = parameters.time_limit.map_or_else(
+        solver::TimeKeeper::default,
+        solver::TimeKeeper::with_time_limit,
+    );
     let primal_bound = parameters.primal_bound;
-    let mut open = collections::BinaryHeap::new();
+    let mut open = BFSLIFOOpenList::default();
     let mut registry = StateRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
@@ -133,16 +136,19 @@ where
             &initial_node.state,
             &model.table_registry,
         );
-        open.push(Reverse(DijkstraEdge {
+        open.push(
             cost,
-            parent: initial_node.clone(),
-            transition,
-        }));
+            DijkstraEdge {
+                cost,
+                parent: initial_node.clone(),
+                transition,
+            },
+        );
     }
     let mut expanded = 0;
     let mut cost_max = T::zero();
 
-    while let Some(Reverse(edge)) = open.pop() {
+    while let Some(edge) = open.pop() {
         let state = edge
             .transition
             .apply(&edge.parent.state, &model.table_registry);
@@ -175,10 +181,7 @@ where
                     ..Default::default()
                 };
             }
-            if time_keeper
-                .as_ref()
-                .map_or(false, |time_keeper| time_keeper.check_time_limit())
-            {
+            if time_keeper.check_time_limit() {
                 return solver::Solution {
                     best_bound: Some(cost_max),
                     expanded,
@@ -191,11 +194,14 @@ where
                 if primal_bound.is_some() && cost >= primal_bound.unwrap() {
                     continue;
                 }
-                open.push(Reverse(DijkstraEdge {
+                open.push(
                     cost,
-                    parent: node.clone(),
-                    transition,
-                }));
+                    DijkstraEdge {
+                        cost,
+                        parent: node.clone(),
+                        transition,
+                    },
+                );
             }
         }
     }

@@ -52,6 +52,9 @@ pub struct SolutionPy {
     /// int : Number of generated nodes.
     #[pyo3(get)]
     pub generated: usize,
+    /// float : Elapsed time in seconds.
+    #[pyo3(get)]
+    pub time: f64,
 }
 
 impl From<Solution<Integer>> for SolutionPy {
@@ -68,6 +71,7 @@ impl From<Solution<Integer>> for SolutionPy {
                 .collect(),
             expanded: solution.expanded,
             generated: solution.generated,
+            time: solution.time,
         }
     }
 }
@@ -88,6 +92,7 @@ impl From<Solution<OrderedContinuous>> for SolutionPy {
                 .collect(),
             expanded: solution.expanded,
             generated: solution.generated,
+            time: solution.time,
         }
     }
 }
@@ -154,14 +159,14 @@ where
         }
     }
 
-    fn set_time_limit(&mut self, limit: u64) {
+    fn set_time_limit(&mut self, limit: f64) {
         match self {
             Self::Int(solver) => solver.set_time_limit(limit),
             Self::Float(solver) => solver.set_time_limit(limit),
         }
     }
 
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         match self {
             Self::Int(solver) => solver.get_time_limit(),
             Self::Float(solver) => solver.get_time_limit(),
@@ -260,7 +265,7 @@ impl CAASDyPy {
     fn new(
         f_operator: FOperator,
         primal_bound: Option<&PyAny>,
-        time_limit: Option<u64>,
+        time_limit: Option<f64>,
         quiet: bool,
         initial_registry_capacity: usize,
         float_cost: bool,
@@ -337,12 +342,12 @@ impl CAASDyPy {
 
     /// int or None : Time limit.
     #[setter]
-    fn set_time_limit(&mut self, limit: u64) {
+    fn set_time_limit(&mut self, limit: f64) {
         self.0.set_time_limit(limit)
     }
 
     #[getter]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.0.get_time_limit()
     }
 
@@ -401,7 +406,7 @@ impl DijkstraPy {
     )]
     fn new(
         primal_bound: Option<&PyAny>,
-        time_limit: Option<u64>,
+        time_limit: Option<f64>,
         quiet: bool,
         initial_registry_capacity: usize,
         float_cost: bool,
@@ -475,12 +480,12 @@ impl DijkstraPy {
 
     /// int or None : Time limit.
     #[setter]
-    fn set_time_limit(&mut self, limit: u64) {
+    fn set_time_limit(&mut self, limit: f64) {
         self.0.set_time_limit(limit)
     }
 
     #[getter]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.0.get_time_limit()
     }
 
@@ -540,7 +545,7 @@ impl LazyDijkstraPy {
     )]
     fn new(
         primal_bound: Option<&PyAny>,
-        time_limit: Option<u64>,
+        time_limit: Option<f64>,
         quiet: bool,
         initial_registry_capacity: usize,
         float_cost: bool,
@@ -614,12 +619,12 @@ impl LazyDijkstraPy {
 
     /// int or None : Time limit.
     #[setter]
-    fn set_time_limit(&mut self, limit: u64) {
+    fn set_time_limit(&mut self, limit: f64) {
         self.0.set_time_limit(limit)
     }
 
     #[getter]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.0.get_time_limit()
     }
 
@@ -682,7 +687,7 @@ impl DualBoundDFBBPy {
     fn new(
         f_operator: FOperator,
         primal_bound: Option<&PyAny>,
-        time_limit: Option<u64>,
+        time_limit: Option<f64>,
         quiet: bool,
         initial_registry_capacity: usize,
         float_cost: bool,
@@ -759,12 +764,12 @@ impl DualBoundDFBBPy {
 
     /// int or None : Time limit.
     #[setter]
-    fn set_time_limit(&mut self, limit: u64) {
+    fn set_time_limit(&mut self, limit: f64) {
         self.0.set_time_limit(limit)
     }
 
     #[getter]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.0.get_time_limit()
     }
 
@@ -832,7 +837,7 @@ impl IBDFSPy {
     )]
     fn new(
         primal_bound: Option<&PyAny>,
-        time_limit: Option<u64>,
+        time_limit: Option<f64>,
         quiet: bool,
         initial_registry_capacity: usize,
         float_cost: bool,
@@ -906,12 +911,12 @@ impl IBDFSPy {
 
     /// int or None : Time limit.
     #[setter]
-    fn set_time_limit(&mut self, limit: u64) {
+    fn set_time_limit(&mut self, limit: f64) {
         self.0.set_time_limit(limit)
     }
 
     #[getter]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.0.get_time_limit()
     }
 
@@ -972,7 +977,7 @@ impl ForwardRecursionPy {
     )]
     fn new(
         primal_bound: Option<&PyAny>,
-        time_limit: Option<u64>,
+        time_limit: Option<f64>,
         quiet: bool,
         initial_registry_capacity: usize,
         float_cost: bool,
@@ -1046,12 +1051,12 @@ impl ForwardRecursionPy {
 
     /// int or None : Time limit.
     #[setter]
-    fn set_time_limit(&mut self, limit: u64) {
+    fn set_time_limit(&mut self, limit: f64) {
         self.0.set_time_limit(limit)
     }
 
     #[getter]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.0.get_time_limit()
     }
 
@@ -1213,7 +1218,7 @@ impl ExpressionBeamSearchPy {
         f_operator: FOperator,
         maximize: bool,
         primal_bound: Option<&PyAny>,
-        time_limit: Option<u64>,
+        time_limit: Option<f64>,
         quiet: bool,
         float_custom_cost: bool,
         float_cost: bool,
@@ -1310,12 +1315,12 @@ impl ExpressionBeamSearchPy {
 
     /// int or None : Time limit.
     #[setter]
-    fn set_time_limit(&mut self, limit: u64) {
+    fn set_time_limit(&mut self, limit: f64) {
         self.0.set_time_limit(limit)
     }
 
     #[getter]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.0.get_time_limit()
     }
 
@@ -1421,7 +1426,7 @@ impl ExpressionEpsilonBeamSearchPy {
         f_operator: FOperator,
         maximize: bool,
         primal_bound: Option<&PyAny>,
-        time_limit: Option<u64>,
+        time_limit: Option<f64>,
         quiet: bool,
         float_custom_cost: bool,
         float_cost: bool,
@@ -1528,12 +1533,12 @@ impl ExpressionEpsilonBeamSearchPy {
 
     /// int or None : Time limit.
     #[setter]
-    fn set_time_limit(&mut self, limit: u64) {
+    fn set_time_limit(&mut self, limit: f64) {
         self.0.set_time_limit(limit)
     }
 
     #[getter]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.0.get_time_limit()
     }
 
@@ -1565,6 +1570,7 @@ mod tests {
             transitions: vec![Transition::default()],
             expanded: 1,
             generated: 1,
+            time: 0.0,
         };
         assert_eq!(
             SolutionPy::from(solution),
@@ -1576,6 +1582,7 @@ mod tests {
                 transitions: vec![TransitionPy::new(Transition::default())],
                 expanded: 1,
                 generated: 1,
+                time: 0.0,
             }
         );
     }
@@ -1590,6 +1597,7 @@ mod tests {
             transitions: vec![Transition::default()],
             expanded: 1,
             generated: 1,
+            time: 0.0,
         };
         assert_eq!(
             SolutionPy::from(solution),
@@ -1601,6 +1609,7 @@ mod tests {
                 transitions: vec![TransitionPy::new(Transition::default())],
                 expanded: 1,
                 generated: 1,
+                time: 0.0,
             }
         );
     }
@@ -1943,14 +1952,14 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             CAASDyPy(WrappedSolver::Int(CAASDy {
                 f_evaluator_type: FEvaluatorType::Plus,
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -1969,14 +1978,14 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             CAASDyPy(WrappedSolver::Float(CAASDy {
                 f_evaluator_type: FEvaluatorType::Plus,
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -1990,12 +1999,12 @@ mod tests {
             f_evaluator_type: FEvaluatorType::Plus,
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -2004,12 +2013,12 @@ mod tests {
             f_evaluator_type: FEvaluatorType::Plus,
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -2375,13 +2384,13 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             DijkstraPy(WrappedSolver::Int(Dijkstra {
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -2399,13 +2408,13 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             DijkstraPy(WrappedSolver::Float(Dijkstra {
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -2418,12 +2427,12 @@ mod tests {
         let solver = DijkstraPy(WrappedSolver::Int(Dijkstra {
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -2431,12 +2440,12 @@ mod tests {
         let solver = DijkstraPy(WrappedSolver::Float(Dijkstra {
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -2796,13 +2805,13 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             LazyDijkstraPy(WrappedSolver::Int(LazyDijkstra {
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -2820,13 +2829,13 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             LazyDijkstraPy(WrappedSolver::Float(LazyDijkstra {
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -2839,12 +2848,12 @@ mod tests {
         let solver = LazyDijkstraPy(WrappedSolver::Int(LazyDijkstra {
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -2852,12 +2861,12 @@ mod tests {
         let solver = LazyDijkstraPy(WrappedSolver::Float(LazyDijkstra {
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -3261,14 +3270,14 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
                 f_evaluator_type: FEvaluatorType::Plus,
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -3287,14 +3296,14 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
                 f_evaluator_type: FEvaluatorType::Plus,
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -3308,12 +3317,12 @@ mod tests {
             f_evaluator_type: FEvaluatorType::Plus,
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -3322,12 +3331,12 @@ mod tests {
             f_evaluator_type: FEvaluatorType::Plus,
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -3693,13 +3702,13 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             IBDFSPy(WrappedSolver::Int(IBDFS {
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -3717,13 +3726,13 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             IBDFSPy(WrappedSolver::Float(IBDFS {
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -3736,12 +3745,12 @@ mod tests {
         let solver = IBDFSPy(WrappedSolver::Int(IBDFS {
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -3749,12 +3758,12 @@ mod tests {
         let solver = IBDFSPy(WrappedSolver::Float(IBDFS {
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -4114,13 +4123,13 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             ForwardRecursionPy(WrappedSolver::Int(ForwardRecursion {
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -4138,13 +4147,13 @@ mod tests {
             },
             initial_registry_capacity: Some(1000000),
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             ForwardRecursionPy(WrappedSolver::Float(ForwardRecursion {
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
                 initial_registry_capacity: Some(1000000),
@@ -4157,12 +4166,12 @@ mod tests {
         let solver = ForwardRecursionPy(WrappedSolver::Int(ForwardRecursion {
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -4170,12 +4179,12 @@ mod tests {
         let solver = ForwardRecursionPy(WrappedSolver::Float(ForwardRecursion {
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
             initial_registry_capacity: Some(1000000),
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -5112,7 +5121,7 @@ mod tests {
                 quiet: false,
             },
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             ExpressionBeamSearchPy(WrappedSolver::Int(ExpressionBeamSearch {
@@ -5127,7 +5136,7 @@ mod tests {
                 f_evaluator_type: FEvaluatorType::Plus,
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
             }))
@@ -5152,7 +5161,7 @@ mod tests {
                 quiet: false,
             },
         }));
-        solver.set_time_limit(10);
+        solver.set_time_limit(10.0);
         assert_eq!(
             solver,
             ExpressionBeamSearchPy(WrappedSolver::Float(ExpressionBeamSearch {
@@ -5167,7 +5176,7 @@ mod tests {
                 f_evaluator_type: FEvaluatorType::Plus,
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound: None,
-                    time_limit: Some(10),
+                    time_limit: Some(10.0),
                     quiet: false,
                 },
             }))
@@ -5188,11 +5197,11 @@ mod tests {
             f_evaluator_type: FEvaluatorType::Plus,
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]
@@ -5209,11 +5218,11 @@ mod tests {
             f_evaluator_type: FEvaluatorType::Plus,
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
-                time_limit: Some(10),
+                time_limit: Some(10.0),
                 quiet: false,
             },
         }));
-        assert_eq!(solver.get_time_limit(), Some(10));
+        assert_eq!(solver.get_time_limit(), Some(10.0));
     }
 
     #[test]

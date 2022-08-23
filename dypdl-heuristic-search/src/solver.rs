@@ -4,29 +4,45 @@ use std::rc::Rc;
 use std::time;
 
 pub struct TimeKeeper {
-    time_limit: time::Duration,
+    time_limit: Option<time::Duration>,
     start: time::Instant,
 }
 
-impl TimeKeeper {
-    pub fn new(time_limit: u64) -> TimeKeeper {
+impl Default for TimeKeeper {
+    fn default() -> Self {
         TimeKeeper {
-            time_limit: time::Duration::new(time_limit, 0),
+            time_limit: None,
+            start: time::Instant::now(),
+        }
+    }
+}
+
+impl TimeKeeper {
+    pub fn with_time_limit(time_limit: f64) -> TimeKeeper {
+        TimeKeeper {
+            time_limit: Some(time::Duration::from_secs_f64(time_limit)),
             start: time::Instant::now(),
         }
     }
 
-    pub fn remaining_time_limit(&self) -> time::Duration {
-        self.time_limit - (time::Instant::now() - self.start)
+    pub fn elapsed_time(&self) -> f64 {
+        (time::Instant::now() - self.start).as_secs_f64()
+    }
+
+    pub fn remaining_time_limit(&self) -> Option<time::Duration> {
+        self.time_limit
+            .map(|time_limit| time_limit - (time::Instant::now() - self.start))
     }
 
     pub fn check_time_limit(&self) -> bool {
-        if time::Instant::now() - self.start > self.time_limit {
-            println!("Reached time limit.");
-            true
-        } else {
-            false
-        }
+        self.time_limit.map_or(false, |time_limit| {
+            if time::Instant::now() - self.start > time_limit {
+                println!("Reached time limit.");
+                true
+            } else {
+                false
+            }
+        })
     }
 }
 
@@ -36,7 +52,7 @@ pub struct SolverParameters<T> {
     /// Primal bound.
     pub primal_bound: Option<T>,
     /// Time limit.
-    pub time_limit: Option<u64>,
+    pub time_limit: Option<f64>,
     /// Suppress log output or not.
     pub quiet: bool,
 }
@@ -68,6 +84,8 @@ pub struct Solution<T: variable_type::Numeric> {
     pub expanded: usize,
     /// Number of generated nodes.
     pub generated: usize,
+    /// Elapsed time in seconds.
+    pub time: f64,
 }
 
 /// A trait defining the interface of a solver.
@@ -82,10 +100,10 @@ pub trait Solver<T: variable_type::Numeric> {
     fn get_primal_bound(&self) -> Option<T>;
 
     /// Sets the time limit.
-    fn set_time_limit(&mut self, _: u64);
+    fn set_time_limit(&mut self, _: f64);
 
     /// Returns the time limit.
-    fn get_time_limit(&self) -> Option<u64>;
+    fn get_time_limit(&self) -> Option<f64>;
 
     /// Sets if quiet.
     fn set_quiet(&mut self, _: bool);

@@ -23,7 +23,7 @@ impl Evaluator for NonnegativeLBEvaluator {
 }
 
 /// How to combine the g-value and the h-value to compute the f-value.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum FEvaluatorType {
     /// f = g + h.
     Plus,
@@ -126,12 +126,12 @@ where
     }
 
     #[inline]
-    fn set_time_limit(&mut self, time_limit: u64) {
+    fn set_time_limit(&mut self, time_limit: f64) {
         self.parameters.time_limit = Some(time_limit)
     }
 
     #[inline]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.parameters.time_limit
     }
 

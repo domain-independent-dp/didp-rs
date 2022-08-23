@@ -36,7 +36,10 @@ where
     H: evaluator::Evaluator,
     F: Fn(U, U, &StateInRegistry, &dypdl::Model) -> U,
 {
-    let time_keeper = parameters.time_limit.map(solver::TimeKeeper::new);
+    let time_keeper = parameters.time_limit.map_or_else(
+        solver::TimeKeeper::default,
+        solver::TimeKeeper::with_time_limit,
+    );
     let quiet = parameters.quiet;
     let mut incumbent = Vec::new();
     let mut cost = None;
@@ -124,7 +127,7 @@ pub fn forward_beam_search<'a, T, U, V, B, C, H, F>(
     beam_constructor: &C,
     evaluators: &EvaluatorsForBeamSearch<H, F>,
     parameters: BeamSearchParameters,
-    time_keeper: &Option<solver::TimeKeeper>,
+    time_keeper: &solver::TimeKeeper,
 ) -> (Solution<T>, bool)
 where
     T: variable_type::Numeric,
@@ -184,10 +187,7 @@ where
                 }
                 continue;
             }
-            if time_keeper
-                .as_ref()
-                .map_or(false, |time_keeper| time_keeper.check_time_limit())
-            {
+            if time_keeper.check_time_limit() {
                 return (
                     incumbent.map_or_else(
                         || Solution {

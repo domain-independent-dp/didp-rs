@@ -49,12 +49,12 @@ where
     }
 
     #[inline]
-    fn set_time_limit(&mut self, time_limit: u64) {
+    fn set_time_limit(&mut self, time_limit: f64) {
         self.parameters.time_limit = Some(time_limit)
     }
 
     #[inline]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.parameters.time_limit
     }
 
@@ -96,7 +96,10 @@ pub fn forward_ibdfs<T>(
 where
     T: variable_type::Numeric + fmt::Display,
 {
-    let time_keeper = parameters.time_limit.map(solver::TimeKeeper::new);
+    let time_keeper = parameters.time_limit.map_or_else(
+        solver::TimeKeeper::default,
+        solver::TimeKeeper::with_time_limit,
+    );
     let quiet = parameters.quiet;
     let mut primal_bound = parameters.primal_bound;
     let mut expanded = 0;
@@ -180,7 +183,7 @@ pub fn bounded_dfs<T: variable_type::Numeric>(
     generator: &SuccessorGenerator<Transition>,
     prob: &mut StateRegistry<T, RecursiveNode<T>>,
     primal_bound: Option<T>,
-    time_keeper: &Option<solver::TimeKeeper>,
+    time_keeper: &solver::TimeKeeper,
     expanded: &mut usize,
 ) -> BoundedDFSSolution<T> {
     let state = node.state;
@@ -198,10 +201,7 @@ pub fn bounded_dfs<T: variable_type::Numeric>(
     if prob.get(&state, cost).is_some() {
         return (None, false);
     }
-    if time_keeper
-        .as_ref()
-        .map_or(false, |time_keeper| time_keeper.check_time_limit())
-    {
+    if time_keeper.check_time_limit() {
         return (None, true);
     }
     for transition in generator.applicable_transitions(&state) {

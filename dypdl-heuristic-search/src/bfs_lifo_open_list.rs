@@ -1,8 +1,15 @@
 use std::collections::BTreeMap;
 
-#[derive(Default)]
 pub struct BFSLIFOOpenList<T: Ord + Copy, U> {
     map: BTreeMap<T, Vec<U>>,
+}
+
+impl<T: Ord + Copy, U> Default for BFSLIFOOpenList<T, U> {
+    fn default() -> Self {
+        Self {
+            map: BTreeMap::default(),
+        }
+    }
 }
 
 impl<T: Ord + Copy, U> BFSLIFOOpenList<T, U> {

@@ -24,14 +24,8 @@ where
         }
     };
     let time_limit = match map.get(&yaml_rust::Yaml::from_str("time_limit")) {
-        Some(yaml_rust::Yaml::Integer(value)) => Some(*value as u64),
+        Some(value) => Some(util::get_numeric(value)?),
         None => None,
-        value => {
-            return Err(util::YamlContentErr::new(format!(
-                "expected Integer, but found `{:?}`",
-                value
-            )))
-        }
     };
     let quiet = match map.get(&yaml_rust::Yaml::from_str("quiet")) {
         Some(yaml_rust::Yaml::Boolean(value)) => *value,

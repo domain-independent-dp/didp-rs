@@ -28,7 +28,10 @@ where
     H: evaluator::Evaluator,
     F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
 {
-    let time_keeper = parameters.time_limit.map(solver::TimeKeeper::new);
+    let time_keeper = parameters.time_limit.map_or_else(
+        solver::TimeKeeper::default,
+        solver::TimeKeeper::with_time_limit,
+    );
     let g_bound = parameters.primal_bound;
     let mut open = BFSLIFOOpenList::default();
     let mut registry = StateRegistry::new(model);
@@ -88,10 +91,7 @@ where
                 ..Default::default()
             };
         }
-        if time_keeper
-            .as_ref()
-            .map_or(false, |time_keeper| time_keeper.check_time_limit())
-        {
+        if time_keeper.check_time_limit() {
             return solver::Solution {
                 best_bound: Some(f_max),
                 expanded,

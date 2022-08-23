@@ -1,11 +1,10 @@
+use crate::bfs_lifo_open_list::BFSLIFOOpenList;
 use crate::search_node::{trace_transitions, SearchNode};
 use crate::solver;
 use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
 use dypdl::variable_type;
 use std::cell::RefCell;
-use std::cmp::Reverse;
-use std::collections;
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
@@ -47,12 +46,12 @@ where
     }
 
     #[inline]
-    fn set_time_limit(&mut self, time_limit: u64) {
+    fn set_time_limit(&mut self, time_limit: f64) {
         self.parameters.time_limit = Some(time_limit)
     }
 
     #[inline]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.parameters.time_limit
     }
 
@@ -77,9 +76,12 @@ pub fn dijkstra<T>(
 where
     T: variable_type::Numeric + Ord + fmt::Display,
 {
-    let time_keeper = parameters.time_limit.map(solver::TimeKeeper::new);
+    let time_keeper = parameters.time_limit.map_or_else(
+        solver::TimeKeeper::default,
+        solver::TimeKeeper::with_time_limit,
+    );
     let primal_bound = parameters.primal_bound;
-    let mut open = collections::BinaryHeap::new();
+    let mut open = BFSLIFOOpenList::default();
     let mut registry = StateRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
@@ -95,12 +97,12 @@ where
         }))
     };
     let (initial_node, _) = registry.insert(initial_state, cost, constructor).unwrap();
-    open.push(Reverse(initial_node));
+    open.push(cost, initial_node);
     let mut expanded = 0;
     let mut generated = 0;
     let mut cost_max = T::zero();
 
-    while let Some(Reverse(node)) = open.pop() {
+    while let Some(node) = open.pop() {
         if *node.closed.borrow() {
             continue;
         }
@@ -119,17 +121,16 @@ where
                 transitions: trace_transitions(node),
                 expanded,
                 generated,
+                time: time_keeper.elapsed_time(),
                 ..Default::default()
             };
         }
-        if time_keeper
-            .as_ref()
-            .map_or(false, |time_keeper| time_keeper.check_time_limit())
-        {
+        if time_keeper.check_time_limit() {
             return solver::Solution {
                 best_bound: Some(cost_max),
                 expanded,
                 generated,
+                time: time_keeper.elapsed_time(),
                 ..Default::default()
             };
         }
@@ -156,7 +157,7 @@ where
                             *dominated.closed.borrow_mut() = true;
                         }
                     }
-                    open.push(Reverse(successor));
+                    open.push(cost, successor);
                     generated += 1;
                 }
             }
@@ -166,6 +167,7 @@ where
         is_infeasible: true,
         expanded,
         generated,
+        time: time_keeper.elapsed_time(),
         ..Default::default()
     }
 }

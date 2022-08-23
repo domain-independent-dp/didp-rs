@@ -26,7 +26,10 @@ where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     fn solve(&mut self, model: &dypdl::Model) -> Result<solver::Solution<T>, Box<dyn Error>> {
-        let time_keeper = self.parameters.time_limit.map(solver::TimeKeeper::new);
+        let time_keeper = self.parameters.time_limit.map_or_else(
+            solver::TimeKeeper::default,
+            solver::TimeKeeper::with_time_limit,
+        );
         let generator = successor_generator::SuccessorGenerator::<Transition>::new(model, false);
         let mut memo = FxHashMap::default();
         if let Some(capacity) = self.initial_registry_capacity {
@@ -78,12 +81,12 @@ where
     }
 
     #[inline]
-    fn set_time_limit(&mut self, time_limit: u64) {
+    fn set_time_limit(&mut self, time_limit: f64) {
         self.parameters.time_limit = Some(time_limit)
     }
 
     #[inline]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.parameters.time_limit
     }
 
@@ -107,7 +110,7 @@ pub fn forward_recursion<T: variable_type::Numeric>(
     model: &dypdl::Model,
     generator: &successor_generator::SuccessorGenerator<Transition>,
     memo: &mut StateMemo<T>,
-    time_keeper: &Option<solver::TimeKeeper>,
+    time_keeper: &solver::TimeKeeper,
     expanded: &mut usize,
 ) -> Option<T> {
     *expanded += 1;
@@ -117,10 +120,7 @@ pub fn forward_recursion<T: variable_type::Numeric>(
     if let Some((cost, _)) = memo.get(&state) {
         return *cost;
     }
-    if time_keeper
-        .as_ref()
-        .map_or(false, |time_keeper| time_keeper.check_time_limit())
-    {
+    if time_keeper.check_time_limit() {
         return None;
     }
     let mut cost = None;

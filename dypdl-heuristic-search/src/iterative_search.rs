@@ -13,15 +13,17 @@ pub struct IterativeSearch<T: variable_type::Numeric> {
 
 impl<T: variable_type::Numeric + fmt::Display> solver::Solver<T> for IterativeSearch<T> {
     fn solve(&mut self, model: &dypdl::Model) -> Result<solver::Solution<T>, Box<dyn Error>> {
-        let time_keeper = self.parameters.time_limit.map(solver::TimeKeeper::new);
+        let time_keeper = self.parameters.time_limit.map_or_else(
+            solver::TimeKeeper::default,
+            solver::TimeKeeper::with_time_limit,
+        );
         let mut primal_bound = self.parameters.primal_bound;
         let mut solution = solver::Solution::default();
         for solver in &mut self.solvers {
             if let Some(bound) = primal_bound {
                 solver.set_primal_bound(bound);
             }
-            if let Some(time_keeper) = time_keeper.as_ref() {
-                let time_limit = time_keeper.remaining_time_limit().as_secs();
+            if let Some(time_limit) = time_keeper.remaining_time_limit().map(|x| x.as_secs_f64()) {
                 if let Some(current_limit) = solver.get_time_limit() {
                     if time_limit < current_limit {
                         solver.set_time_limit(time_limit);
@@ -53,12 +55,12 @@ impl<T: variable_type::Numeric + fmt::Display> solver::Solver<T> for IterativeSe
     }
 
     #[inline]
-    fn set_time_limit(&mut self, time_limit: u64) {
+    fn set_time_limit(&mut self, time_limit: f64) {
         self.parameters.time_limit = Some(time_limit)
     }
 
     #[inline]
-    fn get_time_limit(&self) -> Option<u64> {
+    fn get_time_limit(&self) -> Option<f64> {
         self.parameters.time_limit
     }
 
