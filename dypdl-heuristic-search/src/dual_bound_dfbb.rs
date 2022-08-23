@@ -35,6 +35,7 @@ pub struct DualBoundDFBB<T: variable_type::Numeric> {
     pub parameters: solver::SolverParameters<T>,
     /// The initial capacity of the data structure storing all generated states.
     pub initial_registry_capacity: Option<usize>,
+    pub callback: Box<solver::Callback<T>>,
 }
 
 impl<T> solver::Solver<T> for DualBoundDFBB<T>
@@ -57,6 +58,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -69,6 +71,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -81,6 +84,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -92,6 +96,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )

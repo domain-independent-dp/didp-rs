@@ -690,6 +690,7 @@ impl DualBoundDFBBPy {
             };
             Ok(Self(WrappedSolver::Float(DualBoundDFBB {
                 f_evaluator_type,
+                callback: Box::new(|_| {}),
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound,
                     time_limit,
@@ -705,6 +706,7 @@ impl DualBoundDFBBPy {
             };
             Ok(Self(WrappedSolver::Int(DualBoundDFBB {
                 f_evaluator_type,
+                callback: Box::new(|_| {}),
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound,
                     time_limit,
@@ -3019,6 +3021,7 @@ mod tests {
         });
         let mut solver = DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3037,6 +3040,7 @@ mod tests {
         });
         let mut solver = DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3055,6 +3059,7 @@ mod tests {
         });
         let mut solver = DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3073,6 +3078,7 @@ mod tests {
         });
         let mut solver = DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3089,6 +3095,7 @@ mod tests {
 
         let mut solver = DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3119,6 +3126,7 @@ mod tests {
 
         let mut solver = DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3152,6 +3160,7 @@ mod tests {
 
         let mut solver = DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3170,6 +3179,7 @@ mod tests {
     fn dual_bound_dfbb_get_primal_bound_int() {
         let solver = DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: Some(10),
                 time_limit: None,
@@ -3184,6 +3194,7 @@ mod tests {
     fn dual_bound_dfbb_get_primal_bound_float() {
         let solver = DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: Some(OrderedContinuous::from(10.0)),
                 time_limit: None,
@@ -3198,6 +3209,7 @@ mod tests {
     fn dual_bound_dfbb_set_time_limit_int() {
         let mut solver = DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3222,6 +3234,7 @@ mod tests {
     fn dual_bound_dfbb_set_time_limit_float() {
         let mut solver = DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3246,6 +3259,7 @@ mod tests {
     fn dual_bound_dfbb_get_time_limit_int() {
         let solver = DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: Some(10.0),
@@ -3260,6 +3274,7 @@ mod tests {
     fn dual_bound_dfbb_get_time_limit_float() {
         let solver = DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: Some(10.0),
@@ -3274,6 +3289,7 @@ mod tests {
     fn dual_bound_dfbb_set_quiet_int() {
         let mut solver = DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3298,6 +3314,7 @@ mod tests {
     fn dual_bound_dfbb_set_quiet_float() {
         let mut solver = DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3322,6 +3339,7 @@ mod tests {
     fn dual_bound_dfbb_get_quiet_int() {
         let solver = DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3336,6 +3354,7 @@ mod tests {
     fn dual_bound_dfbb_get_quiet_float() {
         let solver = DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
             f_evaluator_type: FEvaluatorType::Plus,
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,

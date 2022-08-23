@@ -1,6 +1,7 @@
 //! A module for heuristic search solvers for DyPDL.
 
 mod caasdy;
+mod callback;
 mod dijkstra;
 mod dual_bound_bfdfbb;
 mod dual_bound_cbfs;

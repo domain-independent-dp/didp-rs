@@ -19,6 +19,7 @@ pub fn dfbb<T, H, F>(
     generator: SuccessorGenerator<dypdl::Transition>,
     h_evaluator: &Option<H>,
     f_evaluator: F,
+    callback: &mut Box<solver::Callback<T>>,
     parameters: solver::SolverParameters<T>,
     initial_registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
@@ -51,7 +52,7 @@ where
     open.push(initial_node);
     let mut expanded = 0;
     let mut generated = 0;
-    let mut incumbent = None;
+    let mut solution = solver::Solution::default();
     let mut best_bound = None;
 
     while let Some(node) = open.pop() {
@@ -60,6 +61,7 @@ where
         }
         *node.closed.borrow_mut() = true;
         expanded += 1;
+
         if model.is_goal(node.state())
             && (primal_bound.is_none()
                 || ((model.reduce_function == ReduceFunction::Min
@@ -70,10 +72,17 @@ where
             if !parameters.quiet {
                 println!("New primal bound: {}, expanded: {}", node.cost(), expanded);
             }
-            primal_bound = Some(node.cost());
-            incumbent = Some(node);
+            let cost = node.cost();
+            solution.cost = Some(cost);
+            solution.expanded = expanded;
+            solution.generated = generated;
+            solution.time = time_keeper.elapsed_time();
+            solution.transitions = trace_transitions(node);
+            primal_bound = Some(cost);
+            (callback)(&solution);
             continue;
         }
+
         if let (Some(bound), Some(h_evaluator)) = (primal_bound, h_evaluator.as_ref()) {
             let h = h_evaluator.eval(node.state(), model);
             if let Some(h) = h {
@@ -87,26 +96,24 @@ where
                         || (model.reduce_function == ReduceFunction::Max && f < dual_bound)
                 }) {
                     best_bound = Some(f);
+                    solution.best_bound = Some(f);
+                    if f == bound {
+                        return solution;
+                    }
                 }
             } else {
                 continue;
             }
         }
+
         if time_keeper.check_time_limit() {
             if !parameters.quiet {
                 println!("Expanded: {}", expanded);
             }
-            return incumbent
-                .clone()
-                .map_or_else(solver::Solution::default, |node| solver::Solution {
-                    cost: Some(node.cost()),
-                    best_bound,
-                    transitions: incumbent.map_or_else(Vec::new, |node| trace_transitions(node)),
-                    expanded,
-                    generated,
-                    time: time_keeper.elapsed_time(),
-                    ..Default::default()
-                });
+            solution.expanded = expanded;
+            solution.generated = generated;
+            solution.time = time_keeper.elapsed_time();
+            return solution;
         }
         for transition in generator.applicable_transitions(node.state()) {
             let cost = transition.eval_cost(node.cost(), node.state(), &model.table_registry);
@@ -134,22 +141,13 @@ where
             }
         }
     }
-    incumbent.map_or_else(
-        || solver::Solution {
-            is_infeasible: true,
-            expanded,
-            generated,
-            time: time_keeper.elapsed_time(),
-            ..Default::default()
-        },
-        |node| solver::Solution {
-            cost: Some(node.cost()),
-            is_optimal: true,
-            transitions: trace_transitions(node),
-            expanded,
-            generated,
-            time: time_keeper.elapsed_time(),
-            ..Default::default()
-        },
-    )
+    if solution.cost.is_none() {
+        solution.is_infeasible = true;
+    } else {
+        solution.is_optimal = true;
+    }
+    solution.expanded = expanded;
+    solution.generated = generated;
+    solution.time = time_keeper.elapsed_time();
+    solution
 }

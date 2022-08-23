@@ -88,6 +88,8 @@ pub struct Solution<T: variable_type::Numeric> {
     pub time: f64,
 }
 
+pub type Callback<T> = dyn FnMut(&Solution<T>) + Send;
+
 /// A trait defining the interface of a solver.
 pub trait Solver<T: variable_type::Numeric> {
     /// Tries to find a solution.

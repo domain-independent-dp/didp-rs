@@ -68,7 +68,7 @@ pub use iterative_search::IterativeSearch;
 pub use lazy_dijkstra::{lazy_dijkstra, LazyDijkstra};
 pub use lazy_search_node::LazySearchNode;
 pub use search_node::{DPSearchNode, SearchNode};
-pub use solver::{compute_solution_cost, Solution, Solver, SolverParameters};
+pub use solver::{compute_solution_cost, Callback, Solution, Solver, SolverParameters};
 pub use state_registry::{StateInRegistry, StateInformation, StateRegistry};
 pub use successor_generator::{ApplicableTransitions, MaybeApplicable, SuccessorGenerator};
 pub use transition_with_custom_cost::TransitionWithCustomCost;
