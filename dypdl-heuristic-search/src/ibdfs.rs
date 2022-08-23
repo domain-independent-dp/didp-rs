@@ -19,6 +19,8 @@ pub struct IBDFS<T: variable_type::Numeric> {
     pub parameters: solver::SolverParameters<T>,
     /// The initial capacity of the data structure storing all generated states.
     pub initial_registry_capacity: Option<usize>,
+    /// Callback function used when a new solution is found.
+    pub callback: Box<solver::Callback<T>>,
 }
 
 impl<T> solver::Solver<T> for IBDFS<T>
@@ -32,6 +34,7 @@ where
         Ok(forward_ibdfs(
             model,
             &generator,
+            &mut self.callback,
             self.parameters,
             self.initial_registry_capacity,
         ))
@@ -89,6 +92,7 @@ impl<T: variable_type::Numeric> StateInformation<T> for RecursiveNode<T> {
 pub fn forward_ibdfs<T>(
     model: &dypdl::Model,
     generator: &SuccessorGenerator<Transition>,
+    callback: &mut Box<solver::Callback<T>>,
     parameters: solver::SolverParameters<T>,
     capacity: Option<usize>,
 ) -> solver::Solution<T>
@@ -106,7 +110,7 @@ where
     if let Some(capacity) = capacity {
         prob.reserve(capacity);
     };
-    let mut incumbent = None;
+    let mut solution = solver::Solution::default();
     let node = RecursiveNode {
         state: StateInRegistry::new(&model.target),
         cost: T::zero(),
@@ -125,51 +129,54 @@ where
                 if let Some(current_cost) = primal_bound {
                     match model.reduce_function {
                         dypdl::ReduceFunction::Max if new_cost > current_cost => {
-                            primal_bound = Some(new_cost);
-                            incumbent = Some(transitions);
                             if !quiet {
                                 println!("New primal bound: {}, expanded: {}", new_cost, expanded);
                             }
+                            solution.cost = Some(new_cost);
+                            solution.expanded = expanded;
+                            solution.generated = expanded;
+                            solution.time = time_keeper.elapsed_time();
+                            solution.transitions = transitions;
+                            primal_bound = Some(new_cost);
+                            (callback)(&solution)
                         }
                         dypdl::ReduceFunction::Min if new_cost < current_cost => {
-                            primal_bound = Some(new_cost);
-                            incumbent = Some(transitions);
                             if !quiet {
                                 println!("New primal bound: {}, expanded: {}", new_cost, expanded);
                             }
+                            solution.cost = Some(new_cost);
+                            solution.expanded = expanded;
+                            solution.generated = expanded;
+                            solution.time = time_keeper.elapsed_time();
+                            solution.transitions = transitions;
+                            primal_bound = Some(new_cost);
+                            (callback)(&solution)
                         }
                         _ => {}
                     }
                 } else {
-                    primal_bound = Some(new_cost);
-                    incumbent = Some(transitions);
                     if !quiet {
                         println!("New primal bound: {}, expanded: {}", new_cost, expanded);
                     }
+                    solution.cost = Some(new_cost);
+                    solution.expanded = expanded;
+                    solution.generated = expanded;
+                    solution.time = time_keeper.elapsed_time();
+                    solution.transitions = transitions;
+                    primal_bound = Some(new_cost);
+                    (callback)(&solution)
                 }
             }
             (_, time_out) => {
-                return incumbent.map_or_else(
-                    || solver::Solution {
-                        is_infeasible: true,
-                        expanded,
-                        generated: expanded,
-                        time: time_keeper.elapsed_time(),
-                        ..Default::default()
-                    },
-                    |mut incumbent| solver::Solution {
-                        cost: primal_bound,
-                        is_optimal: !time_out,
-                        transitions: {
-                            incumbent.reverse();
-                            incumbent
-                        },
-                        expanded,
-                        generated: expanded,
-                        time: time_keeper.elapsed_time(),
-                        ..Default::default()
-                    },
-                );
+                if !time_out && solution.cost.is_none() {
+                    solution.is_infeasible = true;
+                } else if !time_out {
+                    solution.is_optimal = true;
+                }
+                solution.expanded = expanded;
+                solution.generated = expanded;
+                solution.time = time_keeper.elapsed_time();
+                return solution;
             }
         }
     }

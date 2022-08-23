@@ -42,6 +42,7 @@ mod solver;
 mod state_registry;
 mod successor_generator;
 mod transition_with_custom_cost;
+mod util;
 
 pub use beam::{BeamSearchNodeArgs, NormalBeam, NormalBeamSearchNode};
 pub use beam_search::{beam_search, iterative_beam_search};

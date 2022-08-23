@@ -3,6 +3,7 @@ use crate::chokudai_search;
 use crate::solver;
 use crate::state_registry::StateInRegistry;
 use crate::successor_generator::SuccessorGenerator;
+use crate::util::ForwardSearchParameters;
 use dypdl::variable_type;
 use std::cmp;
 use std::error::Error;
@@ -23,6 +24,8 @@ pub struct DualBoundChokudaiSearch<T: variable_type::Numeric> {
     pub parameters: solver::SolverParameters<T>,
     /// The initial capacity of the data structure storing all generated states.
     pub initial_registry_capacity: Option<usize>,
+    /// Callback function used when a new solution is found.
+    pub callback: Box<solver::Callback<T>>,
 }
 
 impl<T> solver::Solver<T> for DualBoundChokudaiSearch<T>
@@ -32,18 +35,22 @@ where
 {
     fn solve(&mut self, model: &dypdl::Model) -> Result<solver::Solution<T>, Box<dyn Error>> {
         let generator = SuccessorGenerator::<dypdl::Transition>::new(model, false);
+        let parameters = ForwardSearchParameters {
+            generator,
+            parameters: self.parameters,
+            initial_registry_capacity: self.initial_registry_capacity,
+        };
         let h_evaluator = NonnegativeLBEvaluator {};
         let solution = match self.f_evaluator_type {
             FEvaluatorType::Plus => {
                 let f_evaluator = Box::new(|g, h, _: &StateInRegistry, _: &dypdl::Model| g + h);
                 chokudai_search::chokudai_search(
                     model,
-                    generator,
                     &h_evaluator,
                     f_evaluator,
                     self.width,
-                    self.parameters,
-                    self.initial_registry_capacity,
+                    &mut self.callback,
+                    parameters,
                 )
             }
             FEvaluatorType::Max => {
@@ -51,12 +58,11 @@ where
                     Box::new(|g, h, _: &StateInRegistry, _: &dypdl::Model| cmp::max(g, h));
                 chokudai_search::chokudai_search(
                     model,
-                    generator,
                     &h_evaluator,
                     f_evaluator,
                     self.width,
-                    self.parameters,
-                    self.initial_registry_capacity,
+                    &mut self.callback,
+                    parameters,
                 )
             }
             FEvaluatorType::Min => {
@@ -64,24 +70,22 @@ where
                     Box::new(|g, h, _: &StateInRegistry, _: &dypdl::Model| cmp::min(g, h));
                 chokudai_search::chokudai_search(
                     model,
-                    generator,
                     &h_evaluator,
                     f_evaluator,
                     self.width,
-                    self.parameters,
-                    self.initial_registry_capacity,
+                    &mut self.callback,
+                    parameters,
                 )
             }
             FEvaluatorType::Overwrite => {
                 let f_evaluator = Box::new(|_, h, _: &StateInRegistry, _: &dypdl::Model| h);
                 chokudai_search::chokudai_search(
                     model,
-                    generator,
                     &h_evaluator,
                     f_evaluator,
                     self.width,
-                    self.parameters,
-                    self.initial_registry_capacity,
+                    &mut self.callback,
+                    parameters,
                 )
             }
         };

@@ -21,6 +21,8 @@ pub struct DualBoundCBFS<T: variable_type::Numeric> {
     pub parameters: solver::SolverParameters<T>,
     /// The initial capacity of the data structure storing all generated states.
     pub initial_registry_capacity: Option<usize>,
+    /// Callback function used when a new solution is found.
+    pub callback: Box<solver::Callback<T>>,
 }
 
 impl<T> solver::Solver<T> for DualBoundCBFS<T>
@@ -39,6 +41,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -51,6 +54,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -63,6 +67,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -74,6 +79,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )

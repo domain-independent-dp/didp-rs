@@ -20,6 +20,7 @@ pub fn cyclic_bfs<T, H, F>(
     generator: SuccessorGenerator<dypdl::Transition>,
     h_evaluator: &H,
     f_evaluator: F,
+    callback: &mut Box<solver::Callback<T>>,
     parameters: solver::SolverParameters<T>,
     initial_registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
@@ -66,11 +67,14 @@ where
     open[0].push(Reverse(initial_node));
     let mut expanded = 0;
     let mut generated = 0;
-    let mut i = 0;
-    let mut incumbent = None;
     let best_bound = f;
-    let mut no_node = true;
+    let mut solution = solver::Solution {
+        best_bound: Some(f),
+        ..Default::default()
+    };
 
+    let mut i = 0;
+    let mut no_node = true;
     loop {
         if let Some(Reverse(node)) = open[i].pop() {
             if *node.closed.borrow() {
@@ -89,40 +93,33 @@ where
                     if !parameters.quiet {
                         println!("New primal bound: {}, expanded: {}", node.cost(), expanded);
                     }
-                    if node.cost() == best_bound {
-                        return solver::Solution {
-                            cost: Some(node.cost()),
-                            is_optimal: true,
-                            transitions: trace_transitions(node),
-                            expanded,
-                            generated,
-                            time: time_keeper.elapsed_time(),
-                            ..Default::default()
-                        };
+                    let cost = node.cost();
+                    solution.cost = Some(cost);
+                    solution.expanded = expanded;
+                    solution.generated = generated;
+                    solution.time = time_keeper.elapsed_time();
+                    solution.transitions = trace_transitions(node);
+                    primal_bound = Some(cost);
+                    (callback)(&solution);
+                    if cost == best_bound {
+                        solution.is_optimal = true;
+                        return solution;
                     }
-                    primal_bound = Some(node.cost());
-                    incumbent = Some(node);
                     i = 0;
                     no_node = true;
                     continue;
                 }
+
                 if time_keeper.check_time_limit() {
                     if !parameters.quiet {
                         println!("Expanded: {}", expanded);
                     }
-                    return incumbent
-                        .clone()
-                        .map_or_else(solver::Solution::default, |node| solver::Solution {
-                            cost: Some(node.cost()),
-                            best_bound: Some(best_bound),
-                            transitions: incumbent
-                                .map_or_else(Vec::new, |node| trace_transitions(node)),
-                            expanded,
-                            generated,
-                            time: time_keeper.elapsed_time(),
-                            ..Default::default()
-                        });
+                    solution.expanded = expanded;
+                    solution.generated = generated;
+                    solution.time = time_keeper.elapsed_time();
+                    return solution;
                 }
+
                 for transition in generator.applicable_transitions(node.state()) {
                     let g = transition.eval_cost(node.g, node.state(), &model.table_registry);
                     if primal_bound.is_some() && g >= primal_bound.unwrap() {
@@ -186,22 +183,13 @@ where
             i += 1;
         }
     }
-    incumbent.map_or_else(
-        || solver::Solution {
-            is_infeasible: true,
-            expanded,
-            generated,
-            time: time_keeper.elapsed_time(),
-            ..Default::default()
-        },
-        |node| solver::Solution {
-            cost: Some(node.cost()),
-            is_optimal: true,
-            transitions: trace_transitions(node),
-            expanded,
-            generated,
-            time: time_keeper.elapsed_time(),
-            ..Default::default()
-        },
-    )
+    if solution.cost.is_none() {
+        solution.is_infeasible = true;
+    } else {
+        solution.is_optimal = true;
+    }
+    solution.expanded = expanded;
+    solution.generated = generated;
+    solution.time = time_keeper.elapsed_time();
+    solution
 }

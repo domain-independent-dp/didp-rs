@@ -1,3 +1,4 @@
+use super::callback::get_callback;
 use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
@@ -69,9 +70,11 @@ where
                 .into())
             }
         };
+    let callback = get_callback(map)?;
     Ok(DualBoundChokudaiSearch {
         f_evaluator_type,
         width,
+        callback,
         parameters,
         initial_registry_capacity,
     })

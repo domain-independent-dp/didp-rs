@@ -839,6 +839,7 @@ impl IBDFSPy {
                 None
             };
             Ok(Self(WrappedSolver::Float(IBDFS {
+                callback: Box::new(|_| {}),
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound,
                     time_limit,
@@ -853,6 +854,7 @@ impl IBDFSPy {
                 None
             };
             Ok(Self(WrappedSolver::Int(IBDFS {
+                callback: Box::new(|_| {}),
                 parameters: dypdl_heuristic_search::SolverParameters {
                     primal_bound,
                     time_limit,
@@ -3467,6 +3469,7 @@ mod tests {
             ..Default::default()
         });
         let mut solver = IBDFSPy(WrappedSolver::Int(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3484,6 +3487,7 @@ mod tests {
             ..Default::default()
         });
         let mut solver = IBDFSPy(WrappedSolver::Float(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3501,6 +3505,7 @@ mod tests {
             ..Default::default()
         });
         let mut solver = IBDFSPy(WrappedSolver::Int(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3518,6 +3523,7 @@ mod tests {
             ..Default::default()
         });
         let mut solver = IBDFSPy(WrappedSolver::Float(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3533,6 +3539,7 @@ mod tests {
         pyo3::prepare_freethreaded_python();
 
         let mut solver = IBDFSPy(WrappedSolver::Int(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3561,6 +3568,7 @@ mod tests {
         pyo3::prepare_freethreaded_python();
 
         let mut solver = IBDFSPy(WrappedSolver::Float(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3592,6 +3600,7 @@ mod tests {
         pyo3::prepare_freethreaded_python();
 
         let mut solver = IBDFSPy(WrappedSolver::Int(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3609,6 +3618,7 @@ mod tests {
     #[test]
     fn ibdfs_get_primal_bound_int() {
         let solver = IBDFSPy(WrappedSolver::Int(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: Some(10),
                 time_limit: None,
@@ -3622,6 +3632,7 @@ mod tests {
     #[test]
     fn ibdfs_get_primal_bound_float() {
         let solver = IBDFSPy(WrappedSolver::Float(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: Some(OrderedContinuous::from(10.0)),
                 time_limit: None,
@@ -3635,6 +3646,7 @@ mod tests {
     #[test]
     fn ibdfs_set_time_limit_int() {
         let mut solver = IBDFSPy(WrappedSolver::Int(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3657,6 +3669,7 @@ mod tests {
     #[test]
     fn ibdfs_set_time_limit_float() {
         let mut solver = IBDFSPy(WrappedSolver::Float(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3679,6 +3692,7 @@ mod tests {
     #[test]
     fn ibdfs_get_time_limit_int() {
         let solver = IBDFSPy(WrappedSolver::Int(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: Some(10.0),
@@ -3692,6 +3706,7 @@ mod tests {
     #[test]
     fn ibdfs_get_time_limit_float() {
         let solver = IBDFSPy(WrappedSolver::Float(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: Some(10.0),
@@ -3705,6 +3720,7 @@ mod tests {
     #[test]
     fn ibdfs_set_quiet_int() {
         let mut solver = IBDFSPy(WrappedSolver::Int(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3727,6 +3743,7 @@ mod tests {
     #[test]
     fn ibdfs_set_quiet_float() {
         let mut solver = IBDFSPy(WrappedSolver::Float(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3749,6 +3766,7 @@ mod tests {
     #[test]
     fn ibdfs_get_quiet_int() {
         let solver = IBDFSPy(WrappedSolver::Int(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,
@@ -3762,6 +3780,7 @@ mod tests {
     #[test]
     fn ibdfs_get_quiet_float() {
         let solver = IBDFSPy(WrappedSolver::Float(IBDFS {
+            callback: Box::new(|_| {}),
             parameters: dypdl_heuristic_search::SolverParameters {
                 primal_bound: None,
                 time_limit: None,

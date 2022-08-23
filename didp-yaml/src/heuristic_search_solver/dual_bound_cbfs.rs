@@ -1,3 +1,4 @@
+use super::callback::get_callback;
 use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
@@ -16,6 +17,7 @@ where
         yaml_rust::Yaml::Null => {
             return Ok(DualBoundCBFS {
                 f_evaluator_type: FEvaluatorType::default(),
+                callback: Box::new(|_| {}),
                 parameters: SolverParameters::default(),
                 initial_registry_capacity: Some(1000000),
             })
@@ -64,8 +66,10 @@ where
                 .into())
             }
         };
+    let callback = get_callback(map)?;
     Ok(DualBoundCBFS {
         f_evaluator_type,
+        callback,
         parameters,
         initial_registry_capacity,
     })

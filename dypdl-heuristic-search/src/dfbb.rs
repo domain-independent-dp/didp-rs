@@ -98,6 +98,7 @@ where
                     best_bound = Some(f);
                     solution.best_bound = Some(f);
                     if f == bound {
+                        solution.is_optimal = true;
                         return solution;
                     }
                 }

@@ -1,3 +1,4 @@
+use super::callback::get_callback;
 use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
@@ -17,6 +18,7 @@ where
             return Ok(DualBoundDBDFS {
                 f_evaluator_type: FEvaluatorType::default(),
                 width: 1,
+                callback: Box::new(|_| {}),
                 parameters: SolverParameters::default(),
                 initial_registry_capacity: Some(1000000),
             })
@@ -76,9 +78,11 @@ where
                 .into())
             }
         };
+    let callback = get_callback(map)?;
     Ok(DualBoundDBDFS {
         f_evaluator_type,
         width,
+        callback,
         parameters,
         initial_registry_capacity,
     })

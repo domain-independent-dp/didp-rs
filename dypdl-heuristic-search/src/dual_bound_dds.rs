@@ -17,6 +17,8 @@ use std::str;
 pub struct DualBoundDDS<T: variable_type::Numeric> {
     /// How to combine the g-value and the h-value.
     pub f_evaluator_type: FEvaluatorType,
+    /// Callback function used when a new solution is found.
+    pub callback: Box<solver::Callback<T>>,
     /// Common parameters for heuristic search solvers.
     pub parameters: solver::SolverParameters<T>,
     /// The initial capacity of the data structure storing all generated states.
@@ -39,6 +41,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -51,6 +54,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -63,6 +67,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -74,6 +79,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    &mut self.callback,
                     self.parameters,
                     self.initial_registry_capacity,
                 )

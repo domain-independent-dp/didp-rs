@@ -3,7 +3,7 @@ use crate::evaluator;
 use crate::search_node::trace_transitions;
 use crate::solver;
 use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
-use crate::successor_generator::SuccessorGenerator;
+use crate::util::ForwardSearchParameters;
 use dypdl::variable_type;
 use std::cell::RefCell;
 use std::fmt;
@@ -17,27 +17,28 @@ use std::rc::Rc;
 /// The f-value is used as a dual bound to prune a node.
 pub fn dbdfs<T, H, F>(
     model: &dypdl::Model,
-    generator: SuccessorGenerator<dypdl::Transition>,
     h_evaluator: &H,
     f_evaluator: F,
     width: usize,
-    parameters: solver::SolverParameters<T>,
-    initial_registry_capacity: Option<usize>,
+    callback: &mut Box<solver::Callback<T>>,
+    parameters: ForwardSearchParameters<T>,
 ) -> solver::Solution<T>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     H: evaluator::Evaluator,
     F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
 {
-    let time_keeper = parameters.time_limit.map_or_else(
+    let time_keeper = parameters.parameters.time_limit.map_or_else(
         solver::TimeKeeper::default,
         solver::TimeKeeper::with_time_limit,
     );
-    let mut primal_bound = parameters.primal_bound;
+    let mut primal_bound = parameters.parameters.primal_bound;
+    let quiet = parameters.parameters.quiet;
+    let generator = parameters.generator;
     let mut open = Vec::new();
     let mut next_open = Vec::new();
     let mut registry = StateRegistry::new(model);
-    if let Some(capacity) = initial_registry_capacity {
+    if let Some(capacity) = parameters.initial_registry_capacity {
         registry.reserve(capacity);
     }
 
@@ -51,7 +52,7 @@ where
         };
     }
     let h = h.unwrap();
-    if !parameters.quiet {
+    if !quiet {
         println!("Initial h = {}", h);
     }
     let f = f_evaluator(g, h, &initial_state, model);
@@ -68,10 +69,13 @@ where
     open.push((initial_node, 0));
     let mut expanded = 0;
     let mut generated = 0;
-    let mut incumbent = None;
     let best_bound = f;
+    let mut solution = solver::Solution {
+        best_bound: Some(f),
+        ..Default::default()
+    };
     let mut discrepancy_limit = width - 1;
-    if !parameters.quiet {
+    if !quiet {
         println!("Initial discrepancy limit: {}", discrepancy_limit);
     }
 
@@ -79,55 +83,52 @@ where
         if open.is_empty() {
             mem::swap(&mut open, &mut next_open);
             discrepancy_limit += width;
-            if !parameters.quiet {
+            if !quiet {
                 println!("New discrepancy limit: {}", discrepancy_limit);
             }
         }
+
         let (node, discrepancy) = open.pop().unwrap();
         if *node.closed.borrow() {
             continue;
         }
         *node.closed.borrow_mut() = true;
         expanded += 1;
+
         let f = node.f.borrow().unwrap();
         if primal_bound.is_some() && f >= primal_bound.unwrap() {
             continue;
         }
+
         if model.is_goal(node.state()) {
-            if !parameters.quiet {
+            if !quiet {
                 println!("New primal bound: {}, expanded: {}", node.cost(), expanded);
             }
-            if node.cost() == best_bound {
-                return solver::Solution {
-                    cost: Some(node.cost()),
-                    is_optimal: true,
-                    transitions: trace_transitions(node),
-                    expanded,
-                    generated,
-                    time: time_keeper.elapsed_time(),
-                    ..Default::default()
-                };
+            let cost = node.cost();
+            solution.cost = Some(cost);
+            solution.expanded = expanded;
+            solution.generated = generated;
+            solution.time = time_keeper.elapsed_time();
+            solution.transitions = trace_transitions(node);
+            primal_bound = Some(cost);
+            (callback)(&solution);
+            if cost == best_bound {
+                solution.is_optimal = true;
+                return solution;
             }
-            primal_bound = Some(node.cost());
-            incumbent = Some(node);
             continue;
         }
+
         if time_keeper.check_time_limit() {
-            if !parameters.quiet {
+            if !quiet {
                 println!("Expanded: {}", expanded);
             }
-            return incumbent
-                .clone()
-                .map_or_else(solver::Solution::default, |node| solver::Solution {
-                    cost: Some(node.cost()),
-                    best_bound: Some(best_bound),
-                    transitions: incumbent.map_or_else(Vec::new, |node| trace_transitions(node)),
-                    expanded,
-                    generated,
-                    time: time_keeper.elapsed_time(),
-                    ..Default::default()
-                });
+            solution.expanded = expanded;
+            solution.generated = generated;
+            solution.time = time_keeper.elapsed_time();
+            return solution;
         }
+
         let mut successors = vec![];
         for transition in generator.applicable_transitions(node.state()) {
             let g = transition.eval_cost(node.g, node.state(), &model.table_registry);
@@ -191,22 +192,13 @@ where
             }
         }
     }
-    incumbent.map_or_else(
-        || solver::Solution {
-            is_infeasible: true,
-            expanded,
-            generated,
-            time: time_keeper.elapsed_time(),
-            ..Default::default()
-        },
-        |node| solver::Solution {
-            cost: Some(node.cost()),
-            is_optimal: true,
-            transitions: trace_transitions(node),
-            expanded,
-            generated,
-            time: time_keeper.elapsed_time(),
-            ..Default::default()
-        },
-    )
+    if solution.cost.is_none() {
+        solution.is_infeasible = true;
+    } else {
+        solution.is_optimal = true;
+    }
+    solution.expanded = expanded;
+    solution.generated = generated;
+    solution.time = time_keeper.elapsed_time();
+    solution
 }
