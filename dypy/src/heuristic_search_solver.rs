@@ -96,21 +96,12 @@ impl From<Solution<OrderedContinuous>> for SolutionPy {
         }
     }
 }
-#[derive(Debug, PartialEq, Clone)]
-enum WrappedSolver<T, U>
-where
-    T: std::fmt::Debug + PartialEq + Clone,
-    U: std::fmt::Debug + PartialEq + Clone,
-{
+enum WrappedSolver<T, U> {
     Int(T),
     Float(U),
 }
 
-impl<T: Solver<Integer>, U: Solver<OrderedContinuous>> WrappedSolver<T, U>
-where
-    T: std::fmt::Debug + PartialEq + Clone,
-    U: std::fmt::Debug + PartialEq + Clone,
-{
+impl<T: Solver<Integer>, U: Solver<OrderedContinuous>> WrappedSolver<T, U> {
     fn solve(&mut self, model: &ModelPy) -> PyResult<SolutionPy> {
         match (self, model.float_cost()) {
             (Self::Int(solver), false) => {
@@ -248,7 +239,6 @@ impl From<FOperator> for FEvaluatorType {
 #[pyo3(
     text_signature = "(f_operator=FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, float_cost=False)"
 )]
-#[derive(Debug, PartialEq, Clone)]
 pub struct CAASDyPy(WrappedSolver<CAASDy<Integer>, CAASDy<OrderedContinuous>>);
 
 #[pymethods]
@@ -391,7 +381,6 @@ impl CAASDyPy {
 #[pyo3(
     text_signature = "(primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, float_cost=False)"
 )]
-#[derive(Debug, PartialEq, Clone)]
 pub struct DijkstraPy(WrappedSolver<Dijkstra<Integer>, Dijkstra<OrderedContinuous>>);
 
 #[pymethods]
@@ -530,7 +519,6 @@ impl DijkstraPy {
 #[pyo3(
     text_signature = "(primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, float_cost=False)"
 )]
-#[derive(Debug, PartialEq, Clone)]
 pub struct LazyDijkstraPy(WrappedSolver<LazyDijkstra<Integer>, LazyDijkstra<OrderedContinuous>>);
 
 #[pymethods]
@@ -670,7 +658,6 @@ impl LazyDijkstraPy {
 #[pyo3(
     text_signature = "(f_operator=FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, float_cost=False)"
 )]
-#[derive(Debug, PartialEq, Clone)]
 pub struct DualBoundDFBBPy(WrappedSolver<DualBoundDFBB<Integer>, DualBoundDFBB<OrderedContinuous>>);
 
 #[pymethods]
@@ -822,7 +809,6 @@ impl DualBoundDFBBPy {
 #[pyo3(
     text_signature = "(primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, float_cost=False)"
 )]
-#[derive(Debug, PartialEq, Clone)]
 pub struct IBDFSPy(WrappedSolver<IBDFS<Integer>, IBDFS<OrderedContinuous>>);
 
 #[pymethods]
@@ -960,7 +946,6 @@ impl IBDFSPy {
 #[pyo3(
     text_signature = "(primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, float_cost=False)"
 )]
-#[derive(Debug, PartialEq, Clone)]
 pub struct ForwardRecursionPy(
     WrappedSolver<ForwardRecursion<Integer>, ForwardRecursion<OrderedContinuous>>,
 );
@@ -1122,7 +1107,6 @@ impl ForwardRecursionPy {
 #[pyo3(
     text_signature = "(beam_sizes, model, h_evaluator=None, custom_cost_dict=None, float_custom_cost=False, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, float_cost=False)"
 )]
-#[derive(Debug, PartialEq, Clone)]
 pub struct ExpressionBeamSearchPy(
     WrappedSolver<ExpressionBeamSearch<Integer>, ExpressionBeamSearch<OrderedContinuous>>,
 );
@@ -1393,7 +1377,6 @@ impl ExpressionBeamSearchPy {
 #[pyo3(
     text_signature = "(beam_sizes, epsilon, model, h_evaluator=None, custom_cost_dict=None, float_custom_cost=False, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, float_cost=False)"
 )]
-#[derive(Debug, PartialEq, Clone)]
 pub struct ExpressionEpsilonBeamSearchPy(
     WrappedSolver<
         ExpressionEpsilonBeamSearch<Integer>,
@@ -1629,18 +1612,16 @@ mod tests {
     fn caasdy_new_int_ok() {
         let solver = CAASDyPy::new(FOperator::Plus, None, None, false, 1000000, false);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            CAASDyPy(WrappedSolver::Int(CAASDy {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -1659,18 +1640,16 @@ mod tests {
             )
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            CAASDyPy(WrappedSolver::Int(CAASDy {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(100),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, Some(100));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -1695,18 +1674,16 @@ mod tests {
     fn caasdy_new_float_ok() {
         let solver = CAASDyPy::new(FOperator::Plus, None, None, false, 1000000, true);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            CAASDyPy(WrappedSolver::Float(CAASDy {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -1725,18 +1702,19 @@ mod tests {
             )
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            CAASDyPy(WrappedSolver::Float(CAASDy {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(100.0)),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(100.0))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -1794,7 +1772,7 @@ mod tests {
     }
 
     #[test]
-    fn caasdy_solver_int_float_err() {
+    fn caasdy_solve_int_float_err() {
         let model = ModelPy::new(Model {
             cost_type: CostType::Continuous,
             ..Default::default()
@@ -1847,18 +1825,16 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            CAASDyPy(WrappedSolver::Int(CAASDy {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(1),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, Some(1));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -1879,18 +1855,19 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            CAASDyPy(WrappedSolver::Float(CAASDy {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(1.5)),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(1.5))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -1953,18 +1930,16 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            CAASDyPy(WrappedSolver::Int(CAASDy {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -1979,18 +1954,16 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            CAASDyPy(WrappedSolver::Float(CAASDy {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2033,18 +2006,16 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            CAASDyPy(WrappedSolver::Int(CAASDy {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2059,18 +2030,16 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            CAASDyPy(WrappedSolver::Float(CAASDy {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2105,17 +2074,15 @@ mod tests {
     fn dijkstra_new_int_ok() {
         let solver = DijkstraPy::new(None, None, false, 1000000, false);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            DijkstraPy(WrappedSolver::Int(Dijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2127,17 +2094,15 @@ mod tests {
             DijkstraPy::new(Some(primal_bound.as_ref(py)), None, false, 1000000, false)
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            DijkstraPy(WrappedSolver::Int(Dijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(100),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, Some(100));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2155,17 +2120,15 @@ mod tests {
     fn dijkstra_new_float_ok() {
         let solver = DijkstraPy::new(None, None, false, 1000000, true);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            DijkstraPy(WrappedSolver::Float(Dijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2177,17 +2140,18 @@ mod tests {
             DijkstraPy::new(Some(primal_bound.as_ref(py)), None, false, 1000000, true)
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            DijkstraPy(WrappedSolver::Float(Dijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(100.0)),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(100.0))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2286,17 +2250,15 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            DijkstraPy(WrappedSolver::Int(Dijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(1),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, Some(1));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2316,17 +2278,18 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            DijkstraPy(WrappedSolver::Float(Dijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(1.5)),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(1.5))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2385,17 +2348,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            DijkstraPy(WrappedSolver::Int(Dijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2409,17 +2370,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            DijkstraPy(WrappedSolver::Float(Dijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2459,17 +2418,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            DijkstraPy(WrappedSolver::Int(Dijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2483,17 +2440,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            DijkstraPy(WrappedSolver::Float(Dijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2526,17 +2481,15 @@ mod tests {
     fn lazy_dijkstra_new_int_ok() {
         let solver = LazyDijkstraPy::new(None, None, false, 1000000, false);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            LazyDijkstraPy(WrappedSolver::Int(LazyDijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2548,17 +2501,15 @@ mod tests {
             LazyDijkstraPy::new(Some(primal_bound.as_ref(py)), None, false, 1000000, false)
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            LazyDijkstraPy(WrappedSolver::Int(LazyDijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(100),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, Some(100));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2576,17 +2527,15 @@ mod tests {
     fn lazy_dijkstra_new_float_ok() {
         let solver = LazyDijkstraPy::new(None, None, false, 1000000, true);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            LazyDijkstraPy(WrappedSolver::Float(LazyDijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2598,17 +2547,18 @@ mod tests {
             LazyDijkstraPy::new(Some(primal_bound.as_ref(py)), None, false, 1000000, true)
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            LazyDijkstraPy(WrappedSolver::Float(LazyDijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(100.0)),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(100.0))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2707,17 +2657,15 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            LazyDijkstraPy(WrappedSolver::Int(LazyDijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(1),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, Some(1));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2737,17 +2685,18 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            LazyDijkstraPy(WrappedSolver::Float(LazyDijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(1.5)),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(1.5))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2806,17 +2755,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            LazyDijkstraPy(WrappedSolver::Int(LazyDijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2830,17 +2777,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            LazyDijkstraPy(WrappedSolver::Float(LazyDijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2880,17 +2825,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            LazyDijkstraPy(WrappedSolver::Int(LazyDijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2904,17 +2847,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            LazyDijkstraPy(WrappedSolver::Float(LazyDijkstra {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -2947,18 +2888,16 @@ mod tests {
     fn dual_bound_dfbb_new_int_ok() {
         let solver = DualBoundDFBBPy::new(FOperator::Plus, None, None, false, 1000000, false);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -2977,18 +2916,16 @@ mod tests {
             )
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(100),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, Some(100));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -3013,18 +2950,16 @@ mod tests {
     fn dual_bound_dfbb_new_float_ok() {
         let solver = DualBoundDFBBPy::new(FOperator::Plus, None, None, false, 1000000, true);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -3043,18 +2978,19 @@ mod tests {
             )
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(100.0)),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(100.0))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -3165,18 +3101,16 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(1),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, Some(1));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -3197,18 +3131,19 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(1.5)),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(1.5))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -3271,18 +3206,16 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -3297,18 +3230,16 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -3351,18 +3282,16 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            DualBoundDFBBPy(WrappedSolver::Int(DualBoundDFBB {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -3377,18 +3306,16 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            DualBoundDFBBPy(WrappedSolver::Float(DualBoundDFBB {
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -3423,17 +3350,15 @@ mod tests {
     fn ibdfs_new_int_ok() {
         let solver = IBDFSPy::new(None, None, false, 1000000, false);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            IBDFSPy(WrappedSolver::Int(IBDFS {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -3445,17 +3370,15 @@ mod tests {
             IBDFSPy::new(Some(primal_bound.as_ref(py)), None, false, 1000000, false)
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            IBDFSPy(WrappedSolver::Int(IBDFS {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(100),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, Some(100));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -3473,17 +3396,15 @@ mod tests {
     fn ibdfs_new_float_ok() {
         let solver = IBDFSPy::new(None, None, false, 1000000, true);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            IBDFSPy(WrappedSolver::Float(IBDFS {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -3495,17 +3416,18 @@ mod tests {
             IBDFSPy::new(Some(primal_bound.as_ref(py)), None, false, 1000000, true)
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            IBDFSPy(WrappedSolver::Float(IBDFS {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(100.0)),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(100.0))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -3604,17 +3526,15 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            IBDFSPy(WrappedSolver::Int(IBDFS {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(1),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, Some(1));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -3634,17 +3554,18 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            IBDFSPy(WrappedSolver::Float(IBDFS {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(1.5)),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(1.5))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -3703,17 +3624,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            IBDFSPy(WrappedSolver::Int(IBDFS {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -3727,17 +3646,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            IBDFSPy(WrappedSolver::Float(IBDFS {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -3777,17 +3694,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            IBDFSPy(WrappedSolver::Int(IBDFS {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -3801,17 +3716,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            IBDFSPy(WrappedSolver::Float(IBDFS {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -3844,17 +3757,15 @@ mod tests {
     fn forward_recursion_new_int_ok() {
         let solver = ForwardRecursionPy::new(None, None, false, 1000000, false);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            ForwardRecursionPy(WrappedSolver::Int(ForwardRecursion {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -3866,17 +3777,15 @@ mod tests {
             ForwardRecursionPy::new(Some(primal_bound.as_ref(py)), None, false, 1000000, false)
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            ForwardRecursionPy(WrappedSolver::Int(ForwardRecursion {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(100),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, Some(100));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -3894,17 +3803,15 @@ mod tests {
     fn forward_recursion_new_float_ok() {
         let solver = ForwardRecursionPy::new(None, None, false, 1000000, true);
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            ForwardRecursionPy(WrappedSolver::Float(ForwardRecursion {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -3916,17 +3823,18 @@ mod tests {
             ForwardRecursionPy::new(Some(primal_bound.as_ref(py)), None, false, 1000000, true)
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            ForwardRecursionPy(WrappedSolver::Float(ForwardRecursion {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(100.0)),
-                    time_limit: None,
-                    quiet: false
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        )
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(100.0))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -4025,17 +3933,15 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            ForwardRecursionPy(WrappedSolver::Int(ForwardRecursion {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(1),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, Some(1));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -4055,17 +3961,18 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            ForwardRecursionPy(WrappedSolver::Float(ForwardRecursion {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(1.5)),
-                    time_limit: None,
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(1.5))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -4124,17 +4031,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            ForwardRecursionPy(WrappedSolver::Int(ForwardRecursion {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -4148,17 +4053,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            ForwardRecursionPy(WrappedSolver::Float(ForwardRecursion {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -4198,17 +4101,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            ForwardRecursionPy(WrappedSolver::Int(ForwardRecursion {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -4222,17 +4123,15 @@ mod tests {
             initial_registry_capacity: Some(1000000),
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            ForwardRecursionPy(WrappedSolver::Float(ForwardRecursion {
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-                initial_registry_capacity: Some(1000000),
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+                assert_eq!(solver.initial_registry_capacity, Some(1000000));
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -4289,25 +4188,32 @@ mod tests {
             false,
         );
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            ExpressionBeamSearchPy(WrappedSolver::Int(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![CostExpression::Integer(IntegerExpression::Constant(0))],
-                forced_custom_costs: vec![CostExpression::Integer(IntegerExpression::Constant(1))],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Integer(
-                    IntegerExpression::Constant(0)
-                )),
-                f_evaluator_type: FEvaluatorType::Plus,
-                custom_cost_type: Some(CostType::Integer),
-                maximize: false,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                }
-            }))
-        );
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(
+                    solver.custom_costs,
+                    vec![CostExpression::Integer(IntegerExpression::Constant(0))]
+                );
+                assert_eq!(
+                    solver.forced_custom_costs,
+                    vec![CostExpression::Integer(IntegerExpression::Constant(1))]
+                );
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Integer(IntegerExpression::Constant(
+                        0
+                    )))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Integer));
+                assert!(!solver.maximize);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -4343,25 +4249,32 @@ mod tests {
             )
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            ExpressionBeamSearchPy(WrappedSolver::Int(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![CostExpression::Integer(IntegerExpression::Constant(0))],
-                forced_custom_costs: vec![CostExpression::Integer(IntegerExpression::Constant(1))],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Integer(
-                    IntegerExpression::Constant(0)
-                )),
-                f_evaluator_type: FEvaluatorType::Plus,
-                custom_cost_type: Some(CostType::Integer),
-                maximize: false,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(100),
-                    time_limit: None,
-                    quiet: false
-                }
-            }))
-        );
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(
+                    solver.custom_costs,
+                    vec![CostExpression::Integer(IntegerExpression::Constant(0))]
+                );
+                assert_eq!(
+                    solver.forced_custom_costs,
+                    vec![CostExpression::Integer(IntegerExpression::Constant(1))]
+                );
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Integer(IntegerExpression::Constant(
+                        0
+                    )))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Integer));
+                assert!(!solver.maximize);
+                assert_eq!(solver.parameters.primal_bound, Some(100));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -4448,25 +4361,32 @@ mod tests {
             false,
         );
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            ExpressionBeamSearchPy(WrappedSolver::Int(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![CostExpression::Integer(IntegerExpression::Constant(2))],
-                forced_custom_costs: vec![CostExpression::Integer(IntegerExpression::Constant(3))],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Integer(
-                    IntegerExpression::Constant(1)
-                )),
-                f_evaluator_type: FEvaluatorType::Plus,
-                custom_cost_type: Some(CostType::Integer),
-                maximize: false,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                }
-            }))
-        );
+        match solver.unwrap().0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(
+                    solver.custom_costs,
+                    vec![CostExpression::Integer(IntegerExpression::Constant(2))]
+                );
+                assert_eq!(
+                    solver.forced_custom_costs,
+                    vec![CostExpression::Integer(IntegerExpression::Constant(3))]
+                );
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Integer(IntegerExpression::Constant(
+                        1
+                    )))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Integer));
+                assert!(!solver.maximize);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -4650,29 +4570,36 @@ mod tests {
             true,
         );
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            ExpressionBeamSearchPy(WrappedSolver::Float(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![CostExpression::Continuous(ContinuousExpression::Constant(
-                    0.0
-                ))],
-                forced_custom_costs: vec![CostExpression::Continuous(
-                    ContinuousExpression::Constant(1.0)
-                )],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Continuous(
-                    ContinuousExpression::Constant(0.0)
-                )),
-                f_evaluator_type: FEvaluatorType::Plus,
-                custom_cost_type: Some(CostType::Continuous),
-                maximize: false,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                }
-            }))
-        );
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(
+                    solver.custom_costs,
+                    vec![CostExpression::Continuous(ContinuousExpression::Constant(
+                        0.0
+                    ))]
+                );
+                assert_eq!(
+                    solver.forced_custom_costs,
+                    vec![CostExpression::Continuous(ContinuousExpression::Constant(
+                        1.0
+                    ))]
+                );
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Continuous(
+                        ContinuousExpression::Constant(0.0)
+                    ))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Continuous));
+                assert!(!solver.maximize);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -4708,29 +4635,39 @@ mod tests {
             )
         });
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            ExpressionBeamSearchPy(WrappedSolver::Float(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![CostExpression::Continuous(ContinuousExpression::Constant(
-                    0.0
-                ))],
-                forced_custom_costs: vec![CostExpression::Continuous(
-                    ContinuousExpression::Constant(1.0)
-                )],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Continuous(
-                    ContinuousExpression::Constant(0.0)
-                )),
-                f_evaluator_type: FEvaluatorType::Plus,
-                custom_cost_type: Some(CostType::Continuous),
-                maximize: false,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(100.0)),
-                    time_limit: None,
-                    quiet: false
-                }
-            }))
-        );
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(
+                    solver.custom_costs,
+                    vec![CostExpression::Continuous(ContinuousExpression::Constant(
+                        0.0
+                    ))]
+                );
+                assert_eq!(
+                    solver.forced_custom_costs,
+                    vec![CostExpression::Continuous(ContinuousExpression::Constant(
+                        1.0
+                    ))]
+                );
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Continuous(
+                        ContinuousExpression::Constant(0.0)
+                    ))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Continuous));
+                assert!(!solver.maximize);
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(100.0))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -4817,29 +4754,36 @@ mod tests {
             true,
         );
         assert!(solver.is_ok());
-        assert_eq!(
-            solver.unwrap(),
-            ExpressionBeamSearchPy(WrappedSolver::Float(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![CostExpression::Continuous(ContinuousExpression::Constant(
-                    2.0
-                ))],
-                forced_custom_costs: vec![CostExpression::Continuous(
-                    ContinuousExpression::Constant(3.0)
-                )],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Continuous(
-                    ContinuousExpression::Constant(1.0)
-                )),
-                f_evaluator_type: FEvaluatorType::Plus,
-                custom_cost_type: Some(CostType::Continuous),
-                maximize: false,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: false
-                }
-            }))
-        );
+        match solver.unwrap().0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(
+                    solver.custom_costs,
+                    vec![CostExpression::Continuous(ContinuousExpression::Constant(
+                        2.0
+                    ))]
+                );
+                assert_eq!(
+                    solver.forced_custom_costs,
+                    vec![CostExpression::Continuous(ContinuousExpression::Constant(
+                        3.0
+                    ))]
+                );
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Continuous(
+                        ContinuousExpression::Constant(1.0)
+                    ))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Continuous));
+                assert!(!solver.maximize);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -4967,25 +4911,26 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            ExpressionBeamSearchPy(WrappedSolver::Int(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![],
-                forced_custom_costs: vec![],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Continuous(
-                    ContinuousExpression::Constant(1.0),
-                )),
-                custom_cost_type: Some(CostType::Continuous),
-                maximize: false,
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(1),
-                    time_limit: None,
-                    quiet: false,
-                },
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(solver.custom_costs, vec![]);
+                assert_eq!(solver.forced_custom_costs, vec![]);
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Continuous(
+                        ContinuousExpression::Constant(1.0)
+                    ))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Continuous));
+                assert!(!solver.maximize);
+                assert_eq!(solver.parameters.primal_bound, Some(1));
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -5013,25 +4958,29 @@ mod tests {
             solver.set_primal_bound(bound.as_ref(py))
         });
         assert!(result.is_ok());
-        assert_eq!(
-            solver,
-            ExpressionBeamSearchPy(WrappedSolver::Float(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![],
-                forced_custom_costs: vec![],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Continuous(
-                    ContinuousExpression::Constant(1.0),
-                )),
-                custom_cost_type: Some(CostType::Continuous),
-                maximize: false,
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: Some(OrderedContinuous::from(1.5)),
-                    time_limit: None,
-                    quiet: false,
-                },
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(solver.custom_costs, vec![]);
+                assert_eq!(solver.forced_custom_costs, vec![]);
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Continuous(
+                        ContinuousExpression::Constant(1.0)
+                    ))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Continuous));
+                assert!(!solver.maximize);
+                assert_eq!(
+                    solver.parameters.primal_bound,
+                    Some(OrderedContinuous::from(1.5))
+                );
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(!solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -5122,25 +5071,26 @@ mod tests {
             },
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            ExpressionBeamSearchPy(WrappedSolver::Int(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![],
-                forced_custom_costs: vec![],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Continuous(
-                    ContinuousExpression::Constant(1.0),
-                )),
-                custom_cost_type: Some(CostType::Continuous),
-                maximize: false,
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(solver.custom_costs, vec![]);
+                assert_eq!(solver.forced_custom_costs, vec![]);
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Continuous(
+                        ContinuousExpression::Constant(1.0)
+                    ))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Continuous));
+                assert!(!solver.maximize);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -5162,25 +5112,26 @@ mod tests {
             },
         }));
         solver.set_time_limit(10.0);
-        assert_eq!(
-            solver,
-            ExpressionBeamSearchPy(WrappedSolver::Float(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![],
-                forced_custom_costs: vec![],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Continuous(
-                    ContinuousExpression::Constant(1.0),
-                )),
-                custom_cost_type: Some(CostType::Continuous),
-                maximize: false,
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: Some(10.0),
-                    quiet: false,
-                },
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(solver.custom_costs, vec![]);
+                assert_eq!(solver.forced_custom_costs, vec![]);
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Continuous(
+                        ContinuousExpression::Constant(1.0)
+                    ))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Continuous));
+                assert!(!solver.maximize);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, Some(10.0));
+                assert!(!solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]
@@ -5244,25 +5195,26 @@ mod tests {
             },
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            ExpressionBeamSearchPy(WrappedSolver::Int(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![],
-                forced_custom_costs: vec![],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Continuous(
-                    ContinuousExpression::Constant(1.0),
-                )),
-                custom_cost_type: Some(CostType::Continuous),
-                maximize: false,
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Int(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(solver.custom_costs, vec![]);
+                assert_eq!(solver.forced_custom_costs, vec![]);
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Continuous(
+                        ContinuousExpression::Constant(1.0)
+                    ))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Continuous));
+                assert!(!solver.maximize);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Int but is WrappedSolver::Float"),
+        }
     }
 
     #[test]
@@ -5284,25 +5236,26 @@ mod tests {
             },
         }));
         solver.set_quiet(true);
-        assert_eq!(
-            solver,
-            ExpressionBeamSearchPy(WrappedSolver::Float(ExpressionBeamSearch {
-                beam_sizes: vec![10],
-                custom_costs: vec![],
-                forced_custom_costs: vec![],
-                h_evaluator: ExpressionEvaluator::new(CostExpression::Continuous(
-                    ContinuousExpression::Constant(1.0),
-                )),
-                custom_cost_type: Some(CostType::Continuous),
-                maximize: false,
-                f_evaluator_type: FEvaluatorType::Plus,
-                parameters: dypdl_heuristic_search::SolverParameters {
-                    primal_bound: None,
-                    time_limit: None,
-                    quiet: true,
-                },
-            }))
-        );
+        match solver.0 {
+            WrappedSolver::Float(solver) => {
+                assert_eq!(solver.beam_sizes, vec![10]);
+                assert_eq!(solver.custom_costs, vec![]);
+                assert_eq!(solver.forced_custom_costs, vec![]);
+                assert_eq!(
+                    solver.h_evaluator,
+                    ExpressionEvaluator::new(CostExpression::Continuous(
+                        ContinuousExpression::Constant(1.0)
+                    ))
+                );
+                assert_eq!(solver.f_evaluator_type, FEvaluatorType::Plus);
+                assert_eq!(solver.custom_cost_type, Some(CostType::Continuous));
+                assert!(!solver.maximize);
+                assert_eq!(solver.parameters.primal_bound, None);
+                assert_eq!(solver.parameters.time_limit, None);
+                assert!(solver.parameters.quiet);
+            }
+            _ => panic!("Expected WrappedSolver::Float but is WrappedSolver::Int"),
+        }
     }
 
     #[test]

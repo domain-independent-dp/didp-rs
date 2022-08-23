@@ -28,7 +28,6 @@ impl Evaluator for DualBoundEvaluator {
 ///
 /// The current implementation only support cost minimization or maximization with associative cost computation.
 /// E.g., the shortest path and the longest path.
-#[derive(Debug, PartialEq, Clone)]
 pub struct DualBoundDFBB<T: variable_type::Numeric> {
     /// How to combine the g-value and the h-value.
     pub f_evaluator_type: FEvaluatorType,

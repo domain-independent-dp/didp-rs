@@ -21,7 +21,6 @@ use std::str;
 /// When the beam is full, a node having the worst heuristic value is removed.
 /// If the beam only contains randomly selected nodes, a node is randomly removed.
 /// This solver does not have a guarantee for optimality.
-#[derive(Debug, PartialEq, Clone)]
 pub struct ExpressionEpsilonBeamSearch<T> {
     /// Cost expressions defining how to compute g-values for each transition.
     pub custom_costs: Vec<dypdl::CostExpression>,

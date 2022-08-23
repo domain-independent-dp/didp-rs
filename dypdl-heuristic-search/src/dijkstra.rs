@@ -13,7 +13,6 @@ use std::rc::Rc;
 ///
 /// The current implementation only supports cost-algebra with minimization and non-negative edge costs.
 /// E.g., the shortest path and minimizing the maximum edge cost on a path.
-#[derive(Debug, PartialEq, Clone)]
 pub struct Dijkstra<T> {
     /// Common parameters for heuristic search solvers.
     pub parameters: solver::SolverParameters<T>,

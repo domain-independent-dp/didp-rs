@@ -14,7 +14,6 @@ use std::str;
 /// It terminates when no solution is better than the current primal bound.
 /// The current implementation only support cost minimization or maximization with associative cost computation.
 /// E.g., the shortest path and the longest path.
-#[derive(Debug, PartialEq, Clone)]
 pub struct IBDFS<T: variable_type::Numeric> {
     /// Common parameters for heuristic search solvers.
     pub parameters: solver::SolverParameters<T>,

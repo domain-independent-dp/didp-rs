@@ -14,7 +14,6 @@ use std::str;
 /// This performs cost-algebraic A* using the dual bound as the heuristic function.
 /// The current implementation only supports cost-algebra with minimization and non-negative edge costs.
 /// E.g., the shortest path and minimizing the maximum edge cost on a path.
-#[derive(Debug, PartialEq, Clone)]
 pub struct DualBoundChokudaiSearch<T: variable_type::Numeric> {
     /// How to combine the g-value and the h-value.
     pub f_evaluator_type: FEvaluatorType,

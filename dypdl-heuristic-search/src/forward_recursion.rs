@@ -13,7 +13,6 @@ use std::str;
 ///
 /// It performs a naive recursion while memoizing all encoutered states.
 /// It works only if the state space is acyclic.
-#[derive(Debug, PartialEq, Clone)]
 pub struct ForwardRecursion<T> {
     /// The initial capacity of the data structure storing all generated states.
     pub initial_registry_capacity: Option<usize>,

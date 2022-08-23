@@ -16,7 +16,6 @@ use std::str;
 /// Beam search solver using expressions to compute heuristic values.
 ///
 /// This solver does not have a guarantee for optimality.
-#[derive(Debug, PartialEq, Clone)]
 pub struct ExpressionBeamSearch<T> {
     /// Cost expressions defining how to compute g-values for each transition.
     pub custom_costs: Vec<dypdl::CostExpression>,
