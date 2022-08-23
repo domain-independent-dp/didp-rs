@@ -178,6 +178,7 @@ where
                     transitions: trace_transitions(node),
                     expanded,
                     generated: expanded,
+                    time: time_keeper.elapsed_time(),
                     ..Default::default()
                 };
             }
@@ -186,6 +187,7 @@ where
                     best_bound: Some(cost_max),
                     expanded,
                     generated: expanded,
+                    time: time_keeper.elapsed_time(),
                     ..Default::default()
                 };
             }
@@ -209,6 +211,7 @@ where
         is_infeasible: true,
         expanded,
         generated: expanded,
+        time: time_keeper.elapsed_time(),
         ..Default::default()
     }
 }

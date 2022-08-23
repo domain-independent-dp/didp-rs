@@ -193,6 +193,7 @@ where
                         || Solution {
                             expanded,
                             generated,
+                            time: time_keeper.elapsed_time(),
                             ..Default::default()
                         },
                         |node| Solution {
@@ -200,6 +201,7 @@ where
                             transitions: trace_transitions(node),
                             expanded,
                             generated,
+                            time: time_keeper.elapsed_time(),
                             ..Default::default()
                         },
                     ),
@@ -246,6 +248,7 @@ where
                     transitions: trace_transitions(node),
                     expanded,
                     generated,
+                    time: time_keeper.elapsed_time(),
                     ..Default::default()
                 },
                 false,

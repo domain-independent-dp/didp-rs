@@ -66,6 +66,7 @@ where
             expanded,
             generated: expanded,
             is_infeasible: cost.is_none(),
+            time: time_keeper.elapsed_time(),
             ..Default::default()
         })
     }

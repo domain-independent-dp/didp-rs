@@ -7,7 +7,6 @@ use std::fmt;
 use std::fs;
 use std::process;
 use std::str;
-use std::time::Instant;
 
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
@@ -51,6 +50,7 @@ where
     }
     println!("Expanded: {}", solution.expanded);
     println!("Generated: {}", solution.generated);
+    println!("Search time: {}", solution.time);
 }
 
 fn main() {
@@ -102,11 +102,8 @@ fn main() {
         eprintln!("Couldn't load a model: {:?}", e);
         process::exit(1);
     });
-    let start = Instant::now();
     match model.cost_type {
         dypdl::CostType::Integer => solve::<variable_type::Integer>(&model, config),
         dypdl::CostType::Continuous => solve::<variable_type::OrderedContinuous>(&model, config),
     }
-    let stop = Instant::now();
-    println!("search time: {:?}", stop.duration_since(start));
 }

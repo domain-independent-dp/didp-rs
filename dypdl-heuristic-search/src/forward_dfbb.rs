@@ -104,6 +104,7 @@ where
                     transitions: incumbent.map_or_else(Vec::new, |node| trace_transitions(node)),
                     expanded,
                     generated,
+                    time: time_keeper.elapsed_time(),
                     ..Default::default()
                 });
         }
@@ -138,6 +139,7 @@ where
             is_infeasible: true,
             expanded,
             generated,
+            time: time_keeper.elapsed_time(),
             ..Default::default()
         },
         |node| solver::Solution {
@@ -146,6 +148,7 @@ where
             transitions: trace_transitions(node),
             expanded,
             generated,
+            time: time_keeper.elapsed_time(),
             ..Default::default()
         },
     )

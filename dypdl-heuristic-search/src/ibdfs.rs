@@ -155,6 +155,7 @@ where
                         is_infeasible: true,
                         expanded,
                         generated: expanded,
+                        time: time_keeper.elapsed_time(),
                         ..Default::default()
                     },
                     |mut incumbent| solver::Solution {
@@ -166,6 +167,7 @@ where
                         },
                         expanded,
                         generated: expanded,
+                        time: time_keeper.elapsed_time(),
                         ..Default::default()
                     },
                 );
