@@ -1,3 +1,4 @@
+use crate::bfs_lifo_open_list::BFSLIFOOpenList;
 use crate::bfs_node::BFSNode;
 use crate::evaluator;
 use crate::search_node::trace_transitions;
@@ -6,8 +7,6 @@ use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
 use dypdl::{variable_type, Continuous};
 use std::cell::RefCell;
-use std::cmp::Reverse;
-use std::collections;
 use std::fmt;
 use std::rc::Rc;
 
@@ -32,7 +31,7 @@ where
 {
     let time_keeper = parameters.time_limit.map(solver::TimeKeeper::new);
     let g_bound = parameters.primal_bound;
-    let mut open = collections::BinaryHeap::new();
+    let mut open = BFSLIFOOpenList::default();
     let mut registry = StateRegistry::new(model);
     if let Some(capacity) = initial_registry_capacity {
         registry.reserve(capacity);
@@ -62,7 +61,7 @@ where
         }))
     };
     let (initial_node, _) = registry.insert(initial_state, g, constructor).unwrap();
-    open.push(Reverse(initial_node));
+    open.push((f, h), initial_node);
     let mut dfs_open = Vec::<Rc<BFSNode<T>>>::new();
     let mut expanded = 0;
     let mut generated = 0;
@@ -70,11 +69,11 @@ where
     let mut weighted_bound = T::from_continuous(best_bound.to_continuous() * bound_ratio);
 
     while let Some(peek) = open.peek() {
-        if *peek.0.closed.borrow() {
+        if *peek.closed.borrow() {
             open.pop();
             continue;
         }
-        let f = peek.0.f.borrow().unwrap();
+        let f = peek.f.borrow().unwrap();
         if f > best_bound {
             best_bound = f;
             weighted_bound = T::from_continuous(best_bound.to_continuous() * bound_ratio);
@@ -89,7 +88,7 @@ where
             }
             node
         } else {
-            open.pop().unwrap().0
+            open.pop().unwrap()
         };
         *node.closed.borrow_mut() = true;
         expanded += 1;
@@ -159,7 +158,7 @@ where
                         if f <= weighted_bound {
                             dfs_successors.push(successor.clone());
                         }
-                        open.push(Reverse(successor));
+                        open.push((f, h), successor);
                         generated += 1;
                     }
                 }

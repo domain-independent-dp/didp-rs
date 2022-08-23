@@ -2,8 +2,11 @@
 //!
 //! A libarary for heuristic search solvers for DyPDL.
 
+#![feature(map_first_last)]
+
 mod beam;
 mod bfdfbb;
+mod bfs_lifo_open_list;
 mod bfs_node;
 mod caasdy;
 mod chokudai_search;
