@@ -1,7 +1,7 @@
 use super::caasdy::FEvaluatorType;
 use crate::beam::NormalBeam;
+use crate::beam_search;
 use crate::expression_evaluator::ExpressionEvaluator;
-use crate::forward_beam_search;
 use crate::solver;
 use crate::state_registry::StateInRegistry;
 use crate::successor_generator::SuccessorGenerator;
@@ -103,11 +103,11 @@ impl<T> ExpressionBeamSearch<T> {
             FEvaluatorType::Plus => {
                 let f_evaluator =
                     Box::new(|g: U, h: U, _: &StateInRegistry, _: &dypdl::Model| g + h);
-                let evaluators = forward_beam_search::EvaluatorsForBeamSearch {
+                let evaluators = beam_search::EvaluatorsForBeamSearch {
                     h_evaluator: self.h_evaluator.clone(),
                     f_evaluator,
                 };
-                forward_beam_search::iterative_forward_beam_search(
+                beam_search::iterative_beam_search(
                     model,
                     &generator,
                     &evaluators,
@@ -120,11 +120,11 @@ impl<T> ExpressionBeamSearch<T> {
             FEvaluatorType::Max => {
                 let f_evaluator =
                     Box::new(|g: U, h: U, _: &StateInRegistry, _: &dypdl::Model| cmp::max(g, h));
-                let evaluators = forward_beam_search::EvaluatorsForBeamSearch {
+                let evaluators = beam_search::EvaluatorsForBeamSearch {
                     h_evaluator: self.h_evaluator.clone(),
                     f_evaluator,
                 };
-                forward_beam_search::iterative_forward_beam_search(
+                beam_search::iterative_beam_search(
                     model,
                     &generator,
                     &evaluators,
@@ -137,11 +137,11 @@ impl<T> ExpressionBeamSearch<T> {
             FEvaluatorType::Min => {
                 let f_evaluator =
                     Box::new(|g: U, h: U, _: &StateInRegistry, _: &dypdl::Model| cmp::min(g, h));
-                let evaluators = forward_beam_search::EvaluatorsForBeamSearch {
+                let evaluators = beam_search::EvaluatorsForBeamSearch {
                     h_evaluator: self.h_evaluator.clone(),
                     f_evaluator,
                 };
-                forward_beam_search::iterative_forward_beam_search(
+                beam_search::iterative_beam_search(
                     model,
                     &generator,
                     &evaluators,
@@ -153,11 +153,11 @@ impl<T> ExpressionBeamSearch<T> {
             }
             FEvaluatorType::Overwrite => {
                 let f_evaluator = Box::new(|_, h: U, _: &StateInRegistry, _: &dypdl::Model| h);
-                let evaluators = forward_beam_search::EvaluatorsForBeamSearch {
+                let evaluators = beam_search::EvaluatorsForBeamSearch {
                     h_evaluator: self.h_evaluator.clone(),
                     f_evaluator,
                 };
-                forward_beam_search::iterative_forward_beam_search(
+                beam_search::iterative_beam_search(
                     model,
                     &generator,
                     &evaluators,

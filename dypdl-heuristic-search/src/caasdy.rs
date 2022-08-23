@@ -1,5 +1,5 @@
+use crate::best_first_search;
 use crate::evaluator::Evaluator;
-use crate::forward_bfs;
 use crate::solver;
 use crate::state_registry::StateInRegistry;
 use crate::successor_generator::SuccessorGenerator;
@@ -66,7 +66,7 @@ where
         let solution = match self.f_evaluator_type {
             FEvaluatorType::Plus => {
                 let f_evaluator = Box::new(|g, h, _: &StateInRegistry, _: &dypdl::Model| g + h);
-                forward_bfs::forward_bfs(
+                best_first_search::best_first_search(
                     model,
                     generator,
                     &h_evaluator,
@@ -78,7 +78,7 @@ where
             FEvaluatorType::Max => {
                 let f_evaluator =
                     Box::new(|g, h, _: &StateInRegistry, _: &dypdl::Model| cmp::max(g, h));
-                forward_bfs::forward_bfs(
+                best_first_search::best_first_search(
                     model,
                     generator,
                     &h_evaluator,
@@ -90,7 +90,7 @@ where
             FEvaluatorType::Min => {
                 let f_evaluator =
                     Box::new(|g, h, _: &StateInRegistry, _: &dypdl::Model| cmp::min(g, h));
-                forward_bfs::forward_bfs(
+                best_first_search::best_first_search(
                     model,
                     generator,
                     &h_evaluator,
@@ -101,7 +101,7 @@ where
             }
             FEvaluatorType::Overwrite => {
                 let f_evaluator = Box::new(|_, h, _: &StateInRegistry, _: &dypdl::Model| h);
-                forward_bfs::forward_bfs(
+                best_first_search::best_first_search(
                     model,
                     generator,
                     &h_evaluator,

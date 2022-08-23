@@ -17,7 +17,7 @@ pub struct EvaluatorsForBeamSearch<H, F> {
 }
 
 /// Performs multiple iterations of forward beam search using given beam sizes.
-pub fn iterative_forward_beam_search<'a, T, U, V, B, C, H, F>(
+pub fn iterative_beam_search<'a, T, U, V, B, C, H, F>(
     model: &'a dypdl::Model,
     generator: &'a SuccessorGenerator<'a, TransitionWithCustomCost>,
     evaluators: &EvaluatorsForBeamSearch<H, F>,
@@ -51,7 +51,7 @@ where
             maximize,
             quiet: parameters.quiet,
         };
-        let (result, time_out) = forward_beam_search(
+        let (result, time_out) = beam_search(
             model,
             generator,
             &beam_constructor,
@@ -121,7 +121,7 @@ pub struct BeamSearchParameters {
 /// The f-value, the priority of a node, is computed by f_evaluator, which is a function of the g-value, the h-value, and the state.
 /// The h-value is computed by h_evaluator.
 /// At each depth, the top beam_size nodes minimizing (maximizing) the f-values are kept if maximize = false (true).
-pub fn forward_beam_search<'a, T, U, V, B, C, H, F>(
+pub fn beam_search<'a, T, U, V, B, C, H, F>(
     model: &'a dypdl::Model,
     generator: &SuccessorGenerator<'a, TransitionWithCustomCost>,
     beam_constructor: &C,

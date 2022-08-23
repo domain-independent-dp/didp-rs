@@ -5,6 +5,8 @@
 #![feature(map_first_last)]
 
 mod beam;
+mod beam_search;
+mod best_first_search;
 mod bfdfbb;
 mod bfs_lifo_open_list;
 mod bfs_node;
@@ -13,6 +15,7 @@ mod chokudai_search;
 mod cyclic_bfs;
 mod dbdfs;
 mod depth_bounded_discrepancy_search;
+mod dfbb;
 mod dijkstra;
 mod dual_bound_bfdfbb;
 mod dual_bound_cbfs;
@@ -27,9 +30,6 @@ mod evaluator;
 mod expression_beam_search;
 mod expression_epsilon_beam_search;
 mod expression_evaluator;
-mod forward_beam_search;
-mod forward_bfs;
-mod forward_dfbb;
 mod forward_recursion;
 mod hashable_state;
 mod ibdfs;
@@ -44,7 +44,10 @@ mod successor_generator;
 mod transition_with_custom_cost;
 
 pub use beam::{BeamSearchNodeArgs, NormalBeam, NormalBeamSearchNode};
+pub use beam_search::{beam_search, iterative_beam_search};
+pub use best_first_search::best_first_search;
 pub use caasdy::{CAASDy, FEvaluatorType};
+pub use dfbb::dfbb;
 pub use dijkstra::{dijkstra, Dijkstra};
 pub use dual_bound_bfdfbb::DualBoundBFDFBB;
 pub use dual_bound_cbfs::DualBoundCBFS;
@@ -58,9 +61,6 @@ pub use evaluator::Evaluator;
 pub use expression_beam_search::ExpressionBeamSearch;
 pub use expression_epsilon_beam_search::ExpressionEpsilonBeamSearch;
 pub use expression_evaluator::ExpressionEvaluator;
-pub use forward_beam_search::{forward_beam_search, iterative_forward_beam_search};
-pub use forward_bfs::forward_bfs;
-pub use forward_dfbb::dfbb;
 pub use forward_recursion::{forward_recursion, ForwardRecursion};
 pub use hashable_state::HashableState;
 pub use ibdfs::{bounded_dfs, forward_ibdfs, IBDFS};

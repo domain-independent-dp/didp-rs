@@ -1,6 +1,6 @@
 use crate::caasdy::FEvaluatorType;
+use crate::dfbb;
 use crate::evaluator::Evaluator;
-use crate::forward_dfbb;
 use crate::solver;
 use crate::state_registry::StateInRegistry;
 use crate::successor_generator::SuccessorGenerator;
@@ -52,7 +52,7 @@ where
         let solution = match self.f_evaluator_type {
             FEvaluatorType::Plus => {
                 let f_evaluator = Box::new(|g, h, _: &StateInRegistry, _: &dypdl::Model| g + h);
-                forward_dfbb::dfbb(
+                dfbb::dfbb(
                     model,
                     generator,
                     &h_evaluator,
@@ -64,7 +64,7 @@ where
             FEvaluatorType::Max => {
                 let f_evaluator =
                     Box::new(|g, h, _: &StateInRegistry, _: &dypdl::Model| cmp::max(g, h));
-                forward_dfbb::dfbb(
+                dfbb::dfbb(
                     model,
                     generator,
                     &h_evaluator,
@@ -76,7 +76,7 @@ where
             FEvaluatorType::Min => {
                 let f_evaluator =
                     Box::new(|g, h, _: &StateInRegistry, _: &dypdl::Model| cmp::min(g, h));
-                forward_dfbb::dfbb(
+                dfbb::dfbb(
                     model,
                     generator,
                     &h_evaluator,
@@ -87,7 +87,7 @@ where
             }
             FEvaluatorType::Overwrite => {
                 let f_evaluator = Box::new(|_, h, _: &StateInRegistry, _: &dypdl::Model| h);
-                forward_dfbb::dfbb(
+                dfbb::dfbb(
                     model,
                     generator,
                     &h_evaluator,

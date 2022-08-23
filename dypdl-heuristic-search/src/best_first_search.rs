@@ -15,7 +15,7 @@ use std::rc::Rc;
 /// The f-value, the priority of a node, is computed by f_evaluator, which is a function of the g-value, the h-value, and the state.
 /// The h-value is computed by h_evaluator.
 /// A node minimizes the f-value is expanded at each step.
-pub fn forward_bfs<T, H, F>(
+pub fn best_first_search<T, H, F>(
     model: &dypdl::Model,
     generator: SuccessorGenerator<dypdl::Transition>,
     h_evaluator: &H,
