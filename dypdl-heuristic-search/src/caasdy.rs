@@ -71,6 +71,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    true,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -83,6 +84,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    true,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -95,6 +97,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    true,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -106,6 +109,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    true,
                     self.parameters,
                     self.initial_registry_capacity,
                 )

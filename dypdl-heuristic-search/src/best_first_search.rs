@@ -20,6 +20,7 @@ pub fn best_first_search<T, H, F>(
     generator: SuccessorGenerator<dypdl::Transition>,
     h_evaluator: &H,
     f_evaluator: F,
+    is_optimal: bool,
     parameters: solver::SolverParameters<T>,
     initial_registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
@@ -84,7 +85,7 @@ where
         if model.is_goal(node.state()) {
             return solver::Solution {
                 cost: Some(node.g),
-                is_optimal: true,
+                is_optimal,
                 transitions: trace_transitions(node),
                 expanded,
                 generated,
@@ -93,8 +94,9 @@ where
             };
         }
         if time_keeper.check_time_limit() {
+            let best_bound = if is_optimal { Some(f_max) } else { None };
             return solver::Solution {
-                best_bound: Some(f_max),
+                best_bound,
                 expanded,
                 generated,
                 time: time_keeper.elapsed_time(),

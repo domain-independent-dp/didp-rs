@@ -10,7 +10,7 @@ use std::error::Error;
 use std::fmt;
 use std::str;
 
-/// Weighted A* Solver for DyPDL (CAASDy).
+/// Weighted A* Solver for DyPDL.
 ///
 /// This performs weighted A* using the dual bound as the heuristic function.
 /// The current implementation only supports cost-algebra with minimization and non-negative edge costs.
@@ -34,6 +34,7 @@ where
     fn solve(&mut self, model: &dypdl::Model) -> Result<solver::Solution<T>, Box<dyn Error>> {
         let generator = SuccessorGenerator::<dypdl::Transition>::new(model, false);
         let h_evaluator = NonnegativeLBEvaluator {};
+        let is_optimal = self.weight <= 1.0;
         let solution = match self.f_evaluator_type {
             FEvaluatorType::Plus => {
                 let f_evaluator = Box::new(|g, h: T, _: &StateInRegistry, _: &dypdl::Model| {
@@ -44,6 +45,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    is_optimal,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -57,6 +59,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    is_optimal,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -70,6 +73,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    is_optimal,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
@@ -81,6 +85,7 @@ where
                     generator,
                     &h_evaluator,
                     f_evaluator,
+                    is_optimal,
                     self.parameters,
                     self.initial_registry_capacity,
                 )
