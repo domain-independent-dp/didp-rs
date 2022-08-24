@@ -10,12 +10,12 @@ use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-/// Performs best-first search with bounded depth-first lookahead.
+/// Performs best-first search with bounded GBFS lookahead.
 ///
 /// The f-value, the priority of a node, is computed by f_evaluator, which is a function of the g-value, the h-value, and the state.
 /// The h-value is computed by h_evaluator.
 /// A node minimizes the f-value is expanded at each step.
-pub fn lookahead_bfs<T, H, F>(
+pub fn greedy_lookahead_bfs<T, H, F>(
     model: &dypdl::Model,
     generator: SuccessorGenerator<dypdl::Transition>,
     h_evaluator: &H,
@@ -65,7 +65,7 @@ where
     };
     let (initial_node, _) = registry.insert(initial_state, g, constructor).unwrap();
     open.push((f, h), initial_node);
-    let mut dfs_open = Vec::<Rc<BFSNode<T>>>::new();
+    let mut greedy_open: BFSLIFOOpenList<T, Rc<BFSNode<T>>> = BFSLIFOOpenList::default();
     let mut expanded = 0;
     let mut generated = 0;
     let mut best_bound = f;
@@ -76,7 +76,6 @@ where
             open.pop();
             continue;
         }
-
         let f = peek.f.borrow().unwrap();
         if f > best_bound {
             best_bound = f;
@@ -86,8 +85,7 @@ where
                 println!("Weighted bound: {}", weighted_bound);
             }
         }
-
-        let node = if let Some(node) = dfs_open.pop() {
+        let node = if let Some(node) = greedy_open.pop() {
             if *node.closed.borrow() {
                 continue;
             }
@@ -97,7 +95,6 @@ where
         };
         *node.closed.borrow_mut() = true;
         expanded += 1;
-
         if model.is_goal(node.state()) {
             return solver::Solution {
                 cost: Some(node.g),
@@ -118,8 +115,6 @@ where
                 ..Default::default()
             };
         }
-
-        let mut dfs_successors = Vec::new();
         for transition in generator.applicable_transitions(node.state()) {
             let g = transition.eval_cost(node.g, node.state(), &model.table_registry);
             if g_bound.is_some() && g >= g_bound.unwrap() {
@@ -162,7 +157,7 @@ where
                         *successor.h.borrow_mut() = Some(h);
                         *successor.f.borrow_mut() = Some(f);
                         if f <= weighted_bound {
-                            dfs_successors.push(successor.clone());
+                            greedy_open.push(h, successor.clone());
                         }
                         open.push((f, h), successor);
                         generated += 1;
@@ -170,8 +165,6 @@ where
                 }
             }
         }
-        dfs_successors.sort_by(|a, b| b.cmp(a));
-        dfs_open.append(&mut dfs_successors);
     }
     solver::Solution {
         is_infeasible: true,

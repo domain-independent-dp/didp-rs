@@ -1,37 +1,35 @@
+use super::lazy_dijkstra::DijkstraEdge;
 use crate::bfs_lifo_open_list::BFSLIFOOpenList;
 use crate::lazy_search_node::LazySearchNode;
 use crate::search_node::trace_transitions;
 use crate::solver;
 use crate::state_registry::{StateInRegistry, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
-use dypdl::variable_type;
-use std::cmp::Ordering;
+use dypdl::{variable_type, Continuous};
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
 
-/// Lazy Dijkstra's algorithm solver.
-///
-/// Yet another implementation of Dijkstra's algorithm.
-/// Pointers to parent nodes and transitions are stored in the open list, and a state is geenrated when it is expanded.
-/// The current implementation only supports cost-algebra with minimization and non-negative edge costs.
-/// E.g., the shortest path and minimizing the maximum edge cost on a path.
-pub struct LazyDijkstra<T> {
+/// Lazy Dijkstra's algorithm solver with bounded depth-first lookahead.
+pub struct LookaheadLazyDijkstra<T> {
+    /// Bound ratio
+    pub bound_ratio: f64,
     /// Common parameters for heuristic search solvers.
     pub parameters: solver::SolverParameters<T>,
     /// The initial capacity of the data structure storing all generated states.
     pub initial_registry_capacity: Option<usize>,
 }
 
-impl<T> solver::Solver<T> for LazyDijkstra<T>
+impl<T> solver::Solver<T> for LookaheadLazyDijkstra<T>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
 {
     fn solve(&mut self, model: &dypdl::Model) -> Result<solver::Solution<T>, Box<dyn Error>> {
         let generator = SuccessorGenerator::<dypdl::Transition>::new(model, false);
-        Ok(lazy_dijkstra(
+        Ok(lookahead_lazy_dijkstra(
             model,
             generator,
+            self.bound_ratio,
             self.parameters,
             self.initial_registry_capacity,
         ))
@@ -68,40 +66,13 @@ where
     }
 }
 
-/// Search node stored in the open list of lazy Dijkstra.
-#[derive(Debug, Clone)]
-pub struct DijkstraEdge<T: variable_type::Numeric + Ord> {
-    pub cost: T,
-    pub parent: Rc<LazySearchNode<T>>,
-    pub transition: Rc<dypdl::Transition>,
-}
-
-impl<T: variable_type::Numeric + Ord> PartialEq for DijkstraEdge<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.cost == other.cost
-    }
-}
-
-impl<T: variable_type::Numeric + Ord> Eq for DijkstraEdge<T> {}
-
-impl<T: variable_type::Numeric + Ord> Ord for DijkstraEdge<T> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.cost.cmp(&other.cost)
-    }
-}
-
-impl<T: variable_type::Numeric + Ord> PartialOrd for DijkstraEdge<T> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-/// Performs lazy Dijkstra's algorithm.
+/// Performs lazy Dijkstra's algorithm with bounded depth-first lookahead.
 ///
 /// Pointers to parent nodes and transitions are stored in the open list, and a state is generated when it is expanded.
-pub fn lazy_dijkstra<T>(
+pub fn lookahead_lazy_dijkstra<T>(
     model: &dypdl::Model,
     generator: SuccessorGenerator<dypdl::Transition>,
+    bound_ratio: Continuous,
     parameters: solver::SolverParameters<T>,
     registry_capacity: Option<usize>,
 ) -> solver::Solution<T>
@@ -144,10 +115,26 @@ where
             },
         );
     }
+    let mut dfs_open = Vec::new();
     let mut expanded = 0;
-    let mut cost_max = T::zero();
+    let mut best_bound = T::zero();
+    let mut weighted_bound = T::from_continuous(best_bound.to_continuous() * bound_ratio);
 
-    while let Some(edge) = open.pop() {
+    while let Some(peek) = open.peek() {
+        if peek.cost > best_bound {
+            best_bound = peek.cost;
+            weighted_bound = T::from_continuous(best_bound.to_continuous() * bound_ratio);
+            if !parameters.quiet {
+                println!("Best bound: {}, expanded: {}", best_bound, expanded);
+                println!("Weighted bound: {}", weighted_bound);
+            }
+        }
+
+        let edge = if let Some(edge) = dfs_open.pop() {
+            edge
+        } else {
+            open.pop().unwrap()
+        };
         let state = edge
             .transition
             .apply(&edge.parent.state, &model.table_registry);
@@ -162,14 +149,10 @@ where
                 operator: Some(edge.transition),
             }))
         };
+
         if let Some((node, _)) = registry.insert(state, edge.cost, constructor) {
             expanded += 1;
-            if node.cost > cost_max {
-                cost_max = node.cost;
-                if !parameters.quiet {
-                    println!("cost = {}, expanded: {}", cost_max, expanded);
-                }
-            }
+
             if model.is_goal(&node.state) {
                 return solver::Solution {
                     cost: Some(node.cost),
@@ -181,29 +164,35 @@ where
                     ..Default::default()
                 };
             }
+
             if time_keeper.check_time_limit() {
                 return solver::Solution {
-                    best_bound: Some(cost_max),
+                    best_bound: Some(best_bound),
                     expanded,
                     generated: expanded,
                     time: time_keeper.elapsed_time(),
                     ..Default::default()
                 };
             }
+
+            let mut dfs_successors = Vec::new();
             for transition in generator.applicable_transitions(&node.state) {
                 let cost = transition.eval_cost(node.cost, &node.state, &model.table_registry);
                 if primal_bound.is_some() && cost >= primal_bound.unwrap() {
                     continue;
                 }
-                open.push(
+                let successor = DijkstraEdge {
                     cost,
-                    DijkstraEdge {
-                        cost,
-                        parent: node.clone(),
-                        transition,
-                    },
-                );
+                    parent: node.clone(),
+                    transition,
+                };
+                if cost <= weighted_bound {
+                    dfs_successors.push(successor.clone());
+                }
+                open.push(cost, successor);
             }
+            dfs_successors.sort_by(|a, b| b.cmp(a));
+            dfs_open.append(&mut dfs_successors);
         }
     }
     solver::Solution {

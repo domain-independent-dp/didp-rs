@@ -9,6 +9,7 @@ mod dual_bound_chokudai_search;
 mod dual_bound_dbdfs;
 mod dual_bound_dds;
 mod dual_bound_dfbb;
+mod dual_bound_greedy_lookahead_bfs;
 mod dual_bound_lookahead_bfs;
 mod dual_bound_weighted_astar;
 mod expression_beam_search;
@@ -17,6 +18,7 @@ mod forward_recursion;
 mod ibdfs;
 mod iterative_search;
 mod lazy_dijkstra;
+mod lookahead_lazy_dijkstra;
 mod solver_parameters;
 mod transition_with_custom_cost;
 
@@ -81,6 +83,12 @@ impl SolverFactory {
                 )?)),
                 "dual_bound_lookahead_bfs" => {
                     Ok(Box::new(dual_bound_lookahead_bfs::load_from_yaml(&config)?))
+                }
+                "dual_bound_greedy_lookahead_bfs" => Ok(Box::new(
+                    dual_bound_greedy_lookahead_bfs::load_from_yaml(&config)?,
+                )),
+                "lookahead_lazy_dijkstra" => {
+                    Ok(Box::new(lookahead_lazy_dijkstra::load_from_yaml(&config)?))
                 }
                 "forward_recursion" => Ok(Box::new(forward_recursion::load_from_yaml(&config)?)),
                 "iterative" => Ok(Box::new(iterative_search::load_from_yaml(&config, model)?)),
