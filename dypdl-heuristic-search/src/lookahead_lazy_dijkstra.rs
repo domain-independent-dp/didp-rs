@@ -154,10 +154,11 @@ where
             expanded += 1;
 
             if model.is_goal(&node.state) {
+                let is_optimal = node.cost <= best_bound;
                 return solver::Solution {
                     cost: Some(node.cost),
-                    is_optimal: true,
                     transitions: trace_transitions(node),
+                    is_optimal,
                     expanded,
                     generated: expanded,
                     time: time_keeper.elapsed_time(),

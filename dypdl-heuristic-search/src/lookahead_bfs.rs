@@ -99,9 +99,10 @@ where
         expanded += 1;
 
         if model.is_goal(node.state()) {
+            let is_optimal = node.g <= best_bound;
             return solver::Solution {
                 cost: Some(node.g),
-                is_optimal: false,
+                is_optimal,
                 transitions: trace_transitions(node),
                 expanded,
                 generated,
