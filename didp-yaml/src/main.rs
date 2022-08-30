@@ -7,6 +7,7 @@ use std::fmt;
 use std::fs;
 use std::process;
 use std::str;
+use std::time;
 
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
@@ -15,7 +16,7 @@ use tikv_jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-fn solve<T>(model: &dypdl::Model, config: &yaml_rust::Yaml)
+fn solve<T>(model: &dypdl::Model, config: &yaml_rust::Yaml, start: time::Instant)
 where
     T: variable_type::Numeric + Ord + fmt::Display + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
@@ -25,6 +26,8 @@ where
         eprintln!("Error: {:?}", e);
         process::exit(1);
     });
+    let end = time::Instant::now();
+    println!("Preparing time: {}s", (end - start).as_secs_f64());
     let solution = solver.solve(model).unwrap_or_else(|e| {
         eprintln!("Error: {:?}", e);
         process::exit(1);
@@ -50,10 +53,11 @@ where
     }
     println!("Expanded: {}", solution.expanded);
     println!("Generated: {}", solution.generated);
-    println!("Search time: {}", solution.time);
+    println!("Search time: {}s", solution.time);
 }
 
 fn main() {
+    let start = time::Instant::now();
     let mut args = env::args();
     args.next();
     let domain = args.next().unwrap_or_else(|| {
@@ -73,7 +77,7 @@ fn main() {
         process::exit(1);
     });
     let domain = yaml_rust::YamlLoader::load_from_str(&domain).unwrap_or_else(|e| {
-        eprintln!("Coundn't read a domain file: {:?}", e);
+        eprintln!("Couldn't read a domain file: {:?}", e);
         process::exit(1);
     });
     assert_eq!(domain.len(), 1);
@@ -89,7 +93,7 @@ fn main() {
     assert_eq!(problem.len(), 1);
     let problem = &problem[0];
     let config = fs::read_to_string(config).unwrap_or_else(|e| {
-        eprintln!("Could'nt read a config file: {:?}", e);
+        eprintln!("Couldn't read a config file: {:?}", e);
         process::exit(1);
     });
     let config = yaml_rust::YamlLoader::load_from_str(&config).unwrap_or_else(|e| {
@@ -103,7 +107,9 @@ fn main() {
         process::exit(1);
     });
     match model.cost_type {
-        dypdl::CostType::Integer => solve::<variable_type::Integer>(&model, config),
-        dypdl::CostType::Continuous => solve::<variable_type::OrderedContinuous>(&model, config),
+        dypdl::CostType::Integer => solve::<variable_type::Integer>(&model, config, start),
+        dypdl::CostType::Continuous => {
+            solve::<variable_type::OrderedContinuous>(&model, config, start)
+        }
     }
 }
