@@ -24,14 +24,14 @@ sphinx-apidoc -e -f -o ./docs .venv/lib/python{x}/site-packages/dypy
 sphinx-build ./docs/ ./docs/_build/
 ```
 
-This will generates the API reference to `./docs/_build/index.html`.
+This will generate the API reference to `./docs/_build/index.html`.
 
 ## Release
 ```bash
 maturin build --release
 ```
 
-This will creates the Python wheel. Install the wheel in a Python environment you want to use (this may be different from `.venv`).
+This will create the Python wheel. Install the wheel in a Python environment you want to use (this may be different from `.venv`).
 
 ```bash
 pip install --force-reinstall ../target/wheels/dypy-{x}.whl
