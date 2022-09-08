@@ -1,4 +1,3 @@
-use crate::bfs_lifo_open_list::BFSLIFOOpenList;
 use crate::bfs_node::BFSNode;
 use crate::evaluator;
 use crate::search_node::trace_transitions;
@@ -7,6 +6,8 @@ use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
 use dypdl::variable_type;
 use std::cell::RefCell;
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 use std::fmt;
 use std::rc::Rc;
 
@@ -34,7 +35,7 @@ where
         solver::TimeKeeper::with_time_limit,
     );
     let g_bound = parameters.primal_bound;
-    let mut open = BFSLIFOOpenList::default();
+    let mut open = BinaryHeap::default();
     let mut registry = StateRegistry::new(model);
     if let Some(capacity) = initial_registry_capacity {
         registry.reserve(capacity);
@@ -64,12 +65,12 @@ where
         }))
     };
     let (initial_node, _) = registry.insert(initial_state, g, constructor).unwrap();
-    open.push((f, h), initial_node);
+    open.push(Reverse(initial_node));
     let mut expanded = 0;
     let mut generated = 0;
     let mut f_max = f;
 
-    while let Some(node) = open.pop() {
+    while let Some(Reverse(node)) = open.pop() {
         if *node.closed.borrow() {
             continue;
         }
@@ -144,7 +145,7 @@ where
                         }
                         *successor.h.borrow_mut() = Some(h);
                         *successor.f.borrow_mut() = Some(f);
-                        open.push((f, h), successor);
+                        open.push(Reverse(successor));
                         generated += 1;
                     }
                 }
