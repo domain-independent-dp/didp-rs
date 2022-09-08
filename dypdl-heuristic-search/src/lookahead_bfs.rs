@@ -1,4 +1,3 @@
-use crate::bfs_lifo_open_list::BFSLIFOOpenList;
 use crate::bfs_node::BFSNode;
 use crate::evaluator;
 use crate::search_node::trace_transitions;
@@ -7,6 +6,8 @@ use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
 use dypdl::{variable_type, Continuous};
 use std::cell::RefCell;
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 use std::fmt;
 use std::rc::Rc;
 
@@ -34,7 +35,7 @@ where
         solver::TimeKeeper::with_time_limit,
     );
     let g_bound = parameters.primal_bound;
-    let mut open = BFSLIFOOpenList::default();
+    let mut open = BinaryHeap::default();
     let mut registry = StateRegistry::new(model);
     if let Some(capacity) = initial_registry_capacity {
         registry.reserve(capacity);
@@ -64,14 +65,14 @@ where
         }))
     };
     let (initial_node, _) = registry.insert(initial_state, g, constructor).unwrap();
-    open.push((f, h), initial_node);
+    open.push(Reverse(initial_node));
     let mut dfs_open = Vec::<Rc<BFSNode<T>>>::new();
     let mut expanded = 0;
     let mut generated = 0;
     let mut best_bound = f;
     let mut weighted_bound = T::from_continuous(best_bound.to_continuous() * bound_ratio);
 
-    while let Some(peek) = open.peek() {
+    while let Some(Reverse(peek)) = open.peek() {
         if *peek.closed.borrow() {
             open.pop();
             continue;
@@ -93,7 +94,7 @@ where
             }
             node
         } else {
-            open.pop().unwrap()
+            open.pop().unwrap().0
         };
         *node.closed.borrow_mut() = true;
         expanded += 1;
@@ -165,7 +166,7 @@ where
                         if f <= weighted_bound {
                             dfs_successors.push(successor.clone());
                         }
-                        open.push((f, h), successor);
+                        open.push(Reverse(successor));
                         generated += 1;
                     }
                 }

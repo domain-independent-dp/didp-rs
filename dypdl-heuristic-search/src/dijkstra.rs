@@ -1,10 +1,11 @@
-use crate::bfs_lifo_open_list::BFSLIFOOpenList;
 use crate::search_node::{trace_transitions, SearchNode};
 use crate::solver;
 use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
 use dypdl::variable_type;
 use std::cell::RefCell;
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
@@ -80,7 +81,7 @@ where
         solver::TimeKeeper::with_time_limit,
     );
     let primal_bound = parameters.primal_bound;
-    let mut open = BFSLIFOOpenList::default();
+    let mut open = BinaryHeap::default();
     let mut registry = StateRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
@@ -96,12 +97,12 @@ where
         }))
     };
     let (initial_node, _) = registry.insert(initial_state, cost, constructor).unwrap();
-    open.push(cost, initial_node);
+    open.push(Reverse(initial_node));
     let mut expanded = 0;
     let mut generated = 0;
     let mut cost_max = T::zero();
 
-    while let Some(node) = open.pop() {
+    while let Some(Reverse(node)) = open.pop() {
         if *node.closed.borrow() {
             continue;
         }
@@ -156,7 +157,7 @@ where
                             *dominated.closed.borrow_mut() = true;
                         }
                     }
-                    open.push(cost, successor);
+                    open.push(Reverse(successor));
                     generated += 1;
                 }
             }

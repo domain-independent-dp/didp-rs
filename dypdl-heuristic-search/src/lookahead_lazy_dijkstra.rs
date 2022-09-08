@@ -1,11 +1,12 @@
 use super::lazy_dijkstra::DijkstraEdge;
-use crate::bfs_lifo_open_list::BFSLIFOOpenList;
 use crate::lazy_search_node::LazySearchNode;
 use crate::search_node::trace_transitions;
 use crate::solver;
 use crate::state_registry::{StateInRegistry, StateRegistry};
 use crate::successor_generator::SuccessorGenerator;
 use dypdl::{variable_type, Continuous};
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
@@ -84,7 +85,7 @@ where
         solver::TimeKeeper::with_time_limit,
     );
     let primal_bound = parameters.primal_bound;
-    let mut open = BFSLIFOOpenList::default();
+    let mut open = BinaryHeap::default();
     let mut registry = StateRegistry::new(model);
     if let Some(capacity) = registry_capacity {
         registry.reserve(capacity);
@@ -106,21 +107,18 @@ where
             &initial_node.state,
             &model.table_registry,
         );
-        open.push(
+        open.push(Reverse(DijkstraEdge {
             cost,
-            DijkstraEdge {
-                cost,
-                parent: initial_node.clone(),
-                transition,
-            },
-        );
+            parent: initial_node.clone(),
+            transition,
+        }));
     }
     let mut dfs_open = Vec::new();
     let mut expanded = 0;
     let mut best_bound = T::zero();
     let mut weighted_bound = T::from_continuous(best_bound.to_continuous() * bound_ratio);
 
-    while let Some(peek) = open.peek() {
+    while let Some(Reverse(peek)) = open.peek() {
         if peek.cost > best_bound {
             best_bound = peek.cost;
             weighted_bound = T::from_continuous(best_bound.to_continuous() * bound_ratio);
@@ -133,7 +131,7 @@ where
         let edge = if let Some(edge) = dfs_open.pop() {
             edge
         } else {
-            open.pop().unwrap()
+            open.pop().unwrap().0
         };
         let state = edge
             .transition
@@ -190,7 +188,7 @@ where
                 if cost <= weighted_bound {
                     dfs_successors.push(successor.clone());
                 }
-                open.push(cost, successor);
+                open.push(Reverse(successor));
             }
             dfs_successors.sort_by(|a, b| b.cmp(a));
             dfs_open.append(&mut dfs_successors);

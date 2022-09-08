@@ -2,13 +2,10 @@
 //!
 //! A libarary for heuristic search solvers for DyPDL.
 
-#![feature(map_first_last)]
-
 mod beam;
 mod beam_search;
 mod best_first_search;
 mod bfdfbb;
-mod bfs_lifo_open_list;
 mod bfs_node;
 mod caasdy;
 mod chokudai_search;
@@ -23,7 +20,6 @@ mod dual_bound_chokudai_search;
 mod dual_bound_dbdfs;
 mod dual_bound_dds;
 mod dual_bound_dfbb;
-mod dual_bound_greedy_lookahead_bfs;
 mod dual_bound_lookahead_bfs;
 mod dual_bound_weighted_astar;
 mod epsilon_beam;
@@ -32,7 +28,6 @@ mod expression_beam_search;
 mod expression_epsilon_beam_search;
 mod expression_evaluator;
 mod forward_recursion;
-mod greedy_lookahead_bfs;
 mod hashable_state;
 mod ibdfs;
 mod iterative_search;
@@ -59,7 +54,6 @@ pub use dual_bound_chokudai_search::DualBoundChokudaiSearch;
 pub use dual_bound_dbdfs::DualBoundDBDFS;
 pub use dual_bound_dds::DualBoundDDS;
 pub use dual_bound_dfbb::DualBoundDFBB;
-pub use dual_bound_greedy_lookahead_bfs::DualBoundGreedyLookaheadBFS;
 pub use dual_bound_lookahead_bfs::DualBoundLookaheadBFS;
 pub use dual_bound_weighted_astar::DualBoundWeightedAstar;
 pub use evaluator::Evaluator;

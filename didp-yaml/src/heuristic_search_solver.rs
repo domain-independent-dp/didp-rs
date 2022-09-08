@@ -9,7 +9,6 @@ mod dual_bound_chokudai_search;
 mod dual_bound_dbdfs;
 mod dual_bound_dds;
 mod dual_bound_dfbb;
-mod dual_bound_greedy_lookahead_bfs;
 mod dual_bound_lookahead_bfs;
 mod dual_bound_weighted_astar;
 mod expression_beam_search;
@@ -84,9 +83,6 @@ impl SolverFactory {
                 "dual_bound_lookahead_bfs" => {
                     Ok(Box::new(dual_bound_lookahead_bfs::load_from_yaml(&config)?))
                 }
-                "dual_bound_greedy_lookahead_bfs" => Ok(Box::new(
-                    dual_bound_greedy_lookahead_bfs::load_from_yaml(&config)?,
-                )),
                 "lookahead_lazy_dijkstra" => {
                     Ok(Box::new(lookahead_lazy_dijkstra::load_from_yaml(&config)?))
                 }
