@@ -23,7 +23,7 @@ impl Evaluator for NonnegativeLBEvaluator {
 }
 
 /// How to combine the g-value and the h-value to compute the f-value.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum FEvaluatorType {
     /// f = g + h.
     Plus,

@@ -290,7 +290,47 @@ impl Table1DHandle<Continuous> {
     where
         SetExpression: From<T>,
     {
-        ContinuousExpression::Table(Box::new(NumericTableExpression::Table1DSum(
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table1DReduce(
+            ReduceOperator::Sum,
+            self.id(),
+            SetExpression::from(x),
+        )))
+    }
+
+    /// Returns the product of constants over a set expression in a 1D continuous table.
+    #[inline]
+    pub fn product<T>(&self, x: T) -> ContinuousExpression
+    where
+        SetExpression: From<T>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table1DReduce(
+            ReduceOperator::Product,
+            self.id(),
+            SetExpression::from(x),
+        )))
+    }
+
+    /// Returns the maximum of constants over a set expression in a 1D continuous table.
+    #[inline]
+    pub fn max<T>(&self, x: T) -> ContinuousExpression
+    where
+        SetExpression: From<T>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table1DReduce(
+            ReduceOperator::Max,
+            self.id(),
+            SetExpression::from(x),
+        )))
+    }
+
+    /// Returns the minimum of constants over a set expression in a 1D continuous table.
+    #[inline]
+    pub fn min<T>(&self, x: T) -> ContinuousExpression
+    where
+        SetExpression: From<T>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table1DReduce(
+            ReduceOperator::Min,
             self.id(),
             SetExpression::from(x),
         )))
@@ -319,7 +359,8 @@ impl Table2DHandle<Continuous> {
         SetExpression: From<T>,
         ElementExpression: From<U>,
     {
-        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DSumX(
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceX(
+            ReduceOperator::Sum,
             self.id(),
             SetExpression::from(x),
             ElementExpression::from(y),
@@ -333,7 +374,8 @@ impl Table2DHandle<Continuous> {
         ElementExpression: From<T>,
         SetExpression: From<U>,
     {
-        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DSumY(
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceY(
+            ReduceOperator::Sum,
             self.id(),
             ElementExpression::from(x),
             SetExpression::from(y),
@@ -347,7 +389,143 @@ impl Table2DHandle<Continuous> {
         SetExpression: From<T>,
         SetExpression: From<U>,
     {
-        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DSum(
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduce(
+            ReduceOperator::Sum,
+            self.id(),
+            SetExpression::from(x),
+            SetExpression::from(y),
+        )))
+    }
+
+    /// Returns the product of constants over a set expression in a 2D continuous table.
+    #[inline]
+    pub fn product_x<T, U>(&self, x: T, y: U) -> ContinuousExpression
+    where
+        SetExpression: From<T>,
+        ElementExpression: From<U>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceX(
+            ReduceOperator::Product,
+            self.id(),
+            SetExpression::from(x),
+            ElementExpression::from(y),
+        )))
+    }
+
+    /// Returns the product of constants over a set expression in a 2D continuous table.
+    #[inline]
+    pub fn product_y<T, U>(&self, x: T, y: U) -> ContinuousExpression
+    where
+        ElementExpression: From<T>,
+        SetExpression: From<U>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceY(
+            ReduceOperator::Product,
+            self.id(),
+            ElementExpression::from(x),
+            SetExpression::from(y),
+        )))
+    }
+
+    /// Returns the product of constants over two set expressions in a 2D continuous table.
+    #[inline]
+    pub fn product<T, U>(&self, x: T, y: U) -> ContinuousExpression
+    where
+        SetExpression: From<T>,
+        SetExpression: From<U>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduce(
+            ReduceOperator::Product,
+            self.id(),
+            SetExpression::from(x),
+            SetExpression::from(y),
+        )))
+    }
+
+    /// Returns the maximum of constants over a set expression in a 2D continuous table.
+    #[inline]
+    pub fn max_x<T, U>(&self, x: T, y: U) -> ContinuousExpression
+    where
+        SetExpression: From<T>,
+        ElementExpression: From<U>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceX(
+            ReduceOperator::Max,
+            self.id(),
+            SetExpression::from(x),
+            ElementExpression::from(y),
+        )))
+    }
+
+    /// Returns the maximum of constants over a set expression in a 2D continuous table.
+    #[inline]
+    pub fn max_y<T, U>(&self, x: T, y: U) -> ContinuousExpression
+    where
+        ElementExpression: From<T>,
+        SetExpression: From<U>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceY(
+            ReduceOperator::Max,
+            self.id(),
+            ElementExpression::from(x),
+            SetExpression::from(y),
+        )))
+    }
+
+    /// Returns the maximum of constants over two set expressions in a 2D continuous table.
+    #[inline]
+    pub fn max<T, U>(&self, x: T, y: U) -> ContinuousExpression
+    where
+        SetExpression: From<T>,
+        SetExpression: From<U>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduce(
+            ReduceOperator::Max,
+            self.id(),
+            SetExpression::from(x),
+            SetExpression::from(y),
+        )))
+    }
+
+    /// Returns the minimum of constants over a set expression in a 2D continuous table.
+    #[inline]
+    pub fn min_x<T, U>(&self, x: T, y: U) -> ContinuousExpression
+    where
+        SetExpression: From<T>,
+        ElementExpression: From<U>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceX(
+            ReduceOperator::Min,
+            self.id(),
+            SetExpression::from(x),
+            ElementExpression::from(y),
+        )))
+    }
+
+    /// Returns the minimum of constants over a set expression in a 2D continuous table.
+    #[inline]
+    pub fn min_y<T, U>(&self, x: T, y: U) -> ContinuousExpression
+    where
+        ElementExpression: From<T>,
+        SetExpression: From<U>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceY(
+            ReduceOperator::Min,
+            self.id(),
+            ElementExpression::from(x),
+            SetExpression::from(y),
+        )))
+    }
+
+    /// Returns the minimum of constants over two set expressions in a 2D continuous table.
+    #[inline]
+    pub fn min<T, U>(&self, x: T, y: U) -> ContinuousExpression
+    where
+        SetExpression: From<T>,
+        SetExpression: From<U>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduce(
+            ReduceOperator::Min,
             self.id(),
             SetExpression::from(x),
             SetExpression::from(y),
@@ -380,7 +558,59 @@ impl Table3DHandle<Continuous> {
         ArgumentExpression: From<U>,
         ArgumentExpression: From<V>,
     {
-        ContinuousExpression::Table(Box::new(NumericTableExpression::Table3DSum(
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table3DReduce(
+            ReduceOperator::Sum,
+            self.id(),
+            ArgumentExpression::from(x),
+            ArgumentExpression::from(y),
+            ArgumentExpression::from(z),
+        )))
+    }
+
+    /// Returns the product of constants over set expressions in a 3D continuous table.
+    #[inline]
+    pub fn product<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
+    where
+        ArgumentExpression: From<T>,
+        ArgumentExpression: From<U>,
+        ArgumentExpression: From<V>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table3DReduce(
+            ReduceOperator::Product,
+            self.id(),
+            ArgumentExpression::from(x),
+            ArgumentExpression::from(y),
+            ArgumentExpression::from(z),
+        )))
+    }
+
+    /// Returns the maximum of constants over set expressions in a 3D continuous table.
+    #[inline]
+    pub fn max<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
+    where
+        ArgumentExpression: From<T>,
+        ArgumentExpression: From<U>,
+        ArgumentExpression: From<V>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table3DReduce(
+            ReduceOperator::Max,
+            self.id(),
+            ArgumentExpression::from(x),
+            ArgumentExpression::from(y),
+            ArgumentExpression::from(z),
+        )))
+    }
+
+    /// Returns the minimum of constants over set expressions in a 3D continuous table.
+    #[inline]
+    pub fn min<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
+    where
+        ArgumentExpression: From<T>,
+        ArgumentExpression: From<U>,
+        ArgumentExpression: From<V>,
+    {
+        ContinuousExpression::Table(Box::new(NumericTableExpression::Table3DReduce(
+            ReduceOperator::Min,
             self.id(),
             ArgumentExpression::from(x),
             ArgumentExpression::from(y),
@@ -407,7 +637,50 @@ impl TableHandle<Continuous> {
         ArgumentExpression: From<T>,
     {
         let indices = index.into_iter().map(ArgumentExpression::from).collect();
-        ContinuousExpression::Table(Box::new(NumericTableExpression::TableSum(
+        ContinuousExpression::Table(Box::new(NumericTableExpression::TableReduce(
+            ReduceOperator::Sum,
+            self.id(),
+            indices,
+        )))
+    }
+
+    /// Returns the product of constants over set expressions in a continuous table.
+    #[inline]
+    pub fn product<T>(&self, index: Vec<T>) -> ContinuousExpression
+    where
+        ArgumentExpression: From<T>,
+    {
+        let indices = index.into_iter().map(ArgumentExpression::from).collect();
+        ContinuousExpression::Table(Box::new(NumericTableExpression::TableReduce(
+            ReduceOperator::Product,
+            self.id(),
+            indices,
+        )))
+    }
+
+    /// Returns the maximum of constants over set expressions in a continuous table.
+    #[inline]
+    pub fn max<T>(&self, index: Vec<T>) -> ContinuousExpression
+    where
+        ArgumentExpression: From<T>,
+    {
+        let indices = index.into_iter().map(ArgumentExpression::from).collect();
+        ContinuousExpression::Table(Box::new(NumericTableExpression::TableReduce(
+            ReduceOperator::Max,
+            self.id(),
+            indices,
+        )))
+    }
+
+    /// Returns the minimum of constants over set expressions in a continuous table.
+    #[inline]
+    pub fn min<T>(&self, index: Vec<T>) -> ContinuousExpression
+    where
+        ArgumentExpression: From<T>,
+    {
+        let indices = index.into_iter().map(ArgumentExpression::from).collect();
+        ContinuousExpression::Table(Box::new(NumericTableExpression::TableReduce(
+            ReduceOperator::Min,
             self.id(),
             indices,
         )))
@@ -608,13 +881,17 @@ impl ContinuousExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transitioned state is used.
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     #[inline]
     pub fn eval<U: DPState>(&self, state: &U, registry: &TableRegistry) -> Continuous {
         self.eval_inner(None, state, registry)
     }
 
     /// Returns the evaluation result of a cost expression.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty set or vector.
     #[inline]
     pub fn eval_cost<U: DPState>(
         &self,
@@ -689,6 +966,10 @@ impl ContinuousExpression {
     }
 
     /// Returns a simplified version by precomputation.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> ContinuousExpression {
         match self {
             Self::UnaryOperation(op, x) => match x.simplify(registry) {
@@ -5430,7 +5711,32 @@ mod tests {
         );
         assert_eq!(
             t.sum(SetExpression::default()),
-            ContinuousExpression::Table(Box::new(NumericTableExpression::Table1DSum(
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table1DReduce(
+                ReduceOperator::Sum,
+                t.id(),
+                SetExpression::default(),
+            )))
+        );
+        assert_eq!(
+            t.product(SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table1DReduce(
+                ReduceOperator::Product,
+                t.id(),
+                SetExpression::default(),
+            )))
+        );
+        assert_eq!(
+            t.max(SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table1DReduce(
+                ReduceOperator::Max,
+                t.id(),
+                SetExpression::default(),
+            )))
+        );
+        assert_eq!(
+            t.min(SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table1DReduce(
+                ReduceOperator::Min,
                 t.id(),
                 SetExpression::default(),
             )))
@@ -5449,7 +5755,8 @@ mod tests {
         );
         assert_eq!(
             t.sum_x(SetExpression::default(), 0),
-            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DSumX(
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceX(
+                ReduceOperator::Sum,
                 t.id(),
                 SetExpression::default(),
                 ElementExpression::Constant(0),
@@ -5457,7 +5764,8 @@ mod tests {
         );
         assert_eq!(
             t.sum_y(0, SetExpression::default()),
-            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DSumY(
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceY(
+                ReduceOperator::Sum,
                 t.id(),
                 ElementExpression::Constant(0),
                 SetExpression::default(),
@@ -5465,7 +5773,89 @@ mod tests {
         );
         assert_eq!(
             t.sum(SetExpression::default(), SetExpression::default()),
-            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DSum(
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduce(
+                ReduceOperator::Sum,
+                t.id(),
+                SetExpression::default(),
+                SetExpression::default(),
+            )))
+        );
+        assert_eq!(
+            t.product_x(SetExpression::default(), 0),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceX(
+                ReduceOperator::Product,
+                t.id(),
+                SetExpression::default(),
+                ElementExpression::Constant(0),
+            )))
+        );
+        assert_eq!(
+            t.product_y(0, SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceY(
+                ReduceOperator::Product,
+                t.id(),
+                ElementExpression::Constant(0),
+                SetExpression::default(),
+            )))
+        );
+        assert_eq!(
+            t.product(SetExpression::default(), SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduce(
+                ReduceOperator::Product,
+                t.id(),
+                SetExpression::default(),
+                SetExpression::default(),
+            )))
+        );
+        assert_eq!(
+            t.max_x(SetExpression::default(), 0),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceX(
+                ReduceOperator::Max,
+                t.id(),
+                SetExpression::default(),
+                ElementExpression::Constant(0),
+            )))
+        );
+        assert_eq!(
+            t.max_y(0, SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceY(
+                ReduceOperator::Max,
+                t.id(),
+                ElementExpression::Constant(0),
+                SetExpression::default(),
+            )))
+        );
+        assert_eq!(
+            t.max(SetExpression::default(), SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduce(
+                ReduceOperator::Max,
+                t.id(),
+                SetExpression::default(),
+                SetExpression::default(),
+            )))
+        );
+        assert_eq!(
+            t.min_x(SetExpression::default(), 0),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceX(
+                ReduceOperator::Min,
+                t.id(),
+                SetExpression::default(),
+                ElementExpression::Constant(0),
+            )))
+        );
+        assert_eq!(
+            t.min_y(0, SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduceY(
+                ReduceOperator::Min,
+                t.id(),
+                ElementExpression::Constant(0),
+                SetExpression::default(),
+            )))
+        );
+        assert_eq!(
+            t.min(SetExpression::default(), SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table2DReduce(
+                ReduceOperator::Min,
                 t.id(),
                 SetExpression::default(),
                 SetExpression::default(),
@@ -5486,7 +5876,38 @@ mod tests {
         );
         assert_eq!(
             Table3DHandle::<Continuous>::sum(&t, 0, 0, SetExpression::default()),
-            ContinuousExpression::Table(Box::new(NumericTableExpression::Table3DSum(
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table3DReduce(
+                ReduceOperator::Sum,
+                t.id(),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Set(SetExpression::default()),
+            )))
+        );
+        assert_eq!(
+            Table3DHandle::<Continuous>::product(&t, 0, 0, SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table3DReduce(
+                ReduceOperator::Product,
+                t.id(),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Set(SetExpression::default()),
+            )))
+        );
+        assert_eq!(
+            Table3DHandle::<Continuous>::max(&t, 0, 0, SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table3DReduce(
+                ReduceOperator::Max,
+                t.id(),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Set(SetExpression::default()),
+            )))
+        );
+        assert_eq!(
+            Table3DHandle::<Continuous>::min(&t, 0, 0, SetExpression::default()),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::Table3DReduce(
+                ReduceOperator::Min,
                 t.id(),
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -5521,7 +5942,71 @@ mod tests {
                     ArgumentExpression::from(Set::default())
                 ]
             ),
-            ContinuousExpression::Table(Box::new(NumericTableExpression::TableSum(
+            ContinuousExpression::Table(Box::new(NumericTableExpression::TableReduce(
+                ReduceOperator::Sum,
+                t.id(),
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Set(SetExpression::default()),
+                ]
+            )))
+        );
+        assert_eq!(
+            TableHandle::<Continuous>::product(
+                &t,
+                vec![
+                    ArgumentExpression::from(0),
+                    ArgumentExpression::from(0),
+                    ArgumentExpression::from(0),
+                    ArgumentExpression::from(Set::default())
+                ]
+            ),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::TableReduce(
+                ReduceOperator::Product,
+                t.id(),
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Set(SetExpression::default()),
+                ]
+            )))
+        );
+        assert_eq!(
+            TableHandle::<Continuous>::max(
+                &t,
+                vec![
+                    ArgumentExpression::from(0),
+                    ArgumentExpression::from(0),
+                    ArgumentExpression::from(0),
+                    ArgumentExpression::from(Set::default())
+                ]
+            ),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::TableReduce(
+                ReduceOperator::Max,
+                t.id(),
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Set(SetExpression::default()),
+                ]
+            )))
+        );
+        assert_eq!(
+            TableHandle::<Continuous>::min(
+                &t,
+                vec![
+                    ArgumentExpression::from(0),
+                    ArgumentExpression::from(0),
+                    ArgumentExpression::from(0),
+                    ArgumentExpression::from(Set::default())
+                ]
+            ),
+            ContinuousExpression::Table(Box::new(NumericTableExpression::TableReduce(
+                ReduceOperator::Min,
                 t.id(),
                 vec![
                     ArgumentExpression::Element(ElementExpression::Constant(0)),

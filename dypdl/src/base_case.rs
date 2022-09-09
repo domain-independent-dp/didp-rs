@@ -13,6 +13,10 @@ impl BaseCase {
     }
 
     /// Returns true if the base case is satisfied and false otherwise.
+    ///
+    /// # Panics
+    ///
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     #[inline]
     pub fn is_satisfied<U: state::DPState>(
         &self,

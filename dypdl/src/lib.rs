@@ -55,7 +55,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::panic;
 
 /// Type of numeric values to represent the costs of states.
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CostType {
     Integer,
     Continuous,
@@ -69,7 +69,7 @@ impl Default for CostType {
 }
 
 /// How to compute the value of a state given applicable transitions.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ReduceFunction {
     /// Minimum of the evaluation values of the cost expressions of applicable transitions.
     Min,
@@ -146,7 +146,11 @@ impl Model {
     }
 
     /// Returns true if a state satisfies any of base cases and false otherwise.
-    pub fn is_goal<U: DPState>(&self, state: &U) -> bool {
+    ///
+    /// # Panics
+    ///
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    pub fn is_base<U: DPState>(&self, state: &U) -> bool {
         self.base_cases
             .iter()
             .any(|case| case.is_satisfied(state, &self.table_registry))
@@ -167,6 +171,10 @@ impl Model {
     }
 
     /// Evaluate the dual bound given a state.
+    ///
+    /// # Panics
+    ///
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     pub fn eval_dual_bound<U: DPState, T: variable_type::Numeric + Ord>(
         &self,
         state: &U,
@@ -1464,7 +1472,7 @@ macro_rules! impl_check_numeric_table_expression {
                         }
                         Ok(())
                     }
-                    expression::NumericTableExpression::TableSum(id, args) => {
+                    expression::NumericTableExpression::TableReduce(_, id, args) => {
                         self.table_registry.$x.check_table(*id)?;
                         for expression in args {
                             self.check_expression(expression, allow_cost)?;
@@ -1486,55 +1494,55 @@ macro_rules! impl_check_numeric_table_expression {
                         self.check_expression(y, allow_cost)?;
                         self.check_expression(z, allow_cost)
                     }
-                    expression::NumericTableExpression::Table1DSum(id, x) => {
+                    expression::NumericTableExpression::Table1DReduce(_, id, x) => {
                         self.table_registry.$x.check_table_1d(*id)?;
                         self.check_expression(x, allow_cost)
                     }
-                    expression::NumericTableExpression::Table1DVectorSum(id, x) => {
+                    expression::NumericTableExpression::Table1DVectorReduce(_, id, x) => {
                         self.table_registry.$x.check_table_1d(*id)?;
                         self.check_expression(x, allow_cost)
                     }
-                    expression::NumericTableExpression::Table2DSum(id, x, y) => {
+                    expression::NumericTableExpression::Table2DReduce(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)
                     }
-                    expression::NumericTableExpression::Table2DVectorSum(id, x, y) => {
+                    expression::NumericTableExpression::Table2DVectorReduce(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)
                     }
-                    expression::NumericTableExpression::Table2DSetVectorSum(id, x, y) => {
+                    expression::NumericTableExpression::Table2DSetVectorReduce(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)
                     }
-                    expression::NumericTableExpression::Table2DVectorSetSum(id, x, y) => {
+                    expression::NumericTableExpression::Table2DVectorSetReduce(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)
                     }
-                    expression::NumericTableExpression::Table2DSumX(id, x, y) => {
+                    expression::NumericTableExpression::Table2DReduceX(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)
                     }
-                    expression::NumericTableExpression::Table2DSumY(id, x, y) => {
+                    expression::NumericTableExpression::Table2DReduceY(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)
                     }
-                    expression::NumericTableExpression::Table2DVectorSumX(id, x, y) => {
+                    expression::NumericTableExpression::Table2DVectorReduceX(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)
                     }
-                    expression::NumericTableExpression::Table2DVectorSumY(id, x, y) => {
+                    expression::NumericTableExpression::Table2DVectorReduceY(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)
                     }
-                    expression::NumericTableExpression::Table3DSum(id, x, y, z) => {
+                    expression::NumericTableExpression::Table3DReduce(_, id, x, y, z) => {
                         self.table_registry.$x.check_table_2d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)?;
@@ -1583,7 +1591,7 @@ macro_rules! impl_check_table_vector_expression {
                         }
                         Ok(())
                     }
-                    expression::TableVectorExpression::TableSum(id, args) => {
+                    expression::TableVectorExpression::TableReduce(_, id, args) => {
                         self.table_registry.$x.check_table(*id)?;
                         for expression in args {
                             self.check_expression(expression, allow_cost)?;
@@ -1615,17 +1623,17 @@ macro_rules! impl_check_table_vector_expression {
                         self.check_expression(y, allow_cost)?;
                         self.check_expression(z, allow_cost)
                     }
-                    expression::TableVectorExpression::Table2DXSum(id, x, y) => {
+                    expression::TableVectorExpression::Table2DXReduce(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)
                     }
-                    expression::TableVectorExpression::Table2DYSum(id, x, y) => {
+                    expression::TableVectorExpression::Table2DYReduce(_, id, x, y) => {
                         self.table_registry.$x.check_table_2d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)
                     }
-                    expression::TableVectorExpression::Table3DSum(id, x, y, z) => {
+                    expression::TableVectorExpression::Table3DReduce(_, id, x, y, z) => {
                         self.table_registry.$x.check_table_3d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)?;
@@ -2179,7 +2187,7 @@ mod tests {
             }])],
             ..Default::default()
         };
-        assert!(model.is_goal(&state));
+        assert!(model.is_base(&state));
         let model = Model {
             base_cases: vec![BaseCase::new(vec![GroundedCondition {
                 condition: Condition::Constant(false),
@@ -2187,7 +2195,7 @@ mod tests {
             }])],
             ..Default::default()
         };
-        assert!(!model.is_goal(&state));
+        assert!(!model.is_base(&state));
         let model = Model {
             base_cases: vec![BaseCase::new(vec![GroundedCondition {
                 condition: Condition::Constant(false),
@@ -2196,7 +2204,7 @@ mod tests {
             base_states: vec![state::State::default()],
             ..Default::default()
         };
-        assert!(model.is_goal(&state));
+        assert!(model.is_base(&state));
     }
 
     #[test]
@@ -9546,14 +9554,16 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table1DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table1DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table1DVectorSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table1DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
         );
@@ -9568,7 +9578,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -9576,7 +9587,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -9584,7 +9596,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -9592,7 +9605,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -9600,7 +9614,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSumX(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduceX(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Constant(0),
@@ -9608,7 +9623,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSumY(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -9616,7 +9632,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSumX(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             ElementExpression::Constant(0),
@@ -9624,7 +9641,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSumY(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -9641,7 +9659,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table3DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
@@ -9666,7 +9685,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Integer>::TableSum(
+        let expression = expression::NumericTableExpression::<Integer>::TableReduce(
+            ReduceOperator::Sum,
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -9722,28 +9742,32 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table1DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table1DReduce(
+            ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table1DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table1DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table1DVectorSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table1DVectorReduce(
+            ReduceOperator::Sum,
             1,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
         );
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table1DVectorSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table1DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
         );
@@ -9774,7 +9798,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduce(
+            ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -9782,7 +9807,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -9790,7 +9816,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -9798,7 +9825,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduce(
+            ReduceOperator::Sum,
             1,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -9806,7 +9834,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -9814,7 +9843,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
@@ -9822,7 +9852,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -9830,7 +9861,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -9838,7 +9870,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
@@ -9846,7 +9879,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             1,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -9854,7 +9888,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -9862,7 +9897,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -9870,7 +9906,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSumX(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduceX(
+            ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Constant(0),
@@ -9878,7 +9915,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSumX(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduceX(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             ElementExpression::Constant(0),
@@ -9886,7 +9924,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSumX(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduceX(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Variable(0),
@@ -9894,7 +9933,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSumY(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduceY(
+            ReduceOperator::Sum,
             1,
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -9902,7 +9942,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSumY(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Variable(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -9910,7 +9951,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DSumY(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -9918,7 +9960,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSumX(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             1,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             ElementExpression::Constant(0),
@@ -9926,7 +9969,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSumX(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             ElementExpression::Constant(0),
@@ -9934,7 +9978,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSumX(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             ElementExpression::Variable(0),
@@ -9942,7 +9987,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSumY(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             1,
             ElementExpression::Constant(0),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -9950,7 +9996,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSumY(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Variable(0),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -9958,7 +10005,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorSumY(
+        let expression = expression::NumericTableExpression::<Integer>::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
@@ -10002,7 +10050,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table3DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table3DReduce(
+            ReduceOperator::Sum,
             1,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
@@ -10015,7 +10064,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table3DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Variable(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
@@ -10028,7 +10078,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table3DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
@@ -10039,7 +10090,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::Table3DSum(
+        let expression = expression::NumericTableExpression::<Integer>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
@@ -10076,7 +10128,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::TableSum(
+        let expression = expression::NumericTableExpression::<Integer>::TableReduce(
+            ReduceOperator::Sum,
             1,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -10092,7 +10145,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Integer>::TableSum(
+        let expression = expression::NumericTableExpression::<Integer>::TableReduce(
+            ReduceOperator::Sum,
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Variable(0)),
@@ -10149,14 +10203,16 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table1DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table1DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table1DVectorSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table1DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
         );
@@ -10171,7 +10227,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -10179,7 +10236,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -10187,7 +10245,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -10195,7 +10254,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -10203,7 +10263,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSumX(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceX(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Constant(0),
@@ -10211,7 +10272,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSumY(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -10219,7 +10281,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSumX(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             ElementExpression::Constant(0),
@@ -10227,7 +10290,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSumY(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -10244,7 +10308,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table3DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
@@ -10269,7 +10334,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::NumericTableExpression::<Continuous>::TableSum(
+        let expression = expression::NumericTableExpression::<Continuous>::TableReduce(
+            ReduceOperator::Sum,
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -10329,28 +10395,32 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table1DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table1DReduce(
+            ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
         );
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table1DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table1DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table1DVectorSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table1DVectorReduce(
+            ReduceOperator::Sum,
             1,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
         );
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table1DVectorSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table1DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
         );
@@ -10381,7 +10451,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduce(
+            ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -10389,7 +10460,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -10397,7 +10469,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -10405,7 +10478,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduce(
+            ReduceOperator::Sum,
             1,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -10413,7 +10487,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -10421,7 +10496,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
@@ -10429,7 +10505,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -10437,7 +10514,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -10445,7 +10523,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
@@ -10453,7 +10532,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             1,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -10461,7 +10541,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -10469,7 +10550,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -10477,7 +10559,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSumX(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceX(
+            ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Constant(0),
@@ -10485,7 +10568,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSumX(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceX(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             ElementExpression::Constant(0),
@@ -10493,7 +10577,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSumX(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceX(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             ElementExpression::Variable(0),
@@ -10501,7 +10586,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSumY(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceY(
+            ReduceOperator::Sum,
             1,
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -10509,7 +10595,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSumY(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Variable(0),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -10517,7 +10604,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DSumY(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -10525,7 +10613,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSumX(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             1,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             ElementExpression::Constant(0),
@@ -10533,7 +10622,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSumX(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             ElementExpression::Constant(0),
@@ -10541,7 +10631,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSumX(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             ElementExpression::Variable(0),
@@ -10549,7 +10640,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSumY(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             1,
             ElementExpression::Constant(0),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -10557,7 +10649,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSumY(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Variable(0),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -10565,7 +10658,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorSumY(
+        let expression = expression::NumericTableExpression::<Continuous>::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
@@ -10609,7 +10703,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table3DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table3DReduce(
+            ReduceOperator::Sum,
             1,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
@@ -10622,7 +10717,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table3DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Variable(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
@@ -10635,7 +10731,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table3DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
@@ -10646,7 +10743,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::Table3DSum(
+        let expression = expression::NumericTableExpression::<Continuous>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
@@ -10683,7 +10781,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::TableSum(
+        let expression = expression::NumericTableExpression::<Continuous>::TableReduce(
+            ReduceOperator::Sum,
             1,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -10699,7 +10798,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::NumericTableExpression::<Continuous>::TableSum(
+        let expression = expression::NumericTableExpression::<Continuous>::TableReduce(
+            ReduceOperator::Sum,
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Variable(0)),
@@ -10827,7 +10927,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table2DXSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table2DXReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -10835,7 +10936,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table2DYSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table2DYReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -10843,7 +10945,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table3DSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
@@ -10856,7 +10959,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::TableVectorExpression::<Integer>::TableSum(
+        let expression = expression::TableVectorExpression::<Integer>::TableReduce(
+            ReduceOperator::Sum,
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -11056,7 +11160,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table2DXSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table2DXReduce(
+            ReduceOperator::Sum,
             1,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -11064,7 +11169,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table2DXSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table2DXReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -11072,7 +11178,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table2DXSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table2DXReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -11080,7 +11187,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table2DYSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table2DYReduce(
+            ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -11088,7 +11196,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table2DYSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table2DYReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -11096,7 +11205,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table2DYSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table2DYReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
@@ -11104,7 +11214,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table3DSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table3DReduce(
+            ReduceOperator::Sum,
             1,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
@@ -11117,7 +11228,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table3DSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Variable(0)),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
@@ -11130,7 +11242,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table3DSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
@@ -11143,7 +11256,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::Table3DSum(
+        let expression = expression::TableVectorExpression::<Integer>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
@@ -11154,7 +11268,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::TableSum(
+        let expression = expression::TableVectorExpression::<Integer>::TableReduce(
+            ReduceOperator::Sum,
             1,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -11170,7 +11285,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Integer>::TableSum(
+        let expression = expression::TableVectorExpression::<Integer>::TableReduce(
+            ReduceOperator::Sum,
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Variable(0)),
@@ -11276,7 +11392,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DXSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table2DXReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -11284,7 +11401,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DYSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table2DYReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -11292,7 +11410,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table3DSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
@@ -11305,7 +11424,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = expression::TableVectorExpression::<Continuous>::TableSum(
+        let expression = expression::TableVectorExpression::<Continuous>::TableReduce(
+            ReduceOperator::Sum,
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -11509,7 +11629,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DXSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table2DXReduce(
+            ReduceOperator::Sum,
             1,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -11517,7 +11638,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DXSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table2DXReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
@@ -11525,7 +11647,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DXSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table2DXReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -11533,7 +11656,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DYSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table2DYReduce(
+            ReduceOperator::Sum,
             1,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -11541,7 +11665,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DYSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table2DYReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -11549,7 +11674,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table2DYSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table2DYReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
@@ -11557,7 +11683,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table3DSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table3DReduce(
+            ReduceOperator::Sum,
             1,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
@@ -11570,7 +11697,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table3DSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Variable(0)),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
@@ -11583,7 +11711,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table3DSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
@@ -11596,7 +11725,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::Table3DSum(
+        let expression = expression::TableVectorExpression::<Continuous>::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
@@ -11607,7 +11737,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::TableSum(
+        let expression = expression::TableVectorExpression::<Continuous>::TableReduce(
+            ReduceOperator::Sum,
             1,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -11623,7 +11754,8 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
-        let expression = expression::TableVectorExpression::<Continuous>::TableSum(
+        let expression = expression::TableVectorExpression::<Continuous>::TableReduce(
+            ReduceOperator::Sum,
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Variable(0)),

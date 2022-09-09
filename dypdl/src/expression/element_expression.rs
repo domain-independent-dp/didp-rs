@@ -126,7 +126,7 @@ impl MaxMin for ElementExpression {
 }
 
 impl Table1DHandle<Element> {
-    /// Retruns a constant in a 1D element table.
+    /// Returns a constant in a 1D element table.
     #[inline]
     pub fn element<T>(&self, x: T) -> ElementExpression
     where
@@ -140,7 +140,7 @@ impl Table1DHandle<Element> {
 }
 
 impl Table2DHandle<Element> {
-    /// Retruns a constant in a 2D element table.
+    /// Returns a constant in a 2D element table.
     #[inline]
     pub fn element<T, U>(&self, x: T, y: U) -> ElementExpression
     where
@@ -156,7 +156,7 @@ impl Table2DHandle<Element> {
 }
 
 impl Table3DHandle<Element> {
-    /// Retruns a constant in a 3D element table.
+    /// Returns a constant in a 3D element table.
     #[inline]
     pub fn element<T, U, V>(&self, x: T, y: U, z: V) -> ElementExpression
     where
@@ -174,7 +174,7 @@ impl Table3DHandle<Element> {
 }
 
 impl TableHandle<Element> {
-    /// Retruns a constant in an element table.
+    /// Returns a constant in an element table.
     #[inline]
     pub fn element<T>(&self, indices: Vec<T>) -> ElementExpression
     where
@@ -282,7 +282,7 @@ impl ElementExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used.
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> Element {
         match self {
             Self::Constant(x) => *x,
@@ -321,6 +321,10 @@ impl ElementExpression {
     }
 
     /// Returns a simplified version by precomputation.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> ElementExpression {
         match self {
             Self::Last(vector) => match vector.simplify(registry) {

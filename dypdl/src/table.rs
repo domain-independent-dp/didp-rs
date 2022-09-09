@@ -1,4 +1,4 @@
-use crate::variable_type::{Element, Numeric};
+use crate::variable_type::Element;
 use approx::{AbsDiffEq, RelativeEq};
 use rustc_hash::FxHashMap;
 
@@ -48,21 +48,6 @@ impl<T: Copy> Table1D<T> {
     /// the index is out of bound.
     pub fn eval(&self, x: Element) -> T {
         self.0[x]
-    }
-}
-
-impl<T: Numeric> Table1D<T> {
-    #[inline]
-    /// Returns the sum of constants.
-    ///
-    /// # Panics
-    ///
-    /// an index is out of bound.
-    pub fn sum<I>(&self, x: I) -> T
-    where
-        I: Iterator<Item = Element>,
-    {
-        x.map(|x| self.eval(x)).sum()
     }
 }
 
@@ -149,48 +134,6 @@ impl<T: Copy> Table2D<T> {
     }
 }
 
-impl<T: Numeric> Table2D<T> {
-    /// Returns the sum of elements.
-    ///
-    /// # Panics
-    ///
-    /// an index is out of bound.
-    #[inline]
-    pub fn sum<I, J>(&self, x: I, y: J) -> T
-    where
-        I: Iterator<Item = Element>,
-        J: Iterator<Item = Element> + Clone,
-    {
-        x.map(|x| self.sum_y(x, y.clone())).sum()
-    }
-
-    /// Returns the sum of elements.
-    ///
-    /// # Panics
-    ///
-    /// an index is out of bound.
-    #[inline]
-    pub fn sum_x<I>(&self, x: I, y: Element) -> T
-    where
-        I: Iterator<Item = Element>,
-    {
-        x.map(|x| self.eval(x, y)).sum()
-    }
-
-    /// Returns the sum of elements.
-    ///
-    /// # Panics
-    ///
-    /// an index is out of bound.
-    #[inline]
-    pub fn sum_y<I>(&self, x: Element, y: I) -> T
-    where
-        I: Iterator<Item = Element>,
-    {
-        y.map(|y| self.eval(x, y)).sum()
-    }
-}
-
 impl<T: AbsDiffEq> AbsDiffEq for Table2D<T>
 where
     T::Epsilon: Copy,
@@ -273,104 +216,6 @@ impl<T: Copy> Table3D<T> {
     #[inline]
     pub fn eval(&self, x: Element, y: Element, z: Element) -> T {
         self.0[x][y][z]
-    }
-}
-
-impl<T: Numeric> Table3D<T> {
-    /// Returns the sum of constants.
-    ///
-    /// # Panics
-    ///
-    /// an index is out of bound.
-    #[inline]
-    pub fn sum<I, J, K>(&self, x: I, y: J, z: K) -> T
-    where
-        I: Iterator<Item = Element>,
-        J: Iterator<Item = Element> + Clone,
-        K: Iterator<Item = Element> + Clone,
-    {
-        x.map(|x| self.sum_yz(x, y.clone(), z.clone())).sum()
-    }
-
-    /// Returns the sum of constants.
-    ///
-    /// # Panics
-    ///
-    /// an index is out of bound.
-    #[inline]
-    pub fn sum_x<I>(&self, x: I, y: Element, z: Element) -> T
-    where
-        I: Iterator<Item = Element>,
-    {
-        x.map(|x| self.eval(x, y, z)).sum()
-    }
-
-    /// Returns the sum of constants.
-    ///
-    /// # Panics
-    ///
-    /// an index is out of bound.
-    #[inline]
-    pub fn sum_y<I>(&self, x: Element, y: I, z: Element) -> T
-    where
-        I: Iterator<Item = Element>,
-    {
-        y.map(|y| self.eval(x, y, z)).sum()
-    }
-
-    /// Returns the sum of constants.
-    ///
-    /// # Panics
-    ///
-    /// an index is out of bound.
-    #[inline]
-    pub fn sum_z<I>(&self, x: Element, y: Element, z: I) -> T
-    where
-        I: Iterator<Item = Element>,
-    {
-        z.map(|z| self.eval(x, y, z)).sum()
-    }
-
-    /// Returns the sum of constants.
-    ///
-    /// # Panics
-    ///
-    /// an index is out of bound.
-    #[inline]
-    pub fn sum_xy<I, J>(&self, x: I, y: J, z: Element) -> T
-    where
-        I: Iterator<Item = Element>,
-        J: Iterator<Item = Element> + Clone,
-    {
-        x.map(|x| self.sum_y(x, y.clone(), z)).sum()
-    }
-
-    /// Returns the sum of constants.
-    ///
-    /// # Panics
-    ///
-    /// an index is out of bound.
-    #[inline]
-    pub fn sum_xz<I, J>(&self, x: I, y: Element, z: J) -> T
-    where
-        I: Iterator<Item = Element>,
-        J: Iterator<Item = Element> + Clone,
-    {
-        x.map(|x| self.sum_z(x, y, z.clone())).sum()
-    }
-
-    /// Returns the sum of constants.
-    ///
-    /// # Panics
-    ///
-    /// an index is out of bound.
-    #[inline]
-    pub fn sum_yz<I, J>(&self, x: Element, y: I, z: J) -> T
-    where
-        I: Iterator<Item = Element>,
-        J: Iterator<Item = Element> + Clone,
-    {
-        y.map(|y| self.sum_z(x, y, z.clone())).sum()
     }
 }
 
@@ -568,13 +413,6 @@ mod tests {
     }
 
     #[test]
-    fn table_1d_sum_eval() {
-        let f = Table1D::new(vec![10, 20, 30]);
-        let x = vec![0, 2];
-        assert_eq!(f.sum(x.into_iter()), 40);
-    }
-
-    #[test]
     fn table_1d_relative_eq() {
         let t1 = Table1D::new(vec![10.0, 20.0, 30.0]);
         let t2 = Table1D::new(vec![10.0, 20.0, 30.0]);
@@ -607,28 +445,6 @@ mod tests {
     fn table_2d_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
         assert_eq!(f.eval(0, 1), 20);
-    }
-
-    #[test]
-    fn table_2d_sum_eval() {
-        let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
-        let x = vec![0, 2];
-        let y = vec![0, 1];
-        assert_eq!(f.sum(x.into_iter(), y.into_iter()), 180);
-    }
-
-    #[test]
-    fn table_2d_sum_x_eval() {
-        let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
-        let x = vec![0, 2];
-        assert_eq!(f.sum_x(x.into_iter(), 0), 80);
-    }
-
-    #[test]
-    fn table_2d_sum_y_eval() {
-        let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
-        let y = vec![0, 2];
-        assert_eq!(f.sum_y(0, y.into_iter()), 40);
     }
 
     #[test]
@@ -680,89 +496,6 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
         assert_eq!(f.eval(0, 1, 2), 60);
-    }
-
-    #[test]
-    fn table_3d_sum_eval() {
-        let f = Table3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
-        let x = vec![0, 2];
-        let y = vec![0, 1];
-        let z = vec![0, 1];
-        assert_eq!(f.sum(x.into_iter(), y.into_iter(), z.into_iter()), 240);
-    }
-
-    #[test]
-    fn table_3d_sum_x_eval() {
-        let f = Table3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
-        let x = vec![0, 2];
-        assert_eq!(f.sum_x(x.into_iter(), 1, 2), 120);
-    }
-
-    #[test]
-    fn table_3d_sum_y_eval() {
-        let f = Table3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
-        let y = vec![0, 2];
-        assert_eq!(f.sum_y(1, y.into_iter(), 2), 120);
-    }
-
-    #[test]
-    fn table_3d_sum_z_eval() {
-        let f = Table3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
-        let z = vec![0, 2];
-        assert_eq!(f.sum_z(1, 2, z.into_iter()), 160);
-    }
-
-    #[test]
-    fn table_3d_sum_xy_eval() {
-        let f = Table3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
-        let x = vec![0, 2];
-        let y = vec![0, 1];
-        assert_eq!(f.sum_xy(x.into_iter(), y.into_iter(), 2), 180);
-    }
-
-    #[test]
-    fn table_3d_sum_xz_eval() {
-        let f = Table3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
-        let x = vec![0, 2];
-        let z = vec![0, 1];
-        assert_eq!(f.sum_xz(x.into_iter(), 2, z.into_iter()), 300);
-    }
-
-    #[test]
-    fn table_3d_sum_yz_eval() {
-        let f = Table3D::new(vec![
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
-        ]);
-        let y = vec![0, 2];
-        let z = vec![0, 1];
-        assert_eq!(f.sum_yz(2, y.into_iter(), z.into_iter()), 180);
     }
 
     #[test]

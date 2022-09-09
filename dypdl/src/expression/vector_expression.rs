@@ -15,7 +15,7 @@ pub enum VectorExpression {
     Indices(Box<VectorExpression>),
     /// Reverse a vector.
     Reverse(Box<VectorExpression>),
-    /// Set an eleemnt in a vector.
+    /// Set an element in a vector.
     Set(ElementExpression, Box<VectorExpression>, ElementExpression),
     /// Push an element to a vector.
     Push(ElementExpression, Box<VectorExpression>),
@@ -32,7 +32,7 @@ impl VectorExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transitioned state is used.
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> Vector {
         match self {
             Self::Reference(expression) => {
@@ -87,6 +87,10 @@ impl VectorExpression {
     }
 
     /// Returns a simplified version by precomputation.
+    ///
+    /// # Panics
+    ///
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> VectorExpression {
         match self {
             Self::Reference(vector) => {

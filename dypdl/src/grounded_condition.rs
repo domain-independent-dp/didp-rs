@@ -15,6 +15,10 @@ pub struct GroundedCondition {
 
 impl GroundedCondition {
     /// Returns true if the condition is satisfied, false if the condition is not satisifed, and None if an parameter is not included in the corresponding set or vector variable.
+    ///
+    /// # Panics
+    ///
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     pub fn is_satisfied<U: DPState>(
         &self,
         state: &U,

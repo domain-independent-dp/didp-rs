@@ -552,7 +552,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            IntegerExpression::Table(Box::new(NumericTableExpression::TableSum(
+            IntegerExpression::Table(Box::new(NumericTableExpression::TableReduce(
+                ReduceOperator::Sum,
                 0,
                 vec![
                     ArgumentExpression::Element(ElementExpression::Constant(0)),

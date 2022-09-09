@@ -531,7 +531,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If no such vairable.
+    ///     If no such variable.
     #[pyo3(text_signature = "(name)")]
     fn get_element_var(&self, name: &str) -> PyResult<ElementVarPy> {
         match self.0.get_element_variable(name) {
@@ -608,7 +608,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If no such vairable.
+    ///     If no such variable.
     #[pyo3(text_signature = "(name)")]
     fn get_element_resource_var(&self, name: &str) -> PyResult<ElementResourceVarPy> {
         match self.0.get_element_resource_variable(name) {
@@ -688,7 +688,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If no such vairable.
+    ///     If no such variable.
     #[pyo3(text_signature = "(name)")]
     fn get_set_var(&self, name: &str) -> PyResult<SetVarPy> {
         match self.0.get_set_variable(name) {
@@ -763,7 +763,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If no such vairable.
+    ///     If no such variable.
     #[pyo3(text_signature = "(name)")]
     fn get_int_var(&self, name: &str) -> PyResult<IntVarPy> {
         match self.0.get_integer_variable(name) {
@@ -826,7 +826,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If no such vairable.
+    ///     If no such variable.
     #[pyo3(text_signature = "(name)")]
     fn get_int_resource_var(&self, name: &str) -> PyResult<IntResourceVarPy> {
         match self.0.get_integer_resource_variable(name) {
@@ -899,7 +899,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If no such vairable.
+    ///     If no such variable.
     #[pyo3(text_signature = "(name)")]
     fn get_float_var(&self, name: &str) -> PyResult<FloatVarPy> {
         match self.0.get_continuous_variable(name) {
@@ -962,7 +962,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If no such vairable.
+    ///     If no such variable.
     #[pyo3(text_signature = "(name)")]
     fn get_float_resource_var(&self, name: &str) -> PyResult<FloatResourceVarPy> {
         match self.0.get_continuous_resource_variable(name) {

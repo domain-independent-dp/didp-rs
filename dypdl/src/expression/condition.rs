@@ -287,11 +287,11 @@ impl TableHandle<bool> {
 }
 
 impl Condition {
-    /// Returns the evaluatoin result.
+    /// Returns the evaluation result.
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used.
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> bool {
         match self {
             Self::Constant(value) => *value,
@@ -313,6 +313,10 @@ impl Condition {
     }
 
     /// Returns a simplified version by precomputation.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> Condition {
         match self {
             Self::Not(c) => match c.simplify(registry) {

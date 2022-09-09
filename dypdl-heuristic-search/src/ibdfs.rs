@@ -186,7 +186,7 @@ pub fn bounded_dfs<T: variable_type::Numeric>(
     let state = node.state;
     let cost = node.cost;
     *expanded += 1;
-    if model.is_goal(&state) {
+    if model.is_base(&state) {
         if model.reduce_function == ReduceFunction::Max
             && primal_bound.is_some()
             && cost <= primal_bound.unwrap()
