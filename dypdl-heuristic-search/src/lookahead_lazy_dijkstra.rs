@@ -151,7 +151,7 @@ where
         if let Some((node, _)) = registry.insert(state, edge.cost, constructor) {
             expanded += 1;
 
-            if model.is_goal(&node.state) {
+            if model.is_base(&node.state) {
                 let is_optimal = node.cost <= best_bound;
                 return solver::Solution {
                     cost: Some(node.cost),

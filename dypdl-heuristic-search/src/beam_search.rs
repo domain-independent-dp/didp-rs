@@ -171,7 +171,7 @@ where
         let mut incumbent = None;
         for node in current_beam.drain() {
             expanded += 1;
-            if model.is_goal(node.state()) {
+            if model.is_base(node.state()) {
                 if let Some(cost) = incumbent.as_ref().map(|x: &V| x.cost()) {
                     match model.reduce_function {
                         dypdl::ReduceFunction::Max if node.cost() > cost => {

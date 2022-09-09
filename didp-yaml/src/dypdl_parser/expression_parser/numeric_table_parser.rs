@@ -1,7 +1,9 @@
 use super::element_parser;
 use super::util;
 use super::util::ParseErr;
-use dypdl::expression::{ArgumentExpression, ElementExpression, NumericTableExpression};
+use dypdl::expression::{
+    ArgumentExpression, ElementExpression, NumericTableExpression, ReduceOperator,
+};
 use dypdl::variable_type::Numeric;
 use dypdl::{StateMetadata, TableData, TableRegistry};
 use rustc_hash::FxHashMap;
@@ -39,13 +41,18 @@ where
     } else if let Some(i) = tables.name_to_table.get(name) {
         let (args, rest) = parse_args(tokens, metadata, registry, parameters)?;
         Ok(Some((NumericTableExpression::Table(*i, args), rest)))
-    } else if name == "sum" {
+    } else {
+        let op = match name {
+            "sum" => ReduceOperator::Sum,
+            "product" => ReduceOperator::Product,
+            "max" => ReduceOperator::Max,
+            "min" => ReduceOperator::Min,
+            _ => return Ok(None),
+        };
         let (name, rest) = tokens
             .split_first()
             .ok_or_else(|| ParseErr::new(String::from("could not get token")))?;
-        parse_sum(name, rest, metadata, registry, parameters, tables)
-    } else {
-        Ok(None)
+        parse_reduce(name, rest, op, metadata, registry, parameters, tables)
     }
 }
 
@@ -71,9 +78,10 @@ fn parse_args<'a>(
     }
 }
 
-fn parse_sum<'a, T: Numeric>(
+fn parse_reduce<'a, T: Numeric>(
     name: &str,
     tokens: &'a [String],
+    op: ReduceOperator,
     metadata: &StateMetadata,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, usize>,
@@ -83,11 +91,12 @@ fn parse_sum<'a, T: Numeric>(
         let (x, rest) = parse_argument(tokens, metadata, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         match x {
-            ArgumentExpression::Set(x) => {
-                Ok(Some((NumericTableExpression::Table1DSum(*i, x), rest)))
-            }
+            ArgumentExpression::Set(x) => Ok(Some((
+                NumericTableExpression::Table1DReduce(op, *i, x),
+                rest,
+            ))),
             ArgumentExpression::Vector(x) => Ok(Some((
-                NumericTableExpression::Table1DVectorSum(*i, x),
+                NumericTableExpression::Table1DVectorReduce(op, *i, x),
                 rest,
             ))),
             _ => Err(ParseErr::new(format!(
@@ -100,33 +109,36 @@ fn parse_sum<'a, T: Numeric>(
         let (y, rest) = parse_argument(rest, metadata, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         match (x, y) {
-            (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => {
-                Ok(Some((NumericTableExpression::Table2DSum(*i, x, y), rest)))
-            }
+            (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => Ok(Some((
+                NumericTableExpression::Table2DReduce(op, *i, x, y),
+                rest,
+            ))),
             (ArgumentExpression::Vector(x), ArgumentExpression::Vector(y)) => Ok(Some((
-                NumericTableExpression::Table2DVectorSum(*i, x, y),
+                NumericTableExpression::Table2DVectorReduce(op, *i, x, y),
                 rest,
             ))),
             (ArgumentExpression::Set(x), ArgumentExpression::Vector(y)) => Ok(Some((
-                NumericTableExpression::Table2DSetVectorSum(*i, x, y),
+                NumericTableExpression::Table2DSetVectorReduce(op, *i, x, y),
                 rest,
             ))),
             (ArgumentExpression::Vector(x), ArgumentExpression::Set(y)) => Ok(Some((
-                NumericTableExpression::Table2DVectorSetSum(*i, x, y),
+                NumericTableExpression::Table2DVectorSetReduce(op, *i, x, y),
                 rest,
             ))),
-            (ArgumentExpression::Set(x), ArgumentExpression::Element(y)) => {
-                Ok(Some((NumericTableExpression::Table2DSumX(*i, x, y), rest)))
-            }
-            (ArgumentExpression::Element(x), ArgumentExpression::Set(y)) => {
-                Ok(Some((NumericTableExpression::Table2DSumY(*i, x, y), rest)))
-            }
+            (ArgumentExpression::Set(x), ArgumentExpression::Element(y)) => Ok(Some((
+                NumericTableExpression::Table2DReduceX(op, *i, x, y),
+                rest,
+            ))),
+            (ArgumentExpression::Element(x), ArgumentExpression::Set(y)) => Ok(Some((
+                NumericTableExpression::Table2DReduceY(op, *i, x, y),
+                rest,
+            ))),
             (ArgumentExpression::Vector(x), ArgumentExpression::Element(y)) => Ok(Some((
-                NumericTableExpression::Table2DVectorSumX(*i, x, y),
+                NumericTableExpression::Table2DVectorReduceX(op, *i, x, y),
                 rest,
             ))),
             (ArgumentExpression::Element(x), ArgumentExpression::Vector(y)) => Ok(Some((
-                NumericTableExpression::Table2DVectorSumY(*i, x, y),
+                NumericTableExpression::Table2DVectorReduceY(op, *i, x, y),
                 rest,
             ))),
             (x, y) => Err(ParseErr::new(format!(
@@ -140,12 +152,15 @@ fn parse_sum<'a, T: Numeric>(
         let (z, rest) = parse_argument(rest, metadata, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((
-            NumericTableExpression::Table3DSum(*i, x, y, z),
+            NumericTableExpression::Table3DReduce(op, *i, x, y, z),
             rest,
         )))
     } else if let Some(i) = tables.name_to_table.get(name) {
         let (args, rest) = parse_sum_args(tokens, metadata, registry, parameters)?;
-        Ok(Some((NumericTableExpression::TableSum(*i, args), rest)))
+        Ok(Some((
+            NumericTableExpression::TableReduce(op, *i, args),
+            rest,
+        )))
     } else {
         Ok(None)
     }
@@ -430,7 +445,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::Table1DSum(
+            NumericTableExpression::Table1DReduce(
+                ReduceOperator::Sum,
                 0,
                 SetExpression::Reference(ReferenceExpression::Variable(0))
             )
@@ -455,7 +471,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::Table1DVectorSum(
+            NumericTableExpression::Table1DVectorReduce(
+                ReduceOperator::Sum,
                 0,
                 VectorExpression::Reference(ReferenceExpression::Variable(0))
             )
@@ -503,6 +520,330 @@ mod tests {
             .collect();
         let result = parse_expression(
             "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_1d_product_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f1", "s0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table1DReduce(
+                ReduceOperator::Product,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[3..]);
+
+        let tokens: Vec<String> = ["f1", "v0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table1DVectorReduce(
+                ReduceOperator::Product,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[3..]);
+    }
+
+    #[test]
+    fn parse_table_1d_product_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f1", "s0", "s1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f1", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_1d_max_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f1", "s0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table1DReduce(
+                ReduceOperator::Max,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[3..]);
+
+        let tokens: Vec<String> = ["f1", "v0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table1DVectorReduce(
+                ReduceOperator::Max,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[3..]);
+    }
+
+    #[test]
+    fn parse_table_1d_max_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f1", "s0", "s1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f1", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_1d_min_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f1", "s0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table1DReduce(
+                ReduceOperator::Min,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[3..]);
+
+        let tokens: Vec<String> = ["f1", "v0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table1DVectorReduce(
+                ReduceOperator::Min,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[3..]);
+    }
+
+    #[test]
+    fn parse_table_1d_min_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f1", "s0", "s1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f1", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
             &tokens,
             &metadata,
             &registry,
@@ -590,7 +931,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::Table2DSum(
+            NumericTableExpression::Table2DReduce(
+                ReduceOperator::Sum,
                 0,
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
                 SetExpression::Reference(ReferenceExpression::Variable(1))
@@ -616,7 +958,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::Table2DVectorSum(
+            NumericTableExpression::Table2DVectorReduce(
+                ReduceOperator::Sum,
                 0,
                 VectorExpression::Reference(ReferenceExpression::Variable(0)),
                 VectorExpression::Reference(ReferenceExpression::Variable(1))
@@ -642,7 +985,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::Table2DSetVectorSum(
+            NumericTableExpression::Table2DSetVectorReduce(
+                ReduceOperator::Sum,
                 0,
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
                 VectorExpression::Reference(ReferenceExpression::Variable(1))
@@ -668,7 +1012,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::Table2DVectorSetSum(
+            NumericTableExpression::Table2DVectorSetReduce(
+                ReduceOperator::Sum,
                 0,
                 VectorExpression::Reference(ReferenceExpression::Variable(0)),
                 SetExpression::Reference(ReferenceExpression::Variable(1))
@@ -694,7 +1039,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::Table2DSumX(
+            NumericTableExpression::Table2DReduceX(
+                ReduceOperator::Sum,
                 0,
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
                 ElementExpression::Variable(0)
@@ -720,7 +1066,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::Table2DSumY(
+            NumericTableExpression::Table2DReduceY(
+                ReduceOperator::Sum,
                 0,
                 ElementExpression::Constant(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0))
@@ -746,7 +1093,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::Table2DVectorSumX(
+            NumericTableExpression::Table2DVectorReduceX(
+                ReduceOperator::Sum,
                 0,
                 VectorExpression::Reference(ReferenceExpression::Variable(0)),
                 ElementExpression::Variable(0)
@@ -772,7 +1120,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::Table2DVectorSumY(
+            NumericTableExpression::Table2DVectorReduceY(
+                ReduceOperator::Sum,
                 0,
                 ElementExpression::Constant(0),
                 VectorExpression::Reference(ReferenceExpression::Variable(0))
@@ -821,6 +1170,822 @@ mod tests {
             .collect();
         let result = parse_expression(
             "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_2d_product_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f2", "s0", "s1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduce(
+                ReduceOperator::Product,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "v0", "v1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorReduce(
+                ReduceOperator::Product,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                VectorExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "s0", "v1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DSetVectorReduce(
+                ReduceOperator::Product,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                VectorExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "v0", "s1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorSetReduce(
+                ReduceOperator::Product,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "s0", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduceX(
+                ReduceOperator::Product,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0)
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "0", "s0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduceY(
+                ReduceOperator::Product,
+                0,
+                ElementExpression::Constant(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "v0", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorReduceX(
+                ReduceOperator::Product,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0)
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "0", "v0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorReduceY(
+                ReduceOperator::Product,
+                0,
+                ElementExpression::Constant(0),
+                VectorExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+    }
+
+    #[test]
+    fn parse_table_2d_product_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f2", "e0", "0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f2", "0", "e0", "v0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f2", "0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_2d_max_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f2", "s0", "s1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduce(
+                ReduceOperator::Max,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "v0", "v1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorReduce(
+                ReduceOperator::Max,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                VectorExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "s0", "v1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DSetVectorReduce(
+                ReduceOperator::Max,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                VectorExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "v0", "s1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorSetReduce(
+                ReduceOperator::Max,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "s0", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduceX(
+                ReduceOperator::Max,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0)
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "0", "s0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduceY(
+                ReduceOperator::Max,
+                0,
+                ElementExpression::Constant(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "v0", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorReduceX(
+                ReduceOperator::Max,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0)
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "0", "v0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorReduceY(
+                ReduceOperator::Max,
+                0,
+                ElementExpression::Constant(0),
+                VectorExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+    }
+
+    #[test]
+    fn parse_table_2d_max_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f2", "e0", "0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f2", "0", "e0", "v0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f2", "0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_2d_min_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f2", "s0", "s1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduce(
+                ReduceOperator::Min,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "v0", "v1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorReduce(
+                ReduceOperator::Min,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                VectorExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "s0", "v1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DSetVectorReduce(
+                ReduceOperator::Min,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                VectorExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "v0", "s1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorSetReduce(
+                ReduceOperator::Min,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "s0", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduceX(
+                ReduceOperator::Min,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0)
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "0", "s0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduceY(
+                ReduceOperator::Min,
+                0,
+                ElementExpression::Constant(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "v0", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorReduceX(
+                ReduceOperator::Min,
+                0,
+                VectorExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0)
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "0", "v0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DVectorReduceY(
+                ReduceOperator::Min,
+                0,
+                ElementExpression::Constant(0),
+                VectorExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+    }
+
+    #[test]
+    fn parse_table_2d_min_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f2", "e0", "0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f2", "0", "e0", "v0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f2", "0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
             &tokens,
             &metadata,
             &registry,
@@ -909,7 +2074,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::Table3DSum(
+            NumericTableExpression::Table3DReduce(
+                ReduceOperator::Sum,
                 0,
                 ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(2))),
                 ArgumentExpression::Element(ElementExpression::Constant(1)),
@@ -931,6 +2097,174 @@ mod tests {
             .collect();
         let result = parse_expression(
             "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_3d_product_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f3", "s2", "1", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table3DReduce(
+                ReduceOperator::Product,
+                0,
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(2))),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Element(ElementExpression::Variable(0)),
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn pares_table_3d_product_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f3", "s2", "1", "e0", "1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_3d_max_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f3", "s2", "1", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table3DReduce(
+                ReduceOperator::Max,
+                0,
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(2))),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Element(ElementExpression::Variable(0)),
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn pares_table_3d_max_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f3", "s2", "1", "e0", "1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_3d_min_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f3", "s2", "1", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table3DReduce(
+                ReduceOperator::Min,
+                0,
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(2))),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Element(ElementExpression::Variable(0)),
+            )
+        );
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn pares_table_3d_min_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f3", "s2", "1", "e0", "1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
             &tokens,
             &metadata,
             &registry,
@@ -1021,7 +2355,8 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(
             expression,
-            NumericTableExpression::TableSum(
+            NumericTableExpression::TableReduce(
+                ReduceOperator::Sum,
                 0,
                 vec![
                     ArgumentExpression::Set(SetExpression::Reference(
@@ -1064,6 +2399,237 @@ mod tests {
             .collect();
         let result = parse_expression(
             "sum",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_product_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::TableReduce(
+                ReduceOperator::Product,
+                0,
+                vec![
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(2)
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Variable(3)
+                    )),
+                ]
+            )
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_table_product_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", "i0"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "product",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_max_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::TableReduce(
+                ReduceOperator::Max,
+                0,
+                vec![
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(2)
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Variable(3)
+                    )),
+                ]
+            )
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_table_max_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", "i0"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "max",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_table_min_ok() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::TableReduce(
+                ReduceOperator::Min,
+                0,
+                vec![
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(2)
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Variable(3)
+                    )),
+                ]
+            )
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_table_min_err() {
+        let metadata = generate_metadata();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
+            &tokens,
+            &metadata,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", "i0"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            "min",
             &tokens,
             &metadata,
             &registry,

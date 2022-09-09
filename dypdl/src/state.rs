@@ -16,12 +16,14 @@ pub trait DPState: Clone + fmt::Debug {
     ///
     /// if no variable has the id of i.
     fn get_set_variable(&self, i: usize) -> &Set;
+
     /// Returns the value of a vector variable.
     ///
     /// # Panics
     ///
     /// if no variable has the id of i.
     fn get_vector_variable(&self, i: usize) -> &Vector;
+
     /// Returns the value of an element variable.
     ///
     /// # Panics
@@ -34,37 +36,51 @@ pub trait DPState: Clone + fmt::Debug {
     ///
     /// if no variable has the id of i.
     fn get_integer_variable(&self, i: usize) -> Integer;
+
     /// Returns the value of a continuous variable.
     ///
     /// # Panics
     ///
     /// if no variable has the id of i.
     fn get_continuous_variable(&self, i: usize) -> Continuous;
+
     /// Returns the value of an element resource variable.
     ///
     /// # Panics
     ///
     /// if no variable has the id of i.
     fn get_element_resource_variable(&self, i: usize) -> Element;
+
     /// Returns the value of an integer resource variable.
     ///
     /// # Panics
     ///
     /// if no variable has the id of i.
     fn get_integer_resource_variable(&self, i: usize) -> Integer;
+
     /// Returns the value of a continuous resource variable.
     ///
     /// # Panics
     ///
     /// if no variable has the id of i.
     fn get_continuous_resource_variable(&self, i: usize) -> Continuous;
+
     /// Returns the transitioned state by the effect.
+    ///
+    /// # Panics
+    ///
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     fn apply_effect(
         &self,
         effect: &effect::Effect,
         registry: &table_registry::TableRegistry,
     ) -> Self;
+
     /// Update the state to the transitioned state by an effect.
+    ///
+    /// # Panics
+    ///
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     fn apply_effect_in_place(
         &mut self,
         effect: &effect::Effect,

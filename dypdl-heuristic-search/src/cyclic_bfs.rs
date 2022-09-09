@@ -89,7 +89,7 @@ where
                 if no_node {
                     no_node = false;
                 }
-                if model.is_goal(node.state()) {
+                if model.is_base(node.state()) {
                     if !parameters.quiet {
                         println!("New primal bound: {}, expanded: {}", node.cost(), expanded);
                     }

@@ -42,7 +42,7 @@ impl CostExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transitioned state is used.
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     #[inline]
     pub fn eval<T: Numeric, U: DPState>(
         &self,
@@ -56,6 +56,10 @@ impl CostExpression {
     }
 
     /// Returns the evaluation result.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty set or vector.
     pub fn eval_cost<T: Numeric, U: DPState>(
         &self,
         cost: T,
@@ -73,6 +77,10 @@ impl CostExpression {
     }
 
     /// Returns a simplified version by precomputation.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &table_registry::TableRegistry) -> CostExpression {
         match self {
             Self::Integer(expression) => Self::Integer(expression.simplify(registry)),
@@ -106,6 +114,10 @@ pub struct Transition {
 
 impl Transition {
     /// Returns true if the transition is applicable and false otherwise.
+    ///
+    /// # Panics
+    ///
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     pub fn is_applicable<S: DPState>(
         &self,
         state: &S,
@@ -127,12 +139,20 @@ impl Transition {
     }
 
     /// Returns the transitioned state.
+    ///
+    /// # Panics
+    ///
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     #[inline]
     pub fn apply<S: DPState>(&self, state: &S, registry: &table_registry::TableRegistry) -> S {
         state.apply_effect(&self.effect, registry)
     }
 
     /// Updates a state to the transition state.
+    ///
+    /// # Panics
+    ///
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     #[inline]
     pub fn apply_in_place<S: DPState>(
         &self,
@@ -143,6 +163,10 @@ impl Transition {
     }
 
     /// Returns the evaluation result of the cost expression.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty set or vector.
     #[inline]
     pub fn eval_cost<T: Numeric, S: DPState>(
         &self,

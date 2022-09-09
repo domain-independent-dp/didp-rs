@@ -235,17 +235,25 @@ pub enum ReduceOperator {
 }
 
 impl ReduceOperator {
-    /// Returns the evaluatoin result.
+    /// Returns the evaluation result.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty vector.
     pub fn eval<T: Num + PartialOrd + Copy + Sum + Product>(&self, vector: &[T]) -> T {
+        self.eval_iter(vector.iter().copied()).unwrap()
+    }
+
+    /// Returns the evaluation result.
+    pub fn eval_iter<T: Num + PartialOrd + Copy + Sum + Product, I: Iterator<Item = T>>(
+        &self,
+        iter: I,
+    ) -> Option<T> {
         match self {
-            Self::Sum => vector.iter().copied().sum(),
-            Self::Product => vector.iter().copied().product(),
-            Self::Max => vector
-                .iter()
-                .fold(vector[0], |x, y| if *y > x { *y } else { x }),
-            Self::Min => vector
-                .iter()
-                .fold(vector[0], |x, y| if *y < x { *y } else { x }),
+            Self::Sum => Some(iter.sum()),
+            Self::Product => Some(iter.product()),
+            Self::Max => iter.reduce(|x, y| if y > x { y } else { x }),
+            Self::Min => iter.reduce(|x, y| if y < x { y } else { x }),
         }
     }
 }
@@ -685,5 +693,29 @@ mod tests {
     fn reduce_min() {
         let op = ReduceOperator::Min;
         assert_eq!(op.eval(&[1, 2, 4]), 1);
+    }
+
+    #[test]
+    fn reduce_iter_sum() {
+        let op = ReduceOperator::Sum;
+        assert_eq!(op.eval_iter(vec![1, 2, 4].into_iter()), Some(7));
+    }
+
+    #[test]
+    fn reduce_iter_product() {
+        let op = ReduceOperator::Product;
+        assert_eq!(op.eval_iter(vec![1, 2, 4].into_iter()), Some(8));
+    }
+
+    #[test]
+    fn reduce_iter_max() {
+        let op = ReduceOperator::Max;
+        assert_eq!(op.eval_iter(vec![1, 2, 4].into_iter()), Some(4));
+    }
+
+    #[test]
+    fn reduce_iter_min() {
+        let op = ReduceOperator::Min;
+        assert_eq!(op.eval_iter(vec![1, 2, 4].into_iter()), Some(1));
     }
 }

@@ -446,7 +446,7 @@ impl SetExprPy {
     ///
     /// Adds an element to a set.
     ///
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -472,7 +472,7 @@ impl SetExprPy {
     ///
     /// Removes an element from a set.
     ///
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -499,7 +499,7 @@ impl SetExprPy {
     /// Returns a set where all elements in an input set are removed.
     ///
     /// This method is the same as `-` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -519,7 +519,7 @@ impl SetExprPy {
     /// Returns the intersection with another set.
     ///
     /// This method is the same as `&` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -540,7 +540,7 @@ impl SetExprPy {
     /// Returns a set which only contains elements included in either of two sets but not in both.
     ///
     /// This method is the same as `^` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -561,7 +561,7 @@ impl SetExprPy {
     /// Returns the union of two sets.
     ///
     /// This method is the same as `\|` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -722,7 +722,7 @@ impl SetVarPy {
     ///
     /// Adds an element to a set.
     ///
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -748,7 +748,7 @@ impl SetVarPy {
     ///
     /// Removes an element from a set.
     ///
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -775,7 +775,7 @@ impl SetVarPy {
     /// Returns a set where all elements in an input set are removed.
     ///
     /// This method is the same as `-` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -796,7 +796,7 @@ impl SetVarPy {
     /// Returns the intersection with another set.
     ///
     /// This method is the same as `&` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -816,7 +816,7 @@ impl SetVarPy {
     /// Returns a set which only contains elements included in either of two sets but not in both.
     ///
     /// This method is the same as `^` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -837,7 +837,7 @@ impl SetVarPy {
     /// Returns the union of two sets.
     ///
     /// This method is the same as `\|` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -998,7 +998,7 @@ impl SetConstPy {
     ///
     /// Adds an element to a set.
     ///
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -1019,7 +1019,7 @@ impl SetConstPy {
     ///
     /// Removes an element from a set.
     ///
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -1047,7 +1047,7 @@ impl SetConstPy {
     /// Returns a set where all elements in an input set are removed.
     ///
     /// This method is the same as `-` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -1073,7 +1073,7 @@ impl SetConstPy {
     /// Returns the intersection with another set.
     ///
     /// This method is the same as `&` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -1094,7 +1094,7 @@ impl SetConstPy {
     /// Returns a set which only contains elements included in either of two sets but not in both.
     ///
     /// This method is the same as `^` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -1115,7 +1115,7 @@ impl SetConstPy {
     /// Returns the union of two sets.
     ///
     /// This method is the same as `\|` operation.
-    /// This method does not chanege the instance itself.
+    /// This method does not change the instance itself.
     ///
     /// Parameters
     /// ----------
@@ -1447,7 +1447,7 @@ impl IntExprPy {
 /// For division (`/`) and power (`**`), a `FloatExpr` is returned.
 /// If an arithmetic operator with an `FloatExpr`, `FloatVar`, `FloatResourceVar`, or `float` is applied, a `FloatExpr` is returned.
 #[pyclass(name = "IntVar")]
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct IntVarPy(IntegerVariable);
 
 impl From<IntVarPy> for IntegerVariable {
@@ -1632,7 +1632,7 @@ impl IntVarPy {
 /// For division (`/`) and power (`**`), a `FloatExpr` is returned.
 /// If an arithmetic operator with an `FloatExpr`, `FloatVar`, `FloatResourceVar`, or `float` is applied, a `FloatExpr` is returned.
 #[pyclass(name = "IntResourceVar")]
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct IntResourceVarPy(IntegerResourceVariable);
 
 impl From<IntResourceVarPy> for IntegerResourceVariable {
@@ -2003,7 +2003,7 @@ impl FloatExprPy {
 /// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`, `**`) with an `IntExpr`, `IntVar`, `IntResourceVar`, `FloatExpr`, `FloatVar`, `FloatResourceVar`, `int`, or `float` is applied, a new `FloatExpr` is returned.
 /// `round`, `trunc`, `floor`, and `ceil` return an `IntExpr`.
 #[pyclass(name = "FloatVar")]
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FloatVarPy(ContinuousVariable);
 
 impl From<FloatVarPy> for ContinuousVariable {
@@ -2139,7 +2139,7 @@ impl FloatVarPy {
 /// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`, `**`) with an `IntExpr`, `IntVar`, `IntResourceVar`, `FloatExpr`, `FloatVar`, `FloatResourceVar`, `int`, or `float` is applied, a new `FloatExpr` is returned.
 /// `round`, `trunc`, `floor`, and `ceil` return an `IntExpr`.
 #[pyclass(name = "FloatResourceVar")]
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FloatResourceVarPy(ContinuousResourceVariable);
 
 impl From<FloatResourceVarPy> for ContinuousResourceVariable {

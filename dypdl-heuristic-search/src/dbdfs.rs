@@ -100,7 +100,7 @@ where
             continue;
         }
 
-        if model.is_goal(node.state()) {
+        if model.is_base(node.state()) {
             if !quiet {
                 println!("New primal bound: {}, expanded: {}", node.cost(), expanded);
             }

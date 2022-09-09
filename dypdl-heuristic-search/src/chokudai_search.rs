@@ -96,7 +96,7 @@ where
                 no_node = false;
             }
 
-            if model.is_goal(node.state()) {
+            if model.is_base(node.state()) {
                 if !goal_found {
                     goal_found = true;
                 }

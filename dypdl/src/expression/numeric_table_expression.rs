@@ -1,12 +1,16 @@
 use super::element_expression::ElementExpression;
+use super::numeric_operator::ReduceOperator;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::util;
 use super::vector_expression::VectorExpression;
 use crate::state::{DPState, ElementResourceVariable, ElementVariable, SetVariable};
+use crate::table::{Table1D, Table2D};
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Element, Numeric, Set};
+use num_traits::Num;
+use std::iter::{Product, Sum};
 
 /// An enum used to take the sum of constants in a table.
 #[derive(Debug, PartialEq, Clone)]
@@ -71,8 +75,8 @@ pub enum NumericTableExpression<T: Numeric> {
     Constant(T),
     /// Constant in a table.
     Table(usize, Vec<ElementExpression>),
-    /// The sum of constants over sets and vectors in a table.
-    TableSum(usize, Vec<ArgumentExpression>),
+    /// Reduce constants over sets and vectors in a table.
+    TableReduce(ReduceOperator, usize, Vec<ArgumentExpression>),
     /// Constant in a 1D table.
     Table1D(usize, ElementExpression),
     /// Constant in a 2D table.
@@ -84,28 +88,29 @@ pub enum NumericTableExpression<T: Numeric> {
         ElementExpression,
         ElementExpression,
     ),
-    /// The sum of constants over a set in a 1D table.
-    Table1DSum(usize, SetExpression),
-    /// The sum of constants over a vector in a 1D table.
-    Table1DVectorSum(usize, VectorExpression),
-    /// The sum of constants over two sets in a 2D table.
-    Table2DSum(usize, SetExpression, SetExpression),
-    /// The sum of constants over two vectors in a 2D table.
-    Table2DVectorSum(usize, VectorExpression, VectorExpression),
-    /// The sum of constants over a set and a vector in a 2D table.
-    Table2DSetVectorSum(usize, SetExpression, VectorExpression),
-    /// The sum of constants over a vector and a set in a 2D table.
-    Table2DVectorSetSum(usize, VectorExpression, SetExpression),
-    /// The sum of constants over a set in a 2D table.
-    Table2DSumX(usize, SetExpression, ElementExpression),
-    /// The sum of constants over a set in a 2D table.
-    Table2DSumY(usize, ElementExpression, SetExpression),
-    /// The sum of constants over a vector in a 2D table.
-    Table2DVectorSumX(usize, VectorExpression, ElementExpression),
-    /// The sum of constants over a vector in a 2D table.
-    Table2DVectorSumY(usize, ElementExpression, VectorExpression),
-    /// The sum of constants over sets and vectors in a 3D table.
-    Table3DSum(
+    /// Reduce constants over a set in a 1D table.
+    Table1DReduce(ReduceOperator, usize, SetExpression),
+    /// Reduce constants over a vector in a 1D table.
+    Table1DVectorReduce(ReduceOperator, usize, VectorExpression),
+    /// Reduce constants over two sets in a 2D table.
+    Table2DReduce(ReduceOperator, usize, SetExpression, SetExpression),
+    /// Reduce constants over two vectors in a 2D table.
+    Table2DVectorReduce(ReduceOperator, usize, VectorExpression, VectorExpression),
+    /// Reduce constants over a set and a vector in a 2D table.
+    Table2DSetVectorReduce(ReduceOperator, usize, SetExpression, VectorExpression),
+    /// Reduce constants over a vector and a set in a 2D table.
+    Table2DVectorSetReduce(ReduceOperator, usize, VectorExpression, SetExpression),
+    /// Reduce constants over a set in a 2D table.
+    Table2DReduceX(ReduceOperator, usize, SetExpression, ElementExpression),
+    /// Reduce constants over a set in a 2D table.
+    Table2DReduceY(ReduceOperator, usize, ElementExpression, SetExpression),
+    /// Reduce constants over a vector in a 2D table.
+    Table2DVectorReduceX(ReduceOperator, usize, VectorExpression, ElementExpression),
+    /// Reduce constants over a vector in a 2D table.
+    Table2DVectorReduceY(ReduceOperator, usize, ElementExpression, VectorExpression),
+    /// Reduce constants over sets and vectors in a 3D table.
+    Table3DReduce(
+        ReduceOperator,
         usize,
         ArgumentExpression,
         ArgumentExpression,
@@ -118,7 +123,7 @@ impl<T: Numeric> NumericTableExpression<T> {
     ///
     /// # Panics
     ///
-    /// if the cost of the transitioned state is used.
+    /// if the cost of the transitioned state is used or an empty set or vector is passed to a reduce operation or a min/max reduce operation is performed on an empty set or vector.
     pub fn eval<U: DPState>(
         &self,
         state: &U,
@@ -135,11 +140,10 @@ impl<T: Numeric> NumericTableExpression<T> {
                 let args: Vec<Element> = args.iter().map(|x| x.eval(state, registry)).collect();
                 tables.tables[*i].eval(&args)
             }
-            Self::TableSum(i, args) => {
+            Self::TableReduce(op, i, args) => {
                 let args = Self::eval_args(args.iter(), state, registry);
-                args.into_iter()
-                    .map(|args| tables.tables[*i].eval(&args))
-                    .sum()
+                op.eval_iter(args.into_iter().map(|args| tables.tables[*i].eval(&args)))
+                    .unwrap()
             }
             Self::Table1D(i, x) => tables.tables_1d[*i].eval(x.eval(state, registry)),
             Self::Table2D(i, x, y) => {
@@ -150,176 +154,232 @@ impl<T: Numeric> NumericTableExpression<T> {
                 y.eval(state, registry),
                 z.eval(state, registry),
             ),
-            Self::Table1DSum(i, SetExpression::Reference(x)) => {
-                tables.tables_1d[*i].sum(x.eval(state, registry, &set_f, set_tables).ones())
-            }
-            Self::Table1DSum(i, x) => tables.tables_1d[*i].sum(x.eval(state, registry).ones()),
-            Self::Table1DVectorSum(i, VectorExpression::Reference(x)) => tables.tables_1d[*i].sum(
-                x.eval(state, registry, &vector_f, vector_tables)
-                    .iter()
-                    .copied(),
+            Self::Table1DReduce(op, i, SetExpression::Reference(x)) => Self::reduce_table_1d(
+                op,
+                &tables.tables_1d[*i],
+                x.eval(state, registry, &set_f, set_tables).ones(),
             ),
-            Self::Table1DVectorSum(i, x) => {
-                tables.tables_1d[*i].sum(x.eval(state, registry).into_iter())
+            Self::Table1DReduce(op, i, x) => {
+                Self::reduce_table_1d(op, &tables.tables_1d[*i], x.eval(state, registry).ones())
             }
-            Self::Table2DSum(i, SetExpression::Reference(x), SetExpression::Reference(y)) => {
-                let y = y.eval(state, registry, &set_f, set_tables);
-                x.eval(state, registry, &set_f, set_tables)
-                    .ones()
-                    .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
-                    .sum()
-            }
-            Self::Table2DSum(i, SetExpression::Reference(x), y) => {
-                let y = y.eval(state, registry);
-                x.eval(state, registry, &set_f, set_tables)
-                    .ones()
-                    .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
-                    .sum()
-            }
-            Self::Table2DSum(i, x, SetExpression::Reference(y)) => {
-                let y = y.eval(state, registry, &set_f, set_tables);
-                x.eval(state, registry)
-                    .ones()
-                    .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
-                    .sum()
-            }
-            Self::Table2DSum(i, x, y) => {
-                let y = y.eval(state, registry);
-                x.eval(state, registry)
-                    .ones()
-                    .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
-                    .sum()
-            }
-            Self::Table2DVectorSum(
-                i,
-                VectorExpression::Reference(x),
-                VectorExpression::Reference(y),
-            ) => tables.tables_2d[*i].sum(
-                x.eval(state, registry, &vector_f, vector_tables)
-                    .iter()
-                    .copied(),
-                y.eval(state, registry, &vector_f, vector_tables)
-                    .iter()
-                    .copied(),
-            ),
-            Self::Table2DVectorSum(i, VectorExpression::Reference(x), y) => tables.tables_2d[*i]
-                .sum(
+            Self::Table1DVectorReduce(op, i, VectorExpression::Reference(x)) => {
+                Self::reduce_table_1d(
+                    op,
+                    &tables.tables_1d[*i],
                     x.eval(state, registry, &vector_f, vector_tables)
                         .iter()
                         .copied(),
-                    y.eval(state, registry).into_iter(),
-                ),
-            Self::Table2DVectorSum(i, x, VectorExpression::Reference(y)) => tables.tables_2d[*i]
-                .sum(
-                    x.eval(state, registry).into_iter(),
-                    y.eval(state, registry, &vector_f, vector_tables)
-                        .iter()
-                        .copied(),
-                ),
-            Self::Table2DVectorSum(i, x, y) => tables.tables_2d[*i].sum(
+                )
+            }
+            Self::Table1DVectorReduce(op, i, x) => Self::reduce_table_1d(
+                op,
+                &tables.tables_1d[*i],
                 x.eval(state, registry).into_iter(),
-                y.eval(state, registry).into_iter(),
             ),
-            Self::Table2DSetVectorSum(
+            Self::Table2DReduce(
+                op,
+                i,
+                SetExpression::Reference(x),
+                SetExpression::Reference(y),
+            ) => {
+                let x = x.eval(state, registry, &set_f, set_tables).ones();
+                let y = y.eval(state, registry, &set_f, set_tables);
+                Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, y)
+            }
+            Self::Table2DReduce(op, i, SetExpression::Reference(x), y) => {
+                let x = x.eval(state, registry, &set_f, set_tables).ones();
+                let y = y.eval(state, registry);
+                Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, &y)
+            }
+            Self::Table2DReduce(op, i, x, SetExpression::Reference(y)) => {
+                let y = y.eval(state, registry, &set_f, set_tables);
+                Self::reduce_table_2d_set_y(
+                    op,
+                    &tables.tables_2d[*i],
+                    x.eval(state, registry).ones(),
+                    y,
+                )
+            }
+            Self::Table2DReduce(op, i, x, y) => {
+                let y = y.eval(state, registry);
+                Self::reduce_table_2d_set_y(
+                    op,
+                    &tables.tables_2d[*i],
+                    x.eval(state, registry).ones(),
+                    &y,
+                )
+            }
+            Self::Table2DVectorReduce(
+                op,
+                i,
+                VectorExpression::Reference(x),
+                VectorExpression::Reference(y),
+            ) => {
+                let x = x
+                    .eval(state, registry, &vector_f, vector_tables)
+                    .iter()
+                    .copied();
+                let y = y
+                    .eval(state, registry, &vector_f, vector_tables)
+                    .iter()
+                    .copied();
+                Self::reduce_table_2d(op, &tables.tables_2d[*i], x, y)
+            }
+            Self::Table2DVectorReduce(op, i, VectorExpression::Reference(x), y) => {
+                let x = x
+                    .eval(state, registry, &vector_f, vector_tables)
+                    .iter()
+                    .copied();
+                let y = y.eval(state, registry).into_iter();
+                Self::reduce_table_2d(op, &tables.tables_2d[*i], x, y)
+            }
+            Self::Table2DVectorReduce(op, i, x, VectorExpression::Reference(y)) => {
+                let x = x.eval(state, registry).into_iter();
+                let y = y
+                    .eval(state, registry, &vector_f, vector_tables)
+                    .iter()
+                    .copied();
+                Self::reduce_table_2d(op, &tables.tables_2d[*i], x, y)
+            }
+            Self::Table2DVectorReduce(op, i, x, y) => {
+                let x = x.eval(state, registry).into_iter();
+                let y = y.eval(state, registry).into_iter();
+                Self::reduce_table_2d(op, &tables.tables_2d[*i], x, y)
+            }
+            Self::Table2DSetVectorReduce(
+                op,
                 i,
                 SetExpression::Reference(x),
                 VectorExpression::Reference(y),
-            ) => tables.tables_2d[*i].sum(
-                x.eval(state, registry, &set_f, set_tables).ones(),
-                y.eval(state, registry, &vector_f, vector_tables)
+            ) => {
+                let x = x.eval(state, registry, &set_f, set_tables).ones();
+                let y = y
+                    .eval(state, registry, &vector_f, vector_tables)
                     .iter()
-                    .copied(),
-            ),
-            Self::Table2DSetVectorSum(i, SetExpression::Reference(x), y) => tables.tables_2d[*i]
-                .sum(
+                    .copied();
+                Self::reduce_table_2d(op, &tables.tables_2d[*i], x, y)
+            }
+            Self::Table2DSetVectorReduce(op, i, SetExpression::Reference(x), y) => {
+                let y = y.eval(state, registry).into_iter();
+                Self::reduce_table_2d(
+                    op,
+                    &tables.tables_2d[*i],
                     x.eval(state, registry, &set_f, set_tables).ones(),
-                    y.eval(state, registry).into_iter(),
-                ),
-            Self::Table2DSetVectorSum(i, x, VectorExpression::Reference(y)) => tables.tables_2d[*i]
-                .sum(
-                    x.eval(state, registry).ones(),
-                    y.eval(state, registry, &vector_f, vector_tables)
-                        .iter()
-                        .copied(),
-                ),
-            Self::Table2DSetVectorSum(i, x, y) => tables.tables_2d[*i].sum(
-                x.eval(state, registry).ones(),
-                y.eval(state, registry).into_iter(),
-            ),
-            Self::Table2DVectorSetSum(
+                    y,
+                )
+            }
+            Self::Table2DSetVectorReduce(op, i, x, VectorExpression::Reference(y)) => {
+                let y = y
+                    .eval(state, registry, &vector_f, vector_tables)
+                    .iter()
+                    .copied();
+                Self::reduce_table_2d(op, &tables.tables_2d[*i], x.eval(state, registry).ones(), y)
+            }
+            Self::Table2DSetVectorReduce(op, i, x, y) => {
+                let y = y.eval(state, registry).into_iter();
+                Self::reduce_table_2d(op, &tables.tables_2d[*i], x.eval(state, registry).ones(), y)
+            }
+            Self::Table2DVectorSetReduce(
+                op,
                 i,
                 VectorExpression::Reference(x),
                 SetExpression::Reference(y),
             ) => {
-                let x = x.eval(state, registry, &vector_f, vector_tables);
-                y.eval(state, registry, &set_f, set_tables)
-                    .ones()
-                    .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
-                    .sum()
+                let x = x
+                    .eval(state, registry, &vector_f, vector_tables)
+                    .iter()
+                    .copied();
+                let y = y.eval(state, registry, &set_f, set_tables);
+                Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, y)
             }
-            Self::Table2DVectorSetSum(i, x, SetExpression::Reference(y)) => {
+            Self::Table2DVectorSetReduce(op, i, x, SetExpression::Reference(y)) => {
+                let x = x.eval(state, registry).into_iter();
+                let y = y.eval(state, registry, &set_f, set_tables);
+                Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, y)
+            }
+            Self::Table2DVectorSetReduce(op, i, VectorExpression::Reference(x), y) => {
+                let x = x
+                    .eval(state, registry, &vector_f, vector_tables)
+                    .iter()
+                    .copied();
+                let y = y.eval(state, registry);
+                Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, &y)
+            }
+            Self::Table2DVectorSetReduce(op, i, x, y) => {
+                let x = x.eval(state, registry).into_iter();
+                let y = y.eval(state, registry);
+                Self::reduce_table_2d_set_y(op, &tables.tables_2d[*i], x, &y)
+            }
+            Self::Table2DReduceX(op, i, SetExpression::Reference(x), y) => {
+                let x = x.eval(state, registry, &set_f, set_tables).ones();
+                let y = y.eval(state, registry);
+                Self::reduce_table_2d_x(op, &tables.tables_2d[*i], x, y)
+            }
+            Self::Table2DReduceX(op, i, x, y) => {
+                let y = y.eval(state, registry);
+                Self::reduce_table_2d_x(
+                    op,
+                    &tables.tables_2d[*i],
+                    x.eval(state, registry).ones(),
+                    y,
+                )
+            }
+            Self::Table2DReduceY(op, i, x, SetExpression::Reference(y)) => {
                 let x = x.eval(state, registry);
-                y.eval(state, registry, &set_f, set_tables)
-                    .ones()
-                    .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
-                    .sum()
+                let y = y.eval(state, registry, &set_f, set_tables).ones();
+                Self::reduce_table_2d_y(op, &tables.tables_2d[*i], x, y)
             }
-            Self::Table2DVectorSetSum(i, VectorExpression::Reference(x), y) => {
-                let x = x.eval(state, registry, &vector_f, vector_tables);
-                y.eval(state, registry)
-                    .ones()
-                    .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
-                    .sum()
-            }
-            Self::Table2DVectorSetSum(i, x, y) => {
+            Self::Table2DReduceY(op, i, x, y) => {
                 let x = x.eval(state, registry);
-                y.eval(state, registry)
-                    .ones()
-                    .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
-                    .sum()
+                Self::reduce_table_2d_y(
+                    op,
+                    &tables.tables_2d[*i],
+                    x,
+                    y.eval(state, registry).ones(),
+                )
             }
-            Self::Table2DSumX(i, SetExpression::Reference(x), y) => tables.tables_2d[*i].sum_x(
-                x.eval(state, registry, &set_f, set_tables).ones(),
-                y.eval(state, registry),
-            ),
-            Self::Table2DSumX(i, x, y) => {
-                tables.tables_2d[*i].sum_x(x.eval(state, registry).ones(), y.eval(state, registry))
+            Self::Table2DVectorReduceX(op, i, VectorExpression::Reference(x), y) => {
+                let x = x
+                    .eval(state, registry, &vector_f, vector_tables)
+                    .iter()
+                    .copied();
+                let y = y.eval(state, registry);
+                Self::reduce_table_2d_x(op, &tables.tables_2d[*i], x, y)
             }
-            Self::Table2DSumY(i, x, SetExpression::Reference(y)) => tables.tables_2d[*i].sum_y(
-                x.eval(state, registry),
-                y.eval(state, registry, &set_f, set_tables).ones(),
-            ),
-            Self::Table2DSumY(i, x, y) => {
-                tables.tables_2d[*i].sum_y(x.eval(state, registry), y.eval(state, registry).ones())
+            Self::Table2DVectorReduceX(op, i, x, y) => {
+                let x = x.eval(state, registry).into_iter();
+                let y = y.eval(state, registry);
+                Self::reduce_table_2d_x(op, &tables.tables_2d[*i], x, y)
             }
-            Self::Table2DVectorSumX(i, VectorExpression::Reference(x), y) => tables.tables_2d[*i]
-                .sum_x(
-                    x.eval(state, registry, &vector_f, vector_tables)
-                        .iter()
-                        .copied(),
-                    y.eval(state, registry),
-                ),
-            Self::Table2DVectorSumX(i, x, y) => tables.tables_2d[*i]
-                .sum_x(x.eval(state, registry).into_iter(), y.eval(state, registry)),
-            Self::Table2DVectorSumY(i, x, VectorExpression::Reference(y)) => tables.tables_2d[*i]
-                .sum_y(
-                    x.eval(state, registry),
-                    y.eval(state, registry, &vector_f, vector_tables)
-                        .iter()
-                        .copied(),
-                ),
-            Self::Table2DVectorSumY(i, x, y) => tables.tables_2d[*i]
-                .sum_y(x.eval(state, registry), y.eval(state, registry).into_iter()),
-            Self::Table3DSum(i, x, y, z) => {
+            Self::Table2DVectorReduceY(op, i, x, VectorExpression::Reference(y)) => {
+                let x = x.eval(state, registry);
+                let y = y
+                    .eval(state, registry, &vector_f, vector_tables)
+                    .iter()
+                    .copied();
+                Self::reduce_table_2d_y(op, &tables.tables_2d[*i], x, y)
+            }
+            Self::Table2DVectorReduceY(op, i, x, y) => {
+                let x = x.eval(state, registry);
+                let y = y.eval(state, registry).into_iter();
+                Self::reduce_table_2d_y(op, &tables.tables_2d[*i], x, y)
+            }
+            Self::Table3DReduce(op, i, x, y, z) => {
                 let args = Self::eval_args([x, y, z].into_iter(), state, registry);
-                args.into_iter()
-                    .map(|args| tables.tables_3d[*i].eval(args[0], args[1], args[2]))
-                    .sum()
+                op.eval_iter(
+                    args.into_iter()
+                        .map(|args| tables.tables_3d[*i].eval(args[0], args[1], args[2])),
+                )
+                .unwrap()
             }
         }
     }
 
     /// Returns a simplified version by precomputation.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(
         &self,
         registry: &TableRegistry,
@@ -340,17 +400,16 @@ impl<T: Numeric> NumericTableExpression<T> {
                 }
                 Self::Constant(tables.tables[*i].eval(&simplified_args))
             }
-            Self::TableSum(i, args) => {
+            Self::TableReduce(op, i, args) => {
                 let args: Vec<ArgumentExpression> =
                     args.iter().map(|x| x.simplify(registry)).collect();
                 if let Some(args) = Self::simplify_args(args.iter()) {
                     Self::Constant(
-                        args.into_iter()
-                            .map(|args| tables.tables[*i].eval(&args))
-                            .sum(),
+                        op.eval_iter(args.into_iter().map(|args| tables.tables[*i].eval(&args)))
+                            .unwrap(),
                     )
                 } else {
-                    Self::TableSum(*i, args)
+                    Self::TableReduce(op.clone(), *i, args)
                 }
             }
             Self::Table1D(i, x) => match x.simplify(registry) {
@@ -375,102 +434,142 @@ impl<T: Numeric> NumericTableExpression<T> {
                 ) => Self::Constant(tables.tables_3d[*i].eval(x, y, z)),
                 (x, y, z) => Self::Table3D(*i, x, y, z),
             },
-            Self::Table1DSum(i, x) => match x.simplify(registry) {
+            Self::Table1DReduce(op, i, x) => match x.simplify(registry) {
                 SetExpression::Reference(ReferenceExpression::Constant(x)) => {
-                    Self::Constant(tables.tables_1d[*i].sum(x.ones()))
+                    Self::Constant(Self::reduce_table_1d(op, &tables.tables_1d[*i], x.ones()))
                 }
-                x => Self::Table1DSum(*i, x),
+                x => Self::Table1DReduce(op.clone(), *i, x),
             },
-            Self::Table1DVectorSum(i, x) => match x.simplify(registry) {
-                VectorExpression::Reference(ReferenceExpression::Constant(x)) => {
-                    Self::Constant(tables.tables_1d[*i].sum(x.into_iter()))
-                }
-                x => Self::Table1DVectorSum(*i, x),
-            },
-            Self::Table2DSum(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
-                (
-                    SetExpression::Reference(ReferenceExpression::Constant(x)),
-                    SetExpression::Reference(ReferenceExpression::Constant(y)),
-                ) => Self::Constant(
-                    x.ones()
-                        .map(|x| tables.tables_2d[*i].sum_y(x, y.ones()))
-                        .sum(),
+            Self::Table1DVectorReduce(op, i, x) => match x.simplify(registry) {
+                VectorExpression::Reference(ReferenceExpression::Constant(x)) => Self::Constant(
+                    Self::reduce_table_1d(op, &tables.tables_1d[*i], x.into_iter()),
                 ),
-                (x, y) => Self::Table2DSum(*i, x, y),
+                x => Self::Table1DVectorReduce(op.clone(), *i, x),
             },
-            Self::Table2DVectorSum(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
-                (
-                    VectorExpression::Reference(ReferenceExpression::Constant(x)),
-                    VectorExpression::Reference(ReferenceExpression::Constant(y)),
-                ) => Self::Constant(tables.tables_2d[*i].sum(x.into_iter(), y.into_iter())),
-                (x, y) => Self::Table2DVectorSum(*i, x, y),
-            },
-            Self::Table2DSetVectorSum(i, x, y) => {
+            Self::Table2DReduce(op, i, x, y) => {
+                match (x.simplify(registry), y.simplify(registry)) {
+                    (
+                        SetExpression::Reference(ReferenceExpression::Constant(x)),
+                        SetExpression::Reference(ReferenceExpression::Constant(y)),
+                    ) => Self::Constant(Self::reduce_table_2d_set_y(
+                        op,
+                        &tables.tables_2d[*i],
+                        x.ones(),
+                        &y,
+                    )),
+                    (x, y) => Self::Table2DReduce(op.clone(), *i, x, y),
+                }
+            }
+            Self::Table2DVectorReduce(op, i, x, y) => {
+                match (x.simplify(registry), y.simplify(registry)) {
+                    (
+                        VectorExpression::Reference(ReferenceExpression::Constant(x)),
+                        VectorExpression::Reference(ReferenceExpression::Constant(y)),
+                    ) => Self::Constant(Self::reduce_table_2d(
+                        op,
+                        &tables.tables_2d[*i],
+                        x.into_iter(),
+                        y.into_iter(),
+                    )),
+                    (x, y) => Self::Table2DVectorReduce(op.clone(), *i, x, y),
+                }
+            }
+            Self::Table2DSetVectorReduce(op, i, x, y) => {
                 match (x.simplify(registry), y.simplify(registry)) {
                     (
                         SetExpression::Reference(ReferenceExpression::Constant(x)),
                         VectorExpression::Reference(ReferenceExpression::Constant(y)),
-                    ) => Self::Constant(tables.tables_2d[*i].sum(x.ones(), y.into_iter())),
-                    (x, y) => Self::Table2DSetVectorSum(*i, x, y),
+                    ) => Self::Constant(Self::reduce_table_2d(
+                        op,
+                        &tables.tables_2d[*i],
+                        x.ones(),
+                        y.into_iter(),
+                    )),
+                    (x, y) => Self::Table2DSetVectorReduce(op.clone(), *i, x, y),
                 }
             }
-            Self::Table2DVectorSetSum(i, x, y) => {
+            Self::Table2DVectorSetReduce(op, i, x, y) => {
                 match (x.simplify(registry), y.simplify(registry)) {
                     (
                         VectorExpression::Reference(ReferenceExpression::Constant(x)),
                         SetExpression::Reference(ReferenceExpression::Constant(y)),
-                    ) => Self::Constant(
-                        y.ones()
-                            .map(|y| tables.tables_2d[*i].sum_x(x.iter().copied(), y))
-                            .sum(),
-                    ),
-                    (x, y) => Self::Table2DVectorSetSum(*i, x, y),
+                    ) => Self::Constant(Self::reduce_table_2d_set_y(
+                        op,
+                        &tables.tables_2d[*i],
+                        x.into_iter(),
+                        &y,
+                    )),
+                    (x, y) => Self::Table2DVectorSetReduce(op.clone(), *i, x, y),
                 }
             }
-            Self::Table2DSumX(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+            Self::Table2DReduceX(op, i, x, y) => match (x.simplify(registry), y.simplify(registry))
+            {
                 (
                     SetExpression::Reference(ReferenceExpression::Constant(x)),
                     ElementExpression::Constant(y),
-                ) => Self::Constant(tables.tables_2d[*i].sum_x(x.ones(), y)),
-                (x, y) => Self::Table2DSumX(*i, x, y),
+                ) => Self::Constant(Self::reduce_table_2d_x(
+                    op,
+                    &tables.tables_2d[*i],
+                    x.ones(),
+                    y,
+                )),
+                (x, y) => Self::Table2DReduceX(op.clone(), *i, x, y),
             },
-            Self::Table2DSumY(i, x, y) => match (x.simplify(registry), y.simplify(registry)) {
+            Self::Table2DReduceY(op, i, x, y) => match (x.simplify(registry), y.simplify(registry))
+            {
                 (
                     ElementExpression::Constant(x),
                     SetExpression::Reference(ReferenceExpression::Constant(y)),
-                ) => Self::Constant(tables.tables_2d[*i].sum_y(x, y.ones())),
-                (x, y) => Self::Table2DSumY(*i, x, y),
+                ) => Self::Constant(Self::reduce_table_2d_y(
+                    op,
+                    &tables.tables_2d[*i],
+                    x,
+                    y.ones(),
+                )),
+                (x, y) => Self::Table2DReduceY(op.clone(), *i, x, y),
             },
-            Self::Table2DVectorSumX(i, x, y) => {
+            Self::Table2DVectorReduceX(op, i, x, y) => {
                 match (x.simplify(registry), y.simplify(registry)) {
                     (
                         VectorExpression::Reference(ReferenceExpression::Constant(x)),
                         ElementExpression::Constant(y),
-                    ) => Self::Constant(tables.tables_2d[*i].sum_x(x.into_iter(), y)),
-                    (x, y) => Self::Table2DVectorSumX(*i, x, y),
+                    ) => Self::Constant(Self::reduce_table_2d_x(
+                        op,
+                        &tables.tables_2d[*i],
+                        x.into_iter(),
+                        y,
+                    )),
+                    (x, y) => Self::Table2DVectorReduceX(op.clone(), *i, x, y),
                 }
             }
-            Self::Table2DVectorSumY(i, x, y) => {
+            Self::Table2DVectorReduceY(op, i, x, y) => {
                 match (x.simplify(registry), y.simplify(registry)) {
                     (
                         ElementExpression::Constant(x),
                         VectorExpression::Reference(ReferenceExpression::Constant(y)),
-                    ) => Self::Constant(tables.tables_2d[*i].sum_y(x, y.into_iter())),
-                    (x, y) => Self::Table2DVectorSumY(*i, x, y),
+                    ) => Self::Constant(Self::reduce_table_2d_y(
+                        op,
+                        &tables.tables_2d[*i],
+                        x,
+                        y.into_iter(),
+                    )),
+                    (x, y) => Self::Table2DVectorReduceY(op.clone(), *i, x, y),
                 }
             }
-            Self::Table3DSum(i, x, y, z) => {
+            Self::Table3DReduce(op, i, x, y, z) => {
                 let x = x.simplify(registry);
                 let y = y.simplify(registry);
                 let z = z.simplify(registry);
                 if let Some(args) = Self::simplify_args([&x, &y, &z].into_iter()) {
                     Self::Constant(
-                        args.into_iter()
-                            .map(|args| tables.tables_3d[*i].eval(args[0], args[1], args[2]))
-                            .sum(),
+                        op.eval_iter(
+                            args.into_iter()
+                                .map(|args| tables.tables_3d[*i].eval(args[0], args[1], args[2])),
+                        )
+                        .unwrap(),
                     )
                 } else {
-                    Self::Table3DSum(*i, x, y, z)
+                    Self::Table3DReduce(op.clone(), *i, x, y, z)
                 }
             }
             _ => self.clone(),
@@ -515,6 +614,49 @@ impl<T: Numeric> NumericTableExpression<T> {
             }
         }
         result
+    }
+
+    fn reduce_table_1d<I>(op: &ReduceOperator, table: &Table1D<T>, x: I) -> T
+    where
+        T: Num + PartialOrd + Sum + Product,
+        I: Iterator<Item = Element>,
+    {
+        op.eval_iter(x.map(|x| table.eval(x))).unwrap()
+    }
+
+    fn reduce_table_2d<I, J>(op: &ReduceOperator, table: &Table2D<T>, x: I, y: J) -> T
+    where
+        T: Num + PartialOrd + Sum + Product,
+        I: Iterator<Item = Element>,
+        J: Iterator<Item = Element> + Clone,
+    {
+        op.eval_iter(x.map(|x| op.eval_iter(y.clone().map(|y| table.eval(x, y))).unwrap()))
+            .unwrap()
+    }
+
+    fn reduce_table_2d_set_y<I>(op: &ReduceOperator, table: &Table2D<T>, x: I, y: &Set) -> T
+    where
+        T: Num + PartialOrd + Sum + Product,
+        I: Iterator<Item = Element>,
+    {
+        op.eval_iter(x.map(|x| op.eval_iter(y.ones().map(|y| table.eval(x, y))).unwrap()))
+            .unwrap()
+    }
+
+    fn reduce_table_2d_x<I>(op: &ReduceOperator, table: &Table2D<T>, x: I, y: Element) -> T
+    where
+        T: Num + PartialOrd + Sum + Product,
+        I: Iterator<Item = Element>,
+    {
+        op.eval_iter(x.map(|x| table.eval(x, y))).unwrap()
+    }
+
+    fn reduce_table_2d_y<I>(op: &ReduceOperator, table: &Table2D<T>, x: Element, y: I) -> T
+    where
+        T: Num + PartialOrd + Sum + Product,
+        I: Iterator<Item = Element>,
+    {
+        op.eval_iter(y.map(|y| table.eval(x, y))).unwrap()
     }
 
     fn simplify_args<'a, I>(args: I) -> Option<Vec<Vec<Element>>>
@@ -722,7 +864,8 @@ mod tests {
     fn table_1d_sum_eval() {
         let registry = generate_registry();
         let state = generate_state();
-        let expression = NumericTableExpression::Table1DSum(
+        let expression = NumericTableExpression::Table1DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
@@ -730,7 +873,8 @@ mod tests {
             expression.eval(&state, &registry, &registry.integer_tables),
             40
         );
-        let expression = NumericTableExpression::Table1DSum(
+        let expression = NumericTableExpression::Table1DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(1)),
         );
@@ -738,7 +882,8 @@ mod tests {
             expression.eval(&state, &registry, &registry.integer_tables),
             30
         );
-        let expression = NumericTableExpression::Table1DSum(
+        let expression = NumericTableExpression::Table1DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Complement(Box::new(SetExpression::Reference(
                 ReferenceExpression::Variable(0),
@@ -754,7 +899,8 @@ mod tests {
     fn table_1d_vector_sum_eval() {
         let registry = generate_registry();
         let state = generate_state();
-        let expression = NumericTableExpression::Table1DVectorSum(
+        let expression = NumericTableExpression::Table1DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
         );
@@ -762,7 +908,8 @@ mod tests {
             expression.eval(&state, &registry, &registry.integer_tables),
             40
         );
-        let expression = NumericTableExpression::Table1DVectorSum(
+        let expression = NumericTableExpression::Table1DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
                 ReferenceExpression::Variable(0),
@@ -794,7 +941,8 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
 
-        let expression = NumericTableExpression::Table2DSum(
+        let expression = NumericTableExpression::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Variable(1)),
@@ -804,7 +952,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DSum(
+        let expression = NumericTableExpression::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
@@ -816,7 +965,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DSum(
+        let expression = NumericTableExpression::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -828,7 +978,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DSum(
+        let expression = NumericTableExpression::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -848,7 +999,8 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
 
-        let expression = NumericTableExpression::Table2DVectorSum(
+        let expression = NumericTableExpression::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reference(ReferenceExpression::Variable(1)),
@@ -858,7 +1010,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DVectorSum(
+        let expression = NumericTableExpression::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
@@ -870,7 +1023,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DVectorSum(
+        let expression = NumericTableExpression::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
                 ReferenceExpression::Variable(0),
@@ -882,7 +1036,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DVectorSum(
+        let expression = NumericTableExpression::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
                 ReferenceExpression::Variable(0),
@@ -902,7 +1057,8 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
 
-        let expression = NumericTableExpression::Table2DSetVectorSum(
+        let expression = NumericTableExpression::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reference(ReferenceExpression::Variable(1)),
@@ -912,7 +1068,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DSetVectorSum(
+        let expression = NumericTableExpression::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
@@ -924,7 +1081,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DSetVectorSum(
+        let expression = NumericTableExpression::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -936,7 +1094,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DSetVectorSum(
+        let expression = NumericTableExpression::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -956,7 +1115,8 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
 
-        let expression = NumericTableExpression::Table2DVectorSetSum(
+        let expression = NumericTableExpression::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Variable(1)),
@@ -966,7 +1126,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DVectorSetSum(
+        let expression = NumericTableExpression::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
                 ReferenceExpression::Variable(0),
@@ -978,7 +1139,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DVectorSetSum(
+        let expression = NumericTableExpression::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
@@ -990,7 +1152,8 @@ mod tests {
             180
         );
 
-        let expression = NumericTableExpression::Table2DVectorSetSum(
+        let expression = NumericTableExpression::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
                 ReferenceExpression::Variable(0),
@@ -1010,7 +1173,8 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
 
-        let expression = NumericTableExpression::Table2DSumX(
+        let expression = NumericTableExpression::Table2DReduceX(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             ElementExpression::Constant(0),
@@ -1020,7 +1184,8 @@ mod tests {
             80
         );
 
-        let expression = NumericTableExpression::Table2DSumX(
+        let expression = NumericTableExpression::Table2DReduceX(
+            ReduceOperator::Sum,
             0,
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -1038,7 +1203,8 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
 
-        let expression = NumericTableExpression::Table2DVectorSumX(
+        let expression = NumericTableExpression::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             ElementExpression::Constant(0),
@@ -1048,7 +1214,8 @@ mod tests {
             80
         );
 
-        let expression = NumericTableExpression::Table2DVectorSumX(
+        let expression = NumericTableExpression::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
                 ReferenceExpression::Variable(0),
@@ -1066,7 +1233,8 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
 
-        let expression = NumericTableExpression::Table2DSumY(
+        let expression = NumericTableExpression::Table2DReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -1076,7 +1244,8 @@ mod tests {
             40
         );
 
-        let expression = NumericTableExpression::Table2DSumY(
+        let expression = NumericTableExpression::Table2DReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
@@ -1094,7 +1263,8 @@ mod tests {
         let registry = generate_registry();
         let state = generate_state();
 
-        let expression = NumericTableExpression::Table2DVectorSumY(
+        let expression = NumericTableExpression::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
@@ -1104,7 +1274,8 @@ mod tests {
             40
         );
 
-        let expression = NumericTableExpression::Table2DVectorSumY(
+        let expression = NumericTableExpression::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
@@ -1137,7 +1308,8 @@ mod tests {
     fn table_3d_sum_eval() {
         let registry = generate_registry();
         let state = generate_state();
-        let expression = NumericTableExpression::Table3DSum(
+        let expression = NumericTableExpression::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
@@ -1213,7 +1385,8 @@ mod tests {
     fn table_sum_eval() {
         let registry = generate_registry();
         let state = generate_state();
-        let expression = NumericTableExpression::TableSum(
+        let expression = NumericTableExpression::TableReduce(
+            ReduceOperator::Sum,
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -1268,7 +1441,8 @@ mod tests {
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
-        let expression = NumericTableExpression::Table1DSum(
+        let expression = NumericTableExpression::Table1DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(set)),
         );
@@ -1277,7 +1451,8 @@ mod tests {
             NumericTableExpression::Constant(30)
         );
 
-        let expression = NumericTableExpression::Table1DSum(
+        let expression = NumericTableExpression::Table1DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         );
@@ -1291,7 +1466,8 @@ mod tests {
     fn table_1d_vector_sum_simplify() {
         let registry = generate_registry();
 
-        let expression = NumericTableExpression::Table1DVectorSum(
+        let expression = NumericTableExpression::Table1DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
         );
@@ -1300,7 +1476,8 @@ mod tests {
             NumericTableExpression::Constant(30)
         );
 
-        let expression = NumericTableExpression::Table1DVectorSum(
+        let expression = NumericTableExpression::Table1DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
         );
@@ -1342,7 +1519,8 @@ mod tests {
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
-        let expression = NumericTableExpression::Table2DSum(
+        let expression = NumericTableExpression::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(set.clone())),
             SetExpression::Reference(ReferenceExpression::Constant(set)),
@@ -1352,7 +1530,8 @@ mod tests {
             NumericTableExpression::Constant(120)
         );
 
-        let expression = NumericTableExpression::Table2DSum(
+        let expression = NumericTableExpression::Table2DReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             SetExpression::Reference(ReferenceExpression::Variable(1)),
@@ -1367,7 +1546,8 @@ mod tests {
     fn table_2d_vector_sum_simplify() {
         let registry = generate_registry();
 
-        let expression = NumericTableExpression::Table2DVectorSum(
+        let expression = NumericTableExpression::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -1377,7 +1557,8 @@ mod tests {
             NumericTableExpression::Constant(120)
         );
 
-        let expression = NumericTableExpression::Table2DVectorSum(
+        let expression = NumericTableExpression::Table2DVectorReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reference(ReferenceExpression::Variable(1)),
@@ -1395,7 +1576,8 @@ mod tests {
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
-        let expression = NumericTableExpression::Table2DSetVectorSum(
+        let expression = NumericTableExpression::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(set)),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -1405,7 +1587,8 @@ mod tests {
             NumericTableExpression::Constant(120)
         );
 
-        let expression = NumericTableExpression::Table2DSetVectorSum(
+        let expression = NumericTableExpression::Table2DSetVectorReduce(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             VectorExpression::Reference(ReferenceExpression::Variable(1)),
@@ -1423,7 +1606,8 @@ mod tests {
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
-        let expression = NumericTableExpression::Table2DVectorSetSum(
+        let expression = NumericTableExpression::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Constant(set)),
@@ -1433,7 +1617,8 @@ mod tests {
             NumericTableExpression::Constant(120)
         );
 
-        let expression = NumericTableExpression::Table2DVectorSetSum(
+        let expression = NumericTableExpression::Table2DVectorSetReduce(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(1)),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -1451,7 +1636,8 @@ mod tests {
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
-        let expression = NumericTableExpression::Table2DSumX(
+        let expression = NumericTableExpression::Table2DReduceX(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Constant(set)),
             ElementExpression::Constant(0),
@@ -1461,7 +1647,8 @@ mod tests {
             NumericTableExpression::Constant(50)
         );
 
-        let expression = NumericTableExpression::Table2DSumX(
+        let expression = NumericTableExpression::Table2DReduceX(
+            ReduceOperator::Sum,
             0,
             SetExpression::Reference(ReferenceExpression::Variable(0)),
             ElementExpression::Constant(0),
@@ -1479,7 +1666,8 @@ mod tests {
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
-        let expression = NumericTableExpression::Table2DSumY(
+        let expression = NumericTableExpression::Table2DReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Constant(set)),
@@ -1489,7 +1677,8 @@ mod tests {
             NumericTableExpression::Constant(30)
         );
 
-        let expression = NumericTableExpression::Table2DSumY(
+        let expression = NumericTableExpression::Table2DReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -1504,7 +1693,8 @@ mod tests {
     fn table_2d_vector_sum_x_simplify() {
         let registry = generate_registry();
 
-        let expression = NumericTableExpression::Table2DVectorSumX(
+        let expression = NumericTableExpression::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             ElementExpression::Constant(0),
@@ -1514,7 +1704,8 @@ mod tests {
             NumericTableExpression::Constant(50)
         );
 
-        let expression = NumericTableExpression::Table2DVectorSumX(
+        let expression = NumericTableExpression::Table2DVectorReduceX(
+            ReduceOperator::Sum,
             0,
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
             ElementExpression::Constant(0),
@@ -1529,7 +1720,8 @@ mod tests {
     fn table_2d_vector_sum_y_simplify() {
         let registry = generate_registry();
 
-        let expression = NumericTableExpression::Table2DVectorSumY(
+        let expression = NumericTableExpression::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -1539,7 +1731,8 @@ mod tests {
             NumericTableExpression::Constant(30)
         );
 
-        let expression = NumericTableExpression::Table2DVectorSumY(
+        let expression = NumericTableExpression::Table2DVectorReduceY(
+            ReduceOperator::Sum,
             0,
             ElementExpression::Constant(0),
             VectorExpression::Reference(ReferenceExpression::Variable(0)),
@@ -1584,7 +1777,8 @@ mod tests {
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
-        let expression = NumericTableExpression::Table3DSum(
+        let expression = NumericTableExpression::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(set))),
@@ -1597,7 +1791,8 @@ mod tests {
             NumericTableExpression::Constant(180)
         );
 
-        let expression = NumericTableExpression::Table3DSum(
+        let expression = NumericTableExpression::Table3DReduce(
+            ReduceOperator::Sum,
             0,
             ArgumentExpression::Element(ElementExpression::Constant(0)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
@@ -1651,7 +1846,8 @@ mod tests {
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
-        let expression = NumericTableExpression::TableSum(
+        let expression = NumericTableExpression::TableReduce(
+            ReduceOperator::Sum,
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -1671,7 +1867,8 @@ mod tests {
             NumericTableExpression::Constant(1000)
         );
 
-        let expression = NumericTableExpression::TableSum(
+        let expression = NumericTableExpression::TableReduce(
+            ReduceOperator::Sum,
             0,
             vec![
                 ArgumentExpression::Element(ElementExpression::Constant(0)),

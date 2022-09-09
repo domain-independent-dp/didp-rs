@@ -168,7 +168,7 @@ where
                     println!("cost = {}, expanded: {}", cost_max, expanded);
                 }
             }
-            if model.is_goal(&node.state) {
+            if model.is_base(&node.state) {
                 return solver::Solution {
                     cost: Some(node.cost),
                     is_optimal: true,

@@ -273,7 +273,7 @@ impl SetExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transitioned state is used.
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> Set {
         match self {
             Self::Reference(expression) => {
@@ -338,6 +338,10 @@ impl SetExpression {
     }
 
     /// Returns a simplified version by precomputation.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> SetExpression {
         match self {
             Self::Reference(expression) => {

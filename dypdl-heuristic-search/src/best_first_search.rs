@@ -83,7 +83,7 @@ where
                 println!("f = {}, expanded: {}", f, expanded);
             }
         }
-        if model.is_goal(node.state()) {
+        if model.is_base(node.state()) {
             return solver::Solution {
                 cost: Some(node.g),
                 is_optimal,

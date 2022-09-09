@@ -114,7 +114,7 @@ pub fn forward_recursion<T: variable_type::Numeric>(
     expanded: &mut usize,
 ) -> Option<T> {
     *expanded += 1;
-    if model.is_goal(&state) {
+    if model.is_base(&state) {
         return Some(T::zero());
     }
     if let Some((cost, _)) = memo.get(&state) {

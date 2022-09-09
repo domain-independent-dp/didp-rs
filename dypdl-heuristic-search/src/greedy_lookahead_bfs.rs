@@ -95,7 +95,7 @@ where
         };
         *node.closed.borrow_mut() = true;
         expanded += 1;
-        if model.is_goal(node.state()) {
+        if model.is_base(node.state()) {
             return solver::Solution {
                 cost: Some(node.g),
                 is_optimal: false,

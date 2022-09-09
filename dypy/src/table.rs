@@ -369,6 +369,60 @@ impl IntTable1DPy {
             TableIndexUnion::Set(i) => self.0.sum(i),
         })
     }
+
+    /// product(set)
+    ///
+    /// Take the product of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// set : SetExpr, SetVar, or SetConst
+    ///     Set of indices.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The product.
+    #[pyo3(text_signature = "(set)")]
+    fn product(&self, i: SetUnion) -> IntExprPy {
+        IntExprPy::new(self.0.product(i))
+    }
+
+    /// max(set)
+    ///
+    /// Take the maximum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// set : SetExpr, SetVar, or SetConst
+    ///     Set of indices.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The maximum.
+    #[pyo3(text_signature = "(set)")]
+    fn max(&self, i: SetUnion) -> IntExprPy {
+        IntExprPy::new(self.0.max(i))
+    }
+
+    /// min(set)
+    ///
+    /// Take the minimum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// set : SetExpr, SetVar, or SetConst
+    ///     Set of indices.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The minimum.
+    #[pyo3(text_signature = "(set)")]
+    fn min(&self, i: SetUnion) -> IntExprPy {
+        IntExprPy::new(self.0.min(i))
+    }
 }
 
 /// A class representing a 2-dimensional table of integer constants.
@@ -400,6 +454,96 @@ impl IntTable2DPy {
             (TableIndexUnion::Set(x), TableIndexUnion::Element(y)) => self.0.sum_x(x, y),
             (TableIndexUnion::Element(x), TableIndexUnion::Set(y)) => self.0.sum_y(x, y),
             (TableIndexUnion::Set(x), TableIndexUnion::Set(y)) => self.0.sum(x, y),
+        })
+    }
+
+    /// product(x, y)
+    ///
+    /// Take the product of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The product.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x or y is a negative integer.
+    #[pyo3(text_signature = "(x, y)")]
+    fn product(&self, x: TableIndexUnion, y: TableIndexUnion) -> IntExprPy {
+        IntExprPy::new(match (x, y) {
+            (TableIndexUnion::Element(x), TableIndexUnion::Element(y)) => self.0.element(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Element(y)) => self.0.product_x(x, y),
+            (TableIndexUnion::Element(x), TableIndexUnion::Set(y)) => self.0.product_y(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Set(y)) => self.0.product(x, y),
+        })
+    }
+
+    /// max(x, y)
+    ///
+    /// Take the maximum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The maximum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x or y is a negative integer.
+    #[pyo3(text_signature = "(x, y)")]
+    fn max(&self, x: TableIndexUnion, y: TableIndexUnion) -> IntExprPy {
+        IntExprPy::new(match (x, y) {
+            (TableIndexUnion::Element(x), TableIndexUnion::Element(y)) => self.0.element(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Element(y)) => self.0.max_x(x, y),
+            (TableIndexUnion::Element(x), TableIndexUnion::Set(y)) => self.0.max_y(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Set(y)) => self.0.max(x, y),
+        })
+    }
+
+    /// min(x, y)
+    ///
+    /// Take the minimum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The minimum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x or y is a negative integer.
+    #[pyo3(text_signature = "(x, y)")]
+    fn min(&self, x: TableIndexUnion, y: TableIndexUnion) -> IntExprPy {
+        IntExprPy::new(match (x, y) {
+            (TableIndexUnion::Element(x), TableIndexUnion::Element(y)) => self.0.element(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Element(y)) => self.0.min_x(x, y),
+            (TableIndexUnion::Element(x), TableIndexUnion::Set(y)) => self.0.min_y(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Set(y)) => self.0.min(x, y),
         })
     }
 }
@@ -437,6 +581,108 @@ impl IntTable3DPy {
             (x, y, z) => self.0.sum(x, y, z),
         })
     }
+
+    /// product(x, y, z)
+    ///
+    /// Take the product of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    /// z : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the third dimension.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The product.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x, y, or z is a negative integer.
+    #[pyo3(text_signature = "(x, y, z)")]
+    fn product(&self, x: TableIndexUnion, y: TableIndexUnion, z: TableIndexUnion) -> IntExprPy {
+        IntExprPy::new(match (x, y, z) {
+            (
+                TableIndexUnion::Element(x),
+                TableIndexUnion::Element(y),
+                TableIndexUnion::Element(z),
+            ) => self.0.element(x, y, z),
+            (x, y, z) => self.0.product(x, y, z),
+        })
+    }
+
+    /// max(x, y, z)
+    ///
+    /// Take the maximum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    /// z : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the third dimension.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The maximum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x, y, or z is a negative integer.
+    #[pyo3(text_signature = "(x, y, z)")]
+    fn max(&self, x: TableIndexUnion, y: TableIndexUnion, z: TableIndexUnion) -> IntExprPy {
+        IntExprPy::new(match (x, y, z) {
+            (
+                TableIndexUnion::Element(x),
+                TableIndexUnion::Element(y),
+                TableIndexUnion::Element(z),
+            ) => self.0.element(x, y, z),
+            (x, y, z) => self.0.max(x, y, z),
+        })
+    }
+
+    /// min(x, y, z)
+    ///
+    /// Take the minimum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    /// z : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the third dimension.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The minimum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x, y, or z is a negative integer.
+    #[pyo3(text_signature = "(x, y, z)")]
+    fn min(&self, x: TableIndexUnion, y: TableIndexUnion, z: TableIndexUnion) -> IntExprPy {
+        IntExprPy::new(match (x, y, z) {
+            (
+                TableIndexUnion::Element(x),
+                TableIndexUnion::Element(y),
+                TableIndexUnion::Element(z),
+            ) => self.0.element(x, y, z),
+            (x, y, z) => self.0.min(x, y, z),
+        })
+    }
 }
 
 /// A class representing a table of integer constants.
@@ -471,6 +717,96 @@ impl IntTablePy {
         }
         IntExprPy::new(self.0.element(elements))
     }
+
+    /// product(index)
+    ///
+    /// Take the product of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// index : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The product.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If a negative integer is in `index`.
+    #[pyo3(text_signature = "(index)")]
+    fn product(&self, index: Vec<TableIndexUnion>) -> IntExprPy {
+        let mut elements = Vec::with_capacity(index.len());
+        for i in &index {
+            match i {
+                TableIndexUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
+                _ => return IntExprPy::new(self.0.product(index)),
+            }
+        }
+        IntExprPy::new(self.0.element(elements))
+    }
+
+    /// max(index)
+    ///
+    /// Take the maximum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// index : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The maximum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If a negative integer is in `index`.
+    #[pyo3(text_signature = "(index)")]
+    fn max(&self, index: Vec<TableIndexUnion>) -> IntExprPy {
+        let mut elements = Vec::with_capacity(index.len());
+        for i in &index {
+            match i {
+                TableIndexUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
+                _ => return IntExprPy::new(self.0.max(index)),
+            }
+        }
+        IntExprPy::new(self.0.element(elements))
+    }
+
+    /// min(index)
+    ///
+    /// Take the minimum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// index : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The minimum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If a negative integer is in `index`.
+    #[pyo3(text_signature = "(index)")]
+    fn min(&self, index: Vec<TableIndexUnion>) -> IntExprPy {
+        let mut elements = Vec::with_capacity(index.len());
+        for i in &index {
+            match i {
+                TableIndexUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
+                _ => return IntExprPy::new(self.0.min(index)),
+            }
+        }
+        IntExprPy::new(self.0.element(elements))
+    }
 }
 
 /// A class representing a 1-dimensional table of continuous constants.
@@ -500,6 +836,60 @@ impl FloatTable1DPy {
             TableIndexUnion::Element(i) => self.0.element(i),
             TableIndexUnion::Set(i) => self.0.sum(i),
         })
+    }
+
+    /// product(set)
+    ///
+    /// Take the product of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// set : SetExpr, SetVar, or SetConst
+    ///     Set of indices
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The product.
+    #[pyo3(text_signature = "(set)")]
+    fn product(&self, i: SetUnion) -> FloatExprPy {
+        FloatExprPy::new(self.0.product(i))
+    }
+
+    /// max(set)
+    ///
+    /// Take the maximumimum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// set : SetExpr, SetVar, or SetConst
+    ///     Set of indices
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The maximumimum.
+    #[pyo3(text_signature = "(set)")]
+    fn max(&self, i: SetUnion) -> FloatExprPy {
+        FloatExprPy::new(self.0.max(i))
+    }
+
+    /// min(set)
+    ///
+    /// Take the minimum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// set : SetExpr, SetVar, or SetConst
+    ///     Set of indices
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The minimum.
+    #[pyo3(text_signature = "(set)")]
+    fn min(&self, i: SetUnion) -> FloatExprPy {
+        FloatExprPy::new(self.0.min(i))
     }
 }
 
@@ -532,6 +922,96 @@ impl FloatTable2DPy {
             (TableIndexUnion::Set(x), TableIndexUnion::Element(y)) => self.0.sum_x(x, y),
             (TableIndexUnion::Element(x), TableIndexUnion::Set(y)) => self.0.sum_y(x, y),
             (TableIndexUnion::Set(x), TableIndexUnion::Set(y)) => self.0.sum(x, y),
+        })
+    }
+
+    /// product(x, y)
+    ///
+    /// Take the product of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The product.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x or y is a negative integer.
+    #[pyo3(text_signature = "(x, y)")]
+    fn product(&self, x: TableIndexUnion, y: TableIndexUnion) -> FloatExprPy {
+        FloatExprPy::new(match (x, y) {
+            (TableIndexUnion::Element(x), TableIndexUnion::Element(y)) => self.0.element(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Element(y)) => self.0.product_x(x, y),
+            (TableIndexUnion::Element(x), TableIndexUnion::Set(y)) => self.0.product_y(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Set(y)) => self.0.product(x, y),
+        })
+    }
+
+    /// max(x, y)
+    ///
+    /// Take the maximum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The maximum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x or y is a negative integer.
+    #[pyo3(text_signature = "(x, y)")]
+    fn max(&self, x: TableIndexUnion, y: TableIndexUnion) -> FloatExprPy {
+        FloatExprPy::new(match (x, y) {
+            (TableIndexUnion::Element(x), TableIndexUnion::Element(y)) => self.0.element(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Element(y)) => self.0.max_x(x, y),
+            (TableIndexUnion::Element(x), TableIndexUnion::Set(y)) => self.0.max_y(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Set(y)) => self.0.max(x, y),
+        })
+    }
+
+    /// min(x, y)
+    ///
+    /// Take the minimum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y: int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The minimum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x or y is a negative integer.
+    #[pyo3(text_signature = "(x, y)")]
+    fn min(&self, x: TableIndexUnion, y: TableIndexUnion) -> FloatExprPy {
+        FloatExprPy::new(match (x, y) {
+            (TableIndexUnion::Element(x), TableIndexUnion::Element(y)) => self.0.element(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Element(y)) => self.0.min_x(x, y),
+            (TableIndexUnion::Element(x), TableIndexUnion::Set(y)) => self.0.min_y(x, y),
+            (TableIndexUnion::Set(x), TableIndexUnion::Set(y)) => self.0.min(x, y),
         })
     }
 }
@@ -572,6 +1052,108 @@ impl FloatTable3DPy {
             (x, y, z) => self.0.sum(x, y, z),
         })
     }
+
+    /// product(x, y, z)
+    ///
+    /// Take the product of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    /// z : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the third dimension.
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The product.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x, y, or z is a negative integer.
+    #[pyo3(text_signature = "(x, y, z)")]
+    fn product(&self, x: TableIndexUnion, y: TableIndexUnion, z: TableIndexUnion) -> FloatExprPy {
+        FloatExprPy::new(match (x, y, z) {
+            (
+                TableIndexUnion::Element(x),
+                TableIndexUnion::Element(y),
+                TableIndexUnion::Element(z),
+            ) => self.0.element(x, y, z),
+            (x, y, z) => self.0.product(x, y, z),
+        })
+    }
+
+    /// max(x, y, z)
+    ///
+    /// Take the maximum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    /// z : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the third dimension.
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The maximum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x, y, or z is a negative integer.
+    #[pyo3(text_signature = "(x, y, z)")]
+    fn max(&self, x: TableIndexUnion, y: TableIndexUnion, z: TableIndexUnion) -> FloatExprPy {
+        FloatExprPy::new(match (x, y, z) {
+            (
+                TableIndexUnion::Element(x),
+                TableIndexUnion::Element(y),
+                TableIndexUnion::Element(z),
+            ) => self.0.element(x, y, z),
+            (x, y, z) => self.0.max(x, y, z),
+        })
+    }
+
+    /// min(x, y, z)
+    ///
+    /// Take the minimum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    /// z : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the third dimension.
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The minimum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x, y, or z is a negative integer.
+    #[pyo3(text_signature = "(index)")]
+    fn min(&self, x: TableIndexUnion, y: TableIndexUnion, z: TableIndexUnion) -> FloatExprPy {
+        FloatExprPy::new(match (x, y, z) {
+            (
+                TableIndexUnion::Element(x),
+                TableIndexUnion::Element(y),
+                TableIndexUnion::Element(z),
+            ) => self.0.element(x, y, z),
+            (x, y, z) => self.0.min(x, y, z),
+        })
+    }
 }
 
 /// A class representing a table of continuous constants.
@@ -602,6 +1184,96 @@ impl FloatTablePy {
             match i {
                 TableIndexUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
                 _ => return FloatExprPy::new(self.0.sum(index)),
+            }
+        }
+        FloatExprPy::new(self.0.element(elements))
+    }
+
+    /// product(index)
+    ///
+    /// Take the product of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// index : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The product.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If a negative integer is in `index`.
+    #[pyo3(text_signature = "(index)")]
+    fn product(&self, index: Vec<TableIndexUnion>) -> FloatExprPy {
+        let mut elements = Vec::with_capacity(index.len());
+        for i in &index {
+            match i {
+                TableIndexUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
+                _ => return FloatExprPy::new(self.0.product(index)),
+            }
+        }
+        FloatExprPy::new(self.0.element(elements))
+    }
+
+    /// max(index)
+    ///
+    /// Take the maximum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// index : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The maximum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If a negative integer is in `index`.
+    #[pyo3(text_signature = "(index)")]
+    fn max(&self, index: Vec<TableIndexUnion>) -> FloatExprPy {
+        let mut elements = Vec::with_capacity(index.len());
+        for i in &index {
+            match i {
+                TableIndexUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
+                _ => return FloatExprPy::new(self.0.max(index)),
+            }
+        }
+        FloatExprPy::new(self.0.element(elements))
+    }
+
+    /// min(index)
+    ///
+    /// Take the minimum of constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// index : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The minimum.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If a negative integer is in `index`.
+    #[pyo3(text_signature = "(index)")]
+    fn min(&self, index: Vec<TableIndexUnion>) -> FloatExprPy {
+        let mut elements = Vec::with_capacity(index.len());
+        for i in &index {
+            match i {
+                TableIndexUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
+                _ => return FloatExprPy::new(self.0.min(index)),
             }
         }
         FloatExprPy::new(self.0.element(elements))
@@ -1038,7 +1710,68 @@ mod tests {
         assert_eq!(
             t_py.__getitem__(i),
             IntExprPy::new(IntegerExpression::Table(Box::new(
-                NumericTableExpression::Table1DSum(
+                NumericTableExpression::Table1DReduce(
+                    ReduceOperator::Sum,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10)))
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_1d_product() {
+        let mut model = Model::default();
+        let t = model.add_table_1d("t", vec![1]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable1DPy(t);
+        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        assert_eq!(
+            t_py.product(i),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table1DReduce(
+                    ReduceOperator::Product,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10)))
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_1d_max() {
+        let mut model = Model::default();
+        let t = model.add_table_1d("t", vec![1]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable1DPy(t);
+        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        assert_eq!(
+            t_py.max(i),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table1DReduce(
+                    ReduceOperator::Max,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10)))
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_1d_min() {
+        let mut model = Model::default();
+        let t = model.add_table_1d("t", vec![1]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable1DPy(t);
+        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        assert_eq!(
+            t_py.min(i),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table1DReduce(
+                    ReduceOperator::Min,
                     t.id(),
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10)))
                 )
@@ -1088,7 +1821,8 @@ mod tests {
         assert_eq!(
             t_py.__getitem__((x, y)),
             IntExprPy::new(IntegerExpression::Table(Box::new(
-                NumericTableExpression::Table2DSumX(
+                NumericTableExpression::Table2DReduceX(
+                    ReduceOperator::Sum,
                     t.id(),
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
                     ElementExpression::Constant(0)
@@ -1109,7 +1843,8 @@ mod tests {
         assert_eq!(
             t_py.__getitem__((x, y)),
             IntExprPy::new(IntegerExpression::Table(Box::new(
-                NumericTableExpression::Table2DSumY(
+                NumericTableExpression::Table2DReduceY(
+                    ReduceOperator::Sum,
                     t.id(),
                     ElementExpression::Constant(0),
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
@@ -1130,7 +1865,269 @@ mod tests {
         assert_eq!(
             t_py.__getitem__((x, y)),
             IntExprPy::new(IntegerExpression::Table(Box::new(
-                NumericTableExpression::Table2DSum(
+                NumericTableExpression::Table2DReduce(
+                    ReduceOperator::Sum,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_product_element() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.product(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_product_x() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.product(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceX(
+                    ReduceOperator::Product,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_product_y() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.product(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceY(
+                    ReduceOperator::Product,
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_product() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.product(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduce(
+                    ReduceOperator::Product,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_max_element() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.max(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_max_x() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.max(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceX(
+                    ReduceOperator::Max,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_max_y() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.max(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceY(
+                    ReduceOperator::Max,
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_max() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.max(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduce(
+                    ReduceOperator::Max,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_min_element() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.min(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_min_x() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.min(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceX(
+                    ReduceOperator::Min,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_min_y() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.min(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceY(
+                    ReduceOperator::Min,
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_2d_min() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.min(x, y),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduce(
+                    ReduceOperator::Min,
                     t.id(),
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
@@ -1184,7 +2181,155 @@ mod tests {
         assert_eq!(
             t_py.__getitem__((x, y, z)),
             IntExprPy::new(IntegerExpression::Table(Box::new(
-                NumericTableExpression::Table3DSum(
+                NumericTableExpression::Table3DReduce(
+                    ReduceOperator::Sum,
+                    t.id(),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant(Set::with_capacity(10))
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_3d_product_element() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.product(x, y, z),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table3D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_3d_product() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.product(x, y, z),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table3DReduce(
+                    ReduceOperator::Product,
+                    t.id(),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant(Set::with_capacity(10))
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_3d_max_element() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.max(x, y, z),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table3D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_3d_max() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.max(x, y, z),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table3DReduce(
+                    ReduceOperator::Max,
+                    t.id(),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant(Set::with_capacity(10))
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_3d_min_element() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.min(x, y, z),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table3D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_3d_min() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.min(x, y, z),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table3DReduce(
+                    ReduceOperator::Min,
                     t.id(),
                     ArgumentExpression::Element(ElementExpression::Constant(0)),
                     ArgumentExpression::Set(SetExpression::Reference(
@@ -1250,7 +2395,191 @@ mod tests {
         assert_eq!(
             t_py.__getitem__(index),
             IntExprPy::new(IntegerExpression::Table(Box::new(
-                NumericTableExpression::TableSum(
+                NumericTableExpression::TableReduce(
+                    ReduceOperator::Sum,
+                    t.id(),
+                    vec![
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Set(SetExpression::Reference(
+                            ReferenceExpression::Constant(Set::with_capacity(10))
+                        )),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_product_element() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 1);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.product(index),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table(
+                    t.id(),
+                    vec![
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_product() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 0);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.product(index),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::TableReduce(
+                    ReduceOperator::Product,
+                    t.id(),
+                    vec![
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Set(SetExpression::Reference(
+                            ReferenceExpression::Constant(Set::with_capacity(10))
+                        )),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_max_element() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 1);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.max(index),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table(
+                    t.id(),
+                    vec![
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_max() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 0);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.max(index),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::TableReduce(
+                    ReduceOperator::Max,
+                    t.id(),
+                    vec![
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Set(SetExpression::Reference(
+                            ReferenceExpression::Constant(Set::with_capacity(10))
+                        )),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_min_element() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 1);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.min(index),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table(
+                    t.id(),
+                    vec![
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn int_table_min() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 0);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = IntTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.min(index),
+            IntExprPy::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::TableReduce(
+                    ReduceOperator::Min,
                     t.id(),
                     vec![
                         ArgumentExpression::Element(ElementExpression::Constant(0)),
@@ -1301,7 +2630,68 @@ mod tests {
         assert_eq!(
             t_py.__getitem__(i),
             FloatExprPy::new(ContinuousExpression::Table(Box::new(
-                NumericTableExpression::Table1DSum(
+                NumericTableExpression::Table1DReduce(
+                    ReduceOperator::Sum,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10)))
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_1d_product() {
+        let mut model = Model::default();
+        let t = model.add_table_1d("t", vec![1.0]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable1DPy(t);
+        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        assert_eq!(
+            t_py.product(i),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table1DReduce(
+                    ReduceOperator::Product,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10)))
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_1d_max() {
+        let mut model = Model::default();
+        let t = model.add_table_1d("t", vec![1.0]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable1DPy(t);
+        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        assert_eq!(
+            t_py.max(i),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table1DReduce(
+                    ReduceOperator::Max,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10)))
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_1d_min() {
+        let mut model = Model::default();
+        let t = model.add_table_1d("t", vec![1.0]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable1DPy(t);
+        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        assert_eq!(
+            t_py.min(i),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table1DReduce(
+                    ReduceOperator::Min,
                     t.id(),
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10)))
                 )
@@ -1351,7 +2741,8 @@ mod tests {
         assert_eq!(
             t_py.__getitem__((x, y)),
             FloatExprPy::new(ContinuousExpression::Table(Box::new(
-                NumericTableExpression::Table2DSumX(
+                NumericTableExpression::Table2DReduceX(
+                    ReduceOperator::Sum,
                     t.id(),
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
                     ElementExpression::Constant(0)
@@ -1372,7 +2763,8 @@ mod tests {
         assert_eq!(
             t_py.__getitem__((x, y)),
             FloatExprPy::new(ContinuousExpression::Table(Box::new(
-                NumericTableExpression::Table2DSumY(
+                NumericTableExpression::Table2DReduceY(
+                    ReduceOperator::Sum,
                     t.id(),
                     ElementExpression::Constant(0),
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
@@ -1393,7 +2785,269 @@ mod tests {
         assert_eq!(
             t_py.__getitem__((x, y)),
             FloatExprPy::new(ContinuousExpression::Table(Box::new(
-                NumericTableExpression::Table2DSum(
+                NumericTableExpression::Table2DReduce(
+                    ReduceOperator::Sum,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_product_element() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.product(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_product_x() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.product(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceX(
+                    ReduceOperator::Product,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_product_y() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.product(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceY(
+                    ReduceOperator::Product,
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_product() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.product(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduce(
+                    ReduceOperator::Product,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_max_element() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.max(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_max_x() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.max(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceX(
+                    ReduceOperator::Max,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_max_y() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.max(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceY(
+                    ReduceOperator::Max,
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_max() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.max(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduce(
+                    ReduceOperator::Max,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_min_element() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.min(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_min_x() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.min(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceX(
+                    ReduceOperator::Min,
+                    t.id(),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                    ElementExpression::Constant(0)
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_min_y() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.min(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduceY(
+                    ReduceOperator::Min,
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_2d_min() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![1.0]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable2DPy(t);
+        let x = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        assert_eq!(
+            t_py.min(x, y),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table2DReduce(
+                    ReduceOperator::Min,
                     t.id(),
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
                     SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
@@ -1447,7 +3101,155 @@ mod tests {
         assert_eq!(
             t_py.__getitem__((x, y, z)),
             FloatExprPy::new(ContinuousExpression::Table(Box::new(
-                NumericTableExpression::Table3DSum(
+                NumericTableExpression::Table3DReduce(
+                    ReduceOperator::Sum,
+                    t.id(),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant(Set::with_capacity(10))
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_3d_product_element() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1.0]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.product(x, y, z),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table3D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_3d_product() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1.0]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.product(x, y, z),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table3DReduce(
+                    ReduceOperator::Product,
+                    t.id(),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant(Set::with_capacity(10))
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_3d_max_element() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1.0]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.max(x, y, z),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table3D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_3d_max() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1.0]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.max(x, y, z),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table3DReduce(
+                    ReduceOperator::Max,
+                    t.id(),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant(Set::with_capacity(10))
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_3d_min_element() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1.0]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.min(x, y, z),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table3D(
+                    t.id(),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                    ElementExpression::Constant(0),
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_3d_min() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![1.0]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTable3DPy(t);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.min(x, y, z),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table3DReduce(
+                    ReduceOperator::Min,
                     t.id(),
                     ArgumentExpression::Element(ElementExpression::Constant(0)),
                     ArgumentExpression::Set(SetExpression::Reference(
@@ -1513,7 +3315,191 @@ mod tests {
         assert_eq!(
             t_py.__getitem__(index),
             FloatExprPy::new(ContinuousExpression::Table(Box::new(
-                NumericTableExpression::TableSum(
+                NumericTableExpression::TableReduce(
+                    ReduceOperator::Sum,
+                    t.id(),
+                    vec![
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Set(SetExpression::Reference(
+                            ReferenceExpression::Constant(Set::with_capacity(10))
+                        )),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_product_element() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 1.0);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.product(index),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table(
+                    t.id(),
+                    vec![
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_product() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 0.0);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.product(index),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::TableReduce(
+                    ReduceOperator::Product,
+                    t.id(),
+                    vec![
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Set(SetExpression::Reference(
+                            ReferenceExpression::Constant(Set::with_capacity(10))
+                        )),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_max_element() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 1.0);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.max(index),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table(
+                    t.id(),
+                    vec![
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_max() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 0.0);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.max(index),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::TableReduce(
+                    ReduceOperator::Max,
+                    t.id(),
+                    vec![
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Set(SetExpression::Reference(
+                            ReferenceExpression::Constant(Set::with_capacity(10))
+                        )),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                        ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_min_element() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 1.0);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.min(index),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::Table(
+                    t.id(),
+                    vec![
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                        ElementExpression::Constant(0),
+                    ]
+                )
+            )))
+        );
+    }
+
+    #[test]
+    fn float_table_min() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), 0.0);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = FloatTablePy(t);
+        let index = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.min(index),
+            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+                NumericTableExpression::TableReduce(
+                    ReduceOperator::Min,
                     t.id(),
                     vec![
                         ArgumentExpression::Element(ElementExpression::Constant(0)),

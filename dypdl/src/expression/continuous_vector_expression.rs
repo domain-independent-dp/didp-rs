@@ -87,12 +87,16 @@ impl ContinuousVectorExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transitioned state is used.
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     pub fn eval<U: DPState>(&self, state: &U, registry: &TableRegistry) -> Vec<Continuous> {
         self.eval_inner(None, state, registry)
     }
 
     /// Returns the evaluation result of a cost expression.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty set or vector.
     pub fn eval_cost<U: DPState>(
         &self,
         cost: Continuous,
@@ -206,6 +210,10 @@ impl ContinuousVectorExpression {
     }
 
     /// Returns a simplified version by precomputation.
+    ///
+    /// # Panics
+    ///
+    /// if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> ContinuousVectorExpression {
         match self {
             Self::Reverse(vector) => match vector.simplify(registry) {

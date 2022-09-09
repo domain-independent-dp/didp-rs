@@ -6,7 +6,8 @@ use super::util;
 use super::util::ParseErr;
 use dypdl::expression::{
     BinaryOperator, CastOperator, ContinuousBinaryOperator, ContinuousExpression,
-    ContinuousUnaryOperator, ContinuousVectorExpression, IntegerVectorExpression, UnaryOperator,
+    ContinuousUnaryOperator, ContinuousVectorExpression, IntegerVectorExpression, ReduceOperator,
+    UnaryOperator,
 };
 use dypdl::variable_type::{Continuous, Element};
 use dypdl::{StateMetadata, TableRegistry};
@@ -92,42 +93,6 @@ pub fn parse_expression<'a>(
                         Err(ParseErr::new(format!("no such table `{}`", name)))
                     }
                 }
-                "table-sum-vector" => {
-                    let (name, rest) = rest
-                        .split_first()
-                        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
-                    if let Some((expression, rest)) = table_vector_parser::parse_sum_expression(
-                        name,
-                        rest,
-                        metadata,
-                        registry,
-                        parameters,
-                        &registry.continuous_tables,
-                    )? {
-                        Ok((
-                            ContinuousVectorExpression::Table(Box::new(expression)),
-                            rest,
-                        ))
-                    } else if let Some((expression, rest)) =
-                        table_vector_parser::parse_sum_expression(
-                            name,
-                            rest,
-                            metadata,
-                            registry,
-                            parameters,
-                            &registry.integer_tables,
-                        )?
-                    {
-                        Ok((
-                            ContinuousVectorExpression::FromInteger(Box::new(
-                                IntegerVectorExpression::Table(Box::new(expression)),
-                            )),
-                            rest,
-                        ))
-                    } else {
-                        Err(ParseErr::new(format!("no such table `{}`", name)))
-                    }
-                }
                 "if" => {
                     let (condition, rest) =
                         condition_parser::parse_expression(rest, metadata, registry, parameters)?;
@@ -144,28 +109,72 @@ pub fn parse_expression<'a>(
                     ))
                 }
                 name => {
-                    if let Ok(result) =
-                        parse_vector_round(name, rest, metadata, registry, parameters)
+                    let op = match name {
+                        "table-sum-vector" => ReduceOperator::Sum,
+                        "table-product-vector" => ReduceOperator::Product,
+                        "table-max-vector" => ReduceOperator::Max,
+                        "table-min-vector" => ReduceOperator::Min,
+                        _ => {
+                            return if let Ok(result) =
+                                parse_vector_round(name, rest, metadata, registry, parameters)
+                            {
+                                Ok(result)
+                            } else if let Ok(result) = parse_vector_unary_operation(
+                                name, rest, metadata, registry, parameters,
+                            ) {
+                                Ok(result)
+                            } else if let Ok((x, y, rest)) =
+                                parse_continuous_and_vector(rest, metadata, registry, parameters)
+                            {
+                                Ok((parse_vector_binary_operation_x(name, x, y)?, rest))
+                            } else if let Ok((x, y, rest)) =
+                                parse_vector_and_continuous(rest, metadata, registry, parameters)
+                            {
+                                Ok((parse_vector_binary_operation_y(name, x, y)?, rest))
+                            } else if let Ok((x, y, rest)) =
+                                parse_vector_and_vector(rest, metadata, registry, parameters)
+                            {
+                                Ok((parse_vector_operation(name, x, y)?, rest))
+                            } else {
+                                Err(ParseErr::new(format!("could not parse `{:?}`", tokens)))
+                            }
+                        }
+                    };
+                    let (name, rest) = rest
+                        .split_first()
+                        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+                    if let Some((expression, rest)) = table_vector_parser::parse_reduce_expression(
+                        name,
+                        rest,
+                        op.clone(),
+                        metadata,
+                        registry,
+                        parameters,
+                        &registry.continuous_tables,
+                    )? {
+                        Ok((
+                            ContinuousVectorExpression::Table(Box::new(expression)),
+                            rest,
+                        ))
+                    } else if let Some((expression, rest)) =
+                        table_vector_parser::parse_reduce_expression(
+                            name,
+                            rest,
+                            op,
+                            metadata,
+                            registry,
+                            parameters,
+                            &registry.integer_tables,
+                        )?
                     {
-                        Ok(result)
-                    } else if let Ok(result) =
-                        parse_vector_unary_operation(name, rest, metadata, registry, parameters)
-                    {
-                        Ok(result)
-                    } else if let Ok((x, y, rest)) =
-                        parse_continuous_and_vector(rest, metadata, registry, parameters)
-                    {
-                        Ok((parse_vector_binary_operation_x(name, x, y)?, rest))
-                    } else if let Ok((x, y, rest)) =
-                        parse_vector_and_continuous(rest, metadata, registry, parameters)
-                    {
-                        Ok((parse_vector_binary_operation_y(name, x, y)?, rest))
-                    } else if let Ok((x, y, rest)) =
-                        parse_vector_and_vector(rest, metadata, registry, parameters)
-                    {
-                        Ok((parse_vector_operation(name, x, y)?, rest))
+                        Ok((
+                            ContinuousVectorExpression::FromInteger(Box::new(
+                                IntegerVectorExpression::Table(Box::new(expression)),
+                            )),
+                            rest,
+                        ))
                     } else {
-                        Err(ParseErr::new(format!("could not parse `{:?}`", tokens)))
+                        Err(ParseErr::new(format!("no such table `{}`", name)))
                     }
                 }
             }
@@ -2162,39 +2171,6 @@ mod tests {
 
         let tokens: Vec<String> = [
             "(",
-            "table-sum-vector",
-            "cf3",
-            "s0",
-            "(",
-            "vector",
-            "0",
-            "1",
-            ")",
-            "1",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ContinuousVectorExpression::Table(Box::new(TableVectorExpression::Table3DSum(
-                0,
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1])
-                )),
-                ArgumentExpression::Element(ElementExpression::Constant(1)),
-            )))
-        );
-        assert_eq!(rest, &tokens[11..]);
-
-        let tokens: Vec<String> = [
-            "(",
             "table-vector",
             "f3",
             "0",
@@ -2231,6 +2207,40 @@ mod tests {
         let tokens: Vec<String> = [
             "(",
             "table-sum-vector",
+            "cf3",
+            "s0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ContinuousVectorExpression::Table(Box::new(TableVectorExpression::Table3DReduce(
+                ReduceOperator::Sum,
+                0,
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 1])
+                )),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+            )))
+        );
+        assert_eq!(rest, &tokens[11..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-sum-vector",
             "f3",
             "s0",
             "(",
@@ -2251,7 +2261,224 @@ mod tests {
         assert_eq!(
             expression,
             ContinuousVectorExpression::FromInteger(Box::new(IntegerVectorExpression::Table(
-                Box::new(TableVectorExpression::Table3DSum(
+                Box::new(TableVectorExpression::Table3DReduce(
+                    ReduceOperator::Sum,
+                    0,
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    )),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Constant(vec![0, 1])
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ))
+            )))
+        );
+        assert_eq!(rest, &tokens[11..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-product-vector",
+            "cf3",
+            "s0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ContinuousVectorExpression::Table(Box::new(TableVectorExpression::Table3DReduce(
+                ReduceOperator::Product,
+                0,
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 1])
+                )),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+            )))
+        );
+        assert_eq!(rest, &tokens[11..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-product-vector",
+            "f3",
+            "s0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ContinuousVectorExpression::FromInteger(Box::new(IntegerVectorExpression::Table(
+                Box::new(TableVectorExpression::Table3DReduce(
+                    ReduceOperator::Product,
+                    0,
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    )),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Constant(vec![0, 1])
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ))
+            )))
+        );
+        assert_eq!(rest, &tokens[11..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-max-vector",
+            "cf3",
+            "s0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ContinuousVectorExpression::Table(Box::new(TableVectorExpression::Table3DReduce(
+                ReduceOperator::Max,
+                0,
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 1])
+                )),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+            )))
+        );
+        assert_eq!(rest, &tokens[11..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-max-vector",
+            "f3",
+            "s0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ContinuousVectorExpression::FromInteger(Box::new(IntegerVectorExpression::Table(
+                Box::new(TableVectorExpression::Table3DReduce(
+                    ReduceOperator::Max,
+                    0,
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    )),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Constant(vec![0, 1])
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ))
+            )))
+        );
+        assert_eq!(rest, &tokens[11..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-min-vector",
+            "cf3",
+            "s0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ContinuousVectorExpression::Table(Box::new(TableVectorExpression::Table3DReduce(
+                ReduceOperator::Min,
+                0,
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 1])
+                )),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+            )))
+        );
+        assert_eq!(rest, &tokens[11..]);
+
+        let tokens: Vec<String> = [
+            "(",
+            "table-min-vector",
+            "f3",
+            "s0",
+            "(",
+            "vector",
+            "0",
+            "1",
+            ")",
+            "1",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ContinuousVectorExpression::FromInteger(Box::new(IntegerVectorExpression::Table(
+                Box::new(TableVectorExpression::Table3DReduce(
+                    ReduceOperator::Min,
                     0,
                     ArgumentExpression::Set(SetExpression::Reference(
                         ReferenceExpression::Variable(0)
