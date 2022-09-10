@@ -194,6 +194,69 @@ impl Model {
         }
     }
 
+    /// Validate a solution consists of forward transitions.
+    ///
+    /// # Panics
+    ///
+    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    pub fn validate_forward<T: variable_type::Numeric>(
+        &self,
+        transitions: &[Transition],
+        cost: T,
+        show_message: bool,
+    ) -> bool {
+        let mut state_vec = vec![self.target.clone()];
+        for (i, transition) in transitions.iter().enumerate() {
+            let state = state_vec.last().unwrap();
+            for forced_transition in &self.forward_forced_transitions {
+                if forced_transition.is_applicable(state, &self.table_registry) {
+                    if forced_transition == transition {
+                        break;
+                    } else {
+                        println!("Forced transition {} is applicable in the {} th state, but transition {} is applied", forced_transition.get_full_name(), i, transition.get_full_name());
+                        return false;
+                    }
+                }
+            }
+            if !transition.is_applicable(state, &self.table_registry) {
+                if show_message {
+                    println!(
+                        "The {} th transition {} is not applicable.",
+                        i,
+                        transition.get_full_name()
+                    );
+                }
+                return false;
+            }
+            let next_state = state.apply_effect(&transition.effect, &self.table_registry);
+            if !self.check_constraints(&next_state) {
+                if show_message {
+                    println!("The {} th state does not satisfy state constraints", i + 1);
+                }
+                return false;
+            }
+            state_vec.push(next_state);
+        }
+        if !self.is_base(state_vec.last().unwrap()) {
+            if show_message {
+                println!("The last state is not a base state.")
+            }
+            return false;
+        }
+        let mut validation_cost = T::zero();
+        state_vec.pop();
+        for (state, transition) in state_vec.into_iter().zip(transitions).rev() {
+            validation_cost = transition.eval_cost(validation_cost, &state, &self.table_registry);
+        }
+        if cost != validation_cost {
+            if show_message {
+                println!("The cost does not match the actual cost.")
+            }
+            return false;
+        }
+        true
+    }
+
     /// Returns object type given a name.
     ///
     /// # Errors
@@ -2288,6 +2351,611 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(model.eval_dual_bound::<_, Integer>(&state), None);
+    }
+
+    #[test]
+    fn validate_forward_true() {
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: State {
+                signature_variables: SignatureVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            state_constraints: vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(0)),
+                ),
+                ..Default::default()
+            }],
+            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(2)),
+                ),
+                ..Default::default()
+            }])],
+            forward_transitions: vec![
+                Transition {
+                    name: String::from("increase"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("decrease"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Sub,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+            ],
+            forward_forced_transitions: vec![Transition {
+                name: String::from("forced increase"),
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Eq,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(0)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::Cost),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let transitions = vec![
+            model.forward_forced_transitions[0].clone(),
+            model.forward_transitions[0].clone(),
+        ];
+        assert!(model.validate_forward(&transitions, 1, true));
+    }
+
+    #[test]
+    fn validate_forward_forced_false() {
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: State {
+                signature_variables: SignatureVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            state_constraints: vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(0)),
+                ),
+                ..Default::default()
+            }],
+            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(2)),
+                ),
+                ..Default::default()
+            }])],
+            forward_transitions: vec![
+                Transition {
+                    name: String::from("increase"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("decrease"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Sub,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+            ],
+            forward_forced_transitions: vec![Transition {
+                name: String::from("forced increase"),
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Eq,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(0)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::Cost),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let transitions = vec![
+            model.forward_transitions[0].clone(),
+            model.forward_transitions[0].clone(),
+        ];
+        assert!(!model.validate_forward(&transitions, 2, true));
+    }
+
+    #[test]
+    fn validate_forward_state_constraint_false() {
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: State {
+                signature_variables: SignatureVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            state_constraints: vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(0)),
+                ),
+                ..Default::default()
+            }],
+            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(2)),
+                ),
+                ..Default::default()
+            }])],
+            forward_transitions: vec![
+                Transition {
+                    name: String::from("increase"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("decrease"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Sub,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+            ],
+            forward_forced_transitions: vec![Transition {
+                name: String::from("forced increase"),
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Eq,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(0)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::Cost),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let transitions = vec![
+            model.forward_forced_transitions[0].clone(),
+            model.forward_transitions[1].clone(),
+            model.forward_transitions[0].clone(),
+            model.forward_transitions[0].clone(),
+        ];
+        assert!(!model.validate_forward(&transitions, 3, true));
+    }
+
+    #[test]
+    fn validate_forward_applicable_false() {
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: State {
+                signature_variables: SignatureVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            state_constraints: vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(0)),
+                ),
+                ..Default::default()
+            }],
+            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(2)),
+                ),
+                ..Default::default()
+            }])],
+            forward_transitions: vec![
+                Transition {
+                    name: String::from("increase"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("decrease"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Sub,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+            ],
+            forward_forced_transitions: vec![Transition {
+                name: String::from("forced increase"),
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Eq,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(0)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::Cost),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let transitions = vec![
+            model.forward_transitions[0].clone(),
+            model.forward_forced_transitions[0].clone(),
+        ];
+        assert!(!model.validate_forward(&transitions, 1, true));
+    }
+
+    #[test]
+    fn validate_forward_base_false() {
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: State {
+                signature_variables: SignatureVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            state_constraints: vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(0)),
+                ),
+                ..Default::default()
+            }],
+            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(2)),
+                ),
+                ..Default::default()
+            }])],
+            forward_transitions: vec![
+                Transition {
+                    name: String::from("increase"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("decrease"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Sub,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+            ],
+            forward_forced_transitions: vec![Transition {
+                name: String::from("forced increase"),
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Eq,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(0)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::Cost),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let transitions = vec![model.forward_transitions[0].clone()];
+        assert!(!model.validate_forward(&transitions, 0, true));
+    }
+
+    #[test]
+    fn validate_forward_cost_false() {
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: State {
+                signature_variables: SignatureVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            state_constraints: vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(0)),
+                ),
+                ..Default::default()
+            }],
+            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(2)),
+                ),
+                ..Default::default()
+            }])],
+            forward_transitions: vec![
+                Transition {
+                    name: String::from("increase"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("decrease"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Sub,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+            ],
+            forward_forced_transitions: vec![Transition {
+                name: String::from("forced increase"),
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Eq,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(0)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::Cost),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let transitions = vec![
+            model.forward_forced_transitions[0].clone(),
+            model.forward_transitions[0].clone(),
+        ];
+        assert!(!model.validate_forward(&transitions, 2, true));
     }
 
     #[test]
