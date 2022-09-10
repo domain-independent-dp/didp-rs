@@ -33,6 +33,11 @@ where
         process::exit(1);
     });
     if let Some(cost) = solution.cost {
+        if !model.validate_forward(&solution.transitions, cost, true) {
+            eprintln!("Error: the solution is invalid.");
+            process::exit(1);
+        }
+        println!("The solution is valid.");
         println!("transitions:");
         for transition in solution.transitions {
             println!("{}", transition.get_full_name());
