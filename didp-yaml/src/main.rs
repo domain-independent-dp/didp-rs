@@ -1,5 +1,6 @@
 use didp_yaml::dypdl_parser;
 use didp_yaml::heuristic_search_solver;
+use didp_yaml::solution::{CostToDump, SolutionToDump};
 use dypdl::variable_type;
 use dypdl_heuristic_search::Solver;
 use std::env;
@@ -20,6 +21,7 @@ fn solve<T>(model: &dypdl::Model, config: &yaml_rust::Yaml, start: time::Instant
 where
     T: variable_type::Numeric + Ord + fmt::Display + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
+    CostToDump: From<T>,
 {
     let factory = heuristic_search_solver::SolverFactory::default();
     let mut solver: Box<dyn Solver<T>> = factory.create(config, model).unwrap_or_else(|e| {
@@ -32,6 +34,9 @@ where
         eprintln!("Error: {:?}", e);
         process::exit(1);
     });
+    let expanded = solution.expanded;
+    let generated = solution.generated;
+    let search_time = solution.time;
     if let Some(cost) = solution.cost {
         if !model.validate_forward(&solution.transitions, cost, true) {
             eprintln!("Error: the solution is invalid.");
@@ -39,7 +44,7 @@ where
         }
         println!("The solution is valid.");
         println!("transitions:");
-        for transition in solution.transitions {
+        for transition in &solution.transitions {
             println!("{}", transition.get_full_name());
         }
         println!("cost: {}", cost);
@@ -48,6 +53,11 @@ where
         } else if let Some(bound) = solution.best_bound {
             println!("best bound: {}", bound);
         }
+        let solution = SolutionToDump::from(solution);
+        solution.dump_to_file("solution.yaml").unwrap_or_else(|e| {
+            eprintln!("Error: {:?}", e);
+            process::exit(1);
+        })
     } else if solution.is_infeasible {
         println!("The problem is infeasible.");
     } else {
@@ -56,9 +66,9 @@ where
             println!("best bound: {}", bound);
         }
     }
-    println!("Expanded: {}", solution.expanded);
-    println!("Generated: {}", solution.generated);
-    println!("Search time: {}s", solution.time);
+    println!("Expanded: {}", expanded);
+    println!("Generated: {}", generated);
+    println!("Search time: {}s", search_time);
 }
 
 fn main() {

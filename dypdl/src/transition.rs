@@ -98,11 +98,11 @@ pub struct Transition {
     pub parameter_names: Vec<String>,
     /// The values of parameters.
     pub parameter_values: Vec<Element>,
-    /// Pairs of indices of set variables and parameters.
-    /// A parameter must be included in the correspondin variable to be applicable.
+    /// Pairs of an index of a set variable and a parameter.
+    /// A parameter must be included in the corresponding variable to be applicable.
     pub elements_in_set_variable: Vec<(usize, Element)>,
-    /// Pairs of indices of vector variables and parameters.
-    /// A parameter must be included in the correspondin variable to be applicable.
+    /// Pairs of an index of a vector variable and a parameter.
+    /// A parameter must be included in the corresponding variable to be applicable.
     pub elements_in_vector_variable: Vec<(usize, Element)>,
     /// Preconditions.
     pub preconditions: Vec<grounded_condition::GroundedCondition>,

@@ -2,6 +2,7 @@
 
 pub mod dypdl_parser;
 pub mod heuristic_search_solver;
+pub mod solution;
 mod util;
 
 pub use util::YamlContentErr;
