@@ -10,6 +10,7 @@ mod dual_bound_dbdfs;
 mod dual_bound_dds;
 mod dual_bound_dfbb;
 mod dual_bound_lookahead_bfs;
+mod dual_bound_rcbfs;
 mod dual_bound_weighted_astar;
 mod expression_beam_search;
 mod expression_evaluator;
@@ -75,6 +76,7 @@ impl SolverFactory {
                 "dual_bound_dfbb" => Ok(Box::new(dual_bound_dfbb::load_from_yaml(&config)?)),
                 "dual_bound_bfdfbb" => Ok(Box::new(dual_bound_bfdfbb::load_from_yaml(&config)?)),
                 "dual_bound_cbfs" => Ok(Box::new(dual_bound_cbfs::load_from_yaml(&config)?)),
+                "dual_bound_rrcbfs" => Ok(Box::new(dual_bound_rcbfs::load_from_yaml(&config)?)),
                 "dual_bound_dds" => Ok(Box::new(dual_bound_dds::load_from_yaml(&config)?)),
                 "dual_bound_dbdfs" => Ok(Box::new(dual_bound_dbdfs::load_from_yaml(&config)?)),
                 "dual_bound_chokudai" => Ok(Box::new(dual_bound_chokudai_search::load_from_yaml(
