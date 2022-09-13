@@ -99,9 +99,6 @@ where
             if f_min > best_bound {
                 best_bound = f_min;
                 solution.best_bound = Some(f_min);
-                if !parameters.quiet {
-                    println!("New best bound: {}, expanded: {}", best_bound, expanded);
-                }
             }
             arg_min.unwrap()
         } else {
