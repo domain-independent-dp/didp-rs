@@ -39,6 +39,7 @@ where
     let search_time = solution.time;
     if let Some(cost) = solution.cost {
         if !model.validate_forward(&solution.transitions, cost, true) {
+            println!("The solution is invalid.");
             eprintln!("Error: the solution is invalid.");
             process::exit(1);
         }
