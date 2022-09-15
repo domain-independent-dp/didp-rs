@@ -77,7 +77,7 @@ pub enum Condition {
 
 /// A trait to produce if-then-else expression.
 pub trait IfThenElse<T> {
-    /// Returns an if-then-else expression, which retunrs a if this condition holds and b otherwise.
+    /// Returns an if-then-else expression, which returns a if this condition holds and b otherwise.
     fn if_then_else<U, V>(self, a: U, b: V) -> T
     where
         T: From<U> + From<V>;
@@ -101,7 +101,7 @@ impl ops::Not for Condition {
 impl ops::BitAnd for Condition {
     type Output = Condition;
 
-    /// Returns the conjuction of this condition and rhs.
+    /// Returns the conjunction of this condition and rhs.
     #[inline]
     fn bitand(self, rhs: Self) -> Self::Output {
         Self::And(Box::new(self), Box::new(rhs))
@@ -175,6 +175,30 @@ impl SetExpression {
         )))
     }
 
+    /// Returns a condition checking if this set is equal to the other.
+    #[inline]
+    pub fn is_equal<T>(self, set: T) -> Condition
+    where
+        SetExpression: From<T>,
+    {
+        Condition::Set(Box::new(SetCondition::IsEqual(
+            self,
+            SetExpression::from(set),
+        )))
+    }
+
+    /// Returns a condition checking if this set is not equal to the other.
+    #[inline]
+    pub fn is_not_equal<T>(self, set: T) -> Condition
+    where
+        SetExpression: From<T>,
+    {
+        Condition::Set(Box::new(SetCondition::IsNotEqual(
+            self,
+            SetExpression::from(set),
+        )))
+    }
+
     /// Returns a condition checking if this set is a subset of the other.
     #[inline]
     pub fn is_subset<T>(self, set: T) -> Condition
@@ -204,6 +228,30 @@ impl SetVariable {
         Condition::Set(Box::new(SetCondition::IsIn(
             ElementExpression::from(element),
             SetExpression::from(self),
+        )))
+    }
+
+    /// Returns a condition checking if this set is equal to the other.
+    #[inline]
+    pub fn is_equal<T>(self, set: T) -> Condition
+    where
+        SetExpression: From<T>,
+    {
+        Condition::Set(Box::new(SetCondition::IsEqual(
+            From::from(self),
+            SetExpression::from(set),
+        )))
+    }
+
+    /// Returns a condition checking if this set is not equal to the other.
+    #[inline]
+    pub fn is_not_equal<T>(self, set: T) -> Condition
+    where
+        SetExpression: From<T>,
+    {
+        Condition::Set(Box::new(SetCondition::IsNotEqual(
+            From::from(self),
+            SetExpression::from(set),
         )))
     }
 
@@ -592,6 +640,62 @@ mod tests {
             Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(0),
                 SetExpression::Reference(ReferenceExpression::Variable(v.id()))
+            )))
+        );
+    }
+
+    #[test]
+    fn set_is_equal() {
+        let expression = SetExpression::Reference(ReferenceExpression::Constant(Set::default()));
+
+        assert_eq!(
+            expression.is_equal(Set::default()),
+            Condition::Set(Box::new(SetCondition::IsEqual(
+                SetExpression::Reference(ReferenceExpression::Constant(Set::default())),
+                SetExpression::Reference(ReferenceExpression::Constant(Set::default()))
+            )))
+        );
+
+        let mut metadata = StateMetadata::default();
+        let ob = metadata.add_object_type(String::from("something"), 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = metadata.add_set_variable(String::from("sv"), ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        assert_eq!(
+            v.is_equal(Set::default()),
+            Condition::Set(Box::new(SetCondition::IsEqual(
+                SetExpression::Reference(ReferenceExpression::Variable(v.id())),
+                SetExpression::Reference(ReferenceExpression::Constant(Set::default()))
+            )))
+        );
+    }
+
+    #[test]
+    fn set_is_not_equal() {
+        let expression = SetExpression::Reference(ReferenceExpression::Constant(Set::default()));
+
+        assert_eq!(
+            expression.is_not_equal(Set::default()),
+            Condition::Set(Box::new(SetCondition::IsNotEqual(
+                SetExpression::Reference(ReferenceExpression::Constant(Set::default())),
+                SetExpression::Reference(ReferenceExpression::Constant(Set::default()))
+            )))
+        );
+
+        let mut metadata = StateMetadata::default();
+        let ob = metadata.add_object_type(String::from("something"), 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = metadata.add_set_variable(String::from("sv"), ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        assert_eq!(
+            v.is_not_equal(Set::default()),
+            Condition::Set(Box::new(SetCondition::IsNotEqual(
+                SetExpression::Reference(ReferenceExpression::Variable(v.id())),
+                SetExpression::Reference(ReferenceExpression::Constant(Set::default()))
             )))
         );
     }

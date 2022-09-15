@@ -2296,7 +2296,9 @@ impl CheckExpression<expression::Condition> for Model {
                     self.check_expression(element, allow_cost)?;
                     self.check_expression(set, allow_cost)
                 }
-                expression::SetCondition::IsSubset(x, y) => {
+                expression::SetCondition::IsSubset(x, y)
+                | expression::SetCondition::IsEqual(x, y)
+                | expression::SetCondition::IsNotEqual(x, y) => {
                     self.check_expression(x, allow_cost)?;
                     self.check_expression(y, allow_cost)
                 }
@@ -14885,6 +14887,20 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
+        let expression = Condition::Set(Box::new(SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
+            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
+        )));
+        assert!(model.check_expression(&expression, false).is_ok());
+        assert!(model.check_expression(&expression, true).is_ok());
+
+        let expression = Condition::Set(Box::new(SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
+            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
+        )));
+        assert!(model.check_expression(&expression, false).is_ok());
+        assert!(model.check_expression(&expression, true).is_ok());
+
         let expression = Condition::Set(Box::new(SetCondition::IsEmpty(SetExpression::Reference(
             ReferenceExpression::Constant(Set::with_capacity(2)),
         ))));
@@ -15016,6 +15032,34 @@ mod tests {
         assert!(model.check_expression(&expression, true).is_err());
 
         let expression = Condition::Set(Box::new(SetCondition::IsSubset(
+            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        )));
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+
+        let expression = Condition::Set(Box::new(SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
+        )));
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+
+        let expression = Condition::Set(Box::new(SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        )));
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+
+        let expression = Condition::Set(Box::new(SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
+        )));
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+
+        let expression = Condition::Set(Box::new(SetCondition::IsNotEqual(
             SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(2))),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         )));

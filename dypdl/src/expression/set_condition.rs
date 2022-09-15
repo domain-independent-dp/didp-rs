@@ -9,6 +9,10 @@ use crate::table_registry::TableRegistry;
 pub enum SetCondition {
     /// Constant.
     Constant(bool),
+    /// If a set is equal to another set.
+    IsEqual(SetExpression, SetExpression),
+    /// If a set is not equal to another set.
+    IsNotEqual(SetExpression, SetExpression),
     /// If an element is included in a set.
     IsIn(ElementExpression, SetExpression),
     /// If a set is a subset of another set.
@@ -32,6 +36,40 @@ impl SetCondition {
                 set.contains(element.eval(state, registry))
             }
             Self::IsIn(e, s) => s.eval(state, registry).contains(e.eval(state, registry)),
+            Self::IsEqual(SetExpression::Reference(x), SetExpression::Reference(y)) => {
+                let f = |i| state.get_set_variable(i);
+                let x = x.eval(state, registry, &f, &registry.set_tables);
+                let y = y.eval(state, registry, &f, &registry.set_tables);
+                x == y
+            }
+            Self::IsEqual(x, SetExpression::Reference(y)) => {
+                let f = |i| state.get_set_variable(i);
+                let y = y.eval(state, registry, &f, &registry.set_tables);
+                x.eval(state, registry) == *y
+            }
+            Self::IsEqual(SetExpression::Reference(x), y) => {
+                let f = |i| state.get_set_variable(i);
+                let x = x.eval(state, registry, &f, &registry.set_tables);
+                *x == y.eval(state, registry)
+            }
+            Self::IsEqual(x, y) => x.eval(state, registry) == y.eval(state, registry),
+            Self::IsNotEqual(SetExpression::Reference(x), SetExpression::Reference(y)) => {
+                let f = |i| state.get_set_variable(i);
+                let x = x.eval(state, registry, &f, &registry.set_tables);
+                let y = y.eval(state, registry, &f, &registry.set_tables);
+                x != y
+            }
+            Self::IsNotEqual(x, SetExpression::Reference(y)) => {
+                let f = |i| state.get_set_variable(i);
+                let y = y.eval(state, registry, &f, &registry.set_tables);
+                x.eval(state, registry) != *y
+            }
+            Self::IsNotEqual(SetExpression::Reference(x), y) => {
+                let f = |i| state.get_set_variable(i);
+                let x = x.eval(state, registry, &f, &registry.set_tables);
+                *x != y.eval(state, registry)
+            }
+            Self::IsNotEqual(x, y) => x.eval(state, registry) != y.eval(state, registry),
             Self::IsSubset(SetExpression::Reference(x), SetExpression::Reference(y)) => {
                 let f = |i| state.get_set_variable(i);
                 let x = x.eval(state, registry, &f, &registry.set_tables);
@@ -74,6 +112,28 @@ impl SetCondition {
                     (element, set) => Self::IsIn(element, set),
                 }
             }
+            Self::IsEqual(x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (
+                    SetExpression::Reference(ReferenceExpression::Constant(x)),
+                    SetExpression::Reference(ReferenceExpression::Constant(y)),
+                ) => Self::Constant(x == y),
+                (
+                    SetExpression::Reference(ReferenceExpression::Variable(x)),
+                    SetExpression::Reference(ReferenceExpression::Variable(y)),
+                ) if x == y => Self::Constant(true),
+                (x, y) => Self::IsEqual(x, y),
+            },
+            Self::IsNotEqual(x, y) => match (x.simplify(registry), y.simplify(registry)) {
+                (
+                    SetExpression::Reference(ReferenceExpression::Constant(x)),
+                    SetExpression::Reference(ReferenceExpression::Constant(y)),
+                ) => Self::Constant(x != y),
+                (
+                    SetExpression::Reference(ReferenceExpression::Variable(x)),
+                    SetExpression::Reference(ReferenceExpression::Variable(y)),
+                ) if x == y => Self::Constant(false),
+                (x, y) => Self::IsNotEqual(x, y),
+            },
             Self::IsSubset(x, y) => match (x.simplify(registry), y.simplify(registry)) {
                 (
                     SetExpression::Reference(ReferenceExpression::Constant(x)),
@@ -182,6 +242,462 @@ mod tests {
             ))),
         );
         assert!(!expression.eval(&state, &registry));
+    }
+
+    #[test]
+    fn is_equal_eval() {
+        let state = generate_state();
+        let registry = TableRegistry::default();
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(2)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(3)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(2)),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(3)),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(2)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(3)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(2)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(3)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(2)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(3)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(2)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(3)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(2)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(3)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(2)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(3)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+    }
+
+    #[test]
+    fn is_not_equal_eval() {
+        let state = generate_state();
+        let registry = TableRegistry::default();
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(2)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(3)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(2)),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(3)),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(2)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(3)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(2)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(3)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(2)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(3)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(2)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(3)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+        );
+        assert!(!expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(2)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(3)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(2)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(3)),
+            )))),
+            SetExpression::Complement(Box::new(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            )))),
+        );
+        assert!(expression.eval(&state, &registry));
     }
 
     #[test]
@@ -476,6 +992,91 @@ mod tests {
         let expression = SetCondition::IsIn(
             ElementExpression::Constant(0),
             SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn is_equal_simplify() {
+        let registry = TableRegistry::default();
+
+        let mut x = Set::with_capacity(3);
+        x.insert(0);
+        let mut y = Set::with_capacity(3);
+        y.insert(0);
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Constant(x)),
+            SetExpression::Reference(ReferenceExpression::Constant(y)),
+        );
+        assert_eq!(expression.simplify(&registry), SetCondition::Constant(true));
+
+        let mut x = Set::with_capacity(3);
+        x.insert(2);
+        let mut y = Set::with_capacity(3);
+        y.insert(0);
+        y.insert(1);
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Constant(x)),
+            SetExpression::Reference(ReferenceExpression::Constant(y)),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetCondition::Constant(false)
+        );
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert_eq!(expression.simplify(&registry), SetCondition::Constant(true));
+
+        let expression = SetCondition::IsEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
+        );
+        assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn is_not_equal_simplify() {
+        let registry = TableRegistry::default();
+
+        let mut x = Set::with_capacity(3);
+        x.insert(0);
+        let mut y = Set::with_capacity(3);
+        y.insert(0);
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Constant(x)),
+            SetExpression::Reference(ReferenceExpression::Constant(y)),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetCondition::Constant(false)
+        );
+
+        let mut x = Set::with_capacity(3);
+        x.insert(2);
+        let mut y = Set::with_capacity(3);
+        y.insert(0);
+        y.insert(1);
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Constant(x)),
+            SetExpression::Reference(ReferenceExpression::Constant(y)),
+        );
+        assert_eq!(expression.simplify(&registry), SetCondition::Constant(true));
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        );
+        assert_eq!(
+            expression.simplify(&registry),
+            SetCondition::Constant(false)
+        );
+
+        let expression = SetCondition::IsNotEqual(
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+            SetExpression::Reference(ReferenceExpression::Variable(1)),
         );
         assert_eq!(expression.simplify(&registry), expression);
     }

@@ -394,8 +394,8 @@ impl SetExprPy {
         let condition = match op {
             CompareOp::Lt => lhs.clone().is_subset(rhs.clone()) & !rhs.is_subset(lhs),
             CompareOp::Le => lhs.is_subset(rhs),
-            CompareOp::Eq => lhs.clone().is_subset(rhs.clone()) & rhs.is_subset(lhs),
-            CompareOp::Ne => !lhs.clone().is_subset(rhs.clone()) | !rhs.is_subset(lhs),
+            CompareOp::Eq => lhs.is_equal(rhs),
+            CompareOp::Ne => lhs.is_not_equal(rhs),
             CompareOp::Ge => rhs.is_subset(lhs),
             CompareOp::Gt => rhs.clone().is_subset(lhs.clone()) & !lhs.is_subset(rhs),
         };
@@ -670,8 +670,8 @@ impl SetVarPy {
         let condition = match op {
             CompareOp::Lt => lhs.is_subset(rhs.clone()) & !rhs.is_subset(lhs),
             CompareOp::Le => lhs.is_subset(rhs),
-            CompareOp::Eq => lhs.is_subset(rhs.clone()) & rhs.is_subset(lhs),
-            CompareOp::Ne => !lhs.is_subset(rhs.clone()) | !rhs.is_subset(lhs),
+            CompareOp::Eq => lhs.is_equal(rhs),
+            CompareOp::Ne => lhs.is_not_equal(rhs),
             CompareOp::Ge => rhs.is_subset(lhs),
             CompareOp::Gt => rhs.clone().is_subset(lhs) & !lhs.is_subset(rhs),
         };
@@ -946,8 +946,8 @@ impl SetConstPy {
         let condition = match op {
             CompareOp::Lt => lhs.clone().is_subset(rhs.clone()) & !rhs.is_subset(lhs),
             CompareOp::Le => lhs.is_subset(rhs),
-            CompareOp::Eq => lhs.clone().is_subset(rhs.clone()) & rhs.is_subset(lhs),
-            CompareOp::Ne => !lhs.clone().is_subset(rhs.clone()) | !rhs.is_subset(lhs),
+            CompareOp::Eq => lhs.is_equal(rhs),
+            CompareOp::Ne => lhs.is_not_equal(rhs),
             CompareOp::Ge => rhs.is_subset(lhs),
             CompareOp::Gt => rhs.clone().is_subset(lhs.clone()) & !lhs.is_subset(rhs),
         };
@@ -3827,16 +3827,10 @@ mod tests {
         )));
         assert_eq!(
             expression.__richcmp__(other, CompareOp::Eq),
-            ConditionPy(Condition::And(
-                Box::new(Condition::Set(Box::new(SetCondition::IsSubset(
-                    SetExpression::Reference(ReferenceExpression::Variable(0)),
-                    SetExpression::Reference(ReferenceExpression::Variable(1)),
-                )))),
-                Box::new(Condition::Set(Box::new(SetCondition::IsSubset(
-                    SetExpression::Reference(ReferenceExpression::Variable(1)),
-                    SetExpression::Reference(ReferenceExpression::Variable(0)),
-                ))))
-            ))
+            ConditionPy(Condition::Set(Box::new(SetCondition::IsEqual(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            ))))
         );
     }
 
@@ -3848,20 +3842,10 @@ mod tests {
         )));
         assert_eq!(
             expression.__richcmp__(other, CompareOp::Ne),
-            ConditionPy(Condition::Or(
-                Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
-                    SetCondition::IsSubset(
-                        SetExpression::Reference(ReferenceExpression::Variable(0)),
-                        SetExpression::Reference(ReferenceExpression::Variable(1)),
-                    )
-                ))))),
-                Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
-                    SetCondition::IsSubset(
-                        SetExpression::Reference(ReferenceExpression::Variable(1)),
-                        SetExpression::Reference(ReferenceExpression::Variable(0)),
-                    )
-                )))))
-            ))
+            ConditionPy(Condition::Set(Box::new(SetCondition::IsNotEqual(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            ))))
         );
     }
 
@@ -4336,16 +4320,10 @@ mod tests {
         )));
         assert_eq!(
             expression.__richcmp__(other, CompareOp::Eq),
-            ConditionPy(Condition::And(
-                Box::new(Condition::Set(Box::new(SetCondition::IsSubset(
-                    SetExpression::Reference(ReferenceExpression::Variable(v.id())),
-                    SetExpression::Reference(ReferenceExpression::Variable(1)),
-                )))),
-                Box::new(Condition::Set(Box::new(SetCondition::IsSubset(
-                    SetExpression::Reference(ReferenceExpression::Variable(1)),
-                    SetExpression::Reference(ReferenceExpression::Variable(v.id())),
-                ))))
-            ))
+            ConditionPy(Condition::Set(Box::new(SetCondition::IsEqual(
+                SetExpression::Reference(ReferenceExpression::Variable(v.id())),
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            ))))
         );
     }
 
@@ -4365,20 +4343,10 @@ mod tests {
         )));
         assert_eq!(
             expression.__richcmp__(other, CompareOp::Ne),
-            ConditionPy(Condition::Or(
-                Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
-                    SetCondition::IsSubset(
-                        SetExpression::Reference(ReferenceExpression::Variable(v.id())),
-                        SetExpression::Reference(ReferenceExpression::Variable(1)),
-                    )
-                ))))),
-                Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
-                    SetCondition::IsSubset(
-                        SetExpression::Reference(ReferenceExpression::Variable(1)),
-                        SetExpression::Reference(ReferenceExpression::Variable(v.id())),
-                    )
-                )))))
-            ))
+            ConditionPy(Condition::Set(Box::new(SetCondition::IsNotEqual(
+                SetExpression::Reference(ReferenceExpression::Variable(v.id())),
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            ))))
         );
     }
 
@@ -5027,16 +4995,10 @@ mod tests {
         )));
         assert_eq!(
             expression.__richcmp__(other, CompareOp::Eq),
-            ConditionPy(Condition::And(
-                Box::new(Condition::Set(Box::new(SetCondition::IsSubset(
-                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
-                    SetExpression::Reference(ReferenceExpression::Variable(1)),
-                )))),
-                Box::new(Condition::Set(Box::new(SetCondition::IsSubset(
-                    SetExpression::Reference(ReferenceExpression::Variable(1)),
-                    SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
-                ))))
-            ))
+            ConditionPy(Condition::Set(Box::new(SetCondition::IsEqual(
+                SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            ))))
         );
     }
 
@@ -5048,24 +5010,10 @@ mod tests {
         )));
         assert_eq!(
             expression.__richcmp__(other, CompareOp::Ne),
-            ConditionPy(Condition::Or(
-                Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
-                    SetCondition::IsSubset(
-                        SetExpression::Reference(ReferenceExpression::Constant(
-                            Set::with_capacity(10)
-                        )),
-                        SetExpression::Reference(ReferenceExpression::Variable(1)),
-                    )
-                ))))),
-                Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
-                    SetCondition::IsSubset(
-                        SetExpression::Reference(ReferenceExpression::Variable(1)),
-                        SetExpression::Reference(ReferenceExpression::Constant(
-                            Set::with_capacity(10)
-                        )),
-                    )
-                )))))
-            ))
+            ConditionPy(Condition::Set(Box::new(SetCondition::IsNotEqual(
+                SetExpression::Reference(ReferenceExpression::Constant(Set::with_capacity(10))),
+                SetExpression::Reference(ReferenceExpression::Variable(1)),
+            ))))
         );
     }
 
