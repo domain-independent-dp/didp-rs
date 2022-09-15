@@ -280,7 +280,7 @@ impl Model {
         self.state_metadata.add_object_type(name, number)
     }
 
-    /// Retunrs the number of objects associated with the type.
+    /// Returns the number of objects associated with the type.
     ///
     /// # Errors
     ///
@@ -300,7 +300,7 @@ impl Model {
         self.state_metadata.set_number_of_object(ob, number)
     }
 
-    /// Create a set of objects asociated with the type.
+    /// Create a set of objects associated with the type.
     ///
     /// # Errors
     ///
@@ -784,6 +784,75 @@ impl Model {
         let transition = self.check_and_simplify_transition(&transition)?;
         self.backward_forced_transitions.push(transition);
         Ok(())
+    }
+
+    /// Returns the capacity of a set constant in a 1D table.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the table does not exist in the model.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the table is empty.
+    #[inline]
+    pub fn get_capacity_of_set_in_1d_table(
+        &self,
+        table: Table1DHandle<Set>,
+    ) -> Result<usize, ModelErr> {
+        self.table_registry.set_tables.check_table_1d(table.id())?;
+        Ok(self.table_registry.set_tables.tables_1d[table.id()].capacity_of_set())
+    }
+
+    /// Returns the capacity of a set constant in a 2D table.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the table does not exist in the model.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the table is empty.
+    #[inline]
+    pub fn get_capacity_of_set_in_2d_table(
+        &self,
+        table: Table2DHandle<Set>,
+    ) -> Result<usize, ModelErr> {
+        self.table_registry.set_tables.check_table_2d(table.id())?;
+        Ok(self.table_registry.set_tables.tables_2d[table.id()].capacity_of_set())
+    }
+
+    /// Returns the capacity of a set constant in a 3D table.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the table does not exist in the model.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the table is empty.
+    #[inline]
+    pub fn get_capacity_of_set_in_3d_table(
+        &self,
+        table: Table3DHandle<Set>,
+    ) -> Result<usize, ModelErr> {
+        self.table_registry.set_tables.check_table_3d(table.id())?;
+        Ok(self.table_registry.set_tables.tables_3d[table.id()].capacity_of_set())
+    }
+
+    /// Returns the capacity of a set constant in a table.
+    ///
+    /// # Errors
+    ///
+    /// Errors if the table does not exist in the model.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the table is empty.
+    #[inline]
+    pub fn get_capacity_of_set_in_table(&self, table: TableHandle<Set>) -> Result<usize, ModelErr> {
+        self.table_registry.set_tables.check_table(table.id())?;
+        Ok(self.table_registry.set_tables.tables[table.id()].capacity_of_set())
     }
 
     fn check_and_simplify_transition(
@@ -1764,6 +1833,71 @@ impl CheckExpression<expression::ElementExpression> for Model {
     }
 }
 
+impl CheckExpression<expression::SetReduceExpression> for Model {
+    fn check_expression(
+        &self,
+        expression: &expression::SetReduceExpression,
+        allow_cost: bool,
+    ) -> Result<(), ModelErr> {
+        match expression {
+            expression::SetReduceExpression::Constant(_) => Ok(()),
+            expression::SetReduceExpression::Table1D(_, capacity, i, x) => {
+                self.table_registry.set_tables.check_table_1d(*i)?;
+                let expected_capacity =
+                    self.table_registry.set_tables.tables_1d[*i].capacity_of_set();
+                if expected_capacity != *capacity {
+                    return Err(ModelErr::new(format!(
+                        "Given capacity `{}` mismatches the capacity `{}` of an entry in a 1D table",
+                        *capacity, expected_capacity
+                    )));
+                }
+                self.check_expression(x.as_ref(), allow_cost)
+            }
+            expression::SetReduceExpression::Table2D(_, capacity, i, x, y) => {
+                self.table_registry.set_tables.check_table_2d(*i)?;
+                let expected_capacity =
+                    self.table_registry.set_tables.tables_2d[*i].capacity_of_set();
+                if expected_capacity != *capacity {
+                    return Err(ModelErr::new(format!(
+                        "Given capacity `{}` mismatches the capacity `{}` of an entry in a 2D table",
+                        *capacity, expected_capacity
+                    )));
+                }
+                self.check_expression(x.as_ref(), allow_cost)?;
+                self.check_expression(y.as_ref(), allow_cost)
+            }
+            expression::SetReduceExpression::Table3D(_, capacity, i, x, y, z) => {
+                self.table_registry.set_tables.check_table_3d(*i)?;
+                let expected_capacity =
+                    self.table_registry.set_tables.tables_3d[*i].capacity_of_set();
+                if expected_capacity != *capacity {
+                    return Err(ModelErr::new(format!(
+                        "Given capacity `{}` mismatches the capacity `{}` of an entry in a 3D table",
+                        *capacity, expected_capacity
+                    )));
+                }
+                self.check_expression(x.as_ref(), allow_cost)?;
+                self.check_expression(y.as_ref(), allow_cost)?;
+                self.check_expression(z.as_ref(), allow_cost)
+            }
+            expression::SetReduceExpression::Table(_, capacity, i, args) => {
+                self.table_registry.set_tables.check_table(*i)?;
+                let expected_capacity = self.table_registry.set_tables.tables[*i].capacity_of_set();
+                if expected_capacity != *capacity {
+                    return Err(ModelErr::new(format!(
+                        "Given capacity `{}` mismatches the capacity `{}` of an entry in a table",
+                        *capacity, expected_capacity
+                    )));
+                }
+                for arg in args {
+                    self.check_expression(arg, allow_cost)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 impl CheckExpression<expression::SetExpression> for Model {
     fn check_expression(
         &self,
@@ -1798,6 +1932,9 @@ impl CheckExpression<expression::SetExpression> for Model {
             expression::SetExpression::SetElementOperation(_, x, y) => {
                 self.check_expression(x, allow_cost)?;
                 self.check_expression(y.as_ref(), allow_cost)
+            }
+            expression::SetExpression::Reduce(expression) => {
+                self.check_expression(expression, allow_cost)
             }
             expression::SetExpression::FromVector(_, vector) => {
                 self.check_expression(vector.as_ref(), allow_cost)
@@ -9389,6 +9526,94 @@ mod tests {
     }
 
     #[test]
+    fn get_capacity_of_set_in_1d_table_ok() {
+        let mut model = Model::default();
+        let table = model.add_table_1d("table", vec![Set::with_capacity(3)]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let result = model.get_capacity_of_set_in_1d_table(table);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 3);
+    }
+
+    #[test]
+    fn get_capacity_of_set_in_1d_table_err() {
+        let mut model = Model::default();
+        let table = model.add_table_1d("table", vec![Set::with_capacity(3)]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let model = Model::default();
+        let result = model.get_capacity_of_set_in_1d_table(table);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn get_capacity_of_set_in_2d_table_ok() {
+        let mut model = Model::default();
+        let table = model.add_table_2d("table", vec![vec![Set::with_capacity(3)]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let result = model.get_capacity_of_set_in_2d_table(table);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 3);
+    }
+
+    #[test]
+    fn get_capacity_of_set_in_2d_table_err() {
+        let mut model = Model::default();
+        let table = model.add_table_2d("table", vec![vec![Set::with_capacity(3)]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let model = Model::default();
+        let result = model.get_capacity_of_set_in_2d_table(table);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn get_capacity_of_set_in_3d_table_ok() {
+        let mut model = Model::default();
+        let table = model.add_table_3d("table", vec![vec![vec![Set::with_capacity(3)]]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let result = model.get_capacity_of_set_in_3d_table(table);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 3);
+    }
+
+    #[test]
+    fn get_capacity_of_set_in_3d_table_err() {
+        let mut model = Model::default();
+        let table = model.add_table_3d("table", vec![vec![vec![Set::with_capacity(3)]]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let model = Model::default();
+        let result = model.get_capacity_of_set_in_3d_table(table);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn get_capacity_of_set_in_table_ok() {
+        let mut model = Model::default();
+        let table = model.add_table("table", FxHashMap::default(), Set::with_capacity(3));
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let result = model.get_capacity_of_set_in_table(table);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 3);
+    }
+
+    #[test]
+    fn get_capacity_of_set_in_table_err() {
+        let mut model = Model::default();
+        let table = model.add_table("table", FxHashMap::default(), Set::with_capacity(3));
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let model = Model::default();
+        let result = model.get_capacity_of_set_in_table(table);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn check_element_table_expression_ok() {
         let mut model = Model::default();
         let t = TableInterface::<Element>::add_table_1d(&mut model, String::from("t1"), vec![0, 1]);
@@ -12583,6 +12808,397 @@ mod tests {
             Box::new(ElementExpression::Constant(1)),
             Box::new(ElementExpression::Variable(0)),
         );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expression_constant_ok() {
+        let model = Model::default();
+        let expression = SetReduceExpression::Constant(Set::default());
+        assert!(model.check_expression(&expression, false).is_ok());
+        assert!(model.check_expression(&expression, true).is_ok());
+    }
+
+    #[test]
+    fn check_set_reduce_expression_table_1d_ok() {
+        let mut model = Model::default();
+        let table = model.add_table_1d("table", vec![Set::with_capacity(3)]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table1D(
+            SetReduceOperator::Union,
+            3,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_ok());
+        assert!(model.check_expression(&expression, true).is_ok());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_1d_no_table_err() {
+        let mut model = Model::default();
+        let table = model.add_table_1d("table", vec![Set::with_capacity(3)]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table1D(
+            SetReduceOperator::Union,
+            3,
+            table.id() + 1,
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_1d_capacity_err() {
+        let mut model = Model::default();
+        let table = model.add_table_1d("table", vec![Set::with_capacity(3)]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table1D(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_1d_x_err() {
+        let mut model = Model::default();
+        let table = model.add_table_1d("table", vec![Set::with_capacity(3)]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table1D(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expression_table_2d_ok() {
+        let mut model = Model::default();
+        let table = model.add_table_2d("table", vec![vec![Set::with_capacity(3)]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table2D(
+            SetReduceOperator::Union,
+            3,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_ok());
+        assert!(model.check_expression(&expression, true).is_ok());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_2d_no_table_err() {
+        let mut model = Model::default();
+        let table = model.add_table_2d("table", vec![vec![Set::with_capacity(3)]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table2D(
+            SetReduceOperator::Union,
+            3,
+            table.id() + 1,
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_2d_capacity_err() {
+        let mut model = Model::default();
+        let table = model.add_table_2d("table", vec![vec![Set::with_capacity(3)]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table2D(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_2d_x_err() {
+        let mut model = Model::default();
+        let table = model.add_table_2d("table", vec![vec![Set::with_capacity(3)]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table2D(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_2d_y_err() {
+        let mut model = Model::default();
+        let table = model.add_table_2d("table", vec![vec![Set::with_capacity(3)]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table2D(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expression_table_3d_ok() {
+        let mut model = Model::default();
+        let table = model.add_table_3d("table", vec![vec![vec![Set::with_capacity(3)]]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table3D(
+            SetReduceOperator::Union,
+            3,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_ok());
+        assert!(model.check_expression(&expression, true).is_ok());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_3d_no_table_err() {
+        let mut model = Model::default();
+        let table = model.add_table_3d("table", vec![vec![vec![Set::with_capacity(3)]]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table3D(
+            SetReduceOperator::Union,
+            3,
+            table.id() + 1,
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_3d_capacity_err() {
+        let mut model = Model::default();
+        let table = model.add_table_3d("table", vec![vec![vec![Set::with_capacity(3)]]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table3D(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_3d_x_err() {
+        let mut model = Model::default();
+        let table = model.add_table_3d("table", vec![vec![vec![Set::with_capacity(3)]]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table3D(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_3d_y_err() {
+        let mut model = Model::default();
+        let table = model.add_table_3d("table", vec![vec![vec![Set::with_capacity(3)]]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table3D(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_3d_z_err() {
+        let mut model = Model::default();
+        let table = model.add_table_3d("table", vec![vec![vec![Set::with_capacity(3)]]]);
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table3D(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expression_table_ok() {
+        let mut model = Model::default();
+        let table = model.add_table("table", FxHashMap::default(), Set::with_capacity(3));
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            3,
+            table.id(),
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ],
+        );
+        assert!(model.check_expression(&expression, false).is_ok());
+        assert!(model.check_expression(&expression, true).is_ok());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_no_table_err() {
+        let mut model = Model::default();
+        let table = model.add_table("table", FxHashMap::default(), Set::with_capacity(3));
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            3,
+            table.id() + 1,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ],
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_capacity_err() {
+        let mut model = Model::default();
+        let table = model.add_table("table", FxHashMap::default(), Set::with_capacity(3));
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ],
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_reduce_expressin_table_indices_err() {
+        let mut model = Model::default();
+        let table = model.add_table("table", FxHashMap::default(), Set::with_capacity(3));
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            vec![
+                ArgumentExpression::Element(ElementExpression::Variable(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ],
+        );
+        assert!(model.check_expression(&expression, false).is_err());
+        assert!(model.check_expression(&expression, true).is_err());
+    }
+
+    #[test]
+    fn check_set_expression_reduce_ok() {
+        let mut model = Model::default();
+        let table = model.add_table("table", FxHashMap::default(), Set::with_capacity(3));
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            3,
+            table.id(),
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ],
+        ));
+        assert!(model.check_expression(&expression, false).is_ok());
+        assert!(model.check_expression(&expression, true).is_ok());
+    }
+
+    #[test]
+    fn check_set_expression_reduce_err() {
+        let mut model = Model::default();
+        let table = model.add_table("table", FxHashMap::default(), Set::with_capacity(3));
+        assert!(table.is_ok());
+        let table = table.unwrap();
+        let expression = SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            2,
+            table.id(),
+            vec![
+                ArgumentExpression::Element(ElementExpression::Variable(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ],
+        ));
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
     }

@@ -1,10 +1,10 @@
+use super::argument_expression::ArgumentExpression;
 use super::element_expression::ElementExpression;
 use super::numeric_operator::ReduceOperator;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
-use super::util;
 use super::vector_expression::VectorExpression;
-use crate::state::{DPState, ElementResourceVariable, ElementVariable, SetVariable};
+use crate::state::DPState;
 use crate::table::{Table1D, Table2D};
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
@@ -12,63 +12,7 @@ use crate::variable_type::{Element, Numeric, Set};
 use num_traits::Num;
 use std::iter::{Product, Sum};
 
-/// An enum used to take the sum of constants in a table.
-#[derive(Debug, PartialEq, Clone)]
-pub enum ArgumentExpression {
-    Set(SetExpression),
-    Vector(VectorExpression),
-    Element(ElementExpression),
-}
-
-impl From<SetExpression> for ArgumentExpression {
-    #[inline]
-    fn from(v: SetExpression) -> ArgumentExpression {
-        Self::Set(v)
-    }
-}
-
-impl From<VectorExpression> for ArgumentExpression {
-    #[inline]
-    fn from(v: VectorExpression) -> ArgumentExpression {
-        Self::Vector(v)
-    }
-}
-
-impl From<ElementExpression> for ArgumentExpression {
-    #[inline]
-    fn from(v: ElementExpression) -> ArgumentExpression {
-        Self::Element(v)
-    }
-}
-
-macro_rules! impl_from {
-    ($T:ty,$U:ty) => {
-        impl From<$T> for ArgumentExpression {
-            #[inline]
-            fn from(v: $T) -> ArgumentExpression {
-                Self::from(<$U>::from(v))
-            }
-        }
-    };
-}
-
-impl_from!(Set, SetExpression);
-impl_from!(SetVariable, SetExpression);
-impl_from!(Element, ElementExpression);
-impl_from!(ElementVariable, ElementExpression);
-impl_from!(ElementResourceVariable, ElementExpression);
-
-impl ArgumentExpression {
-    /// Returns a simplified version by precomutation.
-    pub fn simplify(&self, registry: &TableRegistry) -> ArgumentExpression {
-        match self {
-            Self::Set(expression) => ArgumentExpression::Set(expression.simplify(registry)),
-            Self::Vector(expression) => ArgumentExpression::Vector(expression.simplify(registry)),
-            Self::Element(expression) => ArgumentExpression::Element(expression.simplify(registry)),
-        }
-    }
-}
-
+/// Expression referring to a numeric table.
 #[derive(Debug, PartialEq, Clone)]
 pub enum NumericTableExpression<T: Numeric> {
     /// Constant.
@@ -141,7 +85,7 @@ impl<T: Numeric> NumericTableExpression<T> {
                 tables.tables[*i].eval(&args)
             }
             Self::TableReduce(op, i, args) => {
-                let args = Self::eval_args(args.iter(), state, registry);
+                let args = ArgumentExpression::eval_args(args.iter(), state, registry);
                 op.eval_iter(args.into_iter().map(|args| tables.tables[*i].eval(&args)))
                     .unwrap()
             }
@@ -365,7 +309,7 @@ impl<T: Numeric> NumericTableExpression<T> {
                 Self::reduce_table_2d_y(op, &tables.tables_2d[*i], x, y)
             }
             Self::Table3DReduce(op, i, x, y, z) => {
-                let args = Self::eval_args([x, y, z].into_iter(), state, registry);
+                let args = ArgumentExpression::eval_args([x, y, z].into_iter(), state, registry);
                 op.eval_iter(
                     args.into_iter()
                         .map(|args| tables.tables_3d[*i].eval(args[0], args[1], args[2])),
@@ -403,7 +347,7 @@ impl<T: Numeric> NumericTableExpression<T> {
             Self::TableReduce(op, i, args) => {
                 let args: Vec<ArgumentExpression> =
                     args.iter().map(|x| x.simplify(registry)).collect();
-                if let Some(args) = Self::simplify_args(args.iter()) {
+                if let Some(args) = ArgumentExpression::simplify_args(args.iter()) {
                     Self::Constant(
                         op.eval_iter(args.into_iter().map(|args| tables.tables[*i].eval(&args)))
                             .unwrap(),
@@ -560,7 +504,7 @@ impl<T: Numeric> NumericTableExpression<T> {
                 let x = x.simplify(registry);
                 let y = y.simplify(registry);
                 let z = z.simplify(registry);
-                if let Some(args) = Self::simplify_args([&x, &y, &z].into_iter()) {
+                if let Some(args) = ArgumentExpression::simplify_args([&x, &y, &z].into_iter()) {
                     Self::Constant(
                         op.eval_iter(
                             args.into_iter()
@@ -574,46 +518,6 @@ impl<T: Numeric> NumericTableExpression<T> {
             }
             _ => self.clone(),
         }
-    }
-
-    fn eval_args<'a, I, U: DPState>(
-        args: I,
-        state: &U,
-        registry: &TableRegistry,
-    ) -> Vec<Vec<Element>>
-    where
-        I: Iterator<Item = &'a ArgumentExpression>,
-    {
-        let mut result = vec![vec![]];
-        for expression in args {
-            match expression {
-                ArgumentExpression::Set(set) => {
-                    result = match set {
-                        SetExpression::Reference(set) => {
-                            let f = |i| state.get_set_variable(i);
-                            let set = set.eval(state, registry, &f, &registry.set_tables);
-                            util::expand_vector_with_set(result, set)
-                        }
-                        _ => util::expand_vector_with_set(result, &set.eval(state, registry)),
-                    }
-                }
-                ArgumentExpression::Vector(vector) => {
-                    result = match vector {
-                        VectorExpression::Reference(vector) => {
-                            let f = |i| state.get_vector_variable(i);
-                            let vector = vector.eval(state, registry, &f, &registry.vector_tables);
-                            util::expand_vector_with_slice(result, vector)
-                        }
-                        _ => util::expand_vector_with_slice(result, &vector.eval(state, registry)),
-                    }
-                }
-                ArgumentExpression::Element(element) => {
-                    let element = element.eval(state, registry);
-                    result.iter_mut().for_each(|r| r.push(element));
-                }
-            }
-        }
-        result
     }
 
     fn reduce_table_1d<I>(op: &ReduceOperator, table: &Table1D<T>, x: I) -> T
@@ -657,28 +561,6 @@ impl<T: Numeric> NumericTableExpression<T> {
         I: Iterator<Item = Element>,
     {
         op.eval_iter(y.map(|y| table.eval(x, y))).unwrap()
-    }
-
-    fn simplify_args<'a, I>(args: I) -> Option<Vec<Vec<Element>>>
-    where
-        I: Iterator<Item = &'a ArgumentExpression>,
-    {
-        let mut simplified_args = vec![vec![]];
-        for expression in args {
-            match expression {
-                ArgumentExpression::Set(SetExpression::Reference(
-                    ReferenceExpression::Constant(set),
-                )) => simplified_args = util::expand_vector_with_set(simplified_args, set),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vector),
-                )) => simplified_args = util::expand_vector_with_slice(simplified_args, vector),
-                ArgumentExpression::Element(ElementExpression::Constant(element)) => {
-                    simplified_args.iter_mut().for_each(|r| r.push(*element));
-                }
-                _ => return None,
-            }
-        }
-        Some(simplified_args)
     }
 }
 
@@ -757,75 +639,6 @@ mod tests {
             },
             ..Default::default()
         }
-    }
-
-    #[test]
-    fn argument_from() {
-        let mut metadata = StateMetadata::default();
-        let ob = metadata.add_object_type(String::from("Something"), 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-
-        let s = metadata.create_set(ob, &[2, 4]);
-        assert!(s.is_ok());
-        let s = s.unwrap();
-        assert_eq!(
-            ArgumentExpression::from(SetExpression::Reference(ReferenceExpression::Constant(
-                s.clone()
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
-                s.clone()
-            )))
-        );
-        assert_eq!(
-            ArgumentExpression::from(s.clone()),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(s)))
-        );
-
-        let v = metadata.add_set_variable(String::from("sv"), ob);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        assert_eq!(
-            ArgumentExpression::from(v),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(
-                v.id()
-            )))
-        );
-
-        assert_eq!(
-            ArgumentExpression::from(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![1, 2]
-            ))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![1, 2]
-            )))
-        );
-
-        assert_eq!(
-            ArgumentExpression::from(ElementExpression::Constant(1)),
-            ArgumentExpression::Element(ElementExpression::Constant(1)),
-        );
-
-        assert_eq!(
-            ArgumentExpression::from(1),
-            ArgumentExpression::Element(ElementExpression::Constant(1)),
-        );
-
-        let v = metadata.add_element_variable(String::from("ev"), ob);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        assert_eq!(
-            ArgumentExpression::from(v),
-            ArgumentExpression::Element(ElementExpression::Variable(v.id())),
-        );
-
-        let v = metadata.add_element_resource_variable(String::from("erv"), ob, true);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        assert_eq!(
-            ArgumentExpression::from(v),
-            ArgumentExpression::Element(ElementExpression::ResourceVariable(v.id())),
-        );
     }
 
     #[test]

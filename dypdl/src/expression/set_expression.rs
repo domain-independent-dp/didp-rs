@@ -1,6 +1,8 @@
+use super::argument_expression::ArgumentExpression;
 use super::condition::{Condition, IfThenElse};
 use super::element_expression::ElementExpression;
 use super::reference_expression::ReferenceExpression;
+use super::set_reduce_expression::{SetReduceExpression, SetReduceOperator};
 use super::table_expression::TableExpression;
 use super::vector_expression::VectorExpression;
 use crate::state::{DPState, ElementResourceVariable, ElementVariable, SetVariable};
@@ -20,6 +22,8 @@ pub enum SetExpression {
     SetOperation(SetOperator, Box<SetExpression>, Box<SetExpression>),
     /// Operation on an element and a set.
     SetElementOperation(SetElementOperator, ElementExpression, Box<SetExpression>),
+    /// Reduce operation on a table of sets.
+    Reduce(SetReduceExpression),
     /// Conversion from a vector.
     FromVector(usize, Box<VectorExpression>),
     /// If-then-else expression, which returns the first one if the condition holds and the second one otherwise.
@@ -129,6 +133,48 @@ impl Table1DHandle<Set> {
             ElementExpression::from(x),
         )))
     }
+
+    /// Returns the union of sets in a 1D table.
+    #[inline]
+    pub fn union<T>(&self, capacity: usize, x: T) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+    {
+        SetExpression::Reduce(SetReduceExpression::Table1D(
+            SetReduceOperator::Union,
+            capacity,
+            self.id(),
+            Box::new(ArgumentExpression::from(x)),
+        ))
+    }
+
+    /// Returns the intersection of sets in a 1D table.
+    #[inline]
+    pub fn intersection<T>(&self, capacity: usize, x: T) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+    {
+        SetExpression::Reduce(SetReduceExpression::Table1D(
+            SetReduceOperator::Intersection,
+            capacity,
+            self.id(),
+            Box::new(ArgumentExpression::from(x)),
+        ))
+    }
+
+    /// Returns the symmetric difference (disjunctive union) of sets in a 1D table.
+    #[inline]
+    pub fn symmetric_difference<T>(&self, capacity: usize, x: T) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+    {
+        SetExpression::Reduce(SetReduceExpression::Table1D(
+            SetReduceOperator::SymmetricDifference,
+            capacity,
+            self.id(),
+            Box::new(ArgumentExpression::from(x)),
+        ))
+    }
 }
 
 impl Table2DHandle<Set> {
@@ -144,6 +190,54 @@ impl Table2DHandle<Set> {
             ElementExpression::from(x),
             ElementExpression::from(y),
         )))
+    }
+
+    /// Returns the union of sets in a 2D table.
+    #[inline]
+    pub fn union<T, U>(&self, capacity: usize, x: T, y: U) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+        ArgumentExpression: From<U>,
+    {
+        SetExpression::Reduce(SetReduceExpression::Table2D(
+            SetReduceOperator::Union,
+            capacity,
+            self.id(),
+            Box::new(ArgumentExpression::from(x)),
+            Box::new(ArgumentExpression::from(y)),
+        ))
+    }
+
+    /// Returns the intersection of sets in a 2D table.
+    #[inline]
+    pub fn intersection<T, U>(&self, capacity: usize, x: T, y: U) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+        ArgumentExpression: From<U>,
+    {
+        SetExpression::Reduce(SetReduceExpression::Table2D(
+            SetReduceOperator::Intersection,
+            capacity,
+            self.id(),
+            Box::new(ArgumentExpression::from(x)),
+            Box::new(ArgumentExpression::from(y)),
+        ))
+    }
+
+    /// Returns the symmetric difference (disjunctive union) of sets in a 2D table.
+    #[inline]
+    pub fn symmetric_difference<T, U>(&self, capacity: usize, x: T, y: U) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+        ArgumentExpression: From<U>,
+    {
+        SetExpression::Reduce(SetReduceExpression::Table2D(
+            SetReduceOperator::SymmetricDifference,
+            capacity,
+            self.id(),
+            Box::new(ArgumentExpression::from(x)),
+            Box::new(ArgumentExpression::from(y)),
+        ))
     }
 }
 
@@ -163,6 +257,60 @@ impl Table3DHandle<Set> {
             ElementExpression::from(z),
         )))
     }
+
+    /// Returns the union of sets in a 3D table.
+    #[inline]
+    pub fn union<T, U, V>(&self, capacity: usize, x: T, y: U, z: V) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+        ArgumentExpression: From<U>,
+        ArgumentExpression: From<V>,
+    {
+        SetExpression::Reduce(SetReduceExpression::Table3D(
+            SetReduceOperator::Union,
+            capacity,
+            self.id(),
+            Box::new(ArgumentExpression::from(x)),
+            Box::new(ArgumentExpression::from(y)),
+            Box::new(ArgumentExpression::from(z)),
+        ))
+    }
+
+    /// Returns the intersection of sets in a 3D table.
+    #[inline]
+    pub fn intersection<T, U, V>(&self, capacity: usize, x: T, y: U, z: V) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+        ArgumentExpression: From<U>,
+        ArgumentExpression: From<V>,
+    {
+        SetExpression::Reduce(SetReduceExpression::Table3D(
+            SetReduceOperator::Intersection,
+            capacity,
+            self.id(),
+            Box::new(ArgumentExpression::from(x)),
+            Box::new(ArgumentExpression::from(y)),
+            Box::new(ArgumentExpression::from(z)),
+        ))
+    }
+
+    /// Returns the symmetric difference (disjunctive union) of sets in a 3D table.
+    #[inline]
+    pub fn symmetric_difference<T, U, V>(&self, capacity: usize, x: T, y: U, z: V) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+        ArgumentExpression: From<U>,
+        ArgumentExpression: From<V>,
+    {
+        SetExpression::Reduce(SetReduceExpression::Table3D(
+            SetReduceOperator::SymmetricDifference,
+            capacity,
+            self.id(),
+            Box::new(ArgumentExpression::from(x)),
+            Box::new(ArgumentExpression::from(y)),
+            Box::new(ArgumentExpression::from(z)),
+        ))
+    }
 }
 
 impl TableHandle<Set> {
@@ -177,6 +325,51 @@ impl TableHandle<Set> {
             self.id(),
             indices,
         )))
+    }
+
+    /// Returns the union of sets in a table.
+    #[inline]
+    pub fn union<T>(&self, capacity: usize, indices: Vec<T>) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+    {
+        let indices = indices.into_iter().map(ArgumentExpression::from).collect();
+        SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            capacity,
+            self.id(),
+            indices,
+        ))
+    }
+
+    /// Returns the intersection of sets in a table.
+    #[inline]
+    pub fn intersection<T>(&self, capacity: usize, indices: Vec<T>) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+    {
+        let indices = indices.into_iter().map(ArgumentExpression::from).collect();
+        SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Intersection,
+            capacity,
+            self.id(),
+            indices,
+        ))
+    }
+
+    /// Returns the symmetric difference (disjunctive union) of sets in a table.
+    #[inline]
+    pub fn symmetric_difference<T>(&self, capacity: usize, indices: Vec<T>) -> SetExpression
+    where
+        ArgumentExpression: From<T>,
+    {
+        let indices = indices.into_iter().map(ArgumentExpression::from).collect();
+        SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::SymmetricDifference,
+            capacity,
+            self.id(),
+            indices,
+        ))
     }
 }
 
@@ -312,6 +505,7 @@ impl SetExpression {
                 let element = element.eval(state, registry);
                 Self::eval_set_element_operation(op, element, set)
             }
+            Self::Reduce(expression) => expression.eval(state, registry),
             Self::FromVector(capacity, vector) => match vector.as_ref() {
                 VectorExpression::Reference(ReferenceExpression::Constant(vector)) => {
                     let mut set = Set::with_capacity(*capacity);
@@ -388,6 +582,12 @@ impl SetExpression {
                     (set, element) => Self::SetElementOperation(op.clone(), element, Box::new(set)),
                 }
             }
+            Self::Reduce(expression) => match expression.simplify(registry) {
+                SetReduceExpression::Constant(set) => {
+                    Self::Reference(ReferenceExpression::Constant(set))
+                }
+                expression => Self::Reduce(expression),
+            },
             Self::FromVector(capacity, vector) => match vector.simplify(registry) {
                 VectorExpression::Reference(ReferenceExpression::Constant(vector)) => {
                     let mut set = Set::with_capacity(*capacity);
@@ -1060,7 +1260,7 @@ mod tests {
     }
 
     #[test]
-    fn set_table_element() {
+    fn set_table_1d_element() {
         let mut registry = TableRegistry::default();
 
         let t = registry.add_table_1d(String::from("t"), vec![Set::default()]);
@@ -1073,6 +1273,131 @@ mod tests {
                 ElementExpression::Constant(0)
             )))
         );
+    }
+
+    #[test]
+    fn set_table_1d_union() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table_1d(
+            String::from("t"),
+            vec![
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                },
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(1);
+                    set.insert(2);
+                    set
+                },
+            ],
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let x = SetExpression::Reference(ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(2);
+            set.insert(0);
+            set.insert(1);
+            set
+        }));
+        assert_eq!(
+            t.union(3, x.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table1D(
+                SetReduceOperator::Union,
+                3,
+                t.id(),
+                Box::new(ArgumentExpression::Set(x))
+            ))
+        );
+    }
+
+    #[test]
+    fn set_table_1d_intersection() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table_1d(
+            String::from("t"),
+            vec![
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                },
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(1);
+                    set.insert(2);
+                    set
+                },
+            ],
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let x = SetExpression::Reference(ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(2);
+            set.insert(0);
+            set.insert(1);
+            set
+        }));
+        assert_eq!(
+            t.intersection(3, x.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table1D(
+                SetReduceOperator::Intersection,
+                3,
+                t.id(),
+                Box::new(ArgumentExpression::Set(x))
+            ))
+        );
+    }
+
+    #[test]
+    fn set_table_1d_symmetric_difference() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table_1d(
+            String::from("t"),
+            vec![
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                },
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(1);
+                    set.insert(2);
+                    set
+                },
+            ],
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let x = SetExpression::Reference(ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(2);
+            set.insert(0);
+            set.insert(1);
+            set
+        }));
+        assert_eq!(
+            t.symmetric_difference(3, x.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table1D(
+                SetReduceOperator::SymmetricDifference,
+                3,
+                t.id(),
+                Box::new(ArgumentExpression::Set(x))
+            ))
+        );
+    }
+
+    #[test]
+    fn set_table_2d_element() {
+        let mut registry = TableRegistry::default();
 
         let t = registry.add_table_2d(String::from("t"), vec![vec![Set::default()]]);
         assert!(t.is_ok());
@@ -1085,6 +1410,134 @@ mod tests {
                 ElementExpression::Constant(0),
             )))
         );
+    }
+
+    #[test]
+    fn set_table_2d_union() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table_2d(
+            String::from("t"),
+            vec![vec![
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                },
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(1);
+                    set.insert(2);
+                    set
+                },
+            ]],
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let y = SetExpression::Reference(ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(2);
+            set.insert(0);
+            set.insert(1);
+            set
+        }));
+        assert_eq!(
+            t.union(3, 0, y.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table2D(
+                SetReduceOperator::Union,
+                3,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Set(y))
+            ))
+        );
+    }
+
+    #[test]
+    fn set_table_2d_intersection() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table_2d(
+            String::from("t"),
+            vec![vec![
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                },
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(1);
+                    set.insert(2);
+                    set
+                },
+            ]],
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let y = SetExpression::Reference(ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(2);
+            set.insert(0);
+            set.insert(1);
+            set
+        }));
+        assert_eq!(
+            t.intersection(3, 0, y.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table2D(
+                SetReduceOperator::Intersection,
+                3,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Set(y))
+            ))
+        );
+    }
+
+    #[test]
+    fn set_table_2d_symmetric_difference() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table_2d(
+            String::from("t"),
+            vec![vec![
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                },
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(1);
+                    set.insert(2);
+                    set
+                },
+            ]],
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let y = SetExpression::Reference(ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(2);
+            set.insert(0);
+            set.insert(1);
+            set
+        }));
+        assert_eq!(
+            t.symmetric_difference(3, 0, y.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table2D(
+                SetReduceOperator::SymmetricDifference,
+                3,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Set(y))
+            ))
+        );
+    }
+
+    #[test]
+    fn set_table_3d_element() {
+        let mut registry = TableRegistry::default();
 
         let t = registry.add_table_3d(String::from("t"), vec![vec![vec![Set::default()]]]);
         assert!(t.is_ok());
@@ -1098,6 +1551,137 @@ mod tests {
                 ElementExpression::Constant(0),
             )))
         );
+    }
+
+    #[test]
+    fn set_table_3d_union() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table_3d(
+            String::from("t"),
+            vec![vec![vec![
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                },
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(1);
+                    set.insert(2);
+                    set
+                },
+            ]]],
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let z = SetExpression::Reference(ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(2);
+            set.insert(0);
+            set.insert(1);
+            set
+        }));
+        assert_eq!(
+            t.union(3, 0, 0, z.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table3D(
+                SetReduceOperator::Union,
+                3,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Set(z))
+            ))
+        );
+    }
+
+    #[test]
+    fn set_table_3d_intersection() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table_3d(
+            String::from("t"),
+            vec![vec![vec![
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                },
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(1);
+                    set.insert(2);
+                    set
+                },
+            ]]],
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let z = SetExpression::Reference(ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(2);
+            set.insert(0);
+            set.insert(1);
+            set
+        }));
+        assert_eq!(
+            t.intersection(3, 0, 0, z.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table3D(
+                SetReduceOperator::Intersection,
+                3,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Set(z))
+            ))
+        );
+    }
+
+    #[test]
+    fn set_table_3d_symmetric_difference() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table_3d(
+            String::from("t"),
+            vec![vec![vec![
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                },
+                {
+                    let mut set = Set::with_capacity(3);
+                    set.insert(1);
+                    set.insert(2);
+                    set
+                },
+            ]]],
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let z = SetExpression::Reference(ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(2);
+            set.insert(0);
+            set.insert(1);
+            set
+        }));
+        assert_eq!(
+            t.symmetric_difference(3, 0, 0, z.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table3D(
+                SetReduceOperator::SymmetricDifference,
+                3,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Set(z))
+            ))
+        );
+    }
+
+    #[test]
+    fn set_table_element() {
+        let mut registry = TableRegistry::default();
 
         let t = registry.add_table(String::from("t"), FxHashMap::default(), Set::default());
         assert!(t.is_ok());
@@ -1113,6 +1697,141 @@ mod tests {
                     ElementExpression::Constant(0)
                 ],
             )))
+        );
+    }
+
+    #[test]
+    fn set_table_union() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table(
+            String::from("t"),
+            {
+                let mut map = FxHashMap::default();
+                let mut set = Set::with_capacity(3);
+                set.insert(0);
+                set.insert(1);
+                map.insert(vec![0, 0, 0, 0], set);
+                map
+            },
+            {
+                let mut set = Set::with_capacity(3);
+                set.insert(1);
+                set.insert(2);
+                set
+            },
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let args = vec![
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(2);
+                set.insert(0);
+                set.insert(1);
+                set
+            }))),
+        ];
+        assert_eq!(
+            t.union(3, args.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::Union,
+                3,
+                t.id(),
+                args
+            ))
+        );
+    }
+
+    #[test]
+    fn set_table_intersection() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table(
+            String::from("t"),
+            {
+                let mut map = FxHashMap::default();
+                let mut set = Set::with_capacity(3);
+                set.insert(0);
+                set.insert(1);
+                map.insert(vec![0, 0, 0, 0], set);
+                map
+            },
+            {
+                let mut set = Set::with_capacity(3);
+                set.insert(1);
+                set.insert(2);
+                set
+            },
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let args = vec![
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(2);
+                set.insert(0);
+                set.insert(1);
+                set
+            }))),
+        ];
+        assert_eq!(
+            t.intersection(3, args.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::Intersection,
+                3,
+                t.id(),
+                args
+            ))
+        );
+    }
+
+    #[test]
+    fn set_table_symmetric_difference() {
+        let mut registry = TableRegistry::default();
+
+        let t = registry.add_table(
+            String::from("t"),
+            {
+                let mut map = FxHashMap::default();
+                let mut set = Set::with_capacity(3);
+                set.insert(0);
+                set.insert(1);
+                map.insert(vec![0, 0, 0, 0], set);
+                map
+            },
+            {
+                let mut set = Set::with_capacity(3);
+                set.insert(1);
+                set.insert(2);
+                set
+            },
+        );
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let args = vec![
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(2);
+                set.insert(0);
+                set.insert(1);
+                set
+            }))),
+        ];
+        assert_eq!(
+            t.symmetric_difference(3, args.clone()),
+            SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::SymmetricDifference,
+                3,
+                t.id(),
+                args
+            ))
         );
     }
 
@@ -1399,6 +2118,74 @@ mod tests {
     }
 
     #[test]
+    fn set_reduce_eval() {
+        let state = State::default();
+        let registry = TableRegistry {
+            set_tables: TableData {
+                tables: vec![Table::new(
+                    {
+                        let mut map = FxHashMap::default();
+                        map.insert(vec![0, 0, 0, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        });
+                        map.insert(vec![0, 0, 0, 1], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(2);
+                            set
+                        });
+                        map.insert(vec![0, 0, 1, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(3);
+                            set
+                        });
+                        map
+                    },
+                    {
+                        let mut set = Set::with_capacity(5);
+                        set.insert(0);
+                        set.insert(4);
+                        set
+                    },
+                )],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expression = SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            5,
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 1]),
+                )),
+            ],
+        ));
+        assert_eq!(expression.eval(&state, &registry), {
+            let mut set = Set::with_capacity(5);
+            set.insert(0);
+            set.insert(1);
+            set.insert(2);
+            set.insert(3);
+            set.insert(4);
+            set
+        });
+    }
+
+    #[test]
     fn set_from_vector_eval() {
         let registry = generate_registry();
         let state = generate_state();
@@ -1624,6 +2411,165 @@ mod tests {
         assert_eq!(
             expression.simplify(&registry),
             SetExpression::Reference(ReferenceExpression::Constant(set))
+        );
+    }
+
+    #[test]
+    fn set_reduce_constant_simplify() {
+        let registry = TableRegistry {
+            set_tables: TableData {
+                tables: vec![Table::new(
+                    {
+                        let mut map = FxHashMap::default();
+                        map.insert(vec![0, 0, 0, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        });
+                        map.insert(vec![0, 0, 0, 1], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(2);
+                            set
+                        });
+                        map.insert(vec![0, 0, 1, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(3);
+                            set
+                        });
+                        map
+                    },
+                    {
+                        let mut set = Set::with_capacity(5);
+                        set.insert(0);
+                        set.insert(4);
+                        set
+                    },
+                )],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expression = SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            5,
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 1]),
+                )),
+            ],
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(5);
+                set.insert(0);
+                set.insert(1);
+                set.insert(2);
+                set.insert(3);
+                set.insert(4);
+                set
+            }))
+        );
+    }
+
+    #[test]
+    fn set_reduce_simplify() {
+        let registry = TableRegistry {
+            set_tables: TableData {
+                tables: vec![Table::new(
+                    {
+                        let mut map = FxHashMap::default();
+                        map.insert(vec![0, 0, 0, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        });
+                        map.insert(vec![0, 0, 0, 1], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(2);
+                            set
+                        });
+                        map.insert(vec![0, 0, 1, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(3);
+                            set
+                        });
+                        map
+                    },
+                    {
+                        let mut set = Set::with_capacity(5);
+                        set.insert(0);
+                        set.insert(4);
+                        set
+                    },
+                )],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let expression = SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            5,
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::If(
+                    Box::new(Condition::Constant(true)),
+                    Box::new(ElementExpression::Variable(0)),
+                    Box::new(ElementExpression::Constant(0)),
+                )),
+                ArgumentExpression::Element(ElementExpression::If(
+                    Box::new(Condition::Constant(true)),
+                    Box::new(ElementExpression::Variable(0)),
+                    Box::new(ElementExpression::Constant(0)),
+                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+                ArgumentExpression::Vector(VectorExpression::Reference(
+                    ReferenceExpression::Constant(vec![0, 1]),
+                )),
+            ],
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::Union,
+                5,
+                0,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Variable(0),),
+                    ArgumentExpression::Element(ElementExpression::Variable(0),),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant({
+                            let mut set = Set::with_capacity(2);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        })
+                    )),
+                    ArgumentExpression::Vector(VectorExpression::Reference(
+                        ReferenceExpression::Constant(vec![0, 1]),
+                    )),
+                ],
+            ))
         );
     }
 

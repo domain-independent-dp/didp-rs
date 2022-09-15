@@ -3,6 +3,7 @@
 use dypdl::expression;
 use rustc_hash::FxHashMap;
 
+mod argument_parser;
 mod condition_parser;
 mod continuous_parser;
 mod continuous_vector_parser;
@@ -21,7 +22,7 @@ pub use util::ParseErr;
 ///
 /// # Errors
 ///
-/// if hte format is invalid.
+/// If the format is invalid.
 pub fn parse_integer(
     text: String,
     metadata: &dypdl::StateMetadata,
@@ -47,7 +48,7 @@ pub fn parse_integer(
 ///
 /// # Errors
 ///
-/// if hte format is invalid.
+/// If the format is invalid.
 pub fn parse_continuous(
     text: String,
     metadata: &dypdl::StateMetadata,
@@ -73,7 +74,7 @@ pub fn parse_continuous(
 ///
 /// # Errors
 ///
-/// if hte format is invalid.
+/// If the format is invalid.
 pub fn parse_element(
     text: String,
     metadata: &dypdl::StateMetadata,
@@ -99,7 +100,7 @@ pub fn parse_element(
 ///
 /// # Errors
 ///
-/// if hte format is invalid.
+/// If the format is invalid.
 pub fn parse_set(
     text: String,
     metadata: &dypdl::StateMetadata,
@@ -125,7 +126,7 @@ pub fn parse_set(
 ///
 /// # Errors
 ///
-/// if hte format is invalid.
+/// If the format is invalid.
 pub fn parse_vector(
     text: String,
     metadata: &dypdl::StateMetadata,
@@ -151,7 +152,7 @@ pub fn parse_vector(
 ///
 /// # Errors
 ///
-/// if hte format is invalid.
+/// If the format is invalid.
 pub fn parse_condition(
     text: String,
     metadata: &dypdl::StateMetadata,

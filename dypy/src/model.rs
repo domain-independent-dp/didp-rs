@@ -72,7 +72,7 @@ impl IntoPy<Py<PyAny>> for TargetReturnUnion {
 }
 
 #[derive(FromPyObject, Debug, Clone, PartialEq, Eq)]
-pub enum TableindexUnion {
+pub enum TableIndexUnion {
     #[pyo3(transparent, annotation = "unsigned int")]
     Table1D(Element),
     #[pyo3(transparent, annotation = "tuple[unsigned int, unsigned int]")]
@@ -1400,7 +1400,7 @@ impl ModelPy {
     ///     If a key not included in `dict` is given, the table returns `default`.
     /// name: str or None, default: None
     ///     Name of the table.
-    ///     If `None`, `__element_table{dimensition}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
+    ///     If `None`, `__element_table{dimension}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
     ///
     /// Returns
     /// -------
@@ -1504,7 +1504,7 @@ impl ModelPy {
     ///     If a key not included in `dict` is given, the table returns `default`.
     /// name: str or None, default: None
     ///     Name of the table.
-    ///     If `None`, `__set_table{dimensition}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
+    ///     If `None`, `__set_table{dimension}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
     /// object_type: ObjectType or None, default: None
     ///     Object type associated with constants.
     ///     Mandatory if `list` of `int` or `set` of `int` is used in `table` or `default`.
@@ -1551,7 +1551,13 @@ impl ModelPy {
                     set_table.push(self.convert_target_set_arg(object_type, set)?);
                 }
                 match self.0.add_table_1d(name, set_table) {
-                    Ok(table) => Ok(SetTableUnion::Table1D(SetTable1DPy::new(table))),
+                    Ok(table) => {
+                        let capacity = self
+                            .0
+                            .get_capacity_of_set_in_1d_table(table.clone())
+                            .unwrap();
+                        Ok(SetTableUnion::Table1D(SetTable1DPy::new(table, capacity)))
+                    }
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -1572,7 +1578,13 @@ impl ModelPy {
                     set_table.push(set_vector);
                 }
                 match self.0.add_table_2d(name, set_table) {
-                    Ok(table) => Ok(SetTableUnion::Table2D(SetTable2DPy::new(table))),
+                    Ok(table) => {
+                        let capacity = self
+                            .0
+                            .get_capacity_of_set_in_2d_table(table.clone())
+                            .unwrap();
+                        Ok(SetTableUnion::Table2D(SetTable2DPy::new(table, capacity)))
+                    }
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -1597,7 +1609,13 @@ impl ModelPy {
                     set_table.push(set_vector2d);
                 }
                 match self.0.add_table_3d(name, set_table) {
-                    Ok(table) => Ok(SetTableUnion::Table3D(SetTable3DPy::new(table))),
+                    Ok(table) => {
+                        let capacity = self
+                            .0
+                            .get_capacity_of_set_in_3d_table(table.clone())
+                            .unwrap();
+                        Ok(SetTableUnion::Table3D(SetTable3DPy::new(table, capacity)))
+                    }
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -1616,7 +1634,11 @@ impl ModelPy {
                 if let Some(default) = default {
                     let default = self.convert_target_set_arg(object_type, default)?;
                     match self.0.add_table(name, map, default) {
-                        Ok(table) => Ok(SetTableUnion::Table(SetTablePy::new(table))),
+                        Ok(table) => {
+                            let capacity =
+                                self.0.get_capacity_of_set_in_table(table.clone()).unwrap();
+                            Ok(SetTableUnion::Table(SetTablePy::new(table, capacity)))
+                        }
                         Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                     }
                 } else {
@@ -1642,7 +1664,7 @@ impl ModelPy {
     ///     If a key not included in `dict` is given, the table returns `default`.
     /// name: str or None, default: None
     ///     Name of the table.
-    ///     If `None`, `__bool_table{dimensition}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
+    ///     If `None`, `__bool_table{dimension}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
     ///
     /// Returns
     /// -------
@@ -1744,7 +1766,7 @@ impl ModelPy {
     ///     If a key not included in `dict` is given, the table returns `default`.
     /// name: str or None, default: None
     ///     Name of the table.
-    ///     If `None`, `__int_table{dimensition}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
+    ///     If `None`, `__int_table{dimension}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
     ///
     /// Returns
     /// -------
@@ -1846,7 +1868,7 @@ impl ModelPy {
     ///     If a key not included in `dict` is given, the table returns `default`.
     /// name: str or None, default: None
     ///     Name of the table.
-    ///     If `None`, `__float_table{dimensition}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
+    ///     If `None`, `__float_table{dimension}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
     ///
     /// Returns
     /// -------
@@ -1948,10 +1970,6 @@ impl ModelPy {
     ///     The length should be 2 and 3 for 2D and 3D tables, respectively.
     /// value: int, SetConst, list of int, set of int, bool, or float
     ///     Value to set.
-    /// object_type: ObjectType or None, default: None
-    ///     Object type associated with a set value.
-    ///     Mandatory if `list` of `int` or `set` of `int` is used in `value`.
-    ///     Otherwise, it is ignored.
     ///
     /// Raises
     /// ------
@@ -1960,19 +1978,17 @@ impl ModelPy {
     ///     If `index` is out of bound of the table.
     /// TypeError
     ///     If `table` and the shape of `index` mismatch.
-    ///     If `value` is `list` of `int` or `set` of `int` and `object_type` is `None`.
     /// OverflowError
     ///     If a value in `index` is negative.
     ///     If `table` is a table of element constants and `value` is negative.
     ///     If `table` is a table of set constants and a value in `value` is negative.
-    #[pyo3(text_signature = "(table, index, value, object_type=None)")]
+    #[pyo3(text_signature = "(table, index, value)")]
     #[args(ob = "None")]
     fn set_table_item(
         &mut self,
         table: TableUnion,
-        index: TableindexUnion,
+        index: TableIndexUnion,
         value: &PyAny,
-        object_type: Option<ObjectTypePy>,
     ) -> PyResult<()> {
         match table {
             TableUnion::Element(table) => {
@@ -1981,7 +1997,7 @@ impl ModelPy {
             }
             TableUnion::Set(table) => {
                 let value = value.extract()?;
-                self.set_set_table_item(table, index, value, object_type)
+                self.set_set_table_item(table, index, value)
             }
             TableUnion::Bool(table) => {
                 let value = value.extract()?;
@@ -2008,10 +2024,6 @@ impl ModelPy {
     ///     Table to update.
     /// value: int, SetConst, list of int, set of int, bool, or float
     ///     Default value to set.
-    /// object_type: ObjectType or None, default: None
-    ///     Object type associated with a set value.
-    ///     Mandatory if `list` of `int` or `set` of `int` is used in `value`.
-    ///     Otherwise, it is ignored.
     ///
     /// Raises
     /// ------
@@ -2019,18 +2031,11 @@ impl ModelPy {
     ///     If `table` is not included in the model.
     /// TypeError
     ///     If `table` and the shape of `index` mismatch.
-    ///     If `value` is `list` of `int` or `set` of `int` and `object_type` is `None`.
     /// OverflowError
     ///     If `table` is a table of element constants and `value` is negative.
     ///     If `table` is a table of set constants and a value in `value` is negative.
-    #[pyo3(text_signature = "(table, value, object_type=None)")]
-    #[args(ob = "None")]
-    fn set_default(
-        &mut self,
-        table: SetDefaultArgUnion,
-        value: &PyAny,
-        object_type: Option<ObjectTypePy>,
-    ) -> PyResult<()> {
+    #[pyo3(text_signature = "(table, value)")]
+    fn set_default(&mut self, table: SetDefaultArgUnion, value: &PyAny) -> PyResult<()> {
         let result = match table {
             SetDefaultArgUnion::Element(table) => {
                 let value: Element = value.extract()?;
@@ -2050,7 +2055,8 @@ impl ModelPy {
             }
             SetDefaultArgUnion::Set(table) => {
                 let value: TargetSetArgUnion = value.extract()?;
-                let value = self.convert_target_set_arg(object_type, value)?;
+                let capacity = table.get_capacity_of_set();
+                let value = Self::convert_target_set_arg_with_capacity(capacity, value)?;
                 self.0.set_default(table.into(), value)
             }
         };
@@ -2074,10 +2080,6 @@ impl ModelPy {
     ///     Default value.
     ///     Used only when `dict` is given.
     ///     If a key not included in `dict` is given, the table returns `default`.
-    /// object_type: ObjectType or None, default: None
-    ///     Object type associated with constants.
-    ///     Mandatory for a table of set constants if `list` of `int` or `set` of `int` is used in `value` or `default`.
-    ///     Otherwise, it is ignored.
     ///
     /// Raises
     /// ------
@@ -2085,18 +2087,16 @@ impl ModelPy {
     ///     If `table` is not included in the model.
     /// TypeError
     ///     If `table` is `dict` and `default` is `None`.
-    ///     if `table` is a table of set constants and`list` of `int` or `set` of `int` is used in `table` and `object_type` is `None`.
     /// OverflowError
     ///     If `table` is a table of element or set constants and a value in `table` or `default` is negative.
     ///     If `table` is `dict` and one of its keys contains a negative value.
-    #[pyo3(text_signature = "(table, default=None, name=None, object_type=None)")]
-    #[args(default = "None", ob = "None")]
+    #[pyo3(text_signature = "(table, default=None, name=None)")]
+    #[args(default = "None")]
     fn update_table(
         &mut self,
         table: TableUnion,
         value: &PyAny,
         default: Option<&PyAny>,
-        object_type: Option<ObjectTypePy>,
     ) -> PyResult<()> {
         match table {
             TableUnion::Element(table) => {
@@ -2115,7 +2115,7 @@ impl ModelPy {
                 } else {
                     None
                 };
-                self.update_set_table(table, value, default, object_type)
+                self.update_set_table(table, value, default)
             }
             TableUnion::Bool(table) => {
                 let value = value.extract()?;
@@ -2163,50 +2163,85 @@ impl ModelPy {
         }
     }
 
+    fn convert_target_set_arg_with_capacity(
+        capacity: usize,
+        target: TargetSetArgUnion,
+    ) -> PyResult<Set> {
+        match target {
+            TargetSetArgUnion::SetConst(target) => Ok(Set::from(target)),
+            TargetSetArgUnion::CreateSetArg(CreateSetArgUnion::List(list)) => {
+                let mut set = Set::with_capacity(capacity);
+                for i in list {
+                    if i >= capacity {
+                        return Err(PyRuntimeError::new_err(format!(
+                            "value `{}` >= capacity `{} of a set`",
+                            i, capacity
+                        )));
+                    }
+                    set.insert(i);
+                }
+                Ok(set)
+            }
+            TargetSetArgUnion::CreateSetArg(CreateSetArgUnion::Set(hash_set)) => {
+                let mut set = Set::with_capacity(capacity);
+                for i in hash_set {
+                    if i >= capacity {
+                        return Err(PyRuntimeError::new_err(format!(
+                            "value `{}` >= capacity `{} of a set`",
+                            i, capacity
+                        )));
+                    }
+                    set.insert(i);
+                }
+                Ok(set)
+            }
+        }
+    }
+
     fn set_element_table_item(
         &mut self,
         table: ElementTableUnion,
-        index: TableindexUnion,
+        index: TableIndexUnion,
         value: Element,
     ) -> PyResult<()> {
         match (table, index) {
-            (ElementTableUnion::Table1D(table), TableindexUnion::Table1D(x)) => {
+            (ElementTableUnion::Table1D(table), TableIndexUnion::Table1D(x)) => {
                 match self.0.set_table_1d(table.into(), x, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (ElementTableUnion::Table2D(table), TableindexUnion::Table2D((x, y))) => {
+            (ElementTableUnion::Table2D(table), TableIndexUnion::Table2D((x, y))) => {
                 match self.0.set_table_2d(table.into(), x, y, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (ElementTableUnion::Table3D(table), TableindexUnion::Table3D((x, y, z))) => {
+            (ElementTableUnion::Table3D(table), TableIndexUnion::Table3D((x, y, z))) => {
                 match self.0.set_table_3d(table.into(), x, y, z, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (ElementTableUnion::Table(table), TableindexUnion::Table1D(x)) => {
+            (ElementTableUnion::Table(table), TableIndexUnion::Table1D(x)) => {
                 match self.0.set_table(table.into(), vec![x], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (ElementTableUnion::Table(table), TableindexUnion::Table2D((x, y))) => {
+            (ElementTableUnion::Table(table), TableIndexUnion::Table2D((x, y))) => {
                 match self.0.set_table(table.into(), vec![x, y], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (ElementTableUnion::Table(table), TableindexUnion::Table3D((x, y, z))) => {
+            (ElementTableUnion::Table(table), TableIndexUnion::Table3D((x, y, z))) => {
                 match self.0.set_table(table.into(), vec![x, y, z], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (ElementTableUnion::Table(table), TableindexUnion::Table(index)) => {
+            (ElementTableUnion::Table(table), TableIndexUnion::Table(index)) => {
                 match self.0.set_table(table.into(), index, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
@@ -2263,49 +2298,61 @@ impl ModelPy {
     fn set_set_table_item(
         &mut self,
         table: SetTableUnion,
-        index: TableindexUnion,
+        index: TableIndexUnion,
         value: TargetSetArgUnion,
-        object_type: Option<ObjectTypePy>,
     ) -> PyResult<()> {
-        let value = self.convert_target_set_arg(object_type, value)?;
         match (table, index) {
-            (SetTableUnion::Table1D(table), TableindexUnion::Table1D(x)) => {
+            (SetTableUnion::Table1D(table), TableIndexUnion::Table1D(x)) => {
+                let capacity = table.get_capacity_of_set();
+                let value = Self::convert_target_set_arg_with_capacity(capacity, value)?;
                 match self.0.set_table_1d(table.into(), x, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (SetTableUnion::Table2D(table), TableindexUnion::Table2D((x, y))) => {
+            (SetTableUnion::Table2D(table), TableIndexUnion::Table2D((x, y))) => {
+                let capacity = table.get_capacity_of_set();
+                let value = Self::convert_target_set_arg_with_capacity(capacity, value)?;
                 match self.0.set_table_2d(table.into(), x, y, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (SetTableUnion::Table3D(table), TableindexUnion::Table3D((x, y, z))) => {
+            (SetTableUnion::Table3D(table), TableIndexUnion::Table3D((x, y, z))) => {
+                let capacity = table.get_capacity_of_set();
+                let value = Self::convert_target_set_arg_with_capacity(capacity, value)?;
                 match self.0.set_table_3d(table.into(), x, y, z, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (SetTableUnion::Table(table), TableindexUnion::Table1D(x)) => {
+            (SetTableUnion::Table(table), TableIndexUnion::Table1D(x)) => {
+                let capacity = table.get_capacity_of_set();
+                let value = Self::convert_target_set_arg_with_capacity(capacity, value)?;
                 match self.0.set_table(table.into(), vec![x], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (SetTableUnion::Table(table), TableindexUnion::Table2D((x, y))) => {
+            (SetTableUnion::Table(table), TableIndexUnion::Table2D((x, y))) => {
+                let capacity = table.get_capacity_of_set();
+                let value = Self::convert_target_set_arg_with_capacity(capacity, value)?;
                 match self.0.set_table(table.into(), vec![x, y], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (SetTableUnion::Table(table), TableindexUnion::Table3D((x, y, z))) => {
+            (SetTableUnion::Table(table), TableIndexUnion::Table3D((x, y, z))) => {
+                let capacity = table.get_capacity_of_set();
+                let value = Self::convert_target_set_arg_with_capacity(capacity, value)?;
                 match self.0.set_table(table.into(), vec![x, y, z], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (SetTableUnion::Table(table), TableindexUnion::Table(index)) => {
+            (SetTableUnion::Table(table), TableIndexUnion::Table(index)) => {
+                let capacity = table.get_capacity_of_set();
+                let value = Self::convert_target_set_arg_with_capacity(capacity, value)?;
                 match self.0.set_table(table.into(), index, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
@@ -2322,13 +2369,13 @@ impl ModelPy {
         table: SetTableUnion,
         value: SetTableArgUnion,
         default: Option<TargetSetArgUnion>,
-        object_type: Option<ObjectTypePy>,
     ) -> PyResult<()> {
         match (table, value) {
             (SetTableUnion::Table1D(table), SetTableArgUnion::Table1D(value)) => {
+                let capacity = table.get_capacity_of_set();
                 let mut set_table = Vec::with_capacity(value.len());
                 for set in value {
-                    set_table.push(self.convert_target_set_arg(object_type, set)?);
+                    set_table.push(Self::convert_target_set_arg_with_capacity(capacity, set)?);
                 }
                 match self.0.update_table_1d(table.into(), set_table) {
                     Ok(_) => Ok(()),
@@ -2336,11 +2383,12 @@ impl ModelPy {
                 }
             }
             (SetTableUnion::Table2D(table), SetTableArgUnion::Table2D(value)) => {
+                let capacity = table.get_capacity_of_set();
                 let mut set_table = Vec::with_capacity(value.len());
                 for vector in value {
                     let mut set_vector = Vec::with_capacity(vector.len());
                     for set in vector {
-                        set_vector.push(self.convert_target_set_arg(object_type, set)?);
+                        set_vector.push(Self::convert_target_set_arg_with_capacity(capacity, set)?);
                     }
                     set_table.push(set_vector);
                 }
@@ -2350,13 +2398,14 @@ impl ModelPy {
                 }
             }
             (SetTableUnion::Table3D(table), SetTableArgUnion::Table3D(value)) => {
+                let capacity = table.get_capacity_of_set();
                 let mut set_table = Vec::with_capacity(value.len());
                 for vector2 in value {
                     let mut set_vector2 = Vec::with_capacity(vector2.len());
                     for vector in vector2 {
                         let mut set_vector = Vec::with_capacity(vector.len());
                         for set in vector {
-                            set_vector.push(self.convert_target_set_arg(object_type, set)?);
+                            set_vector.push(Self::convert_target_set_arg_with_capacity(capacity, set)?);
                         }
                         set_vector2.push(set_vector);
                     }
@@ -2369,10 +2418,11 @@ impl ModelPy {
             }
             (SetTableUnion::Table(table), SetTableArgUnion::Table(value)) => {
                 if let Some(default) = default {
-                    let default = self.convert_target_set_arg(object_type, default)?;
+                let capacity = table.get_capacity_of_set();
+                    let default = Self::convert_target_set_arg_with_capacity(capacity, default)?;
                     let mut map = FxHashMap::default();
                     for (k, v) in value {
-                        map.insert(k, self.convert_target_set_arg(object_type, v)?);
+                        map.insert(k, Self::convert_target_set_arg_with_capacity(capacity, v)?);
                     }
                     match self.0.update_table(table.into(), map, default) {
                         Ok(_) => Ok(()),
@@ -2391,47 +2441,47 @@ impl ModelPy {
     fn set_bool_table_item(
         &mut self,
         table: BoolTableUnion,
-        index: TableindexUnion,
+        index: TableIndexUnion,
         value: bool,
     ) -> PyResult<()> {
         match (table, index) {
-            (BoolTableUnion::Table1D(table), TableindexUnion::Table1D(x)) => {
+            (BoolTableUnion::Table1D(table), TableIndexUnion::Table1D(x)) => {
                 match self.0.set_table_1d(table.into(), x, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (BoolTableUnion::Table2D(table), TableindexUnion::Table2D((x, y))) => {
+            (BoolTableUnion::Table2D(table), TableIndexUnion::Table2D((x, y))) => {
                 match self.0.set_table_2d(table.into(), x, y, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (BoolTableUnion::Table3D(table), TableindexUnion::Table3D((x, y, z))) => {
+            (BoolTableUnion::Table3D(table), TableIndexUnion::Table3D((x, y, z))) => {
                 match self.0.set_table_3d(table.into(), x, y, z, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (BoolTableUnion::Table(table), TableindexUnion::Table1D(x)) => {
+            (BoolTableUnion::Table(table), TableIndexUnion::Table1D(x)) => {
                 match self.0.set_table(table.into(), vec![x], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (BoolTableUnion::Table(table), TableindexUnion::Table2D((x, y))) => {
+            (BoolTableUnion::Table(table), TableIndexUnion::Table2D((x, y))) => {
                 match self.0.set_table(table.into(), vec![x, y], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (BoolTableUnion::Table(table), TableindexUnion::Table3D((x, y, z))) => {
+            (BoolTableUnion::Table(table), TableIndexUnion::Table3D((x, y, z))) => {
                 match self.0.set_table(table.into(), vec![x, y, z], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (BoolTableUnion::Table(table), TableindexUnion::Table(index)) => {
+            (BoolTableUnion::Table(table), TableIndexUnion::Table(index)) => {
                 match self.0.set_table(table.into(), index, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
@@ -2488,47 +2538,47 @@ impl ModelPy {
     fn set_int_table_item(
         &mut self,
         table: IntTableUnion,
-        index: TableindexUnion,
+        index: TableIndexUnion,
         value: Integer,
     ) -> PyResult<()> {
         match (table, index) {
-            (IntTableUnion::Table1D(table), TableindexUnion::Table1D(x)) => {
+            (IntTableUnion::Table1D(table), TableIndexUnion::Table1D(x)) => {
                 match self.0.set_table_1d(table.into(), x, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (IntTableUnion::Table2D(table), TableindexUnion::Table2D((x, y))) => {
+            (IntTableUnion::Table2D(table), TableIndexUnion::Table2D((x, y))) => {
                 match self.0.set_table_2d(table.into(), x, y, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (IntTableUnion::Table3D(table), TableindexUnion::Table3D((x, y, z))) => {
+            (IntTableUnion::Table3D(table), TableIndexUnion::Table3D((x, y, z))) => {
                 match self.0.set_table_3d(table.into(), x, y, z, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (IntTableUnion::Table(table), TableindexUnion::Table1D(x)) => {
+            (IntTableUnion::Table(table), TableIndexUnion::Table1D(x)) => {
                 match self.0.set_table(table.into(), vec![x], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (IntTableUnion::Table(table), TableindexUnion::Table2D((x, y))) => {
+            (IntTableUnion::Table(table), TableIndexUnion::Table2D((x, y))) => {
                 match self.0.set_table(table.into(), vec![x, y], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (IntTableUnion::Table(table), TableindexUnion::Table3D((x, y, z))) => {
+            (IntTableUnion::Table(table), TableIndexUnion::Table3D((x, y, z))) => {
                 match self.0.set_table(table.into(), vec![x, y, z], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (IntTableUnion::Table(table), TableindexUnion::Table(index)) => {
+            (IntTableUnion::Table(table), TableIndexUnion::Table(index)) => {
                 match self.0.set_table(table.into(), index, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
@@ -2585,47 +2635,47 @@ impl ModelPy {
     fn set_float_table_item(
         &mut self,
         table: FloatTableUnion,
-        index: TableindexUnion,
+        index: TableIndexUnion,
         value: Continuous,
     ) -> PyResult<()> {
         match (table, index) {
-            (FloatTableUnion::Table1D(table), TableindexUnion::Table1D(x)) => {
+            (FloatTableUnion::Table1D(table), TableIndexUnion::Table1D(x)) => {
                 match self.0.set_table_1d(table.into(), x, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (FloatTableUnion::Table2D(table), TableindexUnion::Table2D((x, y))) => {
+            (FloatTableUnion::Table2D(table), TableIndexUnion::Table2D((x, y))) => {
                 match self.0.set_table_2d(table.into(), x, y, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (FloatTableUnion::Table3D(table), TableindexUnion::Table3D((x, y, z))) => {
+            (FloatTableUnion::Table3D(table), TableIndexUnion::Table3D((x, y, z))) => {
                 match self.0.set_table_3d(table.into(), x, y, z, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (FloatTableUnion::Table(table), TableindexUnion::Table1D(x)) => {
+            (FloatTableUnion::Table(table), TableIndexUnion::Table1D(x)) => {
                 match self.0.set_table(table.into(), vec![x], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (FloatTableUnion::Table(table), TableindexUnion::Table2D((x, y))) => {
+            (FloatTableUnion::Table(table), TableIndexUnion::Table2D((x, y))) => {
                 match self.0.set_table(table.into(), vec![x, y], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (FloatTableUnion::Table(table), TableindexUnion::Table3D((x, y, z))) => {
+            (FloatTableUnion::Table(table), TableIndexUnion::Table3D((x, y, z))) => {
                 match self.0.set_table(table.into(), vec![x, y, z], value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
-            (FloatTableUnion::Table(table), TableindexUnion::Table(index)) => {
+            (FloatTableUnion::Table(table), TableIndexUnion::Table(index)) => {
                 match self.0.set_table(table.into(), index, value) {
                     Ok(_) => Ok(()),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
@@ -5037,8 +5087,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -5055,8 +5105,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5074,8 +5124,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5094,8 +5144,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5112,7 +5162,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![2usize].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -5129,7 +5179,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![1.5f64].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5147,7 +5197,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2usize]].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5166,7 +5216,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![2usize].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5233,8 +5283,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -5251,8 +5301,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5270,8 +5320,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5290,8 +5340,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5308,7 +5358,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2usize]].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -5325,7 +5375,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![1.5f64]].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5343,7 +5393,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![2usize]]].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5362,7 +5412,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2usize]].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5429,8 +5479,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -5447,8 +5497,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5466,8 +5516,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5486,8 +5536,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5504,7 +5554,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![2usize]]].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -5521,7 +5571,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5539,7 +5589,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2usize]].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5558,7 +5608,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![2usize]]].into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5634,8 +5684,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -5660,8 +5710,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -5686,8 +5736,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -5712,8 +5762,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -5730,8 +5780,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5750,8 +5800,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5772,7 +5822,7 @@ mod tests {
         };
         let result = Python::with_gil(|py| {
             let value = 2usize.into_py(py);
-            model.set_default(SetDefaultArgUnion::Element(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Element(t), value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -5793,7 +5843,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            model.set_default(SetDefaultArgUnion::Element(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Element(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5816,7 +5866,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            model.set_default(SetDefaultArgUnion::Element(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Element(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5843,7 +5893,6 @@ mod tests {
                 TableUnion::Element(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_ok());
@@ -5866,7 +5915,7 @@ mod tests {
                 map
             }
             .into_py(py);
-            model.update_table(TableUnion::Element(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Element(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5894,7 +5943,6 @@ mod tests {
                 TableUnion::Element(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -5923,7 +5971,6 @@ mod tests {
                 TableUnion::Element(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -5947,7 +5994,6 @@ mod tests {
                 TableUnion::Element(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -5975,6 +6021,7 @@ mod tests {
             SetTableUnion::Table1D(t) => t,
             _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table1DHandle::<Set>::from(t1).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_1d[t_id],
@@ -6004,6 +6051,7 @@ mod tests {
             SetTableUnion::Table1D(t) => t,
             _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table1DHandle::<Set>::from(t2).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_1d[t_id],
@@ -6038,6 +6086,7 @@ mod tests {
             SetTableUnion::Table1D(t) => t,
             _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table1DHandle::<Set>::from(t1).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_1d[t_id],
@@ -6071,6 +6120,7 @@ mod tests {
             SetTableUnion::Table1D(t) => t,
             _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table1DHandle::<Set>::from(t2).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_1d[t_id],
@@ -6136,7 +6186,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table1D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
             SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
@@ -6149,7 +6203,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, None, None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table1D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -6164,7 +6222,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table1D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::CreateSetArg(
             CreateSetArgUnion::List(vec![3, 4, 5]),
@@ -6172,7 +6234,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table1D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -6196,7 +6262,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, Some("t1"), None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table1D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
             SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
@@ -6209,7 +6279,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, Some("t2"), None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table1D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -6224,7 +6298,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, Some("t1"), Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table1D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::CreateSetArg(
             CreateSetArgUnion::List(vec![3, 4, 5]),
@@ -6232,7 +6310,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, Some("t2"), Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table1D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -6302,7 +6384,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table1D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
             SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
@@ -6315,7 +6401,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, None, None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table1D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -6335,7 +6425,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table1D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
             SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
@@ -6348,7 +6442,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table1D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -6372,7 +6470,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, Some("t1"), None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table1D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
             SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
@@ -6385,7 +6487,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, Some("t2"), None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table1D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -6406,7 +6512,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, Some("t1"), Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table1D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::CreateSetArg(
             CreateSetArgUnion::Set({
@@ -6420,7 +6530,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, Some("t2"), Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table1D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table1D(t) => t,
+            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -6503,7 +6617,7 @@ mod tests {
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table1D(0);
+        let index = TableIndexUnion::Table1D(0);
         let result = Python::with_gil(|py| {
             let value = SetConstPy::new({
                 let mut set = Set::with_capacity(10);
@@ -6511,7 +6625,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -6527,12 +6641,12 @@ mod tests {
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table1D(0);
+        let index = TableIndexUnion::Table1D(0);
         let mut model = ModelPy::default();
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1usize.into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -6549,7 +6663,7 @@ mod tests {
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table1D(0);
+        let index = TableIndexUnion::Table1D(0);
         let mut model = ModelPy::default();
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
@@ -6559,7 +6673,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -6572,17 +6686,16 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
             Set::with_capacity(10),
         ))]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table1D(0);
+        let index = TableIndexUnion::Table1D(0);
         let result = Python::with_gil(|py| {
             let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -6594,64 +6707,17 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
             Set::with_capacity(10),
         ))]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table1D(0);
+        let index = TableIndexUnion::Table1D(0);
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = vec![10].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_1d_item_from_list_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
-            Set::with_capacity(10),
-        ))]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table1D(0);
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_1d_item_from_list_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
-            Set::with_capacity(10),
-        ))]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table1D(0);
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -6664,14 +6730,13 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
             Set::with_capacity(10),
         ))]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table1D(0);
+        let index = TableIndexUnion::Table1D(0);
         let result = Python::with_gil(|py| {
             let value = {
                 let mut set = HashSet::new();
@@ -6679,7 +6744,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -6691,14 +6756,13 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
             Set::with_capacity(10),
         ))]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table1D(0);
+        let index = TableIndexUnion::Table1D(0);
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = {
@@ -6707,63 +6771,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_1d_item_from_set_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
-            Set::with_capacity(10),
-        ))]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table1D(0);
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = {
-                let mut set = HashSet::new();
-                set.insert(1);
-                set
-            }
-            .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_1d_item_from_set_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
-            Set::with_capacity(10),
-        ))]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table1D(0);
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = {
-                let mut set = HashSet::new();
-                set.insert(1);
-                set
-            }
-            .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -6775,7 +6783,9 @@ mod tests {
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table1D(vec![]);
+        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+            Set::with_capacity(10),
+        ))]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -6799,7 +6809,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_ok());
@@ -6822,7 +6831,9 @@ mod tests {
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table1D(vec![]);
+        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+            Set::with_capacity(10),
+        ))]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -6837,7 +6848,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_err());
@@ -6850,7 +6860,9 @@ mod tests {
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table1D(vec![]);
+        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+            Set::with_capacity(10),
+        ))]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -6875,7 +6887,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_err());
@@ -6883,12 +6894,14 @@ mod tests {
     }
 
     #[test]
-    fn udpate_set_table_1d_no_table_err() {
+    fn update_set_table_1d_no_table_err() {
         pyo3::prepare_freethreaded_python();
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table1D(vec![]);
+        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+            Set::with_capacity(10),
+        ))]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -6914,7 +6927,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_err());
@@ -6928,9 +6940,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table1D(vec![]);
+        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+            Set::with_capacity(10),
+        ))]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -6944,7 +6957,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_ok());
@@ -6968,9 +6980,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table1D(vec![]);
+        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+            Set::with_capacity(10),
+        ))]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -6984,70 +6997,9 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn update_set_table_1d_from_list_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-
-        let table = SetTableArgUnion::Table1D(vec![]);
-        let mut model = ModelPy::default();
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![vec![0, 1, 2]].into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-                table.as_ref(py),
-                None,
-                Some(ob),
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn update_set_table_1d_from_list_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-
-        let table = SetTableArgUnion::Table1D(vec![]);
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![vec![0, 1, 2]].into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-                table.as_ref(py),
-                None,
-                None,
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
     }
 
     #[test]
@@ -7057,9 +7009,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table1D(vec![]);
+        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+            Set::with_capacity(10),
+        ))]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -7080,7 +7033,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_ok());
@@ -7104,9 +7056,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table1D(vec![]);
+        let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+            Set::with_capacity(10),
+        ))]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -7128,84 +7081,9 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn update_set_table_1d_from_set_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-
-        let table = SetTableArgUnion::Table1D(vec![]);
-        let mut model = ModelPy::default();
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![HashSet::new(), {
-                let mut set = HashSet::new();
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }]
-            .into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-                table.as_ref(py),
-                None,
-                Some(ob),
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn update_set_table_1d_from_set_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-
-        let table = SetTableArgUnion::Table1D(vec![]);
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![HashSet::new(), {
-                let mut set = HashSet::new();
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }]
-            .into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-                table.as_ref(py),
-                None,
-                None,
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
     }
 
     #[test]
@@ -7229,6 +7107,7 @@ mod tests {
             SetTableUnion::Table2D(t) => t,
             _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table2DHandle::<Set>::from(t1).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_2d[t_id],
@@ -7258,6 +7137,7 @@ mod tests {
             SetTableUnion::Table2D(t) => t,
             _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table2DHandle::<Set>::from(t2).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_2d[t_id],
@@ -7292,6 +7172,7 @@ mod tests {
             SetTableUnion::Table2D(t) => t,
             _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table2DHandle::<Set>::from(t1).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_2d[t_id],
@@ -7325,6 +7206,7 @@ mod tests {
             SetTableUnion::Table2D(t) => t,
             _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table2DHandle::<Set>::from(t2).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_2d[t_id],
@@ -7390,7 +7272,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table2D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
             SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
@@ -7403,7 +7289,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, None, None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table2D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -7418,7 +7308,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table2D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::CreateSetArg(
             CreateSetArgUnion::List(vec![3, 4, 5]),
@@ -7426,7 +7320,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table2D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -7450,7 +7348,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, Some("t1"), None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table2D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
             SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
@@ -7463,7 +7365,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, Some("t2"), None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table2D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -7478,7 +7384,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, Some("t1"), Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table2D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::CreateSetArg(
             CreateSetArgUnion::List(vec![3, 4, 5]),
@@ -7486,7 +7396,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, Some("t2"), Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table2D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -7556,7 +7470,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table2D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
             SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
@@ -7569,7 +7487,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, None, None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table2D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -7589,7 +7511,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table2D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
             SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
@@ -7602,7 +7528,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table2D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -7626,7 +7556,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, Some("t1"), None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table2D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
             SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
@@ -7639,7 +7573,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, Some("t2"), None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table2D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -7660,7 +7598,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, Some("t1"), Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table2D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::CreateSetArg(
             CreateSetArgUnion::Set({
@@ -7674,7 +7616,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, Some("t2"), Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table2D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table2D(t) => t,
+            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -7757,7 +7703,7 @@ mod tests {
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table2D((0, 0));
+        let index = TableIndexUnion::Table2D((0, 0));
         let result = Python::with_gil(|py| {
             let value = SetConstPy::new({
                 let mut set = Set::with_capacity(10);
@@ -7765,7 +7711,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -7781,12 +7727,12 @@ mod tests {
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table2D((0, 0));
+        let index = TableIndexUnion::Table2D((0, 0));
         let mut model = ModelPy::default();
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1usize.into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -7803,7 +7749,7 @@ mod tests {
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table2D((0, 0));
+        let index = TableIndexUnion::Table2D((0, 0));
         let mut model = ModelPy::default();
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
@@ -7813,7 +7759,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -7826,17 +7772,16 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new(Set::with_capacity(10)),
         )]]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table2D((0, 0));
+        let index = TableIndexUnion::Table2D((0, 0));
         let result = Python::with_gil(|py| {
             let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -7848,64 +7793,17 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new(Set::with_capacity(10)),
         )]]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table2D((0, 0));
+        let index = TableIndexUnion::Table2D((0, 0));
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = vec![10].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_2d_item_from_list_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new(Set::with_capacity(10)),
-        )]]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table2D((0, 0));
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_2d_item_from_list_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new(Set::with_capacity(10)),
-        )]]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table2D((0, 0));
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -7918,14 +7816,13 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new(Set::with_capacity(10)),
         )]]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table2D((0, 0));
+        let index = TableIndexUnion::Table2D((0, 0));
         let result = Python::with_gil(|py| {
             let value = {
                 let mut set = HashSet::new();
@@ -7933,7 +7830,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -7945,14 +7842,13 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new(Set::with_capacity(10)),
         )]]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table2D((0, 0));
+        let index = TableIndexUnion::Table2D((0, 0));
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = {
@@ -7961,63 +7857,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_2d_item_from_set_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new(Set::with_capacity(10)),
-        )]]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table2D((0, 0));
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = {
-                let mut set = HashSet::new();
-                set.insert(1);
-                set
-            }
-            .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_2d_item_from_set_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new(Set::with_capacity(10)),
-        )]]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table2D((0, 0));
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = {
-                let mut set = HashSet::new();
-                set.insert(1);
-                set
-            }
-            .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -8029,7 +7869,9 @@ mod tests {
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
+        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -8053,7 +7895,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_ok());
@@ -8076,7 +7917,9 @@ mod tests {
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
+        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -8091,7 +7934,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_err());
@@ -8104,7 +7946,9 @@ mod tests {
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
+        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -8129,7 +7973,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_err());
@@ -8137,12 +7980,14 @@ mod tests {
     }
 
     #[test]
-    fn udpate_set_table_2d_no_table_err() {
+    fn update_set_table_2d_no_table_err() {
         pyo3::prepare_freethreaded_python();
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
+        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -8168,7 +8013,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_err());
@@ -8182,9 +8026,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
+        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -8198,7 +8043,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_ok());
@@ -8222,9 +8066,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
+        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -8238,70 +8083,9 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn update_set_table_2d_from_list_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
-        let mut model = ModelPy::default();
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![vec![vec![0, 1, 2]]].into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-                table.as_ref(py),
-                None,
-                Some(ob),
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn update_set_table_2d_from_list_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![vec![vec![0, 1, 2]]].into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-                table.as_ref(py),
-                None,
-                None,
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
     }
 
     #[test]
@@ -8311,9 +8095,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
+        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -8334,7 +8119,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_ok());
@@ -8358,9 +8142,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
+        let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -8382,84 +8167,9 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn update_set_table_2d_from_set_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
-        let mut model = ModelPy::default();
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![vec![HashSet::new(), {
-                let mut set = HashSet::new();
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }]]
-            .into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-                table.as_ref(py),
-                None,
-                Some(ob),
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn update_set_table_2d_from_set_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-
-        let table = SetTableArgUnion::Table2D(vec![vec![]]);
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![vec![HashSet::new(), {
-                let mut set = HashSet::new();
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }]]
-            .into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-                table.as_ref(py),
-                None,
-                None,
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
     }
 
     #[test]
@@ -8483,6 +8193,7 @@ mod tests {
             SetTableUnion::Table3D(t) => t,
             _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table3DHandle::<Set>::from(t1).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_3d[t_id],
@@ -8512,6 +8223,7 @@ mod tests {
             SetTableUnion::Table3D(t) => t,
             _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table3DHandle::<Set>::from(t2).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_3d[t_id],
@@ -8546,6 +8258,7 @@ mod tests {
             SetTableUnion::Table3D(t) => t,
             _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table3DHandle::<Set>::from(t1).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_3d[t_id],
@@ -8579,6 +8292,7 @@ mod tests {
             SetTableUnion::Table3D(t) => t,
             _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table3DHandle::<Set>::from(t2).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables_3d[t_id],
@@ -8645,7 +8359,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table3D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new({
@@ -8659,7 +8377,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, None, None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table3D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -8674,7 +8396,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table3D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::CreateSetArg(
             CreateSetArgUnion::List(vec![3, 4, 5]),
@@ -8682,7 +8408,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table3D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -8707,7 +8437,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, Some("t1"), None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table3D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new({
@@ -8721,7 +8455,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, Some("t2"), None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table3D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -8736,7 +8474,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, Some("t1"), Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table3D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::CreateSetArg(
             CreateSetArgUnion::List(vec![3, 4, 5]),
@@ -8744,7 +8486,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, Some("t2"), Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table3D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -8815,7 +8561,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table3D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new({
@@ -8829,7 +8579,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, None, None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table3D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -8850,7 +8604,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table3D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new({
@@ -8864,7 +8622,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, None, Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table3D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -8889,7 +8651,11 @@ mod tests {
         let t1 = model.add_set_table(table, None, Some("t1"), None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table3D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new({
@@ -8903,7 +8669,11 @@ mod tests {
         let t2 = model.add_set_table(table, None, Some("t2"), None);
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table3D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -8924,7 +8694,11 @@ mod tests {
         let t1 = model2.add_set_table(table, None, Some("t1"), Some(ob));
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
-        assert!(matches!(t1, SetTableUnion::Table3D(_)));
+        let t1 = match t1 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+        };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::CreateSetArg(
             CreateSetArgUnion::Set({
@@ -8938,7 +8712,11 @@ mod tests {
         let t2 = model2.add_set_table(table, None, Some("t2"), Some(ob));
         assert!(t2.is_ok());
         let t2 = t2.unwrap();
-        assert!(matches!(t2, SetTableUnion::Table3D(_)));
+        let t2 = match t2 {
+            SetTableUnion::Table3D(t) => t,
+            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+        };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -9021,7 +8799,7 @@ mod tests {
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table3D((0, 0, 0));
+        let index = TableIndexUnion::Table3D((0, 0, 0));
         let result = Python::with_gil(|py| {
             let value = SetConstPy::new({
                 let mut set = Set::with_capacity(10);
@@ -9029,7 +8807,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -9045,12 +8823,12 @@ mod tests {
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table3D((0, 0, 0));
+        let index = TableIndexUnion::Table3D((0, 0, 0));
         let mut model = ModelPy::default();
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1usize.into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -9067,7 +8845,7 @@ mod tests {
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table3D((0, 0, 0));
+        let index = TableIndexUnion::Table3D((0, 0, 0));
         let mut model = ModelPy::default();
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
@@ -9077,7 +8855,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -9090,17 +8868,16 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new(Set::with_capacity(10)),
         )]]]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table3D((0, 0, 0));
+        let index = TableIndexUnion::Table3D((0, 0, 0));
         let result = Python::with_gil(|py| {
             let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -9112,64 +8889,17 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new(Set::with_capacity(10)),
         )]]]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table3D((0, 0, 0));
+        let index = TableIndexUnion::Table3D((0, 0, 0));
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = vec![10].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_3d_item_from_list_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new(Set::with_capacity(10)),
-        )]]]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table3D((0, 0, 0));
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_3d_item_from_list_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new(Set::with_capacity(10)),
-        )]]]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table3D((0, 0, 0));
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -9182,14 +8912,13 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new(Set::with_capacity(10)),
         )]]]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table3D((0, 0, 0));
+        let index = TableIndexUnion::Table3D((0, 0, 0));
         let result = Python::with_gil(|py| {
             let value = {
                 let mut set = HashSet::new();
@@ -9197,7 +8926,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -9209,14 +8938,13 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
             SetConstPy::new(Set::with_capacity(10)),
         )]]]);
         let t = model.add_set_table(table, None, None, None);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table3D((0, 0, 0));
+        let index = TableIndexUnion::Table3D((0, 0, 0));
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = {
@@ -9225,63 +8953,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_3d_item_from_set_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new(Set::with_capacity(10)),
-        )]]]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table3D((0, 0, 0));
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = {
-                let mut set = HashSet::new();
-                set.insert(1);
-                set
-            }
-            .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_3d_item_from_set_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new(Set::with_capacity(10)),
-        )]]]);
-        let t = model.add_set_table(table, None, None, None);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table3D((0, 0, 0));
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = {
-                let mut set = HashSet::new();
-                set.insert(1);
-                set
-            }
-            .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -9293,7 +8965,9 @@ mod tests {
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
+        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -9317,7 +8991,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_ok());
@@ -9340,7 +9013,9 @@ mod tests {
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
+        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -9355,7 +9030,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_err());
@@ -9368,7 +9042,9 @@ mod tests {
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
+        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -9393,7 +9069,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_err());
@@ -9401,12 +9076,14 @@ mod tests {
     }
 
     #[test]
-    fn udpate_set_table_3d_no_table_err() {
+    fn update_set_table_3d_no_table_err() {
         pyo3::prepare_freethreaded_python();
 
         let mut model = ModelPy::default();
 
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
+        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -9432,7 +9109,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
                 table.as_ref(py),
                 None,
-                None,
             )
         });
         assert!(result.is_err());
@@ -9446,9 +9122,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
+        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -9462,7 +9139,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_ok());
@@ -9486,9 +9162,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
+        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -9502,70 +9179,9 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn update_set_table_3d_from_list_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
-        let mut model = ModelPy::default();
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![vec![vec![vec![0, 1, 2]]]].into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-                table.as_ref(py),
-                None,
-                Some(ob),
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn update_set_table_3d_from_list_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![vec![vec![vec![0, 1, 2]]]].into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-                table.as_ref(py),
-                None,
-                None,
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
     }
 
     #[test]
@@ -9575,9 +9191,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
+        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -9598,7 +9215,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_ok());
@@ -9622,9 +9238,10 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
+        let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
+            SetConstPy::new(Set::with_capacity(10)),
+        )]]]);
         let t1 = model.add_set_table(table, None, None, None);
         assert!(t1.is_ok());
         let t1 = t1.unwrap();
@@ -9646,84 +9263,9 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
                 table.as_ref(py),
                 None,
-                Some(ob),
             )
         });
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn update_set_table_3d_from_set_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
-        let mut model = ModelPy::default();
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![vec![vec![HashSet::new(), {
-                let mut set = HashSet::new();
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }]]]
-            .into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-                table.as_ref(py),
-                None,
-                Some(ob),
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn update_set_table_3d_from_set_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-
-        let table = SetTableArgUnion::Table3D(vec![vec![vec![]]]);
-        let t1 = model.add_set_table(table, None, None, None);
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = vec![vec![vec![HashSet::new(), {
-                let mut set = HashSet::new();
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }]]]
-            .into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-                table.as_ref(py),
-                None,
-                None,
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
     }
 
     #[test]
@@ -9758,6 +9300,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = TableHandle::<Set>::from(t1).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables[t_id],
@@ -9803,6 +9346,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = TableHandle::<Set>::from(t2).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables[t_id],
@@ -9853,6 +9397,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = TableHandle::<Set>::from(t1).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables[t_id],
@@ -9898,6 +9443,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = TableHandle::<Set>::from(t2).id();
         assert_eq!(
             model.0.table_registry.set_tables.tables[t_id],
@@ -9987,6 +9533,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table({
             let mut map = FxHashMap::default();
@@ -10016,6 +9563,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -10046,6 +9594,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table({
             let mut map = FxHashMap::default();
@@ -10069,6 +9618,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -10076,7 +9626,7 @@ mod tests {
     }
 
     #[test]
-    fn add_set_table_from_list_with_nameok() {
+    fn add_set_table_from_list_with_name_ok() {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
@@ -10109,6 +9659,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table({
             let mut map = FxHashMap::default();
@@ -10138,6 +9689,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -10168,6 +9720,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table({
             let mut map = FxHashMap::default();
@@ -10191,6 +9744,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -10305,6 +9859,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table({
             let mut map = FxHashMap::default();
@@ -10334,6 +9889,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -10370,6 +9926,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table({
             let mut map = FxHashMap::default();
@@ -10399,6 +9956,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -10406,7 +9964,7 @@ mod tests {
     }
 
     #[test]
-    fn add_set_table_from_set_with_nameok() {
+    fn add_set_table_from_set_with_name_ok() {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
@@ -10439,6 +9997,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table({
             let mut map = FxHashMap::default();
@@ -10468,6 +10027,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -10504,6 +10064,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
         };
+        assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table({
             let mut map = FxHashMap::default();
@@ -10533,6 +10094,7 @@ mod tests {
             SetTableUnion::Table(t) => t,
             _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
         };
+        assert_eq!(t2.get_capacity_of_set(), 10);
 
         assert_ne!(t1, t2);
 
@@ -10684,7 +10246,7 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table1D(0);
+        let index = TableIndexUnion::Table1D(0);
         let result = Python::with_gil(|py| {
             let value = SetConstPy::new({
                 let mut set = Set::with_capacity(10);
@@ -10692,7 +10254,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(model.0.table_registry.set_tables.tables[t_id].get(&[0]), &{
@@ -10722,7 +10284,7 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table2D((0, 0));
+        let index = TableIndexUnion::Table2D((0, 0));
         let result = Python::with_gil(|py| {
             let value = SetConstPy::new({
                 let mut set = Set::with_capacity(10);
@@ -10730,7 +10292,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -10763,7 +10325,7 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table3D((0, 0, 0));
+        let index = TableIndexUnion::Table3D((0, 0, 0));
         let result = Python::with_gil(|py| {
             let value = SetConstPy::new({
                 let mut set = Set::with_capacity(10);
@@ -10771,7 +10333,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -10804,7 +10366,7 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
+        let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
         let result = Python::with_gil(|py| {
             let value = SetConstPy::new({
                 let mut set = Set::with_capacity(10);
@@ -10812,7 +10374,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -10841,11 +10403,11 @@ mod tests {
         );
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
+        let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1usize.into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -10867,7 +10429,7 @@ mod tests {
         );
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
+        let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
         let mut model = ModelPy::default();
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
@@ -10877,7 +10439,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -10891,7 +10453,6 @@ mod tests {
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let t = model.add_set_table(
             table,
             Some(TargetSetArgUnion::SetConst(SetConstPy::new(
@@ -10906,10 +10467,10 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table1D(0);
+        let index = TableIndexUnion::Table1D(0);
         let result = Python::with_gil(|py| {
             let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(model.0.table_registry.set_tables.tables[t_id].get(&[0]), &{
@@ -10926,7 +10487,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -10942,10 +10502,10 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table2D((0, 0));
+        let index = TableIndexUnion::Table2D((0, 0));
         let result = Python::with_gil(|py| {
             let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -10965,7 +10525,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -10981,10 +10540,10 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table3D((0, 0, 0));
+        let index = TableIndexUnion::Table3D((0, 0, 0));
         let result = Python::with_gil(|py| {
             let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11004,7 +10563,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -11020,10 +10578,10 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
+        let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
         let result = Python::with_gil(|py| {
             let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11043,7 +10601,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -11055,67 +10612,11 @@ mod tests {
         );
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
+        let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = vec![10].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_item_from_list_out_of_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_item_from_list_out_of_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = vec![1].into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -11129,7 +10630,6 @@ mod tests {
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let t = model.add_set_table(
             table,
             Some(TargetSetArgUnion::SetConst(SetConstPy::new(
@@ -11144,7 +10644,7 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table1D(0);
+        let index = TableIndexUnion::Table1D(0);
         let result = Python::with_gil(|py| {
             let value = {
                 let mut set = HashSet::new();
@@ -11152,7 +10652,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(model.0.table_registry.set_tables.tables[t_id].get(&[0]), &{
@@ -11169,7 +10669,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -11185,7 +10684,7 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table2D((0, 0));
+        let index = TableIndexUnion::Table2D((0, 0));
         let result = Python::with_gil(|py| {
             let value = {
                 let mut set = HashSet::new();
@@ -11193,7 +10692,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11213,7 +10712,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -11229,7 +10727,7 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table3D((0, 0, 0));
+        let index = TableIndexUnion::Table3D((0, 0, 0));
         let result = Python::with_gil(|py| {
             let value = {
                 let mut set = HashSet::new();
@@ -11237,7 +10735,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11257,7 +10755,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -11273,7 +10770,7 @@ mod tests {
             SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
             _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
         };
-        let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
+        let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
         let result = Python::with_gil(|py| {
             let value = {
                 let mut set = HashSet::new();
@@ -11281,7 +10778,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11301,7 +10798,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -11313,7 +10809,7 @@ mod tests {
         );
         assert!(t.is_ok());
         let t = t.unwrap();
-        let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
+        let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = {
@@ -11322,73 +10818,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_item_from_set_out_of_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = {
-                let mut set = HashSet::new();
-                set.insert(1);
-                set
-            }
-            .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_table_item_from_set_out_of_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = {
-                let mut set = HashSet::new();
-                set.insert(1);
-                set
-            }
-            .into_py(py);
-            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py), None)
+            model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -11416,7 +10846,7 @@ mod tests {
         };
         let result = Python::with_gil(|py| {
             let value = SetConstPy::new(Set::with_capacity(10)).into_py(py);
-            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -11444,7 +10874,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1usize.into_py(py);
-            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -11474,7 +10904,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = SetConstPy::new(Set::with_capacity(10)).into_py(py);
-            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -11487,7 +10917,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -11505,7 +10934,7 @@ mod tests {
         };
         let result = Python::with_gil(|py| {
             let value = vec![1].into_py(py);
-            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py), Some(ob))
+            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -11517,7 +10946,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -11536,69 +10964,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = vec![10].into_py(py);
-            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_default_from_list_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let t = match t {
-            SetTableUnion::Table(t) => t,
-            _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = vec![1].into_py(py);
-            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_default_from_list_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let t = match t {
-            SetTableUnion::Table(t) => t,
-            _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = vec![1].into_py(py);
-            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -11611,7 +10977,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -11634,7 +10999,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py), Some(ob))
+            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -11646,7 +11011,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
@@ -11670,79 +11034,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_default_from_set_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let t = match t {
-            SetTableUnion::Table(t) => t,
-            _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = {
-                let mut set = HashSet::new();
-                set.insert(1);
-                set
-            }
-            .into_py(py);
-            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py), Some(ob))
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn set_set_default_from_set_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let t = match t {
-            SetTableUnion::Table(t) => t,
-            _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let value = {
-                let mut set = HashSet::new();
-                set.insert(1);
-                set
-            }
-            .into_py(py);
-            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -11790,7 +11082,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table(t1.clone())),
                 table.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_ok());
@@ -11848,7 +11139,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table(t1.clone())),
                 table.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -11884,7 +11174,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table(t1.clone())),
                 table.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -11934,7 +11223,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table(t1.clone())),
                 table.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -11985,7 +11273,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table(t1.clone())),
                 table.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -11999,7 +11286,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t1 = model.add_set_table(
@@ -12034,7 +11320,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table(t1.clone())),
                 table.as_ref(py),
                 Some(default.as_ref(py)),
-                Some(ob),
             )
         });
         assert!(result.is_ok());
@@ -12063,7 +11348,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t1 = model.add_set_table(
@@ -12100,7 +11384,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table(t1.clone())),
                 table.as_ref(py),
                 Some(default.as_ref(py)),
-                Some(ob),
             )
         });
         assert!(result.is_err());
@@ -12114,7 +11397,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t1 = model.add_set_table(
@@ -12155,107 +11437,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table(t1.clone())),
                 table.as_ref(py),
                 Some(default.as_ref(py)),
-                Some(ob),
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn update_set_table_from_set_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t1 = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
-        };
-        let table: FxHashMap<(Element, Element, Element, Element), HashSet<Element>> = {
-            let mut map = FxHashMap::default();
-            map.insert((0, 0, 0, 0), {
-                let mut set = HashSet::new();
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(10);
-                set
-            });
-            map
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = table.into_py(py);
-            let default = HashSet::<Element>::new().into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table(t1.clone())),
-                table.as_ref(py),
-                Some(default.as_ref(py)),
-                Some(ob),
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn update_set_table_from_set_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t1 = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
-        };
-        let table: FxHashMap<(Element, Element, Element, Element), HashSet<Element>> = {
-            let mut map = FxHashMap::default();
-            map.insert((0, 0, 0, 0), {
-                let mut set = HashSet::new();
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(10);
-                set
-            });
-            map
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = table.into_py(py);
-            let default = HashSet::<Element>::new().into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table(t1.clone())),
-                table.as_ref(py),
-                Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -12269,7 +11450,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t1 = model.add_set_table(
@@ -12298,7 +11478,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table(t1.clone())),
                 table.as_ref(py),
                 Some(default.as_ref(py)),
-                Some(ob),
             )
         });
         assert!(result.is_ok());
@@ -12327,7 +11506,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t1 = model.add_set_table(
@@ -12357,7 +11535,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table(t1.clone())),
                 table.as_ref(py),
                 Some(default.as_ref(py)),
-                Some(ob),
             )
         });
         assert!(result.is_err());
@@ -12371,7 +11548,6 @@ mod tests {
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
 
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t1 = model.add_set_table(
@@ -12401,93 +11577,6 @@ mod tests {
                 TableUnion::Set(SetTableUnion::Table(t1.clone())),
                 table.as_ref(py),
                 Some(default.as_ref(py)),
-                Some(ob),
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn update_set_table_from_list_no_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-        let ob = model.add_object_type(10, None);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-
-        let mut model = ModelPy::default();
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t1 = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
-        };
-        let table: FxHashMap<(Element, Element, Element, Element), Vec<Element>> = {
-            let mut map = FxHashMap::default();
-            map.insert((0, 0, 0, 0), vec![0, 1, 2]);
-            map
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = table.into_py(py);
-            let default = Vec::<Element>::new().into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table(t1.clone())),
-                table.as_ref(py),
-                Some(default.as_ref(py)),
-                Some(ob),
-            )
-        });
-        assert!(result.is_err());
-        assert_eq!(model, snapshot);
-    }
-
-    #[test]
-    fn update_set_table_from_list_none_object_err() {
-        pyo3::prepare_freethreaded_python();
-
-        let mut model = ModelPy::default();
-
-        let table = SetTableArgUnion::Table(FxHashMap::default());
-        let t1 = model.add_set_table(
-            table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
-                Set::with_capacity(10),
-            ))),
-            None,
-            None,
-        );
-        assert!(t1.is_ok());
-        let t1 = t1.unwrap();
-        let t1 = match t1 {
-            SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
-        };
-        let table: FxHashMap<(Element, Element, Element, Element), Vec<Element>> = {
-            let mut map = FxHashMap::default();
-            map.insert((0, 0, 0, 0), vec![0, 1, 2]);
-            map
-        };
-        let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
-            let table = table.into_py(py);
-            let default = Vec::<Element>::new().into_py(py);
-            model.update_table(
-                TableUnion::Set(SetTableUnion::Table(t1.clone())),
-                table.as_ref(py),
-                Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -12555,8 +11644,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -12573,8 +11662,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12592,8 +11681,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12612,8 +11701,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12630,7 +11719,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![true].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -12647,7 +11736,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![1.5f64].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12665,7 +11754,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![true]].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12684,7 +11773,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![true].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12751,8 +11840,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -12769,8 +11858,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12788,8 +11877,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12808,8 +11897,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12826,7 +11915,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![true]].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -12843,7 +11932,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![1.5f64]].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12861,7 +11950,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![true]]].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12880,7 +11969,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![true]].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12947,8 +12036,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -12965,8 +12054,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -12984,8 +12073,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13004,8 +12093,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13022,7 +12111,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![true]]].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -13039,7 +12128,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13057,7 +12146,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![true]].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13076,7 +12165,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![true]]].into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13152,8 +12241,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -13175,8 +12264,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -13198,8 +12287,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -13221,8 +12310,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -13239,8 +12328,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13259,8 +12348,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13281,7 +12370,7 @@ mod tests {
         };
         let result = Python::with_gil(|py| {
             let value = true.into_py(py);
-            model.set_default(SetDefaultArgUnion::Bool(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Bool(t), value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -13302,7 +12391,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            model.set_default(SetDefaultArgUnion::Bool(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Bool(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13325,7 +12414,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            model.set_default(SetDefaultArgUnion::Bool(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Bool(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13352,7 +12441,6 @@ mod tests {
                 TableUnion::Bool(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_ok());
@@ -13375,7 +12463,7 @@ mod tests {
                 map
             }
             .into_py(py);
-            model.update_table(TableUnion::Bool(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13403,7 +12491,6 @@ mod tests {
                 TableUnion::Bool(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -13432,7 +12519,6 @@ mod tests {
                 TableUnion::Bool(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -13456,7 +12542,6 @@ mod tests {
                 TableUnion::Bool(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -13524,8 +12609,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -13542,8 +12627,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13561,8 +12646,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13581,8 +12666,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13599,7 +12684,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![2i32].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -13616,7 +12701,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![1.5f64].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13634,7 +12719,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2i32]].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13653,7 +12738,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![2i32].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13720,8 +12805,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -13738,8 +12823,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13757,8 +12842,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13777,8 +12862,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13795,7 +12880,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2i32]].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -13812,7 +12897,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![1.5f64]].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13830,7 +12915,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![2i32]]].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13849,7 +12934,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2i32]].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13916,8 +13001,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -13934,8 +13019,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13953,8 +13038,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13973,8 +13058,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -13991,7 +13076,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![2i32]]].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -14008,7 +13093,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14026,7 +13111,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2i32]].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14045,7 +13130,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![2i32]]].into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14121,8 +13206,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -14147,8 +13232,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -14173,8 +13258,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -14199,8 +13284,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -14217,8 +13302,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14237,8 +13322,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14259,7 +13344,7 @@ mod tests {
         };
         let result = Python::with_gil(|py| {
             let value = 2i32.into_py(py);
-            model.set_default(SetDefaultArgUnion::Int(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Int(t), value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -14280,7 +13365,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            model.set_default(SetDefaultArgUnion::Int(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Int(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14303,7 +13388,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 1.5f64.into_py(py);
-            model.set_default(SetDefaultArgUnion::Int(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Int(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14330,7 +13415,6 @@ mod tests {
                 TableUnion::Int(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_ok());
@@ -14353,7 +13437,7 @@ mod tests {
                 map
             }
             .into_py(py);
-            model.update_table(TableUnion::Int(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Int(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14381,7 +13465,6 @@ mod tests {
                 TableUnion::Int(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -14410,7 +13493,6 @@ mod tests {
                 TableUnion::Int(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -14434,7 +13516,6 @@ mod tests {
                 TableUnion::Int(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -14502,8 +13583,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -14520,8 +13601,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = vec![1.5f64].into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14539,8 +13620,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14559,8 +13640,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14577,7 +13658,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![2f64].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -14594,7 +13675,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![1.5f64]].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14612,7 +13693,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2f64]].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14631,7 +13712,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![2f64].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14698,8 +13779,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -14716,8 +13797,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = vec![1.5f64].into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14735,8 +13816,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14755,8 +13836,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14773,7 +13854,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2f64]].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -14790,7 +13871,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14808,7 +13889,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![2f64]]].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14827,7 +13908,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2f64]].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14894,8 +13975,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -14912,8 +13993,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = vec![1.5f64].into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14931,8 +14012,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14951,8 +14032,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -14969,7 +14050,7 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![2f64]]].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_ok());
     }
@@ -14986,7 +14067,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![vec![1.5f64]]]].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -15004,7 +14085,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![2f64]].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -15023,7 +14104,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value: Py<PyAny> = vec![vec![vec![2f64]]].into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -15099,8 +14180,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table1D(0);
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table1D(0);
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -15125,8 +14206,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table2D((0, 0));
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table2D((0, 0));
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -15151,8 +14232,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table3D((0, 0, 0));
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table3D((0, 0, 0));
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
         let t = match t {
@@ -15177,8 +14258,8 @@ mod tests {
         let t = t.unwrap();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -15195,8 +14276,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = vec![1.5f64].into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -15215,8 +14296,8 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            let index = TableindexUnion::Table(vec![0, 0, 0, 0]);
-            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py), None)
+            let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
+            model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -15237,7 +14318,7 @@ mod tests {
         };
         let result = Python::with_gil(|py| {
             let value = 2f64.into_py(py);
-            model.set_default(SetDefaultArgUnion::Float(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Float(t), value.as_ref(py))
         });
         assert!(result.is_ok());
     }
@@ -15258,7 +14339,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = vec![1.5f64].into_py(py);
-            model.set_default(SetDefaultArgUnion::Float(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Float(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -15281,7 +14362,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let value = vec![1.5f64].into_py(py);
-            model.set_default(SetDefaultArgUnion::Float(t), value.as_ref(py), None)
+            model.set_default(SetDefaultArgUnion::Float(t), value.as_ref(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -15308,7 +14389,6 @@ mod tests {
                 TableUnion::Float(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_ok());
@@ -15331,7 +14411,7 @@ mod tests {
                 map
             }
             .into_py(py);
-            model.update_table(TableUnion::Float(t), value.as_ref(py), None, None)
+            model.update_table(TableUnion::Float(t), value.as_ref(py), None)
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -15359,7 +14439,6 @@ mod tests {
                 TableUnion::Float(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -15388,7 +14467,6 @@ mod tests {
                 TableUnion::Float(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
@@ -15412,7 +14490,6 @@ mod tests {
                 TableUnion::Float(t),
                 value.as_ref(py),
                 Some(default.as_ref(py)),
-                None,
             )
         });
         assert!(result.is_err());
