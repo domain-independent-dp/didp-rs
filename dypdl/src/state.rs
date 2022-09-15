@@ -738,7 +738,7 @@ impl StateMetadata {
         Ok(())
     }
 
-    /// Create a set of objects asociated with the type.
+    /// Create a set of objects associated with the type.
     ///
     /// # Errors
     ///

@@ -3,7 +3,7 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::pyclass::CompareOp;
 
-#[derive(FromPyObject, Debug, PartialEq, Clone, Copy)]
+#[derive(FromPyObject, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum VarUnion {
     #[pyo3(transparent, annotation = "ElementVar")]
     Element(ElementVarPy),
@@ -21,7 +21,7 @@ pub enum VarUnion {
     FloatResource(FloatResourceVarPy),
 }
 
-#[derive(FromPyObject, Debug, PartialEq, Clone, Copy)]
+#[derive(FromPyObject, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ResourceVarUnion {
     #[pyo3(transparent, annotation = "ElementResourceVar")]
     Element(ElementResourceVarPy),
@@ -365,6 +365,7 @@ impl From<SetUnion> for SetExpression {
         }
     }
 }
+
 /// A class representing a set expression.
 ///
 /// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a `SetExpr`, `SetVar`, or `SetConst` is applied, a condition is returned.
@@ -550,7 +551,7 @@ impl SetExprPy {
     /// Returns
     /// -------
     /// SetExpr
-    ///     The symemtric difference set.
+    ///     The symmetric difference set.
     #[pyo3(text_signature = "(other)")]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
         self.__xor__(other)
@@ -826,7 +827,7 @@ impl SetVarPy {
     /// Returns
     /// -------
     /// SetExpr
-    ///     The symemtric difference set.
+    ///     The symmetric difference set.
     #[pyo3(text_signature = "(other)")]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
         self.__xor__(other)
@@ -1104,7 +1105,7 @@ impl SetConstPy {
     /// Returns
     /// -------
     /// SetExpr
-    ///     The symemtric difference set.
+    ///     The symmetric difference set.
     #[pyo3(text_signature = "(other)")]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
         self.__xor__(other)

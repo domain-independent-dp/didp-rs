@@ -1,9 +1,10 @@
+use super::argument_parser::{parse_argument, parse_multiple_arguments};
 use super::condition_parser;
 use super::util;
 use super::util::ParseErr;
 use dypdl::expression::{
     BinaryOperator, ElementExpression, ReferenceExpression, SetElementOperator, SetExpression,
-    SetOperator, TableExpression, VectorExpression,
+    SetOperator, SetReduceExpression, SetReduceOperator, TableExpression, VectorExpression,
 };
 use dypdl::variable_type::{Element, Set};
 use dypdl::{StateMetadata, TableData, TableRegistry};
@@ -330,6 +331,74 @@ fn parse_vector_operation<'a, 'b, 'c>(
     }
 }
 
+fn parse_set_reduce_expression<'a, 'b, 'c>(
+    op_name: &str,
+    tokens: &'a [String],
+    metadata: &'b StateMetadata,
+    registry: &'b TableRegistry,
+    parameters: &'c FxHashMap<String, usize>,
+) -> Result<Option<(SetExpression, &'a [String])>, ParseErr> {
+    let op = match op_name {
+        "union" => SetReduceOperator::Union,
+        "intersection" => SetReduceOperator::Intersection,
+        "disjunctive_union" => SetReduceOperator::SymmetricDifference,
+        _ => return Ok(None),
+    };
+    let (table_name, rest) = tokens
+        .split_first()
+        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+    if let Some(i) = registry.set_tables.name_to_table_1d.get(table_name) {
+        let (x, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        let capacity = registry.set_tables.tables_1d[*i].capacity_of_set();
+        Ok(Some((
+            SetExpression::Reduce(SetReduceExpression::Table1D(op, capacity, *i, Box::new(x))),
+            rest,
+        )))
+    } else if let Some(i) = registry.set_tables.name_to_table_2d.get(table_name) {
+        let (x, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let (y, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        let capacity = registry.set_tables.tables_2d[*i].capacity_of_set();
+        Ok(Some((
+            SetExpression::Reduce(SetReduceExpression::Table2D(
+                op,
+                capacity,
+                *i,
+                Box::new(x),
+                Box::new(y),
+            )),
+            rest,
+        )))
+    } else if let Some(i) = registry.set_tables.name_to_table_3d.get(table_name) {
+        let (x, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let (y, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let (z, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let rest = util::parse_closing(rest)?;
+        let capacity = registry.set_tables.tables_3d[*i].capacity_of_set();
+        Ok(Some((
+            SetExpression::Reduce(SetReduceExpression::Table3D(
+                op,
+                capacity,
+                *i,
+                Box::new(x),
+                Box::new(y),
+                Box::new(z),
+            )),
+            rest,
+        )))
+    } else if let Some(i) = registry.set_tables.name_to_table.get(table_name) {
+        let (args, rest) = parse_multiple_arguments(rest, metadata, registry, parameters)?;
+        let capacity = registry.set_tables.tables[*i].capacity_of_set();
+        Ok(Some((
+            SetExpression::Reduce(SetReduceExpression::Table(op, capacity, *i, args)),
+            rest,
+        )))
+    } else {
+        Ok(None)
+    }
+}
+
 pub fn parse_set_expression<'a, 'b, 'c>(
     tokens: &'a [String],
     metadata: &'b StateMetadata,
@@ -360,6 +429,10 @@ pub fn parse_set_expression<'a, 'b, 'c>(
                     SetExpression::Reference(ReferenceExpression::Table(expression)),
                     rest,
                 ))
+            } else if let Some((expression, rest)) =
+                parse_set_reduce_expression(name, rest, metadata, registry, parameters)?
+            {
+                Ok((expression, rest))
             } else if let Some((expression, rest)) =
                 parse_set_from(name, rest, metadata, registry, parameters)?
             {
@@ -678,15 +751,44 @@ mod tests {
         let mut name_to_constant = FxHashMap::default();
         name_to_constant.insert(String::from("st0"), set.clone());
         let default = Set::with_capacity(3);
-        let tables_1d = vec![dypdl::Table1D::new(vec![set, default.clone(), default])];
+        let tables_1d = vec![dypdl::Table1D::new(vec![
+            set.clone(),
+            default.clone(),
+            default.clone(),
+        ])];
         let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("st1"), 0);
+        let tables_2d = vec![dypdl::Table2D::new(vec![vec![
+            set.clone(),
+            default.clone(),
+            default.clone(),
+        ]])];
+        let mut name_to_table_2d = FxHashMap::default();
+        name_to_table_2d.insert(String::from("st2"), 0);
+        let tables_3d = vec![dypdl::Table3D::new(vec![vec![vec![
+            set.clone(),
+            default.clone(),
+            default,
+        ]]])];
+        let mut name_to_table_3d = FxHashMap::default();
+        name_to_table_3d.insert(String::from("st3"), 0);
+        let tables = vec![dypdl::Table::new(
+            FxHashMap::default(),
+            Set::with_capacity(3),
+        )];
+        let mut name_to_table = FxHashMap::default();
+        name_to_table.insert(String::from("st4"), 0);
 
         let set_tables = TableData {
             name_to_constant,
             tables_1d,
             name_to_table_1d,
-            ..Default::default()
+            tables_2d,
+            name_to_table_2d,
+            tables_3d,
+            name_to_table_3d,
+            tables,
+            name_to_table,
         };
 
         let mut name_to_constant = FxHashMap::default();
@@ -1735,7 +1837,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_set_complemnt_ok() {
+    fn parse_set_complement_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();
@@ -2038,6 +2140,511 @@ mod tests {
     }
 
     #[test]
+    fn parse_set_reduce_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "union"].iter().map(|x| x.to_string()).collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_reduce_union_1d_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "union", "st1", "e0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table1D(
+                SetReduceOperator::Union,
+                3,
+                0,
+                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0)))
+            ))
+        );
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_intersection_1d_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "intersection", "st1", "e0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table1D(
+                SetReduceOperator::Intersection,
+                3,
+                0,
+                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0)))
+            ))
+        );
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_disjunctive_union_1d_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "disjunctive_union", "st1", "e0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table1D(
+                SetReduceOperator::SymmetricDifference,
+                3,
+                0,
+                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0)))
+            ))
+        );
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_1d_x_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "disjunctive_union", "st1", "e4", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_reduce_1d_no_closing_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "disjunctive_union", "st1", "e0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_reduce_union_2d_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "union", "st2", "e0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table2D(
+                SetReduceOperator::Union,
+                3,
+                0,
+                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            ))
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_intersection_2d_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "intersection", "st2", "e0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table2D(
+                SetReduceOperator::Intersection,
+                3,
+                0,
+                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            ))
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_disjunctive_union_2d_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "disjunctive_union", "st2", "e0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table2D(
+                SetReduceOperator::SymmetricDifference,
+                3,
+                0,
+                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            ))
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_2d_x_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "disjunctive_union", "st2", "e4", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_reduce_2d_y_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "disjunctive_union", "st2", "e0", "e4", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_reduce_2d_no_closing_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "disjunctive_union", "st1", "e0", "0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_reduce_union_3d_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "union", "st3", "e0", "0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table3D(
+                SetReduceOperator::Union,
+                3,
+                0,
+                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            ))
+        );
+        assert_eq!(rest, &tokens[7..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_intersection_3d_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "intersection", "st3", "e0", "0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table3D(
+                SetReduceOperator::Intersection,
+                3,
+                0,
+                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            ))
+        );
+        assert_eq!(rest, &tokens[7..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_disjunctive_union_3d_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "disjunctive_union", "st3", "e0", "0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table3D(
+                SetReduceOperator::SymmetricDifference,
+                3,
+                0,
+                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+            ))
+        );
+        assert_eq!(rest, &tokens[7..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_3d_x_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "disjunctive_union", "st3", "e4", "0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_reduce_3d_y_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "disjunctive_union", "st3", "e0", "e4", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_reduce_2d_z_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "disjunctive_union", "st3", "e0", "0", "e4", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_reduce_3d_no_closing_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "disjunctive_union",
+            "st1",
+            "e0",
+            "0",
+            "0",
+            "0",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_reduce_union_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "union", "st4", "e0", "0", "0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::Union,
+                3,
+                0,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_intersection_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "intersection", "st4", "e0", "0", "0", "0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::Intersection,
+                3,
+                0,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_disjunctive_union_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "disjunctive_union",
+            "st4",
+            "e0",
+            "0",
+            "0",
+            "0",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::SymmetricDifference,
+                3,
+                0,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ]
+            ))
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
+
+    #[test]
+    fn parse_set_reduce_indices_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = [
+            "(",
+            "disjunctive_union",
+            "st4",
+            "e4",
+            "0",
+            "0",
+            "0",
+            ")",
+            ")",
+        ]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn parse_set_from_set_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
@@ -2062,7 +2669,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_set_from_vectorerr() {
+    fn parse_set_from_vector_err() {
         let metadata = generate_metadata();
         let registry = generate_registry();
         let parameters = generate_parameters();

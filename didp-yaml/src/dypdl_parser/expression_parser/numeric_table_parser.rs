@@ -1,3 +1,4 @@
+use super::argument_parser::{parse_argument, parse_multiple_arguments};
 use super::element_parser;
 use super::util;
 use super::util::ParseErr;
@@ -156,60 +157,13 @@ fn parse_reduce<'a, T: Numeric>(
             rest,
         )))
     } else if let Some(i) = tables.name_to_table.get(name) {
-        let (args, rest) = parse_sum_args(tokens, metadata, registry, parameters)?;
+        let (args, rest) = parse_multiple_arguments(tokens, metadata, registry, parameters)?;
         Ok(Some((
             NumericTableExpression::TableReduce(op, *i, args),
             rest,
         )))
     } else {
         Ok(None)
-    }
-}
-
-fn parse_sum_args<'a>(
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
-) -> Result<(Vec<ArgumentExpression>, &'a [String]), ParseErr> {
-    let mut args = Vec::new();
-    let mut xs = tokens;
-    loop {
-        let (next_token, rest) = xs
-            .split_first()
-            .ok_or_else(|| ParseErr::new("could not find closing `)`".to_string()))?;
-        if next_token == ")" {
-            return Ok((args, rest));
-        }
-        let (expression, new_xs) = parse_argument(xs, metadata, registry, parameters)?;
-        args.push(expression);
-        xs = new_xs;
-    }
-}
-
-pub fn parse_argument<'a>(
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
-) -> Result<(ArgumentExpression, &'a [String]), ParseErr> {
-    if let Ok((element, rest)) =
-        element_parser::parse_expression(tokens, metadata, registry, parameters)
-    {
-        Ok((ArgumentExpression::Element(element), rest))
-    } else if let Ok((set, rest)) =
-        element_parser::parse_set_expression(tokens, metadata, registry, parameters)
-    {
-        Ok((ArgumentExpression::Set(set), rest))
-    } else if let Ok((vector, rest)) =
-        element_parser::parse_vector_expression(tokens, metadata, registry, parameters)
-    {
-        Ok((ArgumentExpression::Vector(vector), rest))
-    } else {
-        Err(ParseErr::new(format!(
-            "could not parse tokens `{:?}`",
-            tokens
-        )))
     }
 }
 
@@ -2636,68 +2590,6 @@ mod tests {
             &parameters,
             &registry.integer_tables,
         );
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_argument_ok() {
-        let metadata = generate_metadata();
-        let parameters = generate_parameters();
-        let registry = generate_registry();
-
-        let tokens: Vec<String> = ["e0", "v3", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ArgumentExpression::Element(ElementExpression::Variable(0))
-        );
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["s0", "v3", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0)))
-        );
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["v0", "v3", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
-                0
-            )))
-        );
-        assert_eq!(rest, &tokens[1..]);
-    }
-
-    #[test]
-    fn parse_argument_err() {
-        let metadata = generate_metadata();
-        let parameters = generate_parameters();
-        let registry = generate_registry();
-
-        let tokens: Vec<String> = ["n0", "v3", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
         assert!(result.is_err());
     }
 }

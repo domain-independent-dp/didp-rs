@@ -1,4 +1,4 @@
-use crate::variable_type::Element;
+use crate::variable_type::{Element, Set};
 use approx::{AbsDiffEq, RelativeEq};
 use rustc_hash::FxHashMap;
 
@@ -16,7 +16,7 @@ impl<T> Table1D<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     #[inline]
     pub fn get(&self, x: Element) -> &T {
         &self.0[x]
@@ -26,7 +26,7 @@ impl<T> Table1D<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     #[inline]
     pub fn set(&mut self, x: Element, v: T) {
         self.0[x] = v;
@@ -45,9 +45,21 @@ impl<T: Copy> Table1D<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     pub fn eval(&self, x: Element) -> T {
         self.0[x]
+    }
+}
+
+impl Table1D<Set> {
+    #[inline]
+    /// Return the capacity of a set constant.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the table is empty.
+    pub fn capacity_of_set(&self) -> usize {
+        self.0[0].len()
     }
 }
 
@@ -99,7 +111,7 @@ impl<T> Table2D<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     #[inline]
     pub fn get(&self, x: Element, y: Element) -> &T {
         &self.0[x][y]
@@ -109,7 +121,7 @@ impl<T> Table2D<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     #[inline]
     pub fn set(&mut self, x: Element, y: Element, v: T) {
         self.0[x][y] = v;
@@ -127,10 +139,22 @@ impl<T: Copy> Table2D<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     #[inline]
     pub fn eval(&self, x: Element, y: Element) -> T {
         self.0[x][y]
+    }
+}
+
+impl Table2D<Set> {
+    #[inline]
+    /// Return the capacity of a set constant.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the table is empty.
+    pub fn capacity_of_set(&self) -> usize {
+        self.0[0][0].len()
     }
 }
 
@@ -184,7 +208,7 @@ impl<T> Table3D<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     #[inline]
     pub fn get(&self, x: Element, y: Element, z: Element) -> &T {
         &self.0[x][y][z]
@@ -194,7 +218,7 @@ impl<T> Table3D<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     #[inline]
     pub fn set(&mut self, x: Element, y: Element, z: Element, v: T) {
         self.0[x][y][z] = v;
@@ -212,10 +236,22 @@ impl<T: Copy> Table3D<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     #[inline]
     pub fn eval(&self, x: Element, y: Element, z: Element) -> T {
         self.0[x][y][z]
+    }
+}
+
+impl Table3D<Set> {
+    #[inline]
+    /// Return the capacity of a set constant.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the table is empty.
+    pub fn capacity_of_set(&self) -> usize {
+        self.0[0][0][0].len()
     }
 }
 
@@ -278,7 +314,7 @@ impl<T> Table<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     pub fn get(&self, args: &[Element]) -> &T {
         match self.map.get(args) {
             Some(value) => value,
@@ -290,7 +326,7 @@ impl<T> Table<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     #[inline]
     pub fn set(&mut self, key: Vec<Element>, v: T) {
         self.map.insert(key, v);
@@ -315,12 +351,24 @@ impl<T: Copy> Table<T> {
     ///
     /// # Panics
     ///
-    /// the index is out of bound.
+    /// Panics if the index is out of bound.
     pub fn eval(&self, args: &[Element]) -> T {
         match self.map.get(args) {
             Some(value) => *value,
             None => self.default,
         }
+    }
+}
+
+impl Table<Set> {
+    #[inline]
+    /// Return the capacity of a set constant.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the table is empty.
+    pub fn capacity_of_set(&self) -> usize {
+        self.default.len()
     }
 }
 
@@ -413,6 +461,12 @@ mod tests {
     }
 
     #[test]
+    fn table_1d_capacity_of_set() {
+        let f = Table1D::new(vec![Set::with_capacity(3)]);
+        assert_eq!(f.capacity_of_set(), 3);
+    }
+
+    #[test]
     fn table_1d_relative_eq() {
         let t1 = Table1D::new(vec![10.0, 20.0, 30.0]);
         let t2 = Table1D::new(vec![10.0, 20.0, 30.0]);
@@ -445,6 +499,12 @@ mod tests {
     fn table_2d_eval() {
         let f = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
         assert_eq!(f.eval(0, 1), 20);
+    }
+
+    #[test]
+    fn table_2d_capacity_of_set() {
+        let f = Table2D::new(vec![vec![Set::with_capacity(3)]]);
+        assert_eq!(f.capacity_of_set(), 3);
     }
 
     #[test]
@@ -496,6 +556,12 @@ mod tests {
             vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
         ]);
         assert_eq!(f.eval(0, 1, 2), 60);
+    }
+
+    #[test]
+    fn table_3d_capacity_of_set() {
+        let f = Table3D::new(vec![vec![vec![Set::with_capacity(3)]]]);
+        assert_eq!(f.capacity_of_set(), 3);
     }
 
     #[test]
@@ -604,6 +670,12 @@ mod tests {
         assert_eq!(f.eval(&[0, 1, 2, 0]), 300);
         assert_eq!(f.eval(&[0, 1, 2, 1]), 400);
         assert_eq!(f.eval(&[0, 1, 2, 2]), 0);
+    }
+
+    #[test]
+    fn table_capacity_of_set() {
+        let f = Table::new(FxHashMap::default(), Set::with_capacity(3));
+        assert_eq!(f.capacity_of_set(), 3);
     }
 
     #[test]

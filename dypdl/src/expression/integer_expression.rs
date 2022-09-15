@@ -1,3 +1,4 @@
+use super::argument_expression::ArgumentExpression;
 use super::condition::{Condition, IfThenElse};
 use super::continuous_expression::ContinuousExpression;
 use super::element_expression::ElementExpression;
@@ -5,7 +6,7 @@ use super::integer_vector_expression::IntegerVectorExpression;
 use super::numeric_operator::{
     BinaryOperator, CastOperator, MaxMin, ReduceOperator, UnaryOperator,
 };
-use super::numeric_table_expression::{ArgumentExpression, NumericTableExpression};
+use super::numeric_table_expression::NumericTableExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::vector_expression::VectorExpression;

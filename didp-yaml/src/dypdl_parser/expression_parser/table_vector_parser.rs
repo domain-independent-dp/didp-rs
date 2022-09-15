@@ -1,5 +1,5 @@
+use super::argument_parser;
 use super::element_parser;
-use super::numeric_table_parser;
 use super::util;
 use super::util::ParseErr;
 use dypdl::expression::{
@@ -111,9 +111,8 @@ pub fn parse_reduce_expression<'a, T: Numeric>(
     tables: &TableData<T>,
 ) -> Result<NumericVectorTableReturnType<'a, T>, ParseErr> {
     if let Some(i) = tables.name_to_table_2d.get(name) {
-        let (x, rest) =
-            numeric_table_parser::parse_argument(tokens, metadata, registry, parameters)?;
-        let (y, rest) = numeric_table_parser::parse_argument(rest, metadata, registry, parameters)?;
+        let (x, rest) = argument_parser::parse_argument(tokens, metadata, registry, parameters)?;
+        let (y, rest) = argument_parser::parse_argument(rest, metadata, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         match (x, y) {
             (ArgumentExpression::Vector(x), ArgumentExpression::Set(y)) => Ok(Some((
@@ -130,10 +129,9 @@ pub fn parse_reduce_expression<'a, T: Numeric>(
             ))),
         }
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let (x, rest) =
-            numeric_table_parser::parse_argument(tokens, metadata, registry, parameters)?;
-        let (y, rest) = numeric_table_parser::parse_argument(rest, metadata, registry, parameters)?;
-        let (z, rest) = numeric_table_parser::parse_argument(rest, metadata, registry, parameters)?;
+        let (x, rest) = argument_parser::parse_argument(tokens, metadata, registry, parameters)?;
+        let (y, rest) = argument_parser::parse_argument(rest, metadata, registry, parameters)?;
+        let (z, rest) = argument_parser::parse_argument(rest, metadata, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((
             TableVectorExpression::Table3DReduce(op, *i, x, y, z),
@@ -166,7 +164,7 @@ fn parse_sum_args<'a>(
             return Ok((args, rest));
         }
         let (expression, new_xs) =
-            numeric_table_parser::parse_argument(xs, metadata, registry, parameters)?;
+            argument_parser::parse_argument(xs, metadata, registry, parameters)?;
         args.push(expression);
         xs = new_xs;
     }

@@ -115,7 +115,7 @@ impl ElementTablePy {
 /// `t[x]` returns a set expression referring to an item where `t` is `SetTable1D` and `x` is `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
 #[pyclass(name = "SetTable1D")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SetTable1DPy(Table1DHandle<Set>);
+pub struct SetTable1DPy(Table1DHandle<Set>, usize);
 
 impl From<SetTable1DPy> for Table1DHandle<Set> {
     fn from(table: SetTable1DPy) -> Self {
@@ -124,8 +124,12 @@ impl From<SetTable1DPy> for Table1DHandle<Set> {
 }
 
 impl SetTable1DPy {
-    pub fn new(table: Table1DHandle<Set>) -> SetTable1DPy {
-        SetTable1DPy(table)
+    pub fn new(table: Table1DHandle<Set>, capacity: usize) -> SetTable1DPy {
+        SetTable1DPy(table, capacity)
+    }
+
+    pub fn get_capacity_of_set(&self) -> usize {
+        self.1
     }
 }
 
@@ -134,6 +138,75 @@ impl SetTable1DPy {
     fn __getitem__(&self, i: ElementUnion) -> SetExprPy {
         SetExprPy::new(self.0.element(i))
     }
+
+    /// union(x)
+    ///
+    /// Take the union of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The union.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x is a negative integer.
+    #[pyo3(text_signature = "(x)")]
+    fn union(&self, x: TableIndexUnion) -> SetExprPy {
+        SetExprPy::new(self.0.union(self.1, x))
+    }
+
+    /// intersection(x)
+    ///
+    /// Take the intersection of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The intersection.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x is a negative integer.
+    #[pyo3(text_signature = "(x)")]
+    fn intersection(&self, x: TableIndexUnion) -> SetExprPy {
+        SetExprPy::new(self.0.intersection(self.1, x))
+    }
+
+    /// symmetric_difference(x)
+    ///
+    /// Take the symmetric difference of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The symmetric difference.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x is a negative integer.
+    #[pyo3(text_signature = "(x)")]
+    fn symmetric_difference(&self, x: TableIndexUnion) -> SetExprPy {
+        SetExprPy::new(self.0.symmetric_difference(self.1, x))
+    }
 }
 
 /// A class representing a 2-dimensional table of set constants.
@@ -141,11 +214,15 @@ impl SetTable1DPy {
 /// `t[x, y]` returns a set expression referring to an item where `t` is `SetTable2D` and `x` and `y` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
 #[pyclass(name = "SetTable2D")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SetTable2DPy(Table2DHandle<Set>);
+pub struct SetTable2DPy(Table2DHandle<Set>, usize);
 
 impl SetTable2DPy {
-    pub fn new(table: Table2DHandle<Set>) -> SetTable2DPy {
-        SetTable2DPy(table)
+    pub fn new(table: Table2DHandle<Set>, capacity: usize) -> SetTable2DPy {
+        SetTable2DPy(table, capacity)
+    }
+
+    pub fn get_capacity_of_set(&self) -> usize {
+        self.1
     }
 }
 
@@ -161,6 +238,81 @@ impl SetTable2DPy {
         let (x, y) = index;
         SetExprPy::new(self.0.element(x, y))
     }
+
+    /// union(x, y)
+    ///
+    /// Take the union of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The union.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x or y is a negative integer.
+    #[pyo3(text_signature = "(x, y)")]
+    fn union(&self, x: TableIndexUnion, y: TableIndexUnion) -> SetExprPy {
+        SetExprPy::new(self.0.union(self.1, x, y))
+    }
+
+    /// intersection(x, y)
+    ///
+    /// Take the intersection of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The intersection.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x or y is a negative integer.
+    #[pyo3(text_signature = "(x, y)")]
+    fn intersection(&self, x: TableIndexUnion, y: TableIndexUnion) -> SetExprPy {
+        SetExprPy::new(self.0.intersection(self.1, x, y))
+    }
+
+    /// symmetric_difference(x, y)
+    ///
+    /// Take the symmetric difference of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The symmetric difference.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x or y is a negative integer.
+    #[pyo3(text_signature = "(x, y)")]
+    fn symmetric_difference(&self, x: TableIndexUnion, y: TableIndexUnion) -> SetExprPy {
+        SetExprPy::new(self.0.symmetric_difference(self.1, x, y))
+    }
 }
 
 /// A class representing a 3-dimensional table of set constants.
@@ -168,7 +320,7 @@ impl SetTable2DPy {
 /// `t[x, y, z]` returns a set expression referring to an item where `t` is `SetTable3D` and `x`, `y`, and `z` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
 #[pyclass(name = "SetTable3D")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SetTable3DPy(Table3DHandle<Set>);
+pub struct SetTable3DPy(Table3DHandle<Set>, usize);
 
 impl From<SetTable3DPy> for Table3DHandle<Set> {
     fn from(table: SetTable3DPy) -> Self {
@@ -177,8 +329,12 @@ impl From<SetTable3DPy> for Table3DHandle<Set> {
 }
 
 impl SetTable3DPy {
-    pub fn new(table: Table3DHandle<Set>) -> SetTable3DPy {
-        SetTable3DPy(table)
+    pub fn new(table: Table3DHandle<Set>, capacity: usize) -> SetTable3DPy {
+        SetTable3DPy(table, capacity)
+    }
+
+    pub fn get_capacity_of_set(&self) -> usize {
+        self.1
     }
 }
 
@@ -188,6 +344,97 @@ impl SetTable3DPy {
         let (x, y, z) = index;
         SetExprPy::new(self.0.element(x, y, z))
     }
+
+    /// union(x, y, z)
+    ///
+    /// Take the union of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    /// z : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the third dimension.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The union.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x, y, or z is a negative integer.
+    #[pyo3(text_signature = "(x, y, z)")]
+    fn union(&self, x: TableIndexUnion, y: TableIndexUnion, z: TableIndexUnion) -> SetExprPy {
+        SetExprPy::new(self.0.union(self.1, x, y, z))
+    }
+
+    /// intersection(x, y, z)
+    ///
+    /// Take the intersection of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    /// z : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the third dimension.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The intersection.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x, y, or z is a negative integer.
+    #[pyo3(text_signature = "(x, y, z)")]
+    fn intersection(
+        &self,
+        x: TableIndexUnion,
+        y: TableIndexUnion,
+        z: TableIndexUnion,
+    ) -> SetExprPy {
+        SetExprPy::new(self.0.intersection(self.1, x, y, z))
+    }
+
+    /// symmetric_difference(x, y, z)
+    ///
+    /// Take the symmetric difference of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// x : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the first dimension.
+    /// y : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the second dimension.
+    /// z : int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Set of indices for the third dimension.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The symmetric difference.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If x, y, or z is a negative integer.
+    #[pyo3(text_signature = "(x, y, z)")]
+    fn symmetric_difference(
+        &self,
+        x: TableIndexUnion,
+        y: TableIndexUnion,
+        z: TableIndexUnion,
+    ) -> SetExprPy {
+        SetExprPy::new(self.0.symmetric_difference(self.1, x, y, z))
+    }
 }
 
 /// A class representing a table of set constants.
@@ -195,7 +442,7 @@ impl SetTable3DPy {
 /// `t[index]` returns a set expression referring to an item where `t` is `SetTable` and `index` is a sequence of `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
 #[pyclass(name = "SetTable")]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SetTablePy(TableHandle<Set>);
+pub struct SetTablePy(TableHandle<Set>, usize);
 
 impl From<SetTablePy> for TableHandle<Set> {
     fn from(table: SetTablePy) -> Self {
@@ -204,8 +451,12 @@ impl From<SetTablePy> for TableHandle<Set> {
 }
 
 impl SetTablePy {
-    pub fn new(table: TableHandle<Set>) -> SetTablePy {
-        SetTablePy(table)
+    pub fn new(table: TableHandle<Set>, capacity: usize) -> SetTablePy {
+        SetTablePy(table, capacity)
+    }
+
+    pub fn get_capacity_of_set(&self) -> usize {
+        self.1
     }
 }
 
@@ -214,6 +465,84 @@ impl SetTablePy {
     fn __getitem__(&self, index: Vec<ElementUnion>) -> SetExprPy {
         let index = index.into_iter().map(ElementExpression::from).collect();
         SetExprPy::new(self.0.element(index))
+    }
+
+    /// union(indices)
+    ///
+    /// Take the union of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// indices : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The union.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If a negative integer is in `indices`.
+    #[pyo3(text_signature = "(indices)")]
+    fn union(&self, indices: Vec<TableIndexUnion>) -> SetExprPy {
+        SetExprPy::new(self.0.union(
+            self.1,
+            indices.into_iter().map(ArgumentExpression::from).collect(),
+        ))
+    }
+
+    /// intersection(indices)
+    ///
+    /// Take the intersection of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// indices : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The intersection.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If a negative integer is in `indices`.
+    #[pyo3(text_signature = "(indices)")]
+    fn intersection(&self, indices: Vec<TableIndexUnion>) -> SetExprPy {
+        SetExprPy::new(self.0.intersection(
+            self.1,
+            indices.into_iter().map(ArgumentExpression::from).collect(),
+        ))
+    }
+
+    /// symmetric_difference(indices)
+    ///
+    /// Take the symmetric difference of set constants in a table over the set of indices.
+    ///
+    /// Parameters
+    /// ----------
+    /// indices : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The symmetric difference.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If a negative integer is in `indices`.
+    #[pyo3(text_signature = "(indices)")]
+    fn symmetric_difference(&self, indices: Vec<TableIndexUnion>) -> SetExprPy {
+        SetExprPy::new(self.0.symmetric_difference(
+            self.1,
+            indices.into_iter().map(ArgumentExpression::from).collect(),
+        ))
     }
 }
 
@@ -718,14 +1047,14 @@ impl IntTablePy {
         IntExprPy::new(self.0.element(elements))
     }
 
-    /// product(index)
+    /// product(indices)
     ///
     /// Take the product of constants in a table over the set of indices.
     ///
     /// Parameters
     /// ----------
-    /// index : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
-    ///     Tuple of index sets
+    /// indices : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets.
     ///
     /// Returns
     /// -------
@@ -735,27 +1064,27 @@ impl IntTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `index`.
-    #[pyo3(text_signature = "(index)")]
-    fn product(&self, index: Vec<TableIndexUnion>) -> IntExprPy {
-        let mut elements = Vec::with_capacity(index.len());
-        for i in &index {
+    ///     If a negative integer is in `indices`.
+    #[pyo3(text_signature = "(indices)")]
+    fn product(&self, indices: Vec<TableIndexUnion>) -> IntExprPy {
+        let mut elements = Vec::with_capacity(indices.len());
+        for i in &indices {
             match i {
                 TableIndexUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
-                _ => return IntExprPy::new(self.0.product(index)),
+                _ => return IntExprPy::new(self.0.product(indices)),
             }
         }
         IntExprPy::new(self.0.element(elements))
     }
 
-    /// max(index)
+    /// max(indices)
     ///
     /// Take the maximum of constants in a table over the set of indices.
     ///
     /// Parameters
     /// ----------
-    /// index : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
-    ///     Tuple of index sets
+    /// indices : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets.
     ///
     /// Returns
     /// -------
@@ -765,27 +1094,27 @@ impl IntTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `index`.
-    #[pyo3(text_signature = "(index)")]
-    fn max(&self, index: Vec<TableIndexUnion>) -> IntExprPy {
-        let mut elements = Vec::with_capacity(index.len());
-        for i in &index {
+    ///     If a negative integer is in `indices`.
+    #[pyo3(text_signature = "(indices)")]
+    fn max(&self, indices: Vec<TableIndexUnion>) -> IntExprPy {
+        let mut elements = Vec::with_capacity(indices.len());
+        for i in &indices {
             match i {
                 TableIndexUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
-                _ => return IntExprPy::new(self.0.max(index)),
+                _ => return IntExprPy::new(self.0.max(indices)),
             }
         }
         IntExprPy::new(self.0.element(elements))
     }
 
-    /// min(index)
+    /// min(indices)
     ///
     /// Take the minimum of constants in a table over the set of indices.
     ///
     /// Parameters
     /// ----------
-    /// index : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
-    ///     Tuple of index sets
+    /// indices : tuple of int, ElementExpr, ElementVar, ElementResourceVar, SetExpr, SetVar, or SetConst
+    ///     Tuple of index sets.
     ///
     /// Returns
     /// -------
@@ -795,14 +1124,14 @@ impl IntTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `index`.
-    #[pyo3(text_signature = "(index)")]
-    fn min(&self, index: Vec<TableIndexUnion>) -> IntExprPy {
-        let mut elements = Vec::with_capacity(index.len());
-        for i in &index {
+    ///     If a negative integer is in `indices`.
+    #[pyo3(text_signature = "(indices)")]
+    fn min(&self, indices: Vec<TableIndexUnion>) -> IntExprPy {
+        let mut elements = Vec::with_capacity(indices.len());
+        for i in &indices {
             match i {
                 TableIndexUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
-                _ => return IntExprPy::new(self.0.min(index)),
+                _ => return IntExprPy::new(self.0.min(indices)),
             }
         }
         IntExprPy::new(self.0.element(elements))
@@ -1289,7 +1618,7 @@ mod tests {
     #[test]
     fn element_table_1d_new() {
         let mut model = Model::default();
-        let t = model.add_table_1d("t", vec![]);
+        let t = model.add_table_1d("t", vec![1]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(ElementTable1DPy::new(t), ElementTable1DPy(t));
@@ -1314,7 +1643,7 @@ mod tests {
     #[test]
     fn element_table_2d_new() {
         let mut model = Model::default();
-        let t = model.add_table_2d("t", vec![]);
+        let t = model.add_table_2d("t", vec![vec![1]]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(ElementTable2DPy::new(t), ElementTable2DPy(t));
@@ -1344,7 +1673,7 @@ mod tests {
     #[test]
     fn element_table_3d_new() {
         let mut model = Model::default();
-        let t = model.add_table_3d("t", vec![]);
+        let t = model.add_table_3d("t", vec![vec![vec![1]]]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(ElementTable3DPy::new(t), ElementTable3DPy(t));
@@ -1412,10 +1741,19 @@ mod tests {
     #[test]
     fn set_table_1d_new() {
         let mut model = Model::default();
-        let t = model.add_table_1d("t", vec![]);
+        let t = model.add_table_1d("t", vec![Set::with_capacity(10)]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(SetTable1DPy::new(t.clone()), SetTable1DPy(t));
+        assert_eq!(SetTable1DPy::new(t.clone(), 10), SetTable1DPy(t, 10));
+    }
+
+    #[test]
+    fn set_table_1d_get_capacity_of_set() {
+        let mut model = Model::default();
+        let t = model.add_table_1d("t", vec![Set::with_capacity(10)]);
+        assert!(t.is_ok());
+        let t = SetTable1DPy(t.unwrap(), 10);
+        assert_eq!(t.get_capacity_of_set(), 10);
     }
 
     #[test]
@@ -1424,7 +1762,7 @@ mod tests {
         let t = model.add_table_1d("t", vec![Set::with_capacity(10)]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let t_py = SetTable1DPy(t.clone());
+        let t_py = SetTable1DPy(t.clone(), 10);
         let i = ElementUnion::Const(0);
         assert_eq!(
             t_py.__getitem__(i),
@@ -1435,12 +1773,78 @@ mod tests {
     }
 
     #[test]
-    fn set_table_2d_new() {
+    fn set_table_1d_union() {
         let mut model = Model::default();
-        let t = model.add_table_2d("t", vec![]);
+        let t = model.add_table_1d("t", vec![Set::with_capacity(10)]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(SetTable2DPy::new(t.clone()), SetTable2DPy(t));
+        let t_py = SetTable1DPy(t.clone(), 10);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.union(x),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table1D(
+                SetReduceOperator::Union,
+                10,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0)))
+            )))
+        );
+    }
+
+    #[test]
+    fn set_table_1d_intersection() {
+        let mut model = Model::default();
+        let t = model.add_table_1d("t", vec![Set::with_capacity(10)]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = SetTable1DPy(t.clone(), 10);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.intersection(x),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table1D(
+                SetReduceOperator::Intersection,
+                10,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0)))
+            )))
+        );
+    }
+
+    #[test]
+    fn set_table_1d_symmetric_difference() {
+        let mut model = Model::default();
+        let t = model.add_table_1d("t", vec![Set::with_capacity(10)]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = SetTable1DPy(t.clone(), 10);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.symmetric_difference(x),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table1D(
+                SetReduceOperator::SymmetricDifference,
+                10,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0)))
+            )))
+        );
+    }
+
+    #[test]
+    fn set_table_2d_new() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![Set::with_capacity(10)]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        assert_eq!(SetTable2DPy::new(t.clone(), 10), SetTable2DPy(t, 10));
+    }
+
+    #[test]
+    fn set_table_2d_get_capacity_of_set() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![Set::with_capacity(10)]]);
+        assert!(t.is_ok());
+        let t = SetTable2DPy(t.unwrap(), 10);
+        assert_eq!(t.get_capacity_of_set(), 10);
     }
 
     #[test]
@@ -1449,7 +1853,7 @@ mod tests {
         let t = model.add_table_2d("t", vec![vec![Set::with_capacity(10)]]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let t_py = SetTable2DPy(t.clone());
+        let t_py = SetTable2DPy(t.clone(), 10);
         let x = ElementUnion::Const(0);
         let y = ElementUnion::Const(0);
         assert_eq!(
@@ -1465,12 +1869,85 @@ mod tests {
     }
 
     #[test]
-    fn set_table_3d_new() {
+    fn set_table_2d_union() {
         let mut model = Model::default();
-        let t = model.add_table_3d("t", vec![]);
+        let t = model.add_table_2d("t", vec![vec![Set::with_capacity(10)]]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(SetTable3DPy::new(t.clone()), SetTable3DPy(t));
+        let t_py = SetTable2DPy(t.clone(), 10);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.union(x, y),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table2D(
+                SetReduceOperator::Union,
+                10,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0)))
+            )))
+        );
+    }
+
+    #[test]
+    fn set_table_2d_intersection() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![Set::with_capacity(10)]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = SetTable2DPy(t.clone(), 10);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.intersection(x, y),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table2D(
+                SetReduceOperator::Intersection,
+                10,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0)))
+            )))
+        );
+    }
+
+    #[test]
+    fn set_table_2d_symmetric_difference() {
+        let mut model = Model::default();
+        let t = model.add_table_2d("t", vec![vec![Set::with_capacity(10)]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = SetTable2DPy(t.clone(), 10);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.symmetric_difference(x, y),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table2D(
+                SetReduceOperator::SymmetricDifference,
+                10,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0)))
+            )))
+        );
+    }
+
+    #[test]
+    fn set_table_3d_new() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![Set::with_capacity(10)]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        assert_eq!(SetTable3DPy::new(t.clone(), 10), SetTable3DPy(t, 10));
+    }
+
+    #[test]
+    fn set_table_3d_get_capacity_of_set() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![Set::with_capacity(10)]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t = SetTable3DPy(t, 10);
+        assert_eq!(t.get_capacity_of_set(), 10);
     }
 
     #[test]
@@ -1479,7 +1956,7 @@ mod tests {
         let t = model.add_table_3d("t", vec![vec![vec![Set::with_capacity(10)]]]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        let t_py = SetTable3DPy(t.clone());
+        let t_py = SetTable3DPy(t.clone(), 10);
         let x = ElementUnion::Const(0);
         let y = ElementUnion::Const(0);
         let z = ElementUnion::Const(0);
@@ -1497,12 +1974,91 @@ mod tests {
     }
 
     #[test]
+    fn set_table_3d_union() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![Set::with_capacity(10)]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = SetTable3DPy(t.clone(), 10);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.union(x, y, z),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table3D(
+                SetReduceOperator::Union,
+                10,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0)))
+            )))
+        );
+    }
+
+    #[test]
+    fn set_table_3d_intersection() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![Set::with_capacity(10)]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = SetTable3DPy(t.clone(), 10);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.intersection(x, y, z),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table3D(
+                SetReduceOperator::Intersection,
+                10,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0)))
+            )))
+        );
+    }
+
+    #[test]
+    fn set_table_3d_symmetric_difference() {
+        let mut model = Model::default();
+        let t = model.add_table_3d("t", vec![vec![vec![Set::with_capacity(10)]]]);
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = SetTable3DPy(t.clone(), 10);
+        let x = TableIndexUnion::Element(ElementUnion::Const(0));
+        let y = TableIndexUnion::Element(ElementUnion::Const(0));
+        let z = TableIndexUnion::Element(ElementUnion::Const(0));
+        assert_eq!(
+            t_py.symmetric_difference(x, y, z),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table3D(
+                SetReduceOperator::SymmetricDifference,
+                10,
+                t.id(),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
+                Box::new(ArgumentExpression::Element(ElementExpression::Constant(0)))
+            )))
+        );
+    }
+
+    #[test]
     fn set_table_new() {
         let mut model = Model::default();
         let t = model.add_table("t", FxHashMap::default(), Set::with_capacity(10));
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(SetTablePy::new(t.clone()), SetTablePy(t));
+        assert_eq!(SetTablePy::new(t.clone(), 10), SetTablePy(t, 10));
+    }
+
+    #[test]
+    fn set_table_get_capacity_of_set() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), Set::with_capacity(10));
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t = SetTablePy(t, 10);
+        assert_eq!(t.get_capacity_of_set(), 10);
     }
 
     #[test]
@@ -1511,7 +2067,7 @@ mod tests {
         let t = model.add_table("t", FxHashMap::default(), Set::with_capacity(10));
         assert!(t.is_ok());
         let t = t.unwrap();
-        let t_py = SetTablePy(t.clone());
+        let t_py = SetTablePy(t.clone(), 10);
         let index = vec![
             ElementUnion::Const(0),
             ElementUnion::Const(0),
@@ -1535,9 +2091,96 @@ mod tests {
     }
 
     #[test]
+    fn set_table_union() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), Set::with_capacity(10));
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = SetTablePy(t.clone(), 10);
+        let indices = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.union(indices),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::Union,
+                10,
+                t.id(),
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0))
+                ]
+            )))
+        );
+    }
+
+    #[test]
+    fn set_table_intersection() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), Set::with_capacity(10));
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = SetTablePy(t.clone(), 10);
+        let indices = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.intersection(indices),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::Intersection,
+                10,
+                t.id(),
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0))
+                ]
+            )))
+        );
+    }
+
+    #[test]
+    fn set_table_symmetric_difference() {
+        let mut model = Model::default();
+        let t = model.add_table("t", FxHashMap::default(), Set::with_capacity(10));
+        assert!(t.is_ok());
+        let t = t.unwrap();
+        let t_py = SetTablePy(t.clone(), 10);
+        let indices = vec![
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+            TableIndexUnion::Element(ElementUnion::Const(0)),
+        ];
+        assert_eq!(
+            t_py.symmetric_difference(indices),
+            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::SymmetricDifference,
+                10,
+                t.id(),
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0))
+                ]
+            )))
+        );
+    }
+
+    #[test]
     fn bool_table_1d_new() {
         let mut model = Model::default();
-        let t = model.add_table_1d("t", vec![]);
+        let t = model.add_table_1d("t", vec![true]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(BoolTable1DPy::new(t), BoolTable1DPy(t));
@@ -1563,7 +2206,7 @@ mod tests {
     #[test]
     fn bool_table_2d_new() {
         let mut model = Model::default();
-        let t = model.add_table_2d("t", vec![]);
+        let t = model.add_table_2d("t", vec![vec![true]]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(BoolTable2DPy::new(t), BoolTable2DPy(t));
@@ -1591,7 +2234,7 @@ mod tests {
     #[test]
     fn bool_table_3d_new() {
         let mut model = Model::default();
-        let t = model.add_table_3d("t", vec![]);
+        let t = model.add_table_3d("t", vec![vec![vec![true]]]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(BoolTable3DPy::new(t), BoolTable3DPy(t));
@@ -1677,7 +2320,7 @@ mod tests {
     #[test]
     fn int_table_1d_new() {
         let mut model = Model::default();
-        let t = model.add_table_1d("t", vec![]);
+        let t = model.add_table_1d("t", vec![1]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(IntTable1DPy::new(t), IntTable1DPy(t));
@@ -1782,7 +2425,7 @@ mod tests {
     #[test]
     fn int_table_2d_new() {
         let mut model = Model::default();
-        let t = model.add_table_2d("t", vec![]);
+        let t = model.add_table_2d("t", vec![vec![1]]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(IntTable2DPy::new(t), IntTable2DPy(t));
@@ -2139,7 +2782,7 @@ mod tests {
     #[test]
     fn int_table_3d_new() {
         let mut model = Model::default();
-        let t = model.add_table_3d("t", vec![]);
+        let t = model.add_table_3d("t", vec![vec![vec![1]]]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(IntTable3DPy::new(t), IntTable3DPy(t));
@@ -2597,7 +3240,7 @@ mod tests {
     #[test]
     fn float_table_1d_new() {
         let mut model = Model::default();
-        let t = model.add_table_1d("t", vec![]);
+        let t = model.add_table_1d("t", vec![1.5]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(FloatTable1DPy::new(t), FloatTable1DPy(t));
@@ -2702,7 +3345,7 @@ mod tests {
     #[test]
     fn float_table_2d_new() {
         let mut model = Model::default();
-        let t = model.add_table_2d("t", vec![]);
+        let t = model.add_table_2d("t", vec![vec![1.5]]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(FloatTable2DPy::new(t), FloatTable2DPy(t));
@@ -3059,7 +3702,7 @@ mod tests {
     #[test]
     fn float_table_3d_new() {
         let mut model = Model::default();
-        let t = model.add_table_3d("t", vec![]);
+        let t = model.add_table_3d("t", vec![vec![vec![1.5]]]);
         assert!(t.is_ok());
         let t = t.unwrap();
         assert_eq!(FloatTable3DPy::new(t), FloatTable3DPy(t));

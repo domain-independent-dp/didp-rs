@@ -1,6 +1,6 @@
+use super::argument_expression::ArgumentExpression;
 use super::element_expression::ElementExpression;
 use super::numeric_operator::ReduceOperator;
-use super::numeric_table_expression::ArgumentExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::util;
