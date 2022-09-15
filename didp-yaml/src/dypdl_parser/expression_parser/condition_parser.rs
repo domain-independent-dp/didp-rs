@@ -5,7 +5,7 @@ use super::util;
 use super::util::ParseErr;
 use dypdl::expression::{
     ComparisonOperator, Condition, ContinuousExpression, ElementExpression, IntegerExpression,
-    SetCondition,
+    SetCondition, SetExpression,
 };
 use rustc_hash::FxHashMap;
 
@@ -84,14 +84,6 @@ fn parse_operation<'a, 'b, 'c>(
                 rest,
             ))
         }
-        "is_subset" => {
-            let (x, rest) =
-                element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) =
-                element_parser::parse_set_expression(rest, metadata, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok((Condition::Set(Box::new(SetCondition::IsSubset(x, y))), rest))
-        }
         "is_empty" => {
             let (set, rest) =
                 element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
@@ -109,36 +101,63 @@ fn parse_comparison<'a, 'b, 'c>(
     registry: &'b dypdl::TableRegistry,
     parameters: &'c FxHashMap<String, usize>,
 ) -> Result<(Condition, &'a [String]), ParseErr> {
-    let operator = match operator {
-        "=" => ComparisonOperator::Eq,
-        "!=" => ComparisonOperator::Ne,
-        ">=" => ComparisonOperator::Ge,
-        ">" => ComparisonOperator::Gt,
-        "<=" => ComparisonOperator::Le,
-        "<" => ComparisonOperator::Lt,
-        _ => return Err(ParseErr::new(format!("no such operator `{}`", operator))),
-    };
-    if let Ok((x, y, rest)) = parse_ii(tokens, metadata, registry, parameters) {
-        Ok((
-            Condition::ComparisonI(operator, Box::new(x), Box::new(y)),
-            rest,
-        ))
-    } else if let Ok((x, y, rest)) = parse_cc(tokens, metadata, registry, parameters) {
-        Ok((
-            Condition::ComparisonC(operator, Box::new(x), Box::new(y)),
-            rest,
-        ))
-    } else if let Ok((x, y, rest)) = parse_ee(tokens, metadata, registry, parameters) {
-        Ok((
-            Condition::ComparisonE(operator, Box::new(x), Box::new(y)),
-            rest,
-        ))
+    if let Ok((x, y, rest)) = parse_ss(tokens, metadata, registry, parameters) {
+        match operator {
+            "=" => Ok((Condition::Set(Box::new(SetCondition::IsEqual(x, y))), rest)),
+            "!=" => Ok((
+                Condition::Set(Box::new(SetCondition::IsNotEqual(x, y))),
+                rest,
+            )),
+            "is_subset" => Ok((Condition::Set(Box::new(SetCondition::IsSubset(x, y))), rest)),
+            _ => Err(ParseErr::new(format!(
+                "no such comparison operator `{}` for two set expressions",
+                operator
+            ))),
+        }
     } else {
-        Err(ParseErr::new(format!(
-            "could not parse `{:?}` as a comparison",
-            tokens
-        )))
+        let operator = match operator {
+            "=" => ComparisonOperator::Eq,
+            "!=" => ComparisonOperator::Ne,
+            ">=" => ComparisonOperator::Ge,
+            ">" => ComparisonOperator::Gt,
+            "<=" => ComparisonOperator::Le,
+            "<" => ComparisonOperator::Lt,
+            _ => return Err(ParseErr::new(format!("no such operator `{}`", operator))),
+        };
+        if let Ok((x, y, rest)) = parse_ii(tokens, metadata, registry, parameters) {
+            Ok((
+                Condition::ComparisonI(operator, Box::new(x), Box::new(y)),
+                rest,
+            ))
+        } else if let Ok((x, y, rest)) = parse_cc(tokens, metadata, registry, parameters) {
+            Ok((
+                Condition::ComparisonC(operator, Box::new(x), Box::new(y)),
+                rest,
+            ))
+        } else if let Ok((x, y, rest)) = parse_ee(tokens, metadata, registry, parameters) {
+            Ok((
+                Condition::ComparisonE(operator, Box::new(x), Box::new(y)),
+                rest,
+            ))
+        } else {
+            Err(ParseErr::new(format!(
+                "could not parse `{:?}` as a comparison",
+                tokens
+            )))
+        }
     }
+}
+
+fn parse_ss<'a, 'b, 'c>(
+    tokens: &'a [String],
+    metadata: &'b dypdl::StateMetadata,
+    registry: &'b dypdl::TableRegistry,
+    parameters: &'c FxHashMap<String, usize>,
+) -> Result<(SetExpression, SetExpression, &'a [String]), ParseErr> {
+    let (x, rest) = element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
+    let (y, rest) = element_parser::parse_set_expression(rest, metadata, registry, parameters)?;
+    let rest = util::parse_closing(rest)?;
+    Ok((x, y, rest))
 }
 
 fn parse_ii<'a, 'b, 'c>(
@@ -644,6 +663,106 @@ mod tests {
     }
 
     #[test]
+    fn parse_is_equal_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["(", "=", "s0", "s1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Set(Box::new(SetCondition::IsEqual(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1))
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn parse_is_equal_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "=", "e0", "s1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "=", "s0", "e1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "=", "s0", "s1", "s2", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_is_not_equal_ok() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["(", "!=", "s0", "s1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            Condition::Set(Box::new(SetCondition::IsNotEqual(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1))
+            )))
+        );
+        assert_eq!(rest, &tokens[5..]);
+    }
+
+    #[test]
+    fn parse_is_not_equal_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "!=", "e0", "s1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "!=", "s0", "e1", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "!=", "s0", "s1", "s2", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn parse_is_subset_ok() {
         let metadata = generate_metadata();
         let registry = generate_registry();
@@ -686,6 +805,20 @@ mod tests {
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_subset", "s0", "s1", "s2", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_is_set_comparison_err() {
+        let metadata = generate_metadata();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "<", "e0", "s1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();

@@ -30,6 +30,7 @@ dual_bounds:
 - [Set Expression](#set-expression)
     - [Immediate Value](#immediate-value-1)
     - [Table](#table-1)
+    - [Table Reduce](#table-reduce)
     - [Variable](#variable-1)
     - [complement](#complement)
     - [union](#union)
@@ -41,7 +42,7 @@ dual_bounds:
 - [Integer Expression](#integer-expression)
     - [Immediate Value](#immediate-value-1)
     - [Table](#table-2)
-    - [sum](#sum)
+    - [Table Reduce](#table-reduce-1)
     - [Variable](#variable-1)
     - [Arithmetic Operations](#arithmetic-operations-1)
     - [Rounding](#rounding)
@@ -50,7 +51,7 @@ dual_bounds:
 - [Continuous Expression](#continuous-expression)
     - [Immediate Value](#immediate-value-2)
     - [Table](#table-3)
-    - [sum](#sum-1)
+    - [Table Reduce](#table-reduce-2)
     - [Variable](#variable-2)
     - [Arithmetic Operations](#arithmetic-operations-2)
     - [Rounding](#rounding-1)
@@ -59,8 +60,8 @@ dual_bounds:
 - [Condition](#numeric-expression)
     - [Table](#table-4)
     - [Arithmetic Comparison](#arithmetic-comparison)
+    - [Set Comparison](#set-comparison)
     - [is_in](#isin)
-    - [is_subset](#issubset)
     - [is_empty](#isempty)
     - [not](#not)
     - [and](#and)
@@ -116,7 +117,7 @@ For two element expressions, addition (`+`), subtraction (`-`), multiplication (
 (if <condition> <element expression 1> <element expression 2>)
 ```
 
-It retunrs `<element expression 1>` if `<condition>` is true.
+It returns `<element expression 1>` if `<condition>` is true.
 Otherwise, it returns `<element expression 2>`.
 
 ## Set Expression
@@ -135,8 +136,21 @@ Each argument is an element expression but restricted to a parameter, an element
 (<table name> <element expression 1>, ..., <element expression k>)
 ```
 
-It retunrs a value in table `<table name>` with indices `<element expression 1>` to `<element expression k>`.
+It returns a value in table `<table name>` with indices `<element expression 1>` to `<element expression k>`.
 The number of element expressions must be the same as `args` of the table.
+
+### Table Reduce
+```
+(union <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(intersection <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(disjunctive_union <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+```
+
+It returns the union/intersection/disjunctive union of values in table `<table name>` with indices specified by the arguments.
+It takes the sum over all elements in the cartesian product of the arguments.
+
+For example, suppose that a table named `table1` is 3-dimensional.
+`(union table1 set1 2 set2)` where `set1 = { 0, 1 }` and `set2 = { 3, 4 }` returns the union of `(table1 0 2 3)`, `(table1 0 2 4)`, `(table1 1 2 3)`, and `(table1 1 2 4)`.
 
 ### Variable
 ```
@@ -150,7 +164,7 @@ It returns element the value of element variable `<variable name>`.
 ~<set expression>
 ```
 
-It retunrs a complement set of the value of `<set expression>`.
+It returns a complement set of the value of `<set expression>`.
 
 ### union
 ```
@@ -192,7 +206,7 @@ It returns the set containing all elements in `<set expression>` except for `<el
 (if <condition> <set expression 1> <set expression 2>)
 ```
 
-It retunrs `<set expression 1>` if `<condition>` is true.
+It returns `<set expression 1>` if `<condition>` is true.
 Otherwise, it returns `<set expression 2>`.
 
 ## Integer Expression
@@ -211,12 +225,14 @@ An integer is an integer expression.
 It returns a value in table `<table name>` with indices `<element expression 1>` to `<element expression k>`.
 The number of element expressions must be the same as `args` of the table.
 
-### sum
+### Table Reduce
 ```
 (sum <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(max <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(min <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
 ```
 
-It returns the sum of values in table `<table name>` with indices specified by the arguments.
+It returns the sum/maximum/minimum of values in table `<table name>` with indices specified by the arguments.
 It takes the sum over all elements in the cartesian product of the arguments.
 
 For example, suppose that a table named `table1` is 3-dimensional.
@@ -273,7 +289,7 @@ It returns the cardinality of `<set expression>`.
 (if <condition> <integer expression 1> <integer expression 2>)
 ```
 
-It retunrs `<integer expression 1>` if `<condition>` is true.
+It returns `<integer expression 1>` if `<condition>` is true.
 Otherwise, it returns `<integer expression 2>`.
 
 ## Continuous Expression
@@ -293,14 +309,15 @@ It returns a value in table `<table name>` with indices `<element expression 1>`
 The number of element expressions must be the same as `args` of the table.
 An integer table can be used in a continuous expression.
 
-### sum
+### Table Reduce
 ```
 (sum <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(max <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(min <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
 ```
 
-It returns the sum of values in table `<table name>` with indices specified by the arguments.
+It returns the sum/maximum/minimum of values in table `<table name>` with indices specified by the arguments.
 It takes the sum over all elements in the cartesian product of the arguments.
-An integer table can be used in a continuous expression.
 
 For example, suppose that a table named `table1` is 3-dimensional.
 `(sum table1 set1 2 set2)` where `set1 = { 0, 1 }` and `set2 = { 3, 4 }` returns the sum of `(table1 0 2 3)`, `(table1 0 2 4)`, `(table1 1 2 3)`, and `(table1 1 2 4)`.
@@ -363,7 +380,7 @@ It returns the cardinality of `<set expression>`.
 (if <condition> <continuous expression 1> <continuous expression 2>)
 ```
 
-It retunrs `<continuous expression 1>` if `<condition>` is true.
+It returns `<continuous expression 1>` if `<condition>` is true.
 Otherwise, it returns `<continuous expression 2>`.
 
 ## Condition
@@ -402,28 +419,31 @@ Two element expressions can be compared.
 ```
 
 Two numeric expressions can be compared.
-It is possible to compare an integer expression and a continuous expression.
+An integer expression and a continuous expression cannot be compared.
+
+### Set Comparison
+```
+(= <set expression 1> <set expression 2>)
+(!= <set expression 1> <set expression 2>)
+(is_subset <set expression 1> <set expression 2>)
+```
+
+Two set expressions can be compared.
+`is_subset` checks if the value of `<set expression 1>` is a subset of `<set expression 2>`.
+
 
 ### is_in
 ```
 (is_in <element expression> <set expression>)
 ```
 
-It checks if the value of `<element expression>` is included in the value of `<set expressoin>`.
-
-### is_subset
-```
-(is_subset <set expression 1> <set expression 2>)
-```
-
-It checks if the value of `<set expressoin 1>` is a subset of `<set expressoin 2>`.
-
+It checks if the value of `<element expression>` is included in the value of `<set expression>`.
 ### is_empty
 ```
 (is_empty <set expression>)
 ```
 
-It checks if the value of `<set expressoin>` is an empty set.
+It checks if the value of `<set expression>` is an empty set.
 
 ### not
 ```
