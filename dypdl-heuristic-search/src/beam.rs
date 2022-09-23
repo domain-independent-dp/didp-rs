@@ -182,14 +182,14 @@ pub trait Beam<T: Numeric, U: Numeric + Ord, V: InBeam + Ord + StateInformation<
     /// Removes nodes from the beam, returning all removed nodes as an iterator.
     fn drain(&mut self) -> BeamDrain<'_, V>;
 
-    /// Crate a node from a state and insert it into the beam.
+    /// Returns true if the state is not pruned due to the capacity.
     fn insert(
         &mut self,
         registry: &mut StateRegistry<'_, T, V>,
         state: StateInRegistry,
         cost: T,
         args: BeamSearchNodeArgs<U, V>,
-    );
+    ) -> bool;
 }
 
 /// Beam for beam search.
@@ -251,7 +251,7 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<NormalBeamSearchNode<T, U>>> fo
         state: StateInRegistry,
         cost: T,
         args: BeamSearchNodeArgs<U, Rc<NormalBeamSearchNode<T, U>>>,
-    ) {
+    ) -> bool {
         if self.size < self.capacity || self.beam.queue.peek().map_or(true, |node| args.f < node.f)
         {
             let constructor =
@@ -266,6 +266,7 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<NormalBeamSearchNode<T, U>>> fo
                         in_beam: RefCell::new(true),
                     }))
                 };
+            let mut pruned_by_capacity = false;
             if let Some((node, dominated)) = registry.insert(state, cost, constructor) {
                 if let Some(dominated) = dominated {
                     if *dominated.in_beam.borrow() {
@@ -276,12 +277,16 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<NormalBeamSearchNode<T, U>>> fo
                 }
                 if self.size == self.capacity {
                     self.pop();
+                    pruned_by_capacity = true;
                 }
                 if self.size < self.capacity {
                     self.beam.queue.push(node);
                     self.size += 1;
                 }
             }
+            !pruned_by_capacity
+        } else {
+            false
         }
     }
 }
@@ -378,7 +383,7 @@ mod tests {
             f: 1,
             ..Default::default()
         };
-        beam.insert(&mut registry, state, cost, args);
+        assert!(beam.insert(&mut registry, state, cost, args));
         assert_eq!(beam.capacity(), 2);
     }
 
@@ -395,7 +400,7 @@ mod tests {
             f: 1,
             ..Default::default()
         };
-        beam.insert(&mut registry, state, cost, args);
+        assert!(beam.insert(&mut registry, state, cost, args));
         assert!(!beam.is_empty());
     }
 
@@ -421,7 +426,7 @@ mod tests {
             f: 2,
             ..Default::default()
         };
-        beam.insert(&mut registry, state, cost, args);
+        assert!(beam.insert(&mut registry, state, cost, args));
 
         let state = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
@@ -436,7 +441,7 @@ mod tests {
             f: 1,
             ..Default::default()
         };
-        beam.insert(&mut registry, state, cost, args);
+        assert!(beam.insert(&mut registry, state, cost, args));
 
         let state = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
@@ -451,7 +456,7 @@ mod tests {
             f: 2,
             ..Default::default()
         };
-        beam.insert(&mut registry, state, cost, args);
+        assert!(!beam.insert(&mut registry, state, cost, args));
 
         let peek = beam.pop();
         assert_eq!(
@@ -495,7 +500,7 @@ mod tests {
             f: 2,
             ..Default::default()
         };
-        beam.insert(&mut registry, state, cost, args);
+        assert!(beam.insert(&mut registry, state, cost, args));
 
         let state = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
@@ -510,7 +515,7 @@ mod tests {
             f: 1,
             ..Default::default()
         };
-        beam.insert(&mut registry, state, cost, args);
+        assert!(beam.insert(&mut registry, state, cost, args));
 
         let state = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
@@ -525,7 +530,7 @@ mod tests {
             f: 2,
             ..Default::default()
         };
-        beam.insert(&mut registry, state, cost, args);
+        assert!(!beam.insert(&mut registry, state, cost, args));
 
         let mut iter = beam.drain();
         assert_eq!(

@@ -3,6 +3,7 @@
 mod caasdy;
 mod callback;
 mod dijkstra;
+mod dual_bound_anytime_beam_search;
 mod dual_bound_bfdfbb;
 mod dual_bound_cbfs;
 mod dual_bound_chokudai_search;
@@ -79,6 +80,9 @@ impl SolverFactory {
                 "dual_bound_rrcbfs" => Ok(Box::new(dual_bound_rcbfs::load_from_yaml(&config)?)),
                 "dual_bound_dds" => Ok(Box::new(dual_bound_dds::load_from_yaml(&config)?)),
                 "dual_bound_dbdfs" => Ok(Box::new(dual_bound_dbdfs::load_from_yaml(&config)?)),
+                "dual_bound_anytime_beam" => Ok(Box::new(
+                    dual_bound_anytime_beam_search::load_from_yaml(&config)?,
+                )),
                 "dual_bound_chokudai" => Ok(Box::new(dual_bound_chokudai_search::load_from_yaml(
                     &config,
                 )?)),

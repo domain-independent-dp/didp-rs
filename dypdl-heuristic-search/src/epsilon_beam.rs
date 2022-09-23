@@ -191,7 +191,7 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<EpsilonBeamSearchNode<T, U>>>
         state: StateInRegistry,
         cost: T,
         args: BeamSearchNodeArgs<U, Rc<EpsilonBeamSearchNode<T, U>>>,
-    ) {
+    ) -> bool {
         let constructor =
             |state: StateInRegistry, cost: T, _: Option<&Rc<EpsilonBeamSearchNode<T, U>>>| {
                 Some(Rc::new(EpsilonBeamSearchNode {
@@ -221,8 +221,10 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<EpsilonBeamSearchNode<T, U>>>
             if self.size < self.capacity
                 || self.beam.queue.peek().map_or(true, |peek| args.f < peek.f)
             {
+                let mut pruned_by_capacity = false;
                 if self.size == self.capacity {
                     if let Some(peek) = self.beam.queue.pop() {
+                        pruned_by_capacity = true;
                         self.size -= 1;
                         *peek.in_queue.borrow_mut() = false;
                         self.clean_queue_garbage();
@@ -233,7 +235,12 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<EpsilonBeamSearchNode<T, U>>>
                     self.beam.queue.push(node);
                     self.size += 1;
                 }
+                !pruned_by_capacity
+            } else {
+                false
             }
+        } else {
+            true
         }
     }
 }

@@ -49,6 +49,7 @@ where
         let beam_constructor = || beam_constructor(*beam_size);
         let parameters = BeamSearchParameters {
             maximize,
+            primal_bound: None,
             quiet: parameters.quiet,
         };
         let (result, time_out) = beam_search(
@@ -109,11 +110,13 @@ where
 }
 
 /// Arguments for beam search.
-pub struct BeamSearchParameters {
+pub struct BeamSearchParameters<T> {
     /// Maximize or not.
-    maximize: bool,
+    pub maximize: bool,
+    /// Primal bound
+    pub primal_bound: Option<T>,
     /// Suppress log output or not.
-    quiet: bool,
+    pub quiet: bool,
 }
 
 /// Performs beam search.
@@ -126,7 +129,7 @@ pub fn beam_search<'a, T, U, V, B, C, H, F>(
     generator: &SuccessorGenerator<'a, TransitionWithCustomCost>,
     beam_constructor: &C,
     evaluators: &EvaluatorsForBeamSearch<H, F>,
-    parameters: BeamSearchParameters,
+    parameters: BeamSearchParameters<U>,
     time_keeper: &solver::TimeKeeper,
 ) -> (Solution<T>, bool)
 where
@@ -141,6 +144,7 @@ where
     let h_evaluator = &evaluators.h_evaluator;
     let f_evaluator = &evaluators.f_evaluator;
     let maximize = parameters.maximize;
+    let primal_bound = parameters.primal_bound;
     let quiet = parameters.quiet;
     let mut current_beam = beam_constructor();
     let mut next_beam = beam_constructor();
@@ -156,6 +160,31 @@ where
     }
     let h = h.unwrap();
     let f = f_evaluator(g, h, &initial_state, model);
+
+    if let Some(primal_bound) = primal_bound {
+        match model.reduce_function {
+            dypdl::ReduceFunction::Max if f <= primal_bound => {
+                return (
+                    Solution {
+                        is_infeasible: true,
+                        ..Default::default()
+                    },
+                    false,
+                );
+            }
+            dypdl::ReduceFunction::Min if f >= primal_bound => {
+                return (
+                    Solution {
+                        is_infeasible: true,
+                        ..Default::default()
+                    },
+                    false,
+                );
+            }
+            _ => {}
+        }
+    }
+
     let f = if maximize { -f } else { f };
     let args = BeamSearchNodeArgs {
         g,
@@ -166,6 +195,7 @@ where
     current_beam.insert(&mut registry, initial_state, cost, args);
     let mut expanded = 0;
     let mut generated = 0;
+    let mut pruned = false;
 
     while !current_beam.is_empty() {
         let mut incumbent = None;
@@ -220,6 +250,15 @@ where
                             &model.table_registry,
                         );
                         let f = f_evaluator(g, h, &state, model);
+
+                        if let Some(primal_bound) = primal_bound {
+                            match model.reduce_function {
+                                dypdl::ReduceFunction::Max if f <= primal_bound => continue,
+                                dypdl::ReduceFunction::Min if f >= primal_bound => continue,
+                                _ => {}
+                            }
+                        }
+
                         let f = if maximize { -f } else { f };
                         let cost = transition.transition.eval_cost(
                             node.cost(),
@@ -232,7 +271,10 @@ where
                             operator: Some(transition),
                             parent: Some(node.clone()),
                         };
-                        next_beam.insert(&mut registry, state, cost, args);
+                        let inserted = next_beam.insert(&mut registry, state, cost, args);
+                        if !pruned && !inserted {
+                            pruned = true;
+                        }
                         generated += 1;
                     }
                 }
@@ -261,6 +303,7 @@ where
         Solution {
             expanded,
             generated,
+            is_infeasible: !pruned,
             ..Default::default()
         },
         false,

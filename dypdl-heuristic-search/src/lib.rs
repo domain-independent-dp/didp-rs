@@ -2,6 +2,7 @@
 //!
 //! A libarary for heuristic search solvers for DyPDL.
 
+mod anytime_beam_search;
 mod beam;
 mod beam_search;
 mod best_first_search;
@@ -14,6 +15,7 @@ mod dbdfs;
 mod depth_bounded_discrepancy_search;
 mod dfbb;
 mod dijkstra;
+mod dual_bound_anytime_beam_search;
 mod dual_bound_bfdfbb;
 mod dual_bound_cbfs;
 mod dual_bound_chokudai_search;
@@ -50,6 +52,7 @@ pub use best_first_search::best_first_search;
 pub use caasdy::{CAASDy, FEvaluatorType};
 pub use dfbb::dfbb;
 pub use dijkstra::{dijkstra, Dijkstra};
+pub use dual_bound_anytime_beam_search::DualBoundAnytimeBeamSearch;
 pub use dual_bound_bfdfbb::DualBoundBFDFBB;
 pub use dual_bound_cbfs::DualBoundCBFS;
 pub use dual_bound_chokudai_search::DualBoundChokudaiSearch;
