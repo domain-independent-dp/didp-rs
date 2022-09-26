@@ -1,3 +1,4 @@
+use super::solution::CostToDump;
 use super::solver_parameters;
 use super::SolverFactory;
 use crate::util;
@@ -14,6 +15,7 @@ pub fn load_from_yaml<T>(
 where
     T: Numeric + Ord + fmt::Display + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
+    CostToDump: From<T>,
 {
     let map = match config {
         yaml_rust::Yaml::Hash(map) => map,

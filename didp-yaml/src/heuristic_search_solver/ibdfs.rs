@@ -1,4 +1,5 @@
 use super::callback::get_callback;
+use super::solution::CostToDump;
 use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
@@ -12,6 +13,7 @@ pub fn load_from_yaml<T>(config: &yaml_rust::Yaml) -> Result<IBDFS<T>, Box<dyn E
 where
     T: Numeric + Ord + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
+    CostToDump: From<T>,
 {
     let map = match config {
         yaml_rust::Yaml::Hash(map) => map,

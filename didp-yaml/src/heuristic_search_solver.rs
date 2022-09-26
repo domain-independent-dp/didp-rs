@@ -20,6 +20,7 @@ mod ibdfs;
 mod iterative_search;
 mod lazy_dijkstra;
 mod lookahead_lazy_dijkstra;
+mod solution;
 mod solver_parameters;
 mod transition_with_custom_cost;
 
@@ -28,6 +29,8 @@ use dypdl::variable_type;
 use std::error::Error;
 use std::fmt;
 use std::str;
+
+pub use solution::{CostToDump, SolutionToDump};
 
 /// Factory of a heuristic search solver.
 #[derive(Default)]
@@ -47,6 +50,7 @@ impl SolverFactory {
     where
         T: variable_type::Numeric + Ord + fmt::Display + 'static,
         <T as str::FromStr>::Err: fmt::Debug,
+        CostToDump: From<T>,
     {
         let map = match config {
             yaml_rust::Yaml::Hash(map) => map,

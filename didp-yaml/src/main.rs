@@ -1,6 +1,6 @@
 use didp_yaml::dypdl_parser;
 use didp_yaml::heuristic_search_solver;
-use didp_yaml::solution::{CostToDump, SolutionToDump};
+use didp_yaml::heuristic_search_solver::{CostToDump, SolutionToDump};
 use dypdl::variable_type;
 use dypdl_heuristic_search::Solver;
 use std::env;
