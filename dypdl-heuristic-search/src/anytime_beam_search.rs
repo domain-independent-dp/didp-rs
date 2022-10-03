@@ -56,6 +56,7 @@ where
             parameters,
             &time_keeper,
         );
+        solution.time = time_keeper.elapsed_time();
         solution.expanded += result.expanded;
         solution.generated += result.expanded;
         match result.cost {
