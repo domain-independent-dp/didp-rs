@@ -56,7 +56,6 @@ where
             parameters,
             &time_keeper,
         );
-        solution.time = time_keeper.elapsed_time();
         solution.expanded += result.expanded;
         solution.generated += result.expanded;
         match result.cost {
@@ -66,6 +65,7 @@ where
                         dypdl::ReduceFunction::Max if new_cost > current_cost => {
                             solution.transitions = result.transitions;
                             solution.cost = Some(new_cost);
+                            solution.time = time_keeper.elapsed_time();
                             (callback)(&solution);
                             if !quiet {
                                 println!("New primal bound: {}", new_cost);
@@ -74,6 +74,7 @@ where
                         dypdl::ReduceFunction::Min if new_cost < current_cost => {
                             solution.transitions = result.transitions;
                             solution.cost = Some(new_cost);
+                            solution.time = time_keeper.elapsed_time();
                             (callback)(&solution);
                             if !quiet {
                                 println!("New primal bound: {}", new_cost);
@@ -84,6 +85,7 @@ where
                 } else {
                     solution.transitions = result.transitions;
                     solution.cost = Some(new_cost);
+                    solution.time = time_keeper.elapsed_time();
                     (callback)(&solution);
                     if !quiet {
                         println!("New primal bound: {}", new_cost);
