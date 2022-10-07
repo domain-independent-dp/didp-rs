@@ -81,7 +81,23 @@ where
         }
         None => None,
     };
-    let progressive_parameters = ProgressiveSearchParameters { init, step, bound };
+    let reset = match map.get(&yaml_rust::Yaml::from_str("reset")) {
+        Some(yaml_rust::Yaml::Boolean(value)) => !(*value),
+        None => false,
+        value => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected Boolean, but found `{:?}`",
+                value
+            ))
+            .into())
+        }
+    };
+    let progressive_parameters = ProgressiveSearchParameters {
+        init,
+        step,
+        bound,
+        reset,
+    };
     let parameters = solver_parameters::parse_from_map(map)?;
     let initial_registry_capacity =
         match map.get(&yaml_rust::Yaml::from_str("initial_registry_capacity")) {

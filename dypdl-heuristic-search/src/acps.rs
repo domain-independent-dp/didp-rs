@@ -20,6 +20,8 @@ pub struct ProgressiveSearchParameters {
     pub step: usize,
     /// The maximum value of the width.
     pub bound: Option<usize>,
+    // Whether reset the bound when a better solution is found.
+    pub reset: bool,
 }
 
 impl Default for ProgressiveSearchParameters {
@@ -28,6 +30,7 @@ impl Default for ProgressiveSearchParameters {
             init: 1,
             step: 1,
             bound: None,
+            reset: false,
         }
     }
 }
@@ -212,7 +215,9 @@ where
             i = 0;
             no_node = true;
 
-            if let Some(bound) = width_bound {
+            if progressive_parameters.reset && goal_found {
+                width = progressive_parameters.init;
+            } else if let Some(bound) = width_bound {
                 if width + width_step < bound {
                     width += width_step;
                 } else if width < bound {

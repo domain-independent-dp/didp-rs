@@ -91,9 +91,9 @@ where
             }
         }
 
-        while !open.is_empty() {
-            let mut goal_found = false;
+        let mut goal_found = false;
 
+        while !open.is_empty() {
             while !open.is_empty() {
                 let node = open.pop().unwrap().0;
                 if *node.closed.borrow() {
@@ -213,7 +213,9 @@ where
             }
         }
 
-        if let Some(bound) = width_bound {
+        if progressive_parameters.reset && goal_found {
+            width = progressive_parameters.init;
+        } else if let Some(bound) = width_bound {
             if width + width_step < bound {
                 width += width_step;
             } else if width < bound {
