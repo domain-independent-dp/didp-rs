@@ -1,6 +1,5 @@
-use crate::beam::{Beam, BeamSearchNodeArgs, InBeam, PrioritizedNode};
+use crate::beam::{Beam, BeamSearchNodeArgs, GetTransitions, InBeam, PrioritizedNode};
 use crate::evaluator;
-use crate::search_node::{trace_transitions, DPSearchNode};
 use crate::solver;
 use crate::solver::Solution;
 use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
@@ -30,7 +29,7 @@ where
     T: variable_type::Numeric + fmt::Display,
     U: variable_type::Numeric + Ord,
     <U as str::FromStr>::Err: fmt::Debug,
-    V: DPSearchNode<T> + InBeam + Ord + StateInformation<T> + PrioritizedNode<U>,
+    V: GetTransitions + InBeam + Ord + StateInformation<T> + PrioritizedNode<U>,
     B: Beam<T, U, V>,
     C: Fn(usize) -> B,
     H: evaluator::Evaluator,
@@ -135,7 +134,7 @@ pub fn beam_search<'a, T, U, V, B, C, H, F>(
 where
     T: variable_type::Numeric,
     U: variable_type::Numeric + Ord,
-    V: DPSearchNode<T> + InBeam + Ord + StateInformation<T> + PrioritizedNode<U>,
+    V: GetTransitions + InBeam + Ord + StateInformation<T> + PrioritizedNode<U>,
     B: Beam<T, U, V>,
     C: Fn() -> B,
     H: evaluator::Evaluator,
@@ -228,7 +227,7 @@ where
                         },
                         |node| Solution {
                             cost: Some(node.cost()),
-                            transitions: trace_transitions(node),
+                            transitions: node.transitions(),
                             expanded,
                             generated,
                             time: time_keeper.elapsed_time(),
@@ -287,7 +286,7 @@ where
             return (
                 Solution {
                     cost: Some(node.cost()),
-                    transitions: trace_transitions(node),
+                    transitions: node.transitions(),
                     expanded,
                     generated,
                     time: time_keeper.elapsed_time(),

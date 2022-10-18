@@ -52,7 +52,7 @@ mod util;
 
 pub use acps::{acps, ProgressiveSearchParameters};
 pub use apps::apps;
-pub use beam::{BeamSearchNodeArgs, NormalBeam, NormalBeamSearchNode};
+pub use beam::{BeamSearchNodeArgs, CustomCostBeamSearchNode, NormalBeam};
 pub use beam_search::{beam_search, iterative_beam_search};
 pub use best_first_search::best_first_search;
 pub use caasdy::{CAASDy, FEvaluatorType};

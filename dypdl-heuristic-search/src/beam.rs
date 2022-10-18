@@ -1,7 +1,7 @@
-use crate::search_node::DPSearchNode;
 use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use crate::transition_with_custom_cost::TransitionWithCustomCost;
 use dypdl::variable_type::Numeric;
+use dypdl::Transition;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections;
@@ -25,11 +25,16 @@ pub trait PrioritizedNode<T> {
     fn f(&self) -> T;
 }
 
+/// Trait to get transitions.
+pub trait GetTransitions {
+    fn transitions(&self) -> Vec<Transition>;
+}
+
 /// Search node for beam search.
 ///
 /// Nodes totally ordered by their f-values.
 #[derive(Debug, Default)]
-pub struct NormalBeamSearchNode<T: Numeric, U: Numeric> {
+pub struct CustomCostBeamSearchNode<T: Numeric, U: Numeric> {
     /// g-value.
     pub g: U,
     /// f-value.
@@ -38,15 +43,13 @@ pub struct NormalBeamSearchNode<T: Numeric, U: Numeric> {
     pub state: StateInRegistry,
     /// Accumulated cost along the path so far.
     pub cost: T,
-    /// Transition applied to reach this node.
-    pub operator: Option<Rc<TransitionWithCustomCost>>,
-    /// Parent node.
-    pub parent: Option<Rc<NormalBeamSearchNode<T, U>>>,
+    /// Transitions applied to reach this node.
+    pub transitions: Vec<Rc<TransitionWithCustomCost>>,
     /// If included in a beam.
     pub in_beam: RefCell<bool>,
 }
 
-impl<T: Numeric, U: Numeric> InBeam for Rc<NormalBeamSearchNode<T, U>> {
+impl<T: Numeric, U: Numeric> InBeam for Rc<CustomCostBeamSearchNode<T, U>> {
     fn in_queue(&self) -> bool {
         *self.in_beam.borrow()
     }
@@ -56,7 +59,7 @@ impl<T: Numeric, U: Numeric> InBeam for Rc<NormalBeamSearchNode<T, U>> {
     }
 }
 
-impl<T: Numeric, U: Numeric> PrioritizedNode<U> for Rc<NormalBeamSearchNode<T, U>> {
+impl<T: Numeric, U: Numeric> PrioritizedNode<U> for Rc<CustomCostBeamSearchNode<T, U>> {
     fn g(&self) -> U {
         self.g
     }
@@ -66,30 +69,30 @@ impl<T: Numeric, U: Numeric> PrioritizedNode<U> for Rc<NormalBeamSearchNode<T, U
     }
 }
 
-impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for NormalBeamSearchNode<T, U> {
+impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for CustomCostBeamSearchNode<T, U> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f
     }
 }
 
-impl<T: Numeric, U: Numeric + Ord> Eq for NormalBeamSearchNode<T, U> {}
+impl<T: Numeric, U: Numeric + Ord> Eq for CustomCostBeamSearchNode<T, U> {}
 
-impl<T: Numeric, U: Numeric + Ord> Ord for NormalBeamSearchNode<T, U> {
+impl<T: Numeric, U: Numeric + Ord> Ord for CustomCostBeamSearchNode<T, U> {
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
         self.f.cmp(&other.f)
     }
 }
 
-impl<T: Numeric, U: Numeric + Ord> PartialOrd for NormalBeamSearchNode<T, U> {
+impl<T: Numeric, U: Numeric + Ord> PartialOrd for CustomCostBeamSearchNode<T, U> {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<T: Numeric, U: Numeric> StateInformation<T> for Rc<NormalBeamSearchNode<T, U>> {
+impl<T: Numeric, U: Numeric> StateInformation<T> for Rc<CustomCostBeamSearchNode<T, U>> {
     #[inline]
     fn state(&self) -> &StateInRegistry {
         &self.state
@@ -101,16 +104,12 @@ impl<T: Numeric, U: Numeric> StateInformation<T> for Rc<NormalBeamSearchNode<T, 
     }
 }
 
-impl<T: Numeric, U: Numeric> DPSearchNode<T> for Rc<NormalBeamSearchNode<T, U>> {
-    #[inline]
-    fn parent(&self) -> Option<Self> {
-        self.parent.as_ref().cloned()
-    }
-
-    fn operator(&self) -> Option<Rc<dypdl::Transition>> {
-        self.operator
-            .as_ref()
-            .map(|operator| Rc::new(operator.transition.clone()))
+impl<T: Numeric, U: Numeric> GetTransitions for Rc<CustomCostBeamSearchNode<T, U>> {
+    fn transitions(&self) -> Vec<Transition> {
+        self.transitions
+            .iter()
+            .map(|t| t.transition.clone())
+            .collect()
     }
 }
 
@@ -198,7 +197,7 @@ pub struct NormalBeam<T: Numeric, U: Numeric + Ord> {
     /// Capacity of the beam, or the beam size.
     pub capacity: usize,
     size: usize,
-    beam: BeamBase<Rc<NormalBeamSearchNode<T, U>>>,
+    beam: BeamBase<Rc<CustomCostBeamSearchNode<T, U>>>,
 }
 
 impl<T: Numeric, U: Numeric + Ord> NormalBeam<T, U> {
@@ -213,7 +212,7 @@ impl<T: Numeric, U: Numeric + Ord> NormalBeam<T, U> {
         }
     }
 
-    fn pop(&mut self) -> Option<Rc<NormalBeamSearchNode<T, U>>> {
+    fn pop(&mut self) -> Option<Rc<CustomCostBeamSearchNode<T, U>>> {
         self.beam.queue.pop().map(|node| {
             *node.in_beam.borrow_mut() = false;
             self.size -= 1;
@@ -231,7 +230,9 @@ impl<T: Numeric, U: Numeric + Ord> NormalBeam<T, U> {
     }
 }
 
-impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<NormalBeamSearchNode<T, U>>> for NormalBeam<T, U> {
+impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<CustomCostBeamSearchNode<T, U>>>
+    for NormalBeam<T, U>
+{
     fn is_empty(&self) -> bool {
         self.size == 0
     }
@@ -240,29 +241,40 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<NormalBeamSearchNode<T, U>>> fo
         self.capacity
     }
 
-    fn drain(&mut self) -> BeamDrain<'_, Rc<NormalBeamSearchNode<T, U>>> {
+    fn drain(&mut self) -> BeamDrain<'_, Rc<CustomCostBeamSearchNode<T, U>>> {
         self.size = 0;
         self.beam.drain()
     }
 
     fn insert(
         &mut self,
-        registry: &mut StateRegistry<'_, T, Rc<NormalBeamSearchNode<T, U>>>,
+        registry: &mut StateRegistry<'_, T, Rc<CustomCostBeamSearchNode<T, U>>>,
         state: StateInRegistry,
         cost: T,
-        args: BeamSearchNodeArgs<U, Rc<NormalBeamSearchNode<T, U>>>,
+        args: BeamSearchNodeArgs<U, Rc<CustomCostBeamSearchNode<T, U>>>,
     ) -> bool {
         if self.size < self.capacity || self.beam.queue.peek().map_or(true, |node| args.f < node.f)
         {
             let constructor =
-                |state: StateInRegistry, cost: T, _: Option<&Rc<NormalBeamSearchNode<T, U>>>| {
-                    Some(Rc::new(NormalBeamSearchNode {
+                |state: StateInRegistry,
+                 cost: T,
+                 _: Option<&Rc<CustomCostBeamSearchNode<T, U>>>| {
+                    let transitions = args.parent.map_or_else(Vec::new, |parent| {
+                        Vec::from_iter(
+                            parent
+                                .transitions
+                                .iter()
+                                .cloned()
+                                .chain(args.operator.into_iter()),
+                        )
+                    });
+
+                    Some(Rc::new(CustomCostBeamSearchNode {
                         g: args.g,
                         f: args.f,
                         state,
                         cost,
-                        operator: args.operator,
-                        parent: args.parent,
+                        transitions,
                         in_beam: RefCell::new(true),
                     }))
                 };
@@ -298,7 +310,7 @@ mod tests {
 
     #[test]
     fn search_node_getter() {
-        let node = Rc::new(NormalBeamSearchNode {
+        let node = Rc::new(CustomCostBeamSearchNode {
             state: StateInRegistry {
                 signature_variables: Rc::new(HashableSignatureVariables {
                     integer_variables: vec![1, 2, 3],
@@ -310,18 +322,16 @@ mod tests {
             g: 1,
             f: 3,
             in_beam: RefCell::new(false),
-            parent: None,
-            operator: None,
+            transitions: Vec::new(),
         });
         assert_eq!(node.state(), &node.state);
         assert_eq!(node.cost(), 1);
-        assert!(node.parent().is_none());
-        assert!(node.operator().is_none());
+        assert_eq!(node.transitions(), Vec::new());
     }
 
     #[test]
     fn search_node_cmp() {
-        let node1 = NormalBeamSearchNode {
+        let node1 = CustomCostBeamSearchNode {
             state: StateInRegistry {
                 signature_variables: Rc::new(HashableSignatureVariables {
                     integer_variables: vec![1, 2, 3],
@@ -333,10 +343,9 @@ mod tests {
             g: 1,
             f: 3,
             in_beam: RefCell::new(false),
-            parent: None,
-            operator: None,
+            transitions: Vec::new(),
         };
-        let node2 = NormalBeamSearchNode {
+        let node2 = CustomCostBeamSearchNode {
             state: StateInRegistry {
                 signature_variables: Rc::new(HashableSignatureVariables {
                     integer_variables: vec![4, 2, 3],
@@ -348,11 +357,10 @@ mod tests {
             g: 1,
             f: 3,
             in_beam: RefCell::new(false),
-            parent: None,
-            operator: None,
+            transitions: Vec::new(),
         };
         assert_eq!(node1, node2);
-        let node2 = NormalBeamSearchNode {
+        let node2 = CustomCostBeamSearchNode {
             state: StateInRegistry {
                 signature_variables: Rc::new(HashableSignatureVariables {
                     integer_variables: vec![4, 2, 3],
@@ -364,8 +372,7 @@ mod tests {
             g: 2,
             f: 4,
             in_beam: RefCell::new(false),
-            parent: None,
-            operator: None,
+            transitions: Vec::new(),
         };
         assert!(node1 < node2);
     }
@@ -461,7 +468,7 @@ mod tests {
         let peek = beam.pop();
         assert_eq!(
             peek,
-            Some(Rc::new(NormalBeamSearchNode {
+            Some(Rc::new(CustomCostBeamSearchNode {
                 state: StateInRegistry {
                     signature_variables: Rc::new(HashableSignatureVariables {
                         integer_variables: vec![2, 3, 4],
@@ -472,8 +479,126 @@ mod tests {
                 cost: 0,
                 g: 0,
                 f: 1,
-                operator: None,
-                parent: None,
+                transitions: Vec::new(),
+                in_beam: RefCell::new(false)
+            }))
+        );
+        let peek = beam.pop();
+        assert_eq!(peek, None);
+    }
+
+    #[test]
+    fn normal_beam_pop_with_parent() {
+        let model = dypdl::Model::default();
+        let mut registry = StateRegistry::new(&model);
+        let mut beam = NormalBeam::new(1);
+
+        let peek = beam.pop();
+        assert_eq!(peek, None);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![1, 2, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 1;
+        let args = BeamSearchNodeArgs {
+            g: 0,
+            f: 2,
+            ..Default::default()
+        };
+        assert!(beam.insert(&mut registry, state, cost, args));
+
+        let parent = Rc::new(CustomCostBeamSearchNode {
+            state: StateInRegistry {
+                signature_variables: Rc::new(HashableSignatureVariables {
+                    integer_variables: vec![4, 2, 3],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            cost: 1,
+            g: 1,
+            f: 3,
+            in_beam: RefCell::new(false),
+            transitions: vec![Rc::new(TransitionWithCustomCost {
+                transition: Transition {
+                    name: String::from("tr1"),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })],
+        });
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![1, 2, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 0;
+        let args = BeamSearchNodeArgs {
+            g: 0,
+            f: 1,
+            parent: Some(parent),
+            operator: Some(Rc::new(TransitionWithCustomCost {
+                transition: Transition {
+                    name: String::from("tr1"),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })),
+        };
+        assert!(beam.insert(&mut registry, state, cost, args));
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![2, 3, 4],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 0;
+        let args = BeamSearchNodeArgs {
+            g: 0,
+            f: 2,
+            ..Default::default()
+        };
+        assert!(!beam.insert(&mut registry, state, cost, args));
+
+        let peek = beam.pop();
+        assert_eq!(
+            peek,
+            Some(Rc::new(CustomCostBeamSearchNode {
+                state: StateInRegistry {
+                    signature_variables: Rc::new(HashableSignatureVariables {
+                        integer_variables: vec![2, 3, 4],
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                cost: 0,
+                g: 0,
+                f: 1,
+                transitions: vec![
+                    Rc::new(TransitionWithCustomCost {
+                        transition: Transition {
+                            name: String::from("tr1"),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    }),
+                    Rc::new(TransitionWithCustomCost {
+                        transition: Transition {
+                            name: String::from("tr2"),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    }),
+                ],
                 in_beam: RefCell::new(false)
             }))
         );
@@ -535,7 +660,7 @@ mod tests {
         let mut iter = beam.drain();
         assert_eq!(
             iter.next(),
-            Some(Rc::new(NormalBeamSearchNode {
+            Some(Rc::new(CustomCostBeamSearchNode {
                 state: StateInRegistry {
                     signature_variables: Rc::new(HashableSignatureVariables {
                         integer_variables: vec![2, 3, 4],
@@ -546,8 +671,7 @@ mod tests {
                 cost: 0,
                 g: 0,
                 f: 1,
-                operator: None,
-                parent: None,
+                transitions: Vec::new(),
                 in_beam: RefCell::new(true)
             }))
         );

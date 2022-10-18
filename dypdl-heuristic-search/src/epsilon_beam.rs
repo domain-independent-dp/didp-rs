@@ -1,8 +1,8 @@
 use super::beam::*;
-use crate::search_node::DPSearchNode;
 use crate::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use crate::transition_with_custom_cost::TransitionWithCustomCost;
 use dypdl::variable_type::Numeric;
+use dypdl::Transition;
 use rand::{Rng, SeedableRng};
 use std::cell::RefCell;
 use std::cmp::Ordering;
@@ -21,10 +21,8 @@ pub struct EpsilonBeamSearchNode<T: Numeric, U: Numeric> {
     pub state: StateInRegistry,
     /// Accumulated cost along the path so far.
     pub cost: T,
-    /// Transition applied to reach this node.
-    pub operator: Option<Rc<TransitionWithCustomCost>>,
-    /// Parent node.
-    pub parent: Option<Rc<EpsilonBeamSearchNode<T, U>>>,
+    /// Transitions applied to reach this node.
+    pub transitions: Vec<Rc<TransitionWithCustomCost>>,
     /// If included in a beam.
     pub in_beam: RefCell<bool>,
     /// If included in a queue.
@@ -86,16 +84,12 @@ impl<T: Numeric, U: Numeric> StateInformation<T> for Rc<EpsilonBeamSearchNode<T,
     }
 }
 
-impl<T: Numeric, U: Numeric> DPSearchNode<T> for Rc<EpsilonBeamSearchNode<T, U>> {
-    #[inline]
-    fn parent(&self) -> Option<Self> {
-        self.parent.as_ref().cloned()
-    }
-
-    fn operator(&self) -> Option<Rc<dypdl::Transition>> {
-        self.operator
-            .as_ref()
-            .map(|operator| Rc::new(operator.transition.clone()))
+impl<T: Numeric, U: Numeric> GetTransitions for Rc<EpsilonBeamSearchNode<T, U>> {
+    fn transitions(&self) -> Vec<Transition> {
+        self.transitions
+            .iter()
+            .map(|t| t.transition.clone())
+            .collect()
     }
 }
 
@@ -194,13 +188,22 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<EpsilonBeamSearchNode<T, U>>>
     ) -> bool {
         let constructor =
             |state: StateInRegistry, cost: T, _: Option<&Rc<EpsilonBeamSearchNode<T, U>>>| {
+                let transitions = args.parent.map_or_else(Vec::new, |parent| {
+                    Vec::from_iter(
+                        parent
+                            .transitions
+                            .iter()
+                            .cloned()
+                            .chain(args.operator.into_iter()),
+                    )
+                });
+
                 Some(Rc::new(EpsilonBeamSearchNode {
                     g: args.g,
                     f: args.f,
                     state,
                     cost,
-                    operator: args.operator,
-                    parent: args.parent,
+                    transitions,
                     in_beam: RefCell::new(true),
                     in_queue: RefCell::new(false),
                 }))

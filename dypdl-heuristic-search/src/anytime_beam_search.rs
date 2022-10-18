@@ -1,7 +1,6 @@
 use super::beam_search::{beam_search, BeamSearchParameters, EvaluatorsForBeamSearch};
-use crate::beam::{Beam, InBeam, PrioritizedNode};
+use crate::beam::{Beam, GetTransitions, InBeam, PrioritizedNode};
 use crate::evaluator;
-use crate::search_node::DPSearchNode;
 use crate::solver;
 use crate::solver::Solution;
 use crate::state_registry::{StateInRegistry, StateInformation};
@@ -24,7 +23,7 @@ pub fn anytime_beam_search<'a, T, V, B, C, H, F>(
 where
     T: variable_type::Numeric + fmt::Display + Ord,
     <T as str::FromStr>::Err: fmt::Debug,
-    V: DPSearchNode<T> + InBeam + Ord + StateInformation<T> + PrioritizedNode<T>,
+    V: GetTransitions + InBeam + Ord + StateInformation<T> + PrioritizedNode<T>,
     B: Beam<T, T, V>,
     C: Fn(usize) -> B,
     H: evaluator::Evaluator,
