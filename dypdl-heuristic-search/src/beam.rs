@@ -72,7 +72,7 @@ impl<T: Numeric, U: Numeric> PrioritizedNode<U> for Rc<CustomCostBeamSearchNode<
 impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for CustomCostBeamSearchNode<T, U> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.f == other.f
+        self.f == other.f && self.g == other.g
     }
 }
 
@@ -81,7 +81,10 @@ impl<T: Numeric, U: Numeric + Ord> Eq for CustomCostBeamSearchNode<T, U> {}
 impl<T: Numeric, U: Numeric + Ord> Ord for CustomCostBeamSearchNode<T, U> {
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
-        self.f.cmp(&other.f)
+        match self.f.cmp(&other.f) {
+            Ordering::Equal => other.g.cmp(&self.g),
+            result => result,
+        }
     }
 }
 
@@ -253,7 +256,10 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<CustomCostBeamSearchNode<T, U>>
         cost: T,
         args: BeamSearchNodeArgs<U, Rc<CustomCostBeamSearchNode<T, U>>>,
     ) -> bool {
-        if self.size < self.capacity || self.beam.queue.peek().map_or(true, |node| args.f < node.f)
+        if self.size < self.capacity
+            || self.beam.queue.peek().map_or(true, |node| {
+                (args.f < node.f) || (args.f == node.f && args.g > node.g)
+            })
         {
             let constructor =
                 |state: StateInRegistry,

@@ -52,7 +52,7 @@ impl<T: Numeric, U: Numeric> PrioritizedNode<U> for Rc<EpsilonBeamSearchNode<T, 
 impl<T: Numeric, U: Numeric + PartialOrd> PartialEq for EpsilonBeamSearchNode<T, U> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.f == other.f
+        self.f == other.f && self.g == other.g
     }
 }
 
@@ -61,7 +61,10 @@ impl<T: Numeric, U: Numeric + Ord> Eq for EpsilonBeamSearchNode<T, U> {}
 impl<T: Numeric, U: Numeric + Ord> Ord for EpsilonBeamSearchNode<T, U> {
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
-        self.f.cmp(&other.f)
+        match self.f.cmp(&other.f) {
+            Ordering::Equal => other.g.cmp(&self.g),
+            result => result,
+        }
     }
 }
 
@@ -222,7 +225,9 @@ impl<T: Numeric, U: Numeric + Ord> Beam<T, U, Rc<EpsilonBeamSearchNode<T, U>>>
             }
             self.all_pool.push(node.clone());
             if self.size < self.capacity
-                || self.beam.queue.peek().map_or(true, |peek| args.f < peek.f)
+                || self.beam.queue.peek().map_or(true, |peek| {
+                    (args.f < peek.f) || (args.f == peek.f && args.g > peek.g)
+                })
             {
                 let mut pruned_by_capacity = false;
                 if self.size == self.capacity {
