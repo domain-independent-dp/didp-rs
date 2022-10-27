@@ -52,6 +52,7 @@ pub mod prelude {
 }
 
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::fmt;
 use std::panic;
 
 /// Type of numeric values to represent the costs of states.
@@ -199,7 +200,7 @@ impl Model {
     /// # Panics
     ///
     /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn validate_forward<T: variable_type::Numeric>(
+    pub fn validate_forward<T: variable_type::Numeric + fmt::Display>(
         &self,
         transitions: &[Transition],
         cost: T,
@@ -248,11 +249,8 @@ impl Model {
         for (state, transition) in state_vec.into_iter().zip(transitions).rev() {
             validation_cost = transition.eval_cost(validation_cost, &state, &self.table_registry);
         }
-        if cost != validation_cost {
-            if show_message {
-                println!("The cost does not match the actual cost.")
-            }
-            return false;
+        if cost != validation_cost && show_message {
+            println!("The cost {} does not match the actual cost {}. This is possibly due to the cost is continuous.", cost, validation_cost)
         }
         true
     }
@@ -3094,7 +3092,7 @@ mod tests {
             model.forward_forced_transitions[0].clone(),
             model.forward_transitions[0].clone(),
         ];
-        assert!(!model.validate_forward(&transitions, 2, true));
+        assert!(model.validate_forward(&transitions, 2, true));
     }
 
     #[test]
