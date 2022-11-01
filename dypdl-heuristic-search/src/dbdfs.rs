@@ -180,7 +180,6 @@ where
         // reverse sort
         successors.sort_by(|a, b| b.cmp(a));
         if let Some(best) = successors.pop() {
-            open.push((best, discrepancy));
             let mut successors = successors
                 .into_iter()
                 .map(|x| (x, discrepancy + 1))
@@ -190,6 +189,7 @@ where
             } else {
                 next_open.append(&mut successors);
             }
+            open.push((best, discrepancy));
         }
     }
     if solution.cost.is_none() {
