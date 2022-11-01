@@ -194,15 +194,13 @@ where
                 }
             }
 
-            if !goal_found {
-                while open.len() < width {
-                    if let Some(Reverse(node)) = children.pop() {
-                        if !(*(node.closed.borrow())) {
-                            open.push(Reverse(node));
-                        }
-                    } else {
-                        break;
+            while open.len() < width {
+                if let Some(Reverse(node)) = children.pop() {
+                    if !(*(node.closed.borrow())) {
+                        open.push(Reverse(node));
                     }
+                } else {
+                    break;
                 }
             }
 
