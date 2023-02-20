@@ -1,4 +1,0 @@
-solver: lookahead_lazy_dijkstra
-config:
-    bound_ratio: 2
-    time_limit: 1800

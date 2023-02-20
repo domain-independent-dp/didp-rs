@@ -15,14 +15,14 @@ use yaml_rust::Yaml;
 
 type TransitionsWithFlags = (Vec<Transition>, bool, bool);
 
-/// Returns transitoins of loaded from YAML
+/// Returns transitions of loaded from YAML
 ///
 /// The second returned value indicates whether it is forced or not.
 /// The third returned value indicates whether it is backward or not.
 ///
 /// # Errors
 ///
-/// if the format is invalid.
+/// If the format is invalid.
 pub fn load_transitions_from_yaml(
     value: &Yaml,
     metadata: &StateMetadata,

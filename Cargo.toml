@@ -4,7 +4,7 @@ members = [
     "dypdl",
     "didp-yaml",
     "dypdl-heuristic-search",
-    "dypy",
+    "didppy",
 ]
 
 [profile.release]

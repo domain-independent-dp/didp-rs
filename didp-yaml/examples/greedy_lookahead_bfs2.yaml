@@ -1,4 +1,0 @@
-solver: dual_bound_greedy_lookahead_bfs
-config:
-    bound_ratio: 2
-    time_limit: 1800

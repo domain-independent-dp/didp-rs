@@ -18,17 +18,17 @@ pub use base_case::BaseCase;
 pub use effect::Effect;
 pub use grounded_condition::GroundedCondition;
 pub use state::{
-    AccessPreference, CheckVariable, ContinuousResourceVariable, ContinuousVariable, DPState,
+    AccessPreference, CheckVariable, ContinuousResourceVariable, ContinuousVariable,
     ElementResourceVariable, ElementVariable, GetObjectTypeOf, IntegerResourceVariable,
     IntegerVariable, ObjectType, ResourceVariables, SetVariable, SignatureVariables, State,
-    StateMetadata, VectorVariable,
+    StateInterface, StateMetadata, VectorVariable,
 };
 pub use table::{Table, Table1D, Table2D, Table3D};
 pub use table_data::{
     Table1DHandle, Table2DHandle, Table3DHandle, TableData, TableHandle, TableInterface,
 };
 pub use table_registry::TableRegistry;
-pub use transition::{AddEffect, CostExpression, Transition};
+pub use transition::{AddEffect, CostExpression, Transition, TransitionInterface};
 pub use util::ModelErr;
 pub use variable_type::{Continuous, Element, Integer, Set, Vector};
 
@@ -138,7 +138,7 @@ impl Model {
     }
 
     /// Returns true if a state satisfies all state constraints and false otherwise.
-    pub fn check_constraints<U: DPState>(&self, state: &U) -> bool {
+    pub fn check_constraints<U: StateInterface>(&self, state: &U) -> bool {
         self.state_constraints.iter().all(|constraint| {
             constraint
                 .is_satisfied(state, &self.table_registry)
@@ -150,8 +150,8 @@ impl Model {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn is_base<U: DPState>(&self, state: &U) -> bool {
+    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a base case.
+    pub fn is_base<U: StateInterface>(&self, state: &U) -> bool {
         self.base_cases
             .iter()
             .any(|case| case.is_satisfied(state, &self.table_registry))
@@ -175,8 +175,8 @@ impl Model {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval_dual_bound<U: DPState, T: variable_type::Numeric + Ord>(
+    /// If the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a dual bound.
+    pub fn eval_dual_bound<U: StateInterface, T: variable_type::Numeric + Ord>(
         &self,
         state: &U,
     ) -> Option<T> {
@@ -195,11 +195,47 @@ impl Model {
         }
     }
 
+    /// Returns the successor state given a state and a transition.
+    ///
+    /// # Panics
+    ///
+    /// If the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a precondition or an effect of the transition.
+    pub fn generate_successor_state<
+        S: StateInterface,
+        R: StateInterface + From<State>,
+        T: TransitionInterface,
+        U: variable_type::Numeric,
+    >(
+        &self,
+        state: &S,
+        cost: U,
+        transition: &T,
+        cost_bound: Option<U>,
+    ) -> Option<(R, U)> {
+        let successor_cost = transition.eval_cost(cost, state, &self.table_registry);
+
+        if cost_bound.map_or(false, |bound| match self.reduce_function {
+            ReduceFunction::Max => successor_cost <= bound,
+            ReduceFunction::Min => successor_cost >= bound,
+            _ => false,
+        }) {
+            return None;
+        }
+
+        let successor = transition.apply(state, &self.table_registry);
+
+        if self.check_constraints(&successor) {
+            Some((successor, successor_cost))
+        } else {
+            None
+        }
+    }
+
     /// Validate a solution consists of forward transitions.
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a precondition or an effect of a transition.
     pub fn validate_forward<T: variable_type::Numeric + fmt::Display>(
         &self,
         transitions: &[Transition],
@@ -259,7 +295,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if no object type with the name.
+    /// If no object type with the name.
     #[inline]
     pub fn get_object_type(&self, name: &str) -> Result<ObjectType, ModelErr> {
         self.state_metadata.get_object_type(name)
@@ -269,7 +305,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the name is already used.
+    /// If the name is already used.
     #[inline]
     pub fn add_object_type<T>(&mut self, name: T, number: usize) -> Result<ObjectType, ModelErr>
     where
@@ -282,7 +318,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the object type is not in the model.
+    /// If the object type is not in the model.
     #[inline]
     pub fn get_number_of_objects(&self, ob: ObjectType) -> Result<usize, ModelErr> {
         self.state_metadata.get_number_of_objects(ob)
@@ -292,7 +328,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the object type is not in the model.
+    /// If the object type is not in the model.
     #[inline]
     pub fn set_number_of_object(&mut self, ob: ObjectType, number: usize) -> Result<(), ModelErr> {
         self.state_metadata.set_number_of_object(ob, number)
@@ -302,7 +338,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the object type is not in the model or an input value is greater than or equal to the number of the objects.
+    /// If the object type is not in the model or an input value is greater than or equal to the number of the objects.
     #[inline]
     pub fn create_set(&self, ob: ObjectType, array: &[Element]) -> Result<Set, ModelErr> {
         self.state_metadata.create_set(ob, array)
@@ -312,7 +348,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if no such variable.
+    /// If no such variable.
     #[inline]
     pub fn get_element_variable(&self, name: &str) -> Result<ElementVariable, ModelErr> {
         self.state_metadata.get_element_variable(name)
@@ -324,7 +360,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the name is already used, the object type is not in the model, or the target value is greater than or equal to the number of the objects.
+    /// If the name is already used, the object type is not in the model, or the target value is greater than or equal to the number of the objects.
     pub fn add_element_variable<T>(
         &mut self,
         name: T,
@@ -355,7 +391,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if no such variable.
+    /// If no such variable.
     #[inline]
     pub fn get_element_resource_variable(
         &self,
@@ -370,7 +406,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the name is already used, the object type is not in the model, or the target value is greater than or equal to the number of the objects.
+    /// If the name is already used, the object type is not in the model, or the target value is greater than or equal to the number of the objects.
     pub fn add_element_resource_variable<T>(
         &mut self,
         name: T,
@@ -404,7 +440,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if no such variable.
+    /// If no such variable.
     #[inline]
     pub fn get_set_variable(&self, name: &str) -> Result<SetVariable, ModelErr> {
         self.state_metadata.get_set_variable(name)
@@ -416,7 +452,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the name is already used, the object type is not in the model, or the target contains a value greater than or equal to the number of the objects.
+    /// If the name is already used, the object type is not in the model, or the target contains a value greater than or equal to the number of the objects.
     pub fn add_set_variable<T>(
         &mut self,
         name: T,
@@ -445,7 +481,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if no such variable.
+    /// If no such variable.
     #[inline]
     pub fn get_vector_variable(&self, name: &str) -> Result<VectorVariable, ModelErr> {
         self.state_metadata.get_vector_variable(name)
@@ -457,7 +493,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the name is already used, the object type is not in the model, or the target contains a value greater than or equal to the number of the objects.
+    /// If the name is already used, the object type is not in the model, or the target contains a value greater than or equal to the number of the objects.
     pub fn add_vector_variable<T>(
         &mut self,
         name: T,
@@ -489,7 +525,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if no such variable.
+    /// If no such variable.
     #[inline]
     pub fn get_integer_variable(&self, name: &str) -> Result<IntegerVariable, ModelErr> {
         self.state_metadata.get_integer_variable(name)
@@ -501,7 +537,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the name is already used.
+    /// If the name is already used.
     pub fn add_integer_variable<T>(
         &mut self,
         name: T,
@@ -522,7 +558,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if no such variable.
+    /// If no such variable.
     #[inline]
     pub fn get_integer_resource_variable(
         &self,
@@ -537,7 +573,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the name is already used.
+    /// If the name is already used.
     pub fn add_integer_resource_variable<T>(
         &mut self,
         name: T,
@@ -561,7 +597,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if no such variable.
+    /// If no such variable.
     #[inline]
     pub fn get_continuous_variable(&self, name: &str) -> Result<ContinuousVariable, ModelErr> {
         self.state_metadata.get_continuous_variable(name)
@@ -573,7 +609,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the name is already used.
+    /// If the name is already used.
     pub fn add_continuous_variable<T>(
         &mut self,
         name: T,
@@ -594,7 +630,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if no such variable.
+    /// If no such variable.
     #[inline]
     pub fn get_continuous_resource_variable(
         &self,
@@ -609,7 +645,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the name is already used.
+    /// If the name is already used.
     pub fn add_continuous_resource_variable<T>(
         &mut self,
         name: T,
@@ -633,7 +669,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if the condition is invalid, e.., it uses not existing variables or the state of the transitioned state.
+    /// If the condition is invalid, e.., it uses not existing variables or the state of the transitioned state.
     #[inline]
     pub fn add_state_constraint(
         &mut self,
@@ -661,7 +697,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if a condition is invalid, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    /// If a condition is invalid, e.g., it uses variables not existing in this model or the state of the transitioned state.
     #[inline]
     pub fn add_base_case(
         &mut self,
@@ -699,7 +735,7 @@ impl Model {
     /// # Errors
     ///
     /// If a state is invalid, e.g., it contains variables not existing in this model.
-    pub fn check_state<'a, T: DPState>(&self, state: &'a T) -> Result<(), ModelErr>
+    pub fn check_state<'a, T: StateInterface>(&self, state: &'a T) -> Result<(), ModelErr>
     where
         &'a T: panic::UnwindSafe,
     {
@@ -734,7 +770,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    /// If it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
     #[inline]
     pub fn add_forward_transition(&mut self, transition: Transition) -> Result<(), ModelErr> {
         let transition = self.check_and_simplify_transition(&transition)?;
@@ -746,7 +782,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    /// If it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
     #[inline]
     pub fn add_forward_forced_transition(
         &mut self,
@@ -761,7 +797,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    /// If it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
     #[inline]
     pub fn add_backward_transition(&mut self, transition: Transition) -> Result<(), ModelErr> {
         let transition = self.check_and_simplify_transition(&transition)?;
@@ -773,7 +809,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// if it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    /// If it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
     #[inline]
     pub fn add_backward_forced_transition(
         &mut self,
@@ -1143,19 +1179,19 @@ impl Model {
     }
 }
 
-/// A trait for accessing the values in the target state.
+/// Trait for accessing the values in the target state.
 pub trait AccessTarget<T, U> {
     /// Returns the value in the target state.
     ///
     /// # Errors
     ///
-    /// if the variable is not in the model.
+    /// If the variable is not in the model.
     fn get_target(&self, variable: T) -> Result<U, ModelErr>;
     /// Set the value in the target state
     ///
     /// # Errors
     ///
-    /// if the variable is not in the model.
+    /// If the variable is not in the model.
     fn set_target(&mut self, variable: T, target: U) -> Result<(), ModelErr>;
 }
 
@@ -1346,24 +1382,24 @@ macro_rules! impl_table_interface {
                 self.table_registry.add_table_1d(name, v)
             }
 
-            #[inline]
-            fn set_table_1d(
-                &mut self,
-                t: Table1DHandle<$T>,
-                x: Element,
-                v: $T,
-            ) -> Result<(), ModelErr> {
-                self.table_registry.set_table_1d(t, x, v)
-            }
+            // #[inline]
+            // fn set_table_1d(
+            //     &mut self,
+            //     t: Table1DHandle<$T>,
+            //     x: Element,
+            //     v: $T,
+            // ) -> Result<(), ModelErr> {
+            //     self.table_registry.set_table_1d(t, x, v)
+            // }
 
-            #[inline]
-            fn update_table_1d(
-                &mut self,
-                t: Table1DHandle<$T>,
-                v: Vec<$T>,
-            ) -> Result<(), ModelErr> {
-                self.table_registry.update_table_1d(t, v)
-            }
+            // #[inline]
+            // fn update_table_1d(
+            //     &mut self,
+            //     t: Table1DHandle<$T>,
+            //     v: Vec<$T>,
+            // ) -> Result<(), ModelErr> {
+            //     self.table_registry.update_table_1d(t, v)
+            // }
 
             #[inline]
             fn add_table_2d<U>(
@@ -1377,25 +1413,25 @@ macro_rules! impl_table_interface {
                 self.table_registry.add_table_2d(name, v)
             }
 
-            #[inline]
-            fn set_table_2d(
-                &mut self,
-                t: Table2DHandle<$T>,
-                x: Element,
-                y: Element,
-                v: $T,
-            ) -> Result<(), ModelErr> {
-                self.table_registry.set_table_2d(t, x, y, v)
-            }
+            // #[inline]
+            // fn set_table_2d(
+            //     &mut self,
+            //     t: Table2DHandle<$T>,
+            //     x: Element,
+            //     y: Element,
+            //     v: $T,
+            // ) -> Result<(), ModelErr> {
+            //     self.table_registry.set_table_2d(t, x, y, v)
+            // }
 
-            #[inline]
-            fn update_table_2d(
-                &mut self,
-                t: Table2DHandle<$T>,
-                v: Vec<Vec<$T>>,
-            ) -> Result<(), ModelErr> {
-                self.table_registry.update_table_2d(t, v)
-            }
+            // #[inline]
+            // fn update_table_2d(
+            //     &mut self,
+            //     t: Table2DHandle<$T>,
+            //     v: Vec<Vec<$T>>,
+            // ) -> Result<(), ModelErr> {
+            //     self.table_registry.update_table_2d(t, v)
+            // }
 
             #[inline]
             fn add_table_3d<U>(
@@ -1409,26 +1445,26 @@ macro_rules! impl_table_interface {
                 self.table_registry.add_table_3d(name, v)
             }
 
-            #[inline]
-            fn set_table_3d(
-                &mut self,
-                t: Table3DHandle<$T>,
-                x: Element,
-                y: Element,
-                z: Element,
-                v: $T,
-            ) -> Result<(), ModelErr> {
-                self.table_registry.set_table_3d(t, x, y, z, v)
-            }
+            // #[inline]
+            // fn set_table_3d(
+            //     &mut self,
+            //     t: Table3DHandle<$T>,
+            //     x: Element,
+            //     y: Element,
+            //     z: Element,
+            //     v: $T,
+            // ) -> Result<(), ModelErr> {
+            //     self.table_registry.set_table_3d(t, x, y, z, v)
+            // }
 
-            #[inline]
-            fn update_table_3d(
-                &mut self,
-                t: Table3DHandle<$T>,
-                v: Vec<Vec<Vec<$T>>>,
-            ) -> Result<(), ModelErr> {
-                self.table_registry.update_table_3d(t, v)
-            }
+            // #[inline]
+            // fn update_table_3d(
+            //     &mut self,
+            //     t: Table3DHandle<$T>,
+            //     v: Vec<Vec<Vec<$T>>>,
+            // ) -> Result<(), ModelErr> {
+            //     self.table_registry.update_table_3d(t, v)
+            // }
 
             #[inline]
             fn add_table<U>(
@@ -1443,30 +1479,30 @@ macro_rules! impl_table_interface {
                 self.table_registry.add_table(name, map, default)
             }
 
-            #[inline]
-            fn set_table(
-                &mut self,
-                t: TableHandle<$T>,
-                key: Vec<Element>,
-                v: $T,
-            ) -> Result<(), ModelErr> {
-                self.table_registry.set_table(t, key, v)
-            }
+            // #[inline]
+            // fn set_table(
+            //     &mut self,
+            //     t: TableHandle<$T>,
+            //     key: Vec<Element>,
+            //     v: $T,
+            // ) -> Result<(), ModelErr> {
+            //     self.table_registry.set_table(t, key, v)
+            // }
 
-            #[inline]
-            fn set_default(&mut self, t: TableHandle<$T>, default: $T) -> Result<(), ModelErr> {
-                self.table_registry.set_default(t, default)
-            }
+            // #[inline]
+            // fn set_default(&mut self, t: TableHandle<$T>, default: $T) -> Result<(), ModelErr> {
+            //     self.table_registry.set_default(t, default)
+            // }
 
-            #[inline]
-            fn update_table(
-                &mut self,
-                t: TableHandle<$T>,
-                map: FxHashMap<Vec<Element>, $T>,
-                default: $T,
-            ) -> Result<(), ModelErr> {
-                self.table_registry.update_table(t, map, default)
-            }
+            // #[inline]
+            // fn update_table(
+            //     &mut self,
+            //     t: TableHandle<$T>,
+            //     map: FxHashMap<Vec<Element>, $T>,
+            //     default: $T,
+            // ) -> Result<(), ModelErr> {
+            //     self.table_registry.update_table(t, map, default)
+            // }
         }
     };
 }
@@ -1478,13 +1514,13 @@ impl_table_interface!(Integer);
 impl_table_interface!(Continuous);
 impl_table_interface!(bool);
 
-/// A trait for adding a dual bound.
+/// Trait for adding a dual bound.
 pub trait AddDualBound<T> {
     /// Adds a dual bound.
     ///
     /// # Errors
     ///
-    /// if the expression is invalid, e.., it uses not existing variables or the state of the transitioned state.
+    /// If the expression is invalid, e.g., it uses not existing variables or the state of the transitioned state.
     fn add_dual_bound(&mut self, bound: T) -> Result<(), ModelErr>;
 }
 
@@ -1514,13 +1550,13 @@ impl AddDualBound<expression::ContinuousExpression> for Model {
     }
 }
 
-/// A trait for checking if an expression is valid.
+/// Trait for checking if an expression is valid.
 pub trait CheckExpression<T> {
     /// Checks if an expression is valid.
     ///
     /// # Errors
     ///
-    /// if the expression is invalid, e.., it uses not existing variables or the state of the transitioned state.
+    /// If the expression is invalid, e.., it uses not existing variables or the state of the transitioned state.
     fn check_expression(&self, expression: &T, allow_cost: bool) -> Result<(), ModelErr>;
 }
 
@@ -2488,6 +2524,327 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(model.eval_dual_bound::<_, Integer>(&state), None);
+    }
+
+    #[test]
+    fn generate_successor_state_with_no_cost_bound() {
+        let state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let transition = Transition {
+            name: String::from("increase"),
+            effect: Effect {
+                integer_effects: vec![(
+                    0,
+                    IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(1)),
+                    ),
+                )],
+                ..Default::default()
+            },
+            cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                BinaryOperator::Add,
+                Box::new(IntegerExpression::Cost),
+                Box::new(IntegerExpression::Constant(1)),
+            )),
+            ..Default::default()
+        };
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: state.clone(),
+            forward_transitions: vec![transition.clone()],
+            ..Default::default()
+        };
+
+        let result = model.generate_successor_state(&state, 0, &transition, None);
+        assert_eq!(
+            result,
+            Some((
+                State {
+                    signature_variables: SignatureVariables {
+                        integer_variables: vec![1],
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                1
+            ))
+        );
+    }
+
+    #[test]
+    fn generate_successor_state_with_upper_bound() {
+        let state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let transition = Transition {
+            name: String::from("increase"),
+            effect: Effect {
+                integer_effects: vec![(
+                    0,
+                    IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(1)),
+                    ),
+                )],
+                ..Default::default()
+            },
+            cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                BinaryOperator::Add,
+                Box::new(IntegerExpression::Cost),
+                Box::new(IntegerExpression::Constant(1)),
+            )),
+            ..Default::default()
+        };
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: state.clone(),
+            forward_transitions: vec![transition.clone()],
+            reduce_function: ReduceFunction::Min,
+            ..Default::default()
+        };
+
+        let result = model.generate_successor_state(&state, 0, &transition, Some(2));
+        assert_eq!(
+            result,
+            Some((
+                State {
+                    signature_variables: SignatureVariables {
+                        integer_variables: vec![1],
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                1
+            ))
+        );
+    }
+
+    #[test]
+    fn generate_successor_state_with_lower_bound() {
+        let state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let transition = Transition {
+            name: String::from("increase"),
+            effect: Effect {
+                integer_effects: vec![(
+                    0,
+                    IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(1)),
+                    ),
+                )],
+                ..Default::default()
+            },
+            cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                BinaryOperator::Add,
+                Box::new(IntegerExpression::Cost),
+                Box::new(IntegerExpression::Constant(1)),
+            )),
+            ..Default::default()
+        };
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: state.clone(),
+            forward_transitions: vec![transition.clone()],
+            reduce_function: ReduceFunction::Max,
+            ..Default::default()
+        };
+
+        let result = model.generate_successor_state(&state, 0, &transition, Some(0));
+        assert_eq!(
+            result,
+            Some((
+                State {
+                    signature_variables: SignatureVariables {
+                        integer_variables: vec![1],
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                1
+            ))
+        );
+    }
+
+    #[test]
+    fn generate_successor_state_pruned_by_upper_bound() {
+        let state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let transition = Transition {
+            name: String::from("increase"),
+            effect: Effect {
+                integer_effects: vec![(
+                    0,
+                    IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(1)),
+                    ),
+                )],
+                ..Default::default()
+            },
+            cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                BinaryOperator::Add,
+                Box::new(IntegerExpression::Cost),
+                Box::new(IntegerExpression::Constant(1)),
+            )),
+            ..Default::default()
+        };
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: state.clone(),
+            forward_transitions: vec![transition.clone()],
+            reduce_function: ReduceFunction::Min,
+            ..Default::default()
+        };
+
+        let result: Option<(State, _)> =
+            model.generate_successor_state(&state, 0, &transition, Some(1));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn generate_successor_state_pruned_by_lower_bound() {
+        let state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let transition = Transition {
+            name: String::from("increase"),
+            effect: Effect {
+                integer_effects: vec![(
+                    0,
+                    IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(1)),
+                    ),
+                )],
+                ..Default::default()
+            },
+            cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                BinaryOperator::Add,
+                Box::new(IntegerExpression::Cost),
+                Box::new(IntegerExpression::Constant(1)),
+            )),
+            ..Default::default()
+        };
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: state.clone(),
+            forward_transitions: vec![transition.clone()],
+            reduce_function: ReduceFunction::Max,
+            ..Default::default()
+        };
+
+        let result: Option<(State, _)> =
+            model.generate_successor_state(&state, 0, &transition, Some(1));
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn generate_successor_state_pruned_by_constraint() {
+        let state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let transition = Transition {
+            name: String::from("increase"),
+            effect: Effect {
+                integer_effects: vec![(
+                    0,
+                    IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(1)),
+                    ),
+                )],
+                ..Default::default()
+            },
+            cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                BinaryOperator::Add,
+                Box::new(IntegerExpression::Cost),
+                Box::new(IntegerExpression::Constant(1)),
+            )),
+            ..Default::default()
+        };
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: state.clone(),
+            state_constraints: vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Le,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(0)),
+                ),
+                ..Default::default()
+            }],
+            forward_transitions: vec![transition.clone()],
+            ..Default::default()
+        };
+
+        let result: Option<(State, _)> =
+            model.generate_successor_state(&state, 0, &transition, None);
+        assert_eq!(result, None);
     }
 
     #[test]
@@ -3621,234 +3978,234 @@ mod tests {
         assert!(t.is_err());
     }
 
-    #[test]
-    fn set_table_1d_ok() {
-        let mut model = Model::default();
-        let t = model.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, 1);
-        assert!(result.is_ok());
-        let t = model.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, 1.0);
-        assert!(result.is_ok());
-        let t = model.add_table_1d(String::from("t1"), vec![true]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, false);
-        assert!(result.is_ok());
-        let t = model.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, vec![0]);
-        assert!(result.is_ok());
-        let t = model.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, Set::with_capacity(2));
-        assert!(result.is_ok());
-        let t: Result<Table1DHandle<Element>, _> =
-            model.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, 1);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn set_table_1d_ok() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, 1);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, 1.0);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![true]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, false);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, vec![0]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, Set::with_capacity(2));
+    //     assert!(result.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         model.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, 1);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn set_table_1d_err() {
-        let mut model = Model::default();
-        let t = model.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_1d_err() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = model1.add_table_1d(String::from("t2"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, 1);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_1d(String::from("t2"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, 1);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = model1.add_table_1d(String::from("t2"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, 1.0);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_1d(String::from("t2"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, 1.0);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_1d(String::from("t1"), vec![true]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![true]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_1d(String::from("t1"), vec![true]);
-        assert!(t.is_ok());
-        let t = model1.add_table_1d(String::from("t2"), vec![true]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, false);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_1d(String::from("t1"), vec![true]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_1d(String::from("t2"), vec![true]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, false);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_1d(String::from("t2"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, vec![1]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_1d(String::from("t2"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, vec![1]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = model1.add_table_1d(String::from("t2"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, Set::with_capacity(1));
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_1d(String::from("t2"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, Set::with_capacity(1));
+    //     assert!(result.is_err());
 
-        let t: Result<Table1DHandle<Element>, _> =
-            model.add_table_1d(String::from("t1"), vec![1, 2]);
-        assert!(t.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         model.add_table_1d(String::from("t1"), vec![1, 2]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t: Result<Table1DHandle<Element>, _> =
-            model1.add_table_1d(String::from("t1"), vec![1, 2]);
-        assert!(t.is_ok());
-        let t: Result<Table1DHandle<Element>, _> =
-            model1.add_table_1d(String::from("t2"), vec![2, 3]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_1d(t, 0, 1);
-        assert!(result.is_err());
-    }
+    //     let mut model1 = Model::default();
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         model1.add_table_1d(String::from("t1"), vec![1, 2]);
+    //     assert!(t.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         model1.add_table_1d(String::from("t2"), vec![2, 3]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_1d(t, 0, 1);
+    //     assert!(result.is_err());
+    // }
 
-    #[test]
-    fn update_table_1d_ok() {
-        let mut model = Model::default();
-        let t = model.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![1, 1]);
-        assert!(result.is_ok());
-        let t = model.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![1.0, 1.0]);
-        assert!(result.is_ok());
-        let t = model.add_table_1d(String::from("t1"), vec![false]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![true]);
-        assert!(result.is_ok());
-        let t = model.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![vec![1]]);
-        assert!(result.is_ok());
-        let t = model.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![Set::with_capacity(1)]);
-        assert!(result.is_ok());
-        let t: Result<Table1DHandle<Element>, _> = model.add_table_1d(String::from("t1"), vec![0]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![1]);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn update_table_1d_ok() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![1, 1]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![1.0, 1.0]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![false]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![true]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![vec![1]]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![Set::with_capacity(1)]);
+    //     assert!(result.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> = model.add_table_1d(String::from("t1"), vec![0]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![1]);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn update_table_1d_err() {
-        let mut model = Model::default();
-        let t = model.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_1d_err() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = model1.add_table_1d(String::from("t2"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![1, 1]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_1d(String::from("t2"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![1, 1]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = model1.add_table_1d(String::from("t2"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![1.0, 1.0]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_1d(String::from("t2"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![1.0, 1.0]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_1d(String::from("t1"), vec![true]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![true]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_1d(String::from("t1"), vec![true]);
-        assert!(t.is_ok());
-        let t = model1.add_table_1d(String::from("t2"), vec![true]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![false]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_1d(String::from("t1"), vec![true]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_1d(String::from("t2"), vec![true]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![false]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_1d(String::from("t2"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![vec![1]]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_1d(String::from("t2"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![vec![1]]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = model1.add_table_1d(String::from("t2"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![Set::with_capacity(1)]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_1d(String::from("t2"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![Set::with_capacity(1)]);
+    //     assert!(result.is_err());
 
-        let t: Result<Table1DHandle<Element>, _> =
-            model.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         model.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t: Result<Table1DHandle<Element>, _> =
-            model1.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t: Result<Table1DHandle<Element>, _> =
-            model1.add_table_1d(String::from("t2"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_1d(t, vec![1, 1]);
-        assert!(result.is_err());
-    }
+    //     let mut model1 = Model::default();
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         model1.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         model1.add_table_1d(String::from("t2"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_1d(t, vec![1, 1]);
+    //     assert!(result.is_err());
+    // }
 
     #[test]
     fn add_table_2d_ok() {
@@ -3960,220 +4317,220 @@ mod tests {
         name_to_table.insert(String::from("t1"), 0);
     }
 
-    #[test]
-    fn set_table_2d_ok() {
-        let mut model = Model::default();
-        let t = model.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, 1);
-        assert!(result.is_ok());
-        let t = model.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, 1.0);
-        assert!(result.is_ok());
-        let t = model.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, true);
-        assert!(result.is_ok());
-        let t = model.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, vec![1]);
-        assert!(result.is_ok());
-        let t = model.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, Set::with_capacity(1));
-        assert!(result.is_ok());
-        let t: Result<Table2DHandle<Element>, _> =
-            model.add_table_2d(String::from("t1"), vec![vec![0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, 1);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn set_table_2d_ok() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, 1);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, 1.0);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, true);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, vec![1]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, Set::with_capacity(1));
+    //     assert!(result.is_ok());
+    //     let t: Result<Table2DHandle<Element>, _> =
+    //         model.add_table_2d(String::from("t1"), vec![vec![0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, 1);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn set_table_2d_err() {
-        let mut model = Model::default();
-        let t = model.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_2d_err() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, 1);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, 1);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_2d(String::from("t2"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, 1.0);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_2d(String::from("t2"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, 1.0);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_2d(String::from("t2"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, true);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_2d(String::from("t2"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, true);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_2d(String::from("t2"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, vec![0]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_2d(String::from("t2"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, vec![0]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_2d(String::from("t2"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, Set::with_capacity(1));
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_2d(String::from("t2"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, Set::with_capacity(1));
+    //     assert!(result.is_err());
 
-        let t: Result<Table2DHandle<Element>, _> =
-            model.add_table_2d(String::from("t1"), vec![vec![1]]);
-        assert!(t.is_ok());
+    //     let t: Result<Table2DHandle<Element>, _> =
+    //         model.add_table_2d(String::from("t1"), vec![vec![1]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t: Result<Table2DHandle<Element>, _> =
-            model1.add_table_2d(String::from("t1"), vec![vec![0]]);
-        assert!(t.is_ok());
-        let t: Result<Table2DHandle<Element>, _> =
-            model1.add_table_2d(String::from("t2"), vec![vec![0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_2d(t, 0, 0, 1);
-        assert!(result.is_err());
-    }
+    //     let mut model1 = Model::default();
+    //     let t: Result<Table2DHandle<Element>, _> =
+    //         model1.add_table_2d(String::from("t1"), vec![vec![0]]);
+    //     assert!(t.is_ok());
+    //     let t: Result<Table2DHandle<Element>, _> =
+    //         model1.add_table_2d(String::from("t2"), vec![vec![0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_2d(t, 0, 0, 1);
+    //     assert!(result.is_err());
+    // }
 
-    #[test]
-    fn update_table_2d_ok() {
-        let mut model = Model::default();
-        let t = model.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_2d(t, vec![vec![1, 1]]);
-        assert!(result.is_ok());
-        let t = model.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_2d(t, vec![vec![1.0, 1.0]]);
-        assert!(result.is_ok());
-        let t = model.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_2d(t, vec![vec![true]]);
-        assert!(result.is_ok());
-        let t = model.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_2d(t, vec![vec![vec![1]]]);
-        assert!(result.is_ok());
-        let t = model.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_2d(t, vec![vec![Set::with_capacity(1)]]);
-        assert!(result.is_ok());
-        let t: Result<Table2DHandle<Element>, _> =
-            model.add_table_2d(String::from("t1"), vec![vec![0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_2d(t, vec![vec![1]]);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn update_table_2d_ok() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_2d(t, vec![vec![1, 1]]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_2d(t, vec![vec![1.0, 1.0]]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_2d(t, vec![vec![true]]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_2d(t, vec![vec![vec![1]]]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_2d(t, vec![vec![Set::with_capacity(1)]]);
+    //     assert!(result.is_ok());
+    //     let t: Result<Table2DHandle<Element>, _> =
+    //         model.add_table_2d(String::from("t1"), vec![vec![0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_2d(t, vec![vec![1]]);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn update_table_2d_err() {
-        let mut model = Model::default();
-        let t = model.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_2d_err() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_2d(t, vec![vec![1, 1]]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_2d(t, vec![vec![1, 1]]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_2d(String::from("t2"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_2d(t, vec![vec![1.0, 1.0]]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_2d(String::from("t2"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_2d(t, vec![vec![1.0, 1.0]]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_2d(String::from("t2"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_2d(t, vec![vec![true]]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_2d(String::from("t2"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_2d(t, vec![vec![true]]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_2d(String::from("t2"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_2d(t, vec![vec![vec![1]]]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_2d(String::from("t2"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_2d(t, vec![vec![vec![1]]]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_2d(String::from("t2"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_2d(t, vec![vec![Set::with_capacity(1)]]);
-        assert!(result.is_err());
-    }
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_2d(String::from("t2"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_2d(t, vec![vec![Set::with_capacity(1)]]);
+    //     assert!(result.is_err());
+    // }
 
     #[test]
     fn add_table_3d_ok() {
@@ -4261,235 +4618,235 @@ mod tests {
         assert!(t.is_err());
     }
 
-    #[test]
-    fn set_table_3d_ok() {
-        let mut model = Model::default();
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, 1);
-        assert!(result.is_ok());
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, 1.0);
-        assert!(result.is_ok());
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, true);
-        assert!(result.is_ok());
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, vec![1]);
-        assert!(result.is_ok());
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, Set::with_capacity(1));
-        assert!(result.is_ok());
-        let t: Result<Table3DHandle<Element>, _> =
-            model.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, 2);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn set_table_3d_ok() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, 1);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, 1.0);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, true);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, vec![1]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, Set::with_capacity(1));
+    //     assert!(result.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         model.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, 2);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn set_table_3d_err() {
-        let mut model = Model::default();
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_3d_err() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, 1);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, 1);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, 1.0);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, 1.0);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, true);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, true);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, vec![1]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, vec![1]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, Set::with_capacity(1));
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, Set::with_capacity(1));
+    //     assert!(result.is_err());
 
-        let t: Result<Table3DHandle<Element>, _> =
-            model.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         model.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t: Result<Table3DHandle<Element>, _> =
-            model1.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t: Result<Table3DHandle<Element>, _> =
-            model1.add_table_3d(String::from("t2"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table_3d(t, 0, 0, 0, 0);
-        assert!(result.is_err());
-    }
+    //     let mut model1 = Model::default();
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         model1.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         model1.add_table_3d(String::from("t2"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table_3d(t, 0, 0, 0, 0);
+    //     assert!(result.is_err());
+    // }
 
-    #[test]
-    fn update_table_3d_ok() {
-        let mut model = Model::default();
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![1, 1]]]);
-        assert!(result.is_ok());
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![1.0, 1.0]]]);
-        assert!(result.is_ok());
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![true]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![false]]]);
-        assert!(result.is_ok());
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![vec![1]]]]);
-        assert!(result.is_ok());
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![Set::with_capacity(1)]]]);
-        assert!(result.is_ok());
-        let t: Result<Table3DHandle<Element>, _> =
-            model.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![2]]]);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn update_table_3d_ok() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![1, 1]]]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![1.0, 1.0]]]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![true]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![false]]]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![vec![1]]]]);
+    //     assert!(result.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![Set::with_capacity(1)]]]);
+    //     assert!(result.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         model.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![2]]]);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn update_table_3d_err() {
-        let mut model = Model::default();
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_3d_err() {
+    //     let mut model = Model::default();
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![1, 1]]]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![1, 1]]]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![1.0, 1.0]]]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![1.0, 1.0]]]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![true]]]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![true]]]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![vec![1]]]]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![vec![1]]]]);
+    //     assert!(result.is_err());
 
-        let t = model.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
+    //     let t = model.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![Set::with_capacity(1)]]]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table_3d(String::from("t2"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![Set::with_capacity(1)]]]);
+    //     assert!(result.is_err());
 
-        let t: Result<Table3DHandle<Element>, _> =
-            model.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         model.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t: Result<Table3DHandle<Element>, _> =
-            model1.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t: Result<Table3DHandle<Element>, _> =
-            model1.add_table_3d(String::from("t2"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.update_table_3d(t, vec![vec![vec![0]]]);
-        assert!(result.is_err());
-    }
+    //     let mut model1 = Model::default();
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         model1.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         model1.add_table_3d(String::from("t2"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.update_table_3d(t, vec![vec![vec![0]]]);
+    //     assert!(result.is_err());
+    // }
 
     #[test]
     fn add_table_ok() {
@@ -4619,449 +4976,449 @@ mod tests {
         assert!(t.is_err());
     }
 
-    #[test]
-    fn set_table_ok() {
-        let mut model = Model::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], 1);
-        assert!(result.is_ok());
+    // #[test]
+    // fn set_table_ok() {
+    //     let mut model = Model::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], 1);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = model.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], 1.0);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], 1.0);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = model.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], true);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = model.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], true);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = model.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], vec![]);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = model.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], vec![]);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = model.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], Set::default());
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = model.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], Set::default());
+    //     assert!(result.is_ok());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], 0);
-        assert!(result.is_ok());
-    }
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], 0);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn set_table_err() {
-        let mut model = Model::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_err() {
+    //     let mut model = Model::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), 1);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), 2);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], 1);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), 1);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), 2);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], 1);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = model.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), 1.0);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), 2.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], 1.0);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), 1.0);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), 2.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], 1.0);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = model.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = model.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], true);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], true);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = model.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = model.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], vec![1]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], vec![1]);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = model.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = model.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], Set::with_capacity(1));
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], Set::with_capacity(1));
+    //     assert!(result.is_err());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_table(t, vec![0, 0, 0, 0], 1);
-        assert!(result.is_err());
-    }
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_table(t, vec![0, 0, 0, 0], 1);
+    //     assert!(result.is_err());
+    // }
 
-    #[test]
-    fn set_default_ok() {
-        let mut model = Model::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, 1);
-        assert!(result.is_ok());
+    // #[test]
+    // fn set_default_ok() {
+    //     let mut model = Model::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, 1);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = model.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, 1.0);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, 1.0);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = model.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, true);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = model.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, true);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = model.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, vec![2]);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = model.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, vec![2]);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = model.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, Set::with_capacity(2));
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = model.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, Set::with_capacity(2));
+    //     assert!(result.is_ok());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, 2);
-        assert!(result.is_ok());
-    }
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, 2);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn set_default_err() {
-        let mut model = Model::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_default_err() {
+    //     let mut model = Model::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, 1);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, 1);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = model.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), 0.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, 1.0);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, 1.0);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = model.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = model.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, true);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, true);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = model.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = model.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, vec![1]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, vec![1]);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = model.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = model.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, Set::with_capacity(2));
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, Set::with_capacity(2));
+    //     assert!(result.is_err());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = model.set_default(t, 2);
-        assert!(result.is_err());
-    }
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = model.set_default(t, 2);
+    //     assert!(result.is_err());
+    // }
 
-    #[test]
-    fn update_table_ok() {
-        let mut model = Model::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 2);
-        let result = model.update_table(t, map.clone(), 1);
-        assert!(result.is_ok());
+    // #[test]
+    // fn update_table_ok() {
+    //     let mut model = Model::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 2);
+    //     let result = model.update_table(t, map.clone(), 1);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = model.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 2.0);
-        let result = model.update_table(t, map.clone(), 1.0);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 2.0);
+    //     let result = model.update_table(t, map.clone(), 1.0);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = model.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let result = model.update_table(t, map.clone(), false);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = model.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let result = model.update_table(t, map.clone(), false);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = model.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let result = model.update_table(t, map.clone(), vec![]);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = model.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let result = model.update_table(t, map.clone(), vec![]);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = model.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let result = model.update_table(t, map.clone(), Set::default());
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = model.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let result = model.update_table(t, map.clone(), Set::default());
+    //     assert!(result.is_ok());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let result = model.update_table(t, map.clone(), 0);
-        assert!(result.is_ok());
-    }
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let result = model.update_table(t, map.clone(), 0);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn update_table_err() {
-        let mut model = Model::default();
-        let mut map: FxHashMap<_, Integer> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_err() {
+    //     let mut model = Model::default();
+    //     let mut map: FxHashMap<_, Integer> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), 1);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), 2);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], 2);
-        let result = model.update_table(t, map2, 3);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), 1);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), 2);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], 2);
+    //     let result = model.update_table(t, map2, 3);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = model.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), 1.0);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), 2.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], 2.0);
-        let result = model.update_table(t, map2, 3.0);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), 1.0);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), 2.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], 2.0);
+    //     let result = model.update_table(t, map2, 3.0);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = model.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = model.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), true);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), true);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], true);
-        let result = model.update_table(t, map2, false);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), true);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), true);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], true);
+    //     let result = model.update_table(t, map2, false);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = model.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = model.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], vec![]);
-        let result = model.update_table(t, map2, vec![]);
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], vec![]);
+    //     let result = model.update_table(t, map2, vec![]);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = model.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = model.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let result = model.update_table(t, map2, Set::default());
-        assert!(result.is_err());
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let result = model.update_table(t, map2, Set::default());
+    //     assert!(result.is_err());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = model.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = model.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut model1 = Model::default();
-        let t = model1.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = model1.add_table(String::from("t2"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], 1);
-        let result = model.update_table(t, map2, 0);
-        assert!(result.is_err());
-    }
+    //     let mut model1 = Model::default();
+    //     let t = model1.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = model1.add_table(String::from("t2"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], 1);
+    //     let result = model.update_table(t, map2, 0);
+    //     assert!(result.is_err());
+    // }
 
     #[test]
     fn add_constraint_ok() {

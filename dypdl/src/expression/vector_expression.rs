@@ -2,7 +2,7 @@ use super::condition::Condition;
 use super::element_expression::ElementExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
-use crate::state::DPState;
+use crate::state::StateInterface;
 use crate::table_registry::TableRegistry;
 use crate::variable_type::Vector;
 
@@ -32,8 +32,8 @@ impl VectorExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> Vector {
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval<T: StateInterface>(&self, state: &T, registry: &TableRegistry) -> Vector {
         match self {
             Self::Reference(expression) => {
                 let f = |i| state.get_vector_variable(i);
@@ -90,7 +90,7 @@ impl VectorExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> VectorExpression {
         match self {
             Self::Reference(vector) => {

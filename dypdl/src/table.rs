@@ -3,10 +3,12 @@ use approx::{AbsDiffEq, RelativeEq};
 use rustc_hash::FxHashMap;
 
 /// 1D table of constants.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Table1D<T>(Vec<T>);
 
 impl<T> Table1D<T> {
+    /// Returns a new table.
     #[inline]
     pub fn new(vector: Vec<T>) -> Table1D<T> {
         Table1D(vector)
@@ -98,10 +100,12 @@ where
 }
 
 /// 2D table of constants.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Table2D<T>(Vec<Vec<T>>);
 
 impl<T> Table2D<T> {
+    /// Returns a new table.
     #[inline]
     pub fn new(vector: Vec<Vec<T>>) -> Table2D<T> {
         Table2D(vector)
@@ -195,10 +199,12 @@ where
 }
 
 /// 3D table of constants.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Table3D<T>(Vec<Vec<Vec<T>>>);
 
 impl<T> Table3D<T> {
+    /// Returns a new table.
     #[inline]
     pub fn new(vector: Vec<Vec<Vec<T>>>) -> Table3D<T> {
         Table3D(vector)
@@ -298,6 +304,7 @@ where
 /// Table of constants.
 ///
 /// A constant is indexed by a sequence of elements, and the dimension is not fixed.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Table<T> {
     map: FxHashMap<Vec<Element>, T>,
@@ -305,6 +312,7 @@ pub struct Table<T> {
 }
 
 impl<T> Table<T> {
+    /// Returns a new table.
     #[inline]
     pub fn new(map: FxHashMap<Vec<Element>, T>, default: T) -> Table<T> {
         Table { map, default }

@@ -1,3 +1,0 @@
-solver: expression_beam
-config:
-    beam_size: 10000

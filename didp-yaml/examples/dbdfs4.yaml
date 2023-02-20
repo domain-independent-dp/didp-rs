@@ -1,4 +1,0 @@
-solver: dual_bound_dbdfs
-config:
-    width: 4
-    time_limit: 1800

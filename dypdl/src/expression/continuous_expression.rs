@@ -12,8 +12,8 @@ use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::vector_expression::VectorExpression;
 use crate::state::{
-    ContinuousResourceVariable, ContinuousVariable, DPState, IntegerResourceVariable,
-    IntegerVariable, SetVariable,
+    ContinuousResourceVariable, ContinuousVariable, IntegerResourceVariable, IntegerVariable,
+    SetVariable, StateInterface,
 };
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
@@ -882,9 +882,9 @@ impl ContinuousExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     #[inline]
-    pub fn eval<U: DPState>(&self, state: &U, registry: &TableRegistry) -> Continuous {
+    pub fn eval<U: StateInterface>(&self, state: &U, registry: &TableRegistry) -> Continuous {
         self.eval_inner(None, state, registry)
     }
 
@@ -892,9 +892,9 @@ impl ContinuousExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     #[inline]
-    pub fn eval_cost<U: DPState>(
+    pub fn eval_cost<U: StateInterface>(
         &self,
         cost: Continuous,
         state: &U,
@@ -903,7 +903,7 @@ impl ContinuousExpression {
         self.eval_inner(Some(cost), state, registry)
     }
 
-    fn eval_inner<U: DPState>(
+    fn eval_inner<U: StateInterface>(
         &self,
         cost: Option<Continuous>,
         state: &U,
@@ -970,7 +970,7 @@ impl ContinuousExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> ContinuousExpression {
         match self {
             Self::UnaryOperation(op, x) => match x.simplify(registry) {

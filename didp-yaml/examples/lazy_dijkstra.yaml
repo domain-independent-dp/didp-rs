@@ -1,3 +1,0 @@
-solver: lazy_dijkstra
-config:
-    time_limit: 1800

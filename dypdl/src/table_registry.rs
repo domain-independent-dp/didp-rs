@@ -31,24 +31,24 @@ macro_rules! impl_table_interface {
                 self.$tables.add_table_1d(name, v)
             }
 
-            #[inline]
-            fn set_table_1d(
-                &mut self,
-                t: Table1DHandle<$T>,
-                x: Element,
-                v: $T,
-            ) -> Result<(), ModelErr> {
-                self.$tables.set_table_1d(t, x, v)
-            }
+            // #[inline]
+            // fn set_table_1d(
+            //     &mut self,
+            //     t: Table1DHandle<$T>,
+            //     x: Element,
+            //     v: $T,
+            // ) -> Result<(), ModelErr> {
+            //     self.$tables.set_table_1d(t, x, v)
+            // }
 
-            #[inline]
-            fn update_table_1d(
-                &mut self,
-                t: Table1DHandle<$T>,
-                v: Vec<$T>,
-            ) -> Result<(), ModelErr> {
-                self.$tables.update_table_1d(t, v)
-            }
+            // #[inline]
+            // fn update_table_1d(
+            //     &mut self,
+            //     t: Table1DHandle<$T>,
+            //     v: Vec<$T>,
+            // ) -> Result<(), ModelErr> {
+            //     self.$tables.update_table_1d(t, v)
+            // }
 
             #[inline]
             fn add_table_2d<U>(
@@ -62,25 +62,25 @@ macro_rules! impl_table_interface {
                 self.$tables.add_table_2d(name, v)
             }
 
-            #[inline]
-            fn set_table_2d(
-                &mut self,
-                t: Table2DHandle<$T>,
-                x: Element,
-                y: Element,
-                v: $T,
-            ) -> Result<(), ModelErr> {
-                self.$tables.set_table_2d(t, x, y, v)
-            }
+            // #[inline]
+            // fn set_table_2d(
+            //     &mut self,
+            //     t: Table2DHandle<$T>,
+            //     x: Element,
+            //     y: Element,
+            //     v: $T,
+            // ) -> Result<(), ModelErr> {
+            //     self.$tables.set_table_2d(t, x, y, v)
+            // }
 
-            #[inline]
-            fn update_table_2d(
-                &mut self,
-                t: Table2DHandle<$T>,
-                v: Vec<Vec<$T>>,
-            ) -> Result<(), ModelErr> {
-                self.$tables.update_table_2d(t, v)
-            }
+            // #[inline]
+            // fn update_table_2d(
+            //     &mut self,
+            //     t: Table2DHandle<$T>,
+            //     v: Vec<Vec<$T>>,
+            // ) -> Result<(), ModelErr> {
+            //     self.$tables.update_table_2d(t, v)
+            // }
 
             #[inline]
             fn add_table_3d<U>(
@@ -94,26 +94,26 @@ macro_rules! impl_table_interface {
                 self.$tables.add_table_3d(name, v)
             }
 
-            #[inline]
-            fn set_table_3d(
-                &mut self,
-                t: Table3DHandle<$T>,
-                x: Element,
-                y: Element,
-                z: Element,
-                v: $T,
-            ) -> Result<(), ModelErr> {
-                self.$tables.set_table_3d(t, x, y, z, v)
-            }
+            // #[inline]
+            // fn set_table_3d(
+            //     &mut self,
+            //     t: Table3DHandle<$T>,
+            //     x: Element,
+            //     y: Element,
+            //     z: Element,
+            //     v: $T,
+            // ) -> Result<(), ModelErr> {
+            //     self.$tables.set_table_3d(t, x, y, z, v)
+            // }
 
-            #[inline]
-            fn update_table_3d(
-                &mut self,
-                t: Table3DHandle<$T>,
-                v: Vec<Vec<Vec<$T>>>,
-            ) -> Result<(), ModelErr> {
-                self.$tables.update_table_3d(t, v)
-            }
+            // #[inline]
+            // fn update_table_3d(
+            //     &mut self,
+            //     t: Table3DHandle<$T>,
+            //     v: Vec<Vec<Vec<$T>>>,
+            // ) -> Result<(), ModelErr> {
+            //     self.$tables.update_table_3d(t, v)
+            // }
 
             #[inline]
             fn add_table<U>(
@@ -128,30 +128,30 @@ macro_rules! impl_table_interface {
                 self.$tables.add_table(name, map, default)
             }
 
-            #[inline]
-            fn set_table(
-                &mut self,
-                t: TableHandle<$T>,
-                key: Vec<Element>,
-                v: $T,
-            ) -> Result<(), ModelErr> {
-                self.$tables.set_table(t, key, v)
-            }
+            // #[inline]
+            // fn set_table(
+            //     &mut self,
+            //     t: TableHandle<$T>,
+            //     key: Vec<Element>,
+            //     v: $T,
+            // ) -> Result<(), ModelErr> {
+            //     self.$tables.set_table(t, key, v)
+            // }
 
-            #[inline]
-            fn set_default(&mut self, t: TableHandle<$T>, default: $T) -> Result<(), ModelErr> {
-                self.$tables.set_default(t, default)
-            }
+            // #[inline]
+            // fn set_default(&mut self, t: TableHandle<$T>, default: $T) -> Result<(), ModelErr> {
+            //     self.$tables.set_default(t, default)
+            // }
 
-            #[inline]
-            fn update_table(
-                &mut self,
-                t: TableHandle<$T>,
-                map: FxHashMap<Vec<Element>, $T>,
-                default: $T,
-            ) -> Result<(), ModelErr> {
-                self.$tables.update_table(t, map, default)
-            }
+            // #[inline]
+            // fn update_table(
+            //     &mut self,
+            //     t: TableHandle<$T>,
+            //     map: FxHashMap<Vec<Element>, $T>,
+            //     default: $T,
+            // ) -> Result<(), ModelErr> {
+            //     self.$tables.update_table(t, map, default)
+            // }
         }
     };
 }
@@ -267,235 +267,235 @@ mod tests {
         assert!(t.is_err());
     }
 
-    #[test]
-    fn set_table_1d_ok() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, 1);
-        assert!(result.is_ok());
-        let t = registry.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, 1.0);
-        assert!(result.is_ok());
-        let t = registry.add_table_1d(String::from("t1"), vec![true]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, false);
-        assert!(result.is_ok());
-        let t = registry.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, vec![0]);
-        assert!(result.is_ok());
-        let t = registry.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, Set::with_capacity(2));
-        assert!(result.is_ok());
-        let t: Result<Table1DHandle<Element>, _> =
-            registry.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, 1);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn set_table_1d_ok() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, 1);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, 1.0);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![true]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, false);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, vec![0]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, Set::with_capacity(2));
+    //     assert!(result.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         registry.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, 1);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn set_table_1d_err() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_1d_err() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_1d(String::from("t2"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, 1);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_1d(String::from("t2"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, 1);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_1d(String::from("t2"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, 1.0);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_1d(String::from("t2"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, 1.0);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_1d(String::from("t1"), vec![true]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![true]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_1d(String::from("t1"), vec![true]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_1d(String::from("t2"), vec![true]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, false);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_1d(String::from("t1"), vec![true]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_1d(String::from("t2"), vec![true]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, false);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_1d(String::from("t2"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, vec![1]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_1d(String::from("t2"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, vec![1]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_1d(String::from("t2"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, Set::with_capacity(1));
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_1d(String::from("t2"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, Set::with_capacity(1));
+    //     assert!(result.is_err());
 
-        let t: Result<Table1DHandle<Element>, _> =
-            registry.add_table_1d(String::from("t1"), vec![1, 2]);
-        assert!(t.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         registry.add_table_1d(String::from("t1"), vec![1, 2]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t: Result<Table1DHandle<Element>, _> =
-            registry1.add_table_1d(String::from("t1"), vec![1, 2]);
-        assert!(t.is_ok());
-        let t: Result<Table1DHandle<Element>, _> =
-            registry1.add_table_1d(String::from("t2"), vec![2, 3]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_1d(t, 0, 1);
-        assert!(result.is_err());
-    }
+    //     let mut registry1 = TableRegistry::default();
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         registry1.add_table_1d(String::from("t1"), vec![1, 2]);
+    //     assert!(t.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         registry1.add_table_1d(String::from("t2"), vec![2, 3]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_1d(t, 0, 1);
+    //     assert!(result.is_err());
+    // }
 
-    #[test]
-    fn update_table_1d_ok() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![1, 1]);
-        assert!(result.is_ok());
-        let t = registry.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![1.0, 1.0]);
-        assert!(result.is_ok());
-        let t = registry.add_table_1d(String::from("t1"), vec![false]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![true]);
-        assert!(result.is_ok());
-        let t = registry.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![vec![1]]);
-        assert!(result.is_ok());
-        let t = registry.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![Set::with_capacity(1)]);
-        assert!(result.is_ok());
-        let t: Result<Table1DHandle<Element>, _> =
-            registry.add_table_1d(String::from("t1"), vec![0]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![1]);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn update_table_1d_ok() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![1, 1]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![1.0, 1.0]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![false]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![true]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![vec![1]]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![Set::with_capacity(1)]);
+    //     assert!(result.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         registry.add_table_1d(String::from("t1"), vec![0]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![1]);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn update_table_1d_err() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_1d_err() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_1d(String::from("t2"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![1, 1]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_1d(String::from("t2"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![1, 1]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_1d(String::from("t2"), vec![0.0, 1.0]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![1.0, 1.0]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_1d(String::from("t1"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_1d(String::from("t2"), vec![0.0, 1.0]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![1.0, 1.0]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_1d(String::from("t1"), vec![true]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![true]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_1d(String::from("t1"), vec![true]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_1d(String::from("t2"), vec![true]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![false]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_1d(String::from("t1"), vec![true]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_1d(String::from("t2"), vec![true]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![false]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_1d(String::from("t1"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_1d(String::from("t2"), vec![vec![]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![vec![1]]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_1d(String::from("t1"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_1d(String::from("t2"), vec![vec![]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![vec![1]]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_1d(String::from("t1"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_1d(String::from("t2"), vec![Set::default()]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![Set::with_capacity(1)]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_1d(String::from("t1"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_1d(String::from("t2"), vec![Set::default()]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![Set::with_capacity(1)]);
+    //     assert!(result.is_err());
 
-        let t: Result<Table1DHandle<Element>, _> =
-            registry.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         registry.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t: Result<Table1DHandle<Element>, _> =
-            registry1.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t: Result<Table1DHandle<Element>, _> =
-            registry1.add_table_1d(String::from("t2"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_1d(t, vec![1, 1]);
-        assert!(result.is_err());
-    }
+    //     let mut registry1 = TableRegistry::default();
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         registry1.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t: Result<Table1DHandle<Element>, _> =
+    //         registry1.add_table_1d(String::from("t2"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_1d(t, vec![1, 1]);
+    //     assert!(result.is_err());
+    // }
 
     #[test]
     fn add_table_2d_ok() {
@@ -607,220 +607,220 @@ mod tests {
         name_to_table.insert(String::from("t1"), 0);
     }
 
-    #[test]
-    fn set_table_2d_ok() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, 1);
-        assert!(result.is_ok());
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, 1.0);
-        assert!(result.is_ok());
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, true);
-        assert!(result.is_ok());
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, vec![1]);
-        assert!(result.is_ok());
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, Set::with_capacity(1));
-        assert!(result.is_ok());
-        let t: Result<Table2DHandle<Element>, _> =
-            registry.add_table_2d(String::from("t1"), vec![vec![0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, 1);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn set_table_2d_ok() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, 1);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, 1.0);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, true);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, vec![1]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, Set::with_capacity(1));
+    //     assert!(result.is_ok());
+    //     let t: Result<Table2DHandle<Element>, _> =
+    //         registry.add_table_2d(String::from("t1"), vec![vec![0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, 1);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn set_table_2d_err() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_2d_err() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, 1);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, 1);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_2d(String::from("t2"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, 1.0);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_2d(String::from("t2"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, 1.0);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_2d(String::from("t2"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, true);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_2d(String::from("t2"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, true);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_2d(String::from("t2"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, vec![0]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_2d(String::from("t2"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, vec![0]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_2d(String::from("t2"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, Set::with_capacity(1));
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_2d(String::from("t2"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, Set::with_capacity(1));
+    //     assert!(result.is_err());
 
-        let t: Result<Table2DHandle<Element>, _> =
-            registry.add_table_2d(String::from("t1"), vec![vec![1]]);
-        assert!(t.is_ok());
+    //     let t: Result<Table2DHandle<Element>, _> =
+    //         registry.add_table_2d(String::from("t1"), vec![vec![1]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t: Result<Table2DHandle<Element>, _> =
-            registry1.add_table_2d(String::from("t1"), vec![vec![0]]);
-        assert!(t.is_ok());
-        let t: Result<Table2DHandle<Element>, _> =
-            registry1.add_table_2d(String::from("t2"), vec![vec![0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_2d(t, 0, 0, 1);
-        assert!(result.is_err());
-    }
+    //     let mut registry1 = TableRegistry::default();
+    //     let t: Result<Table2DHandle<Element>, _> =
+    //         registry1.add_table_2d(String::from("t1"), vec![vec![0]]);
+    //     assert!(t.is_ok());
+    //     let t: Result<Table2DHandle<Element>, _> =
+    //         registry1.add_table_2d(String::from("t2"), vec![vec![0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_2d(t, 0, 0, 1);
+    //     assert!(result.is_err());
+    // }
 
-    #[test]
-    fn update_table_2d_ok() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_2d(t, vec![vec![1, 1]]);
-        assert!(result.is_ok());
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_2d(t, vec![vec![1.0, 1.0]]);
-        assert!(result.is_ok());
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_2d(t, vec![vec![true]]);
-        assert!(result.is_ok());
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_2d(t, vec![vec![vec![1]]]);
-        assert!(result.is_ok());
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_2d(t, vec![vec![Set::with_capacity(1)]]);
-        assert!(result.is_ok());
-        let t: Result<Table2DHandle<Element>, _> =
-            registry.add_table_2d(String::from("t1"), vec![vec![0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_2d(t, vec![vec![1]]);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn update_table_2d_ok() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_2d(t, vec![vec![1, 1]]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_2d(t, vec![vec![1.0, 1.0]]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_2d(t, vec![vec![true]]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_2d(t, vec![vec![vec![1]]]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_2d(t, vec![vec![Set::with_capacity(1)]]);
+    //     assert!(result.is_ok());
+    //     let t: Result<Table2DHandle<Element>, _> =
+    //         registry.add_table_2d(String::from("t1"), vec![vec![0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_2d(t, vec![vec![1]]);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn update_table_2d_err() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_2d_err() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_2d(t, vec![vec![1, 1]]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_2d(t, vec![vec![1, 1]]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_2d(String::from("t2"), vec![vec![0.0, 1.0]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_2d(t, vec![vec![1.0, 1.0]]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_2d(String::from("t1"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_2d(String::from("t2"), vec![vec![0.0, 1.0]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_2d(t, vec![vec![1.0, 1.0]]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_2d(String::from("t1"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_2d(String::from("t2"), vec![vec![false]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_2d(t, vec![vec![true]]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_2d(String::from("t1"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_2d(String::from("t2"), vec![vec![false]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_2d(t, vec![vec![true]]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_2d(String::from("t2"), vec![vec![vec![]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_2d(t, vec![vec![vec![1]]]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_2d(String::from("t1"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_2d(String::from("t2"), vec![vec![vec![]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_2d(t, vec![vec![vec![1]]]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_2d(String::from("t2"), vec![vec![Set::default()]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_2d(t, vec![vec![Set::with_capacity(1)]]);
-        assert!(result.is_err());
-    }
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_2d(String::from("t1"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_2d(String::from("t2"), vec![vec![Set::default()]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_2d(t, vec![vec![Set::with_capacity(1)]]);
+    //     assert!(result.is_err());
+    // }
 
     #[test]
     fn add_table_3d_ok() {
@@ -908,235 +908,235 @@ mod tests {
         assert!(t.is_err());
     }
 
-    #[test]
-    fn set_table_3d_ok() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, 1);
-        assert!(result.is_ok());
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, 1.0);
-        assert!(result.is_ok());
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, true);
-        assert!(result.is_ok());
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, vec![1]);
-        assert!(result.is_ok());
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, Set::with_capacity(1));
-        assert!(result.is_ok());
-        let t: Result<Table3DHandle<Element>, _> =
-            registry.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, 2);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn set_table_3d_ok() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, 1);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, 1.0);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, true);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, vec![1]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, Set::with_capacity(1));
+    //     assert!(result.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         registry.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, 2);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn set_table_3d_err() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_3d_err() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, 1);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, 1);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, 1.0);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, 1.0);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, true);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, true);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, vec![1]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, vec![1]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, Set::with_capacity(1));
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, Set::with_capacity(1));
+    //     assert!(result.is_err());
 
-        let t: Result<Table3DHandle<Element>, _> =
-            registry.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         registry.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t: Result<Table3DHandle<Element>, _> =
-            registry1.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t: Result<Table3DHandle<Element>, _> =
-            registry1.add_table_3d(String::from("t2"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table_3d(t, 0, 0, 0, 0);
-        assert!(result.is_err());
-    }
+    //     let mut registry1 = TableRegistry::default();
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         registry1.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         registry1.add_table_3d(String::from("t2"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table_3d(t, 0, 0, 0, 0);
+    //     assert!(result.is_err());
+    // }
 
-    #[test]
-    fn update_table_3d_ok() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![1, 1]]]);
-        assert!(result.is_ok());
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![1.0, 1.0]]]);
-        assert!(result.is_ok());
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![true]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![false]]]);
-        assert!(result.is_ok());
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![vec![1]]]]);
-        assert!(result.is_ok());
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![Set::with_capacity(1)]]]);
-        assert!(result.is_ok());
-        let t: Result<Table3DHandle<Element>, _> =
-            registry.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![2]]]);
-        assert!(result.is_ok());
-    }
+    // #[test]
+    // fn update_table_3d_ok() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![1, 1]]]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![1.0, 1.0]]]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![true]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![false]]]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![vec![1]]]]);
+    //     assert!(result.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![Set::with_capacity(1)]]]);
+    //     assert!(result.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         registry.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![2]]]);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn update_table_3d_err() {
-        let mut registry = TableRegistry::default();
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_3d_err() {
+    //     let mut registry = TableRegistry::default();
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![1, 1]]]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![1, 1]]]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![0.0, 1.0]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![1.0, 1.0]]]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![0.0, 1.0]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![1.0, 1.0]]]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![false]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![true]]]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![false]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![true]]]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![vec![]]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![vec![1]]]]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![vec![]]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![vec![1]]]]);
+    //     assert!(result.is_err());
 
-        let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
+    //     let t = registry.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![Set::default()]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![Set::with_capacity(1)]]]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table_3d(String::from("t1"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table_3d(String::from("t2"), vec![vec![vec![Set::default()]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![Set::with_capacity(1)]]]);
+    //     assert!(result.is_err());
 
-        let t: Result<Table3DHandle<Element>, _> =
-            registry.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         registry.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t: Result<Table3DHandle<Element>, _> =
-            registry1.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t: Result<Table3DHandle<Element>, _> =
-            registry1.add_table_3d(String::from("t2"), vec![vec![vec![1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.update_table_3d(t, vec![vec![vec![0]]]);
-        assert!(result.is_err());
-    }
+    //     let mut registry1 = TableRegistry::default();
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         registry1.add_table_3d(String::from("t1"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t: Result<Table3DHandle<Element>, _> =
+    //         registry1.add_table_3d(String::from("t2"), vec![vec![vec![1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.update_table_3d(t, vec![vec![vec![0]]]);
+    //     assert!(result.is_err());
+    // }
 
     #[test]
     fn add_table_ok() {
@@ -1266,449 +1266,449 @@ mod tests {
         assert!(t.is_err());
     }
 
-    #[test]
-    fn set_table_ok() {
-        let mut registry = TableRegistry::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], 1);
-        assert!(result.is_ok());
+    // #[test]
+    // fn set_table_ok() {
+    //     let mut registry = TableRegistry::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], 1);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], 1.0);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], 1.0);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = registry.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], true);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], true);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], vec![]);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], vec![]);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], Set::default());
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], Set::default());
+    //     assert!(result.is_ok());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], 0);
-        assert!(result.is_ok());
-    }
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], 0);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn set_table_err() {
-        let mut registry = TableRegistry::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_err() {
+    //     let mut registry = TableRegistry::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), 1);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), 2);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], 1);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), 1);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), 2);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], 1);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), 1.0);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), 2.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], 1.0);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), 1.0);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), 2.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], 1.0);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = registry.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], true);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], true);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], vec![1]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], vec![1]);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], Set::with_capacity(1));
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], Set::with_capacity(1));
+    //     assert!(result.is_err());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_table(t, vec![0, 0, 0, 0], 1);
-        assert!(result.is_err());
-    }
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_table(t, vec![0, 0, 0, 0], 1);
+    //     assert!(result.is_err());
+    // }
 
-    #[test]
-    fn set_default_ok() {
-        let mut registry = TableRegistry::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, 1);
-        assert!(result.is_ok());
+    // #[test]
+    // fn set_default_ok() {
+    //     let mut registry = TableRegistry::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, 1);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, 1.0);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, 1.0);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = registry.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, true);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, true);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, vec![2]);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, vec![2]);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, Set::with_capacity(2));
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, Set::with_capacity(2));
+    //     assert!(result.is_ok());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, 2);
-        assert!(result.is_ok());
-    }
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, 2);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn set_default_err() {
-        let mut registry = TableRegistry::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_default_err() {
+    //     let mut registry = TableRegistry::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, 1);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, 1);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), 0.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, 1.0);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, 1.0);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = registry.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, true);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, true);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, vec![1]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, vec![1]);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, Set::with_capacity(2));
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, Set::with_capacity(2));
+    //     assert!(result.is_err());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = registry.set_default(t, 2);
-        assert!(result.is_err());
-    }
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = registry.set_default(t, 2);
+    //     assert!(result.is_err());
+    // }
 
-    #[test]
-    fn update_table_ok() {
-        let mut registry = TableRegistry::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 2);
-        let result = registry.update_table(t, map.clone(), 1);
-        assert!(result.is_ok());
+    // #[test]
+    // fn update_table_ok() {
+    //     let mut registry = TableRegistry::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 2);
+    //     let result = registry.update_table(t, map.clone(), 1);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 2.0);
-        let result = registry.update_table(t, map.clone(), 1.0);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 2.0);
+    //     let result = registry.update_table(t, map.clone(), 1.0);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = registry.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let result = registry.update_table(t, map.clone(), false);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let result = registry.update_table(t, map.clone(), false);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let result = registry.update_table(t, map.clone(), vec![]);
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let result = registry.update_table(t, map.clone(), vec![]);
+    //     assert!(result.is_ok());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let result = registry.update_table(t, map.clone(), Set::default());
-        assert!(result.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let result = registry.update_table(t, map.clone(), Set::default());
+    //     assert!(result.is_ok());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let result = registry.update_table(t, map.clone(), 0);
-        assert!(result.is_ok());
-    }
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let result = registry.update_table(t, map.clone(), 0);
+    //     assert!(result.is_ok());
+    // }
 
-    #[test]
-    fn update_table_err() {
-        let mut registry = TableRegistry::default();
-        let mut map: FxHashMap<_, Integer> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_err() {
+    //     let mut registry = TableRegistry::default();
+    //     let mut map: FxHashMap<_, Integer> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), 1);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), 2);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], 2);
-        let result = registry.update_table(t, map2, 3);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), 1);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), 2);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], 2);
+    //     let result = registry.update_table(t, map2, 3);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1.0);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1.0);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0.0);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), 1.0);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), 2.0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], 2.0);
-        let result = registry.update_table(t, map2, 3.0);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), 1.0);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), 2.0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], 2.0);
+    //     let result = registry.update_table(t, map2, 3.0);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], true);
-        let t = registry.add_table(String::from("t1"), map.clone(), false);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], true);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), false);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), true);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), true);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], true);
-        let result = registry.update_table(t, map2, false);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), true);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), true);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], true);
+    //     let result = registry.update_table(t, map2, false);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], vec![1]);
-        let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], vec![1]);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), vec![]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], vec![]);
-        let result = registry.update_table(t, map2, vec![]);
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), vec![]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], vec![]);
+    //     let result = registry.update_table(t, map2, vec![]);
+    //     assert!(result.is_err());
 
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let t = registry.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), Set::default());
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
-        let result = registry.update_table(t, map2, Set::default());
-        assert!(result.is_err());
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), Set::default());
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], Set::with_capacity(1));
+    //     let result = registry.update_table(t, map2, Set::default());
+    //     assert!(result.is_err());
 
-        let mut map: FxHashMap<_, Element> = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = registry.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    //     let mut map: FxHashMap<_, Element> = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = registry.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut registry1 = TableRegistry::default();
-        let t = registry1.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = registry1.add_table(String::from("t2"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], 1);
-        let result = registry.update_table(t, map2, 0);
-        assert!(result.is_err());
-    }
+    //     let mut registry1 = TableRegistry::default();
+    //     let t = registry1.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = registry1.add_table(String::from("t2"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], 1);
+    //     let result = registry.update_table(t, map2, 0);
+    //     assert!(result.is_err());
+    // }
 
     #[test]
     fn table_registry_get_name_set() {

@@ -9,11 +9,11 @@ use dypdl::expression::{
 };
 use rustc_hash::FxHashMap;
 
-pub fn parse_expression<'a, 'b, 'c>(
+pub fn parse_expression<'a, 'b>(
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
     registry: &'b dypdl::TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<(Condition, &'a [String]), ParseErr> {
     let (token, rest) = tokens
         .split_first()
@@ -48,12 +48,12 @@ pub fn parse_expression<'a, 'b, 'c>(
     }
 }
 
-fn parse_operation<'a, 'b, 'c>(
+fn parse_operation<'a, 'b>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
     registry: &'b dypdl::TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<(Condition, &'a [String]), ParseErr> {
     match name {
         "not" => {
@@ -94,12 +94,12 @@ fn parse_operation<'a, 'b, 'c>(
     }
 }
 
-fn parse_comparison<'a, 'b, 'c>(
+fn parse_comparison<'a, 'b>(
     operator: &'a str,
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
     registry: &'b dypdl::TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<(Condition, &'a [String]), ParseErr> {
     if let Ok((x, y, rest)) = parse_ss(tokens, metadata, registry, parameters) {
         match operator {
@@ -148,11 +148,11 @@ fn parse_comparison<'a, 'b, 'c>(
     }
 }
 
-fn parse_ss<'a, 'b, 'c>(
+fn parse_ss<'a, 'b>(
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
     registry: &'b dypdl::TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<(SetExpression, SetExpression, &'a [String]), ParseErr> {
     let (x, rest) = element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
     let (y, rest) = element_parser::parse_set_expression(rest, metadata, registry, parameters)?;
@@ -160,11 +160,11 @@ fn parse_ss<'a, 'b, 'c>(
     Ok((x, y, rest))
 }
 
-fn parse_ii<'a, 'b, 'c>(
+fn parse_ii<'a, 'b>(
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
     registry: &'b dypdl::TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<(IntegerExpression, IntegerExpression, &'a [String]), ParseErr> {
     let (x, rest) = integer_parser::parse_expression(tokens, metadata, registry, parameters)?;
     let (y, rest) = integer_parser::parse_expression(rest, metadata, registry, parameters)?;
@@ -172,11 +172,11 @@ fn parse_ii<'a, 'b, 'c>(
     Ok((x, y, rest))
 }
 
-fn parse_cc<'a, 'b, 'c>(
+fn parse_cc<'a, 'b>(
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
     registry: &'b dypdl::TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<(ContinuousExpression, ContinuousExpression, &'a [String]), ParseErr> {
     let (x, rest) = continuous_parser::parse_expression(tokens, metadata, registry, parameters)?;
     let (y, rest) = continuous_parser::parse_expression(rest, metadata, registry, parameters)?;
@@ -184,11 +184,11 @@ fn parse_cc<'a, 'b, 'c>(
     Ok((x, y, rest))
 }
 
-fn parse_ee<'a, 'b, 'c>(
+fn parse_ee<'a, 'b>(
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
     registry: &'b dypdl::TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<(ElementExpression, ElementExpression, &'a [String]), ParseErr> {
     let (x, rest) = element_parser::parse_expression(tokens, metadata, registry, parameters)?;
     let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;

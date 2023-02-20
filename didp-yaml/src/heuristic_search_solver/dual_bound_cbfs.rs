@@ -1,32 +1,25 @@
-use super::callback::get_callback;
-use super::solution::CostToDump;
 use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
-use dypdl_heuristic_search::{DualBoundCBFS, FEvaluatorType, SolverParameters};
+use dypdl_heuristic_search::{create_dual_bound_cbfs, FEvaluatorType, Search};
 use std::error::Error;
 use std::fmt;
+use std::rc::Rc;
 use std::str;
 
-pub fn load_from_yaml<T>(config: &yaml_rust::Yaml) -> Result<DualBoundCBFS<T>, Box<dyn Error>>
+pub fn load_from_yaml<T>(
+    model: dypdl::Model,
+    config: &yaml_rust::Yaml,
+) -> Result<Box<dyn Search<T>>, Box<dyn Error>>
 where
-    T: Numeric + Ord + fmt::Display,
+    T: Numeric + Ord + fmt::Display + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
-    CostToDump: From<T>,
 {
     let map = match config {
         yaml_rust::Yaml::Hash(map) => map,
-        yaml_rust::Yaml::Null => {
-            return Ok(DualBoundCBFS {
-                f_evaluator_type: FEvaluatorType::default(),
-                callback: Box::new(|_| {}),
-                parameters: SolverParameters::default(),
-                initial_registry_capacity: Some(1000000),
-            })
-        }
         _ => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Hash, but found `{:?}`",
+                "expected Hash for the solver config, but found `{:?}`",
                 config
             ))
             .into())
@@ -40,7 +33,7 @@ where
             "h" => FEvaluatorType::Overwrite,
             op => {
                 return Err(util::YamlContentErr::new(format!(
-                    "unexpected operator for f function `{}`",
+                    "unexpected operator for `{}` for `f`",
                     op
                 ))
                 .into())
@@ -49,7 +42,7 @@ where
         None => FEvaluatorType::default(),
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String, but found `{:?}`",
+                "expected String for `f`, but found `{:?}`",
                 value
             ))
             .into())
@@ -62,17 +55,17 @@ where
             None => Some(1000000),
             value => {
                 return Err(util::YamlContentErr::new(format!(
-                    "expected Integer, but found `{:?}`",
+                    "expected Integer for `initial_registry_capacity`, but found `{:?}`",
                     value
                 ))
                 .into())
             }
         };
-    let callback = get_callback(map)?;
-    Ok(DualBoundCBFS {
-        f_evaluator_type,
-        callback,
+
+    Ok(create_dual_bound_cbfs(
+        Rc::new(model),
         parameters,
+        f_evaluator_type,
         initial_registry_capacity,
-    })
+    ))
 }

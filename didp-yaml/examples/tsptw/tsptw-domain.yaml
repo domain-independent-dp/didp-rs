@@ -1,0 +1,69 @@
+domain: TSPTW
+objects:
+  - city
+state_variables:
+  - name: unvisited
+    type: set
+    object: city
+  - name: location
+    type: element
+    object: city
+  - name: time
+    type: integer
+    preference: less
+tables:
+  - name: ready_time
+    type: integer
+    args:
+      - city
+  - name: due_date
+    type: integer
+    args:
+      - city
+  - name: distance
+    type: integer
+    args:
+      - city
+      - city
+    default: 0
+  - name: min_distance_to
+    type: integer
+    args:
+      - city
+  - name: min_distance_from
+    type: integer
+    args:
+      - city
+constraints:
+  - condition: (<= (+ time (distance location to)) (due_date to))
+    forall:
+      - name: to
+        object: unvisited
+base_cases:
+  - - (is_empty unvisited)
+    - (= location 0)
+reduce: min
+cost_type: integer
+transitions:
+  - name: visit
+    parameters:
+      - name: to
+        object: unvisited
+    preconditions:
+      - (<= (+ time (distance location to)) (due_date to))
+    effect:
+      unvisited: (remove to unvisited)
+      location: to
+      time: (max (+ time (distance location to)) (ready_time to))
+    cost: (+ cost (distance location to))
+  - name: return
+    preconditions:
+      - (is_empty unvisited)
+      - (!= location 0)
+    effect:
+      location: 0
+      time: (+ time (distance location 0))
+    cost: (+ cost (distance location 0))
+dual_bounds:
+  - (+ (sum min_distance_to unvisited) (if (!= location 0) (min_distance_to 0) 0))
+  - (+ (sum min_distance_from unvisited) (if (!= location 0) (min_distance_from location) 0))

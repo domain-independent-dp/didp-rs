@@ -3,7 +3,7 @@ use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::util;
 use super::vector_expression::VectorExpression;
-use crate::state::{DPState, ElementResourceVariable, ElementVariable, SetVariable};
+use crate::state::{ElementResourceVariable, ElementVariable, SetVariable, StateInterface};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Element, Set};
 
@@ -58,7 +58,7 @@ impl ArgumentExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> ArgumentExpression {
         match self {
             Self::Set(expression) => ArgumentExpression::Set(expression.simplify(registry)),
@@ -71,8 +71,8 @@ impl ArgumentExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transitioned state is used or an empty set or vector is passed to a reduce operation or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval_args<'a, I, U: DPState>(
+    /// Panics if the cost of the transitioned state is used or an empty set or vector is passed to a reduce operation or a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval_args<'a, I, U: StateInterface>(
         args: I,
         state: &U,
         registry: &TableRegistry,
@@ -116,7 +116,7 @@ impl ArgumentExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify_args<'a, I>(args: I) -> Option<Vec<Vec<Element>>>
     where
         I: Iterator<Item = &'a ArgumentExpression>,

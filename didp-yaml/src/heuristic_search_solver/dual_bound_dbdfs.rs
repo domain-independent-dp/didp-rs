@@ -1,33 +1,25 @@
-use super::callback::get_callback;
-use super::solution::CostToDump;
 use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
-use dypdl_heuristic_search::{DualBoundDBDFS, FEvaluatorType, SolverParameters};
+use dypdl_heuristic_search::{create_dual_bound_dbdfs, FEvaluatorType, Search};
 use std::error::Error;
 use std::fmt;
+use std::rc::Rc;
 use std::str;
 
-pub fn load_from_yaml<T>(config: &yaml_rust::Yaml) -> Result<DualBoundDBDFS<T>, Box<dyn Error>>
+pub fn load_from_yaml<T>(
+    model: dypdl::Model,
+    config: &yaml_rust::Yaml,
+) -> Result<Box<dyn Search<T>>, Box<dyn Error>>
 where
-    T: Numeric + Ord + fmt::Display,
+    T: Numeric + Ord + fmt::Display + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
-    CostToDump: From<T>,
 {
     let map = match config {
         yaml_rust::Yaml::Hash(map) => map,
-        yaml_rust::Yaml::Null => {
-            return Ok(DualBoundDBDFS {
-                f_evaluator_type: FEvaluatorType::default(),
-                width: 1,
-                callback: Box::new(|_| {}),
-                parameters: SolverParameters::default(),
-                initial_registry_capacity: Some(1000000),
-            })
-        }
         _ => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Hash, but found `{:?}`",
+                "expected Hash for the solver config, but found `{:?}`",
                 config
             ))
             .into())
@@ -41,7 +33,7 @@ where
             "h" => FEvaluatorType::Overwrite,
             op => {
                 return Err(util::YamlContentErr::new(format!(
-                    "unexpected operator for f function `{}`",
+                    "unexpected operator for `{}` for `f`",
                     op
                 ))
                 .into())
@@ -50,42 +42,42 @@ where
         None => FEvaluatorType::default(),
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String, but found `{:?}`",
+                "expected String for `f`, but found `{:?}`",
                 value
             ))
             .into())
         }
     };
-    let parameters = solver_parameters::parse_from_map(map)?;
     let width = match map.get(&yaml_rust::Yaml::from_str("width")) {
         Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
-        None => 1,
-        value => {
+        Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer, but found `{:?}`",
+                "expected Integer for `width`, but found `{:?}`",
                 value
             ))
             .into())
         }
+        None => 1,
     };
+    let parameters = solver_parameters::parse_from_map(map)?;
     let initial_registry_capacity =
         match map.get(&yaml_rust::Yaml::from_str("initial_registry_capacity")) {
             Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
             None => Some(1000000),
             value => {
                 return Err(util::YamlContentErr::new(format!(
-                    "expected Integer, but found `{:?}`",
+                    "expected Integer for `initial_registry_capacity`, but found `{:?}`",
                     value
                 ))
                 .into())
             }
         };
-    let callback = get_callback(map)?;
-    Ok(DualBoundDBDFS {
-        f_evaluator_type,
-        width,
-        callback,
+
+    Ok(create_dual_bound_dbdfs(
+        Rc::new(model),
         parameters,
+        width,
+        f_evaluator_type,
         initial_registry_capacity,
-    })
+    ))
 }

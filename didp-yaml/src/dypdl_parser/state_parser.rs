@@ -8,7 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 ///
 /// # Errors
 ///
-/// if the format is invalid.
+/// If the format is invalid.
 pub fn load_state_from_yaml(
     value: &yaml_rust::Yaml,
     metadata: &StateMetadata,

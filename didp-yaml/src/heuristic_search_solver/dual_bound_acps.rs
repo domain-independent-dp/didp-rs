@@ -1,25 +1,27 @@
-use super::callback::get_callback;
-use super::solution::CostToDump;
 use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
-use dypdl_heuristic_search::ProgressiveSearchParameters;
-use dypdl_heuristic_search::{DualBoundACPS, FEvaluatorType};
+use dypdl_heuristic_search::{
+    create_dual_bound_acps, FEvaluatorType, ProgressiveSearchParameters, Search,
+};
 use std::error::Error;
 use std::fmt;
+use std::rc::Rc;
 use std::str;
 
-pub fn load_from_yaml<T>(config: &yaml_rust::Yaml) -> Result<DualBoundACPS<T>, Box<dyn Error>>
+pub fn load_from_yaml<T>(
+    model: dypdl::Model,
+    config: &yaml_rust::Yaml,
+) -> Result<Box<dyn Search<T>>, Box<dyn Error>>
 where
-    T: Numeric + Ord + fmt::Display,
+    T: Numeric + Ord + fmt::Display + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
-    CostToDump: From<T>,
 {
     let map = match config {
         yaml_rust::Yaml::Hash(map) => map,
         _ => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Hash, but found `{:?}`",
+                "expected Hash for the solver config, but found `{:?}`",
                 config
             ))
             .into())
@@ -33,7 +35,7 @@ where
             "h" => FEvaluatorType::Overwrite,
             op => {
                 return Err(util::YamlContentErr::new(format!(
-                    "unexpected operator for f function `{}`",
+                    "unexpected operator for `{}` for `f`",
                     op
                 ))
                 .into())
@@ -42,7 +44,7 @@ where
         None => FEvaluatorType::default(),
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String, but found `{:?}`",
+                "expected String for `f`, but found `{:?}`",
                 value
             ))
             .into())
@@ -52,7 +54,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer, but found `{:?}`",
+                "expected Integer for `init`, but found `{:?}`",
                 value
             ))
             .into())
@@ -63,7 +65,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer, but found `{:?}`",
+                "expected Integer for `step`, but found `{:?}`",
                 value
             ))
             .into())
@@ -74,7 +76,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer, but found `{:?}`",
+                "expected Integer for `bound`, but found `{:?}`",
                 value
             ))
             .into())
@@ -86,7 +88,7 @@ where
         None => false,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Boolean, but found `{:?}`",
+                "expected Boolean for `reset`, but found `{:?}`",
                 value
             ))
             .into())
@@ -105,18 +107,18 @@ where
             None => Some(1000000),
             value => {
                 return Err(util::YamlContentErr::new(format!(
-                    "expected Integer, but found `{:?}`",
+                    "expected Integer for `initial_registry_capacity`, but found `{:?}`",
                     value
                 ))
                 .into())
             }
         };
-    let callback = get_callback(map)?;
-    Ok(DualBoundACPS {
-        f_evaluator_type,
-        progressive_parameters,
-        callback,
+
+    Ok(create_dual_bound_acps(
+        Rc::new(model),
         parameters,
+        progressive_parameters,
+        f_evaluator_type,
         initial_registry_capacity,
-    })
+    ))
 }

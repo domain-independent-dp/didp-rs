@@ -1,3 +1,5 @@
+//! Utility functions for parsing YAML.
+
 use dypdl::variable_type;
 use std::convert::TryFrom;
 use std::error;
@@ -10,6 +12,7 @@ use yaml_rust::Yaml;
 pub struct YamlContentErr(String);
 
 impl YamlContentErr {
+    /// Returns a new error.
     pub fn new(message: String) -> YamlContentErr {
         YamlContentErr(format!("Error in yaml contents: {}", message))
     }
@@ -23,6 +26,11 @@ impl fmt::Display for YamlContentErr {
 
 impl error::Error for YamlContentErr {}
 
+/// Returns a map parsed from a YAML.
+///
+/// # Errors
+///
+/// If the YAML is not a map.
 pub fn get_map(
     value: &Yaml,
 ) -> Result<&linked_hash_map::LinkedHashMap<Yaml, Yaml>, YamlContentErr> {
@@ -35,9 +43,14 @@ pub fn get_map(
     }
 }
 
-pub fn get_yaml_by_key<'a, 'b>(
+/// Returns a YAML from a map given a key.
+///
+/// # Errors
+///
+/// If no such key exists.
+pub fn get_yaml_by_key<'a>(
     map: &'a linked_hash_map::LinkedHashMap<Yaml, Yaml>,
-    key: &'b str,
+    key: &str,
 ) -> Result<&'a Yaml, YamlContentErr> {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => Ok(value),
@@ -48,6 +61,11 @@ pub fn get_yaml_by_key<'a, 'b>(
     }
 }
 
+/// Returns a vector parsed from a YAML.
+///
+/// # Errors
+///
+/// If the YAML is not an array.
 pub fn get_array(value: &Yaml) -> Result<&Vec<Yaml>, YamlContentErr> {
     match value {
         Yaml::Array(array) => Ok(array),
@@ -58,6 +76,11 @@ pub fn get_array(value: &Yaml) -> Result<&Vec<Yaml>, YamlContentErr> {
     }
 }
 
+/// Returns a boolean parsed from a YAML.
+///
+/// # Errors
+///
+/// If it cannot be parsed.
 pub fn get_bool(value: &Yaml) -> Result<bool, YamlContentErr> {
     match value {
         Yaml::Boolean(value) => Ok(*value),
@@ -68,6 +91,11 @@ pub fn get_bool(value: &Yaml) -> Result<bool, YamlContentErr> {
     }
 }
 
+/// Returns a boolean from a map given a key.
+///
+/// # Errors
+///
+/// If no such key exists or it cannot be parsed.
 pub fn get_bool_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
@@ -78,6 +106,11 @@ pub fn get_bool_by_key(
     }
 }
 
+/// Returns an usize parsed from a YAML.
+///
+/// # Errors
+///
+/// If it cannot be parsed.
 pub fn get_usize(value: &Yaml) -> Result<usize, YamlContentErr> {
     if let Yaml::Integer(value) = value {
         match variable_type::Element::try_from(*value) {
@@ -95,6 +128,11 @@ pub fn get_usize(value: &Yaml) -> Result<usize, YamlContentErr> {
     }
 }
 
+/// Returns an array of usize parsed from a YAML.
+///
+/// # Errors
+///
+/// If it cannot be parsed.
 pub fn get_usize_array(value: &Yaml) -> Result<Vec<usize>, YamlContentErr> {
     if let Yaml::Array(array) = value {
         let mut result = Vec::with_capacity(array.len());
@@ -110,6 +148,11 @@ pub fn get_usize_array(value: &Yaml) -> Result<Vec<usize>, YamlContentErr> {
     }
 }
 
+/// Returns an usize from a map given a key.
+///
+/// # Errors
+///
+/// If no such key exists or it cannot be parsed.
 pub fn get_usize_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
@@ -120,6 +163,11 @@ pub fn get_usize_by_key(
     }
 }
 
+/// Returns an array of usize from a map given a key.
+///
+/// # Errors
+///
+/// If no such key exists or it cannot be parsed.
 pub fn get_usize_array_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
@@ -130,6 +178,11 @@ pub fn get_usize_array_by_key(
     }
 }
 
+/// Returns a numeric value parsed from a YAML.
+///
+/// # Errors
+///
+/// If it cannot be parsed.
 pub fn get_numeric<T: str::FromStr + num_traits::FromPrimitive>(
     value: &Yaml,
 ) -> Result<T, YamlContentErr>
@@ -154,6 +207,11 @@ where
     }
 }
 
+/// Returns a numeric value from a map given a key.
+///
+/// # Errors
+///
+/// If no such key exists or it cannot be parsed.
 pub fn get_numeric_by_key<T: str::FromStr + num_traits::FromPrimitive>(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
@@ -167,6 +225,11 @@ where
     }
 }
 
+/// Returns a string parsed from a YAML.
+///
+/// # Errors
+///
+/// If it cannot be parsed.
 pub fn get_string(value: &Yaml) -> Result<String, YamlContentErr> {
     match value {
         Yaml::String(string) => Ok(string.clone()),
@@ -177,6 +240,11 @@ pub fn get_string(value: &Yaml) -> Result<String, YamlContentErr> {
     }
 }
 
+/// Returns an array of string parsed from a YAML.
+///
+/// # Errors
+///
+/// If it cannot be parsed.
 pub fn get_string_array(value: &Yaml) -> Result<Vec<String>, YamlContentErr> {
     match value {
         Yaml::Array(value) => parse_string_array(value),
@@ -187,6 +255,11 @@ pub fn get_string_array(value: &Yaml) -> Result<Vec<String>, YamlContentErr> {
     }
 }
 
+/// Returns a string from a map given a key.
+///
+/// # Errors
+///
+/// If no such key exists or it cannot be parsed.
 pub fn get_string_by_key(
     map: &linked_hash_map::LinkedHashMap<Yaml, Yaml>,
     key: &str,
@@ -197,6 +270,11 @@ pub fn get_string_by_key(
     }
 }
 
+/// Returns an array of string from a map given a key.
+///
+/// # Errors
+///
+/// If no such key exists or it cannot be parsed.
 fn parse_string_array(array: &[Yaml]) -> Result<Vec<String>, YamlContentErr> {
     let mut result = Vec::with_capacity(array.len());
     for v in array {

@@ -3,7 +3,7 @@ use super::element_expression::ElementExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::vector_expression::VectorExpression;
-use crate::state::DPState;
+use crate::state::StateInterface;
 use crate::table::{Table1D, Table2D};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Element, Set};
@@ -78,8 +78,8 @@ impl SetReduceExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transitioned state is used or an empty set or vector is passed to a reduce operation or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<U: DPState>(&self, state: &U, registry: &TableRegistry) -> Set {
+    /// Panics if the cost of the transitioned state is used or an empty set or vector is passed to a reduce operation or a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval<U: StateInterface>(&self, state: &U, registry: &TableRegistry) -> Set {
         let get_set_variable = |i| state.get_set_variable(i);
         let get_vector_variable = |i| state.get_vector_variable(i);
         let set_tables = &registry.set_tables;
@@ -366,7 +366,7 @@ impl SetReduceExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> Self {
         let set_tables = &registry.set_tables;
         match self {

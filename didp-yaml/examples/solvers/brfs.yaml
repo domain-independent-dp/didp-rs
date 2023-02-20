@@ -1,0 +1,3 @@
+solver: dual_bound_breadth_first_search
+config:
+    time_limit: 1800

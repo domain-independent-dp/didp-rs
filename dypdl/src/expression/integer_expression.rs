@@ -10,7 +10,7 @@ use super::numeric_table_expression::NumericTableExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::vector_expression::VectorExpression;
-use crate::state::{DPState, IntegerResourceVariable, IntegerVariable, SetVariable};
+use crate::state::{IntegerResourceVariable, IntegerVariable, SetVariable, StateInterface};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Continuous, Integer};
@@ -745,9 +745,9 @@ impl IntegerExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     #[inline]
-    pub fn eval<U: DPState>(&self, state: &U, registry: &TableRegistry) -> Integer {
+    pub fn eval<U: StateInterface>(&self, state: &U, registry: &TableRegistry) -> Integer {
         self.eval_inner(None, state, registry)
     }
 
@@ -755,9 +755,9 @@ impl IntegerExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     #[inline]
-    pub fn eval_cost<U: DPState>(
+    pub fn eval_cost<U: StateInterface>(
         &self,
         cost: Integer,
         state: &U,
@@ -766,7 +766,7 @@ impl IntegerExpression {
         self.eval_inner(Some(cost), state, registry)
     }
 
-    fn eval_inner<U: DPState>(
+    fn eval_inner<U: StateInterface>(
         &self,
         cost: Option<Integer>,
         state: &U,
@@ -826,7 +826,7 @@ impl IntegerExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> IntegerExpression {
         match self {
             Self::UnaryOperation(op, x) => match x.simplify(registry) {

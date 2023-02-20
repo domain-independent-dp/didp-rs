@@ -31,7 +31,7 @@ use yaml_rust::Yaml;
 ///
 /// # Errors
 ///
-/// if the format is invalid.
+/// If the format is invalid.
 pub fn load_integer_expression_from_yaml(
     value: &Yaml,
     model: &Model,
@@ -51,7 +51,7 @@ pub fn load_integer_expression_from_yaml(
 ///
 /// # Errors
 ///
-/// if the format is invalid.
+/// If the format is invalid.
 pub fn load_continuous_expression_from_yaml(
     value: &Yaml,
     model: &Model,
@@ -71,7 +71,7 @@ pub fn load_continuous_expression_from_yaml(
 ///
 /// # Errors
 ///
-/// if the format is invalid.
+/// If the format is invalid.
 pub fn load_element_expression_from_yaml(
     value: &Yaml,
     model: &Model,
@@ -91,7 +91,7 @@ pub fn load_element_expression_from_yaml(
 ///
 /// # Errors
 ///
-/// if the format is invalid.
+/// If the format is invalid.
 pub fn load_set_expression_from_yaml(
     value: &Yaml,
     model: &Model,
@@ -111,7 +111,7 @@ pub fn load_set_expression_from_yaml(
 ///
 /// # Errors
 ///
-/// if the format is invalid.
+/// If the format is invalid.
 pub fn load_vector_expression_from_yaml(
     value: &Yaml,
     model: &Model,
@@ -129,7 +129,7 @@ pub fn load_vector_expression_from_yaml(
 ///
 /// # Errors
 ///
-/// if the format is invalid.
+/// If the format is invalid.
 pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<dyn Error>> {
     let domain = util::get_map(domain)?;
     let problem = util::get_map(problem)?;

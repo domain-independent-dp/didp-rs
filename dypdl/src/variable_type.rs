@@ -18,7 +18,7 @@ pub type Continuous = f64;
 /// Continuous value with a total order.
 pub type OrderedContinuous = ordered_float::OrderedFloat<Continuous>;
 
-/// A trait representing a numeric value.
+/// Trait representing a numeric value.
 pub trait Numeric:
     num_traits::Num
     + ToNumeric
@@ -39,13 +39,13 @@ impl Numeric for Integer {}
 impl Numeric for Continuous {}
 impl Numeric for OrderedContinuous {}
 
-/// A trait for converting to numeric values.
+/// Trait for converting to numeric values.
 pub trait ToNumeric {
     fn to_integer(self) -> Integer;
     fn to_continuous(self) -> Continuous;
 }
 
-/// A trait for converting from numeric values.
+/// Trait for converting from numeric values.
 pub trait FromNumeric {
     fn from_integer(n: Integer) -> Self;
     fn from_continuous(n: Continuous) -> Self;

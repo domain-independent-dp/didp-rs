@@ -6,6 +6,7 @@ use std::fmt;
 pub struct ParseErr(String);
 
 impl ParseErr {
+    /// Returns a new `ParseErr` with the given message.
     pub fn new(message: String) -> ParseErr {
         ParseErr(format!("Error in parsing expression: {}", message))
     }

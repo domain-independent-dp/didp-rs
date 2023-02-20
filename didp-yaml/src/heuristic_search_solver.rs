@@ -1,27 +1,17 @@
 //! A module for heuristic search solvers for DyPDL.
 
 mod caasdy;
-mod callback;
 mod dijkstra;
 mod dual_bound_acps;
-mod dual_bound_anytime_beam_search;
 mod dual_bound_apps;
-mod dual_bound_bfdfbb;
+mod dual_bound_breadth_first_search;
+mod dual_bound_cabs;
 mod dual_bound_cbfs;
-mod dual_bound_chokudai_search;
 mod dual_bound_dbdfs;
-mod dual_bound_dds;
 mod dual_bound_dfbb;
-mod dual_bound_lookahead_bfs;
-mod dual_bound_rcbfs;
 mod dual_bound_weighted_astar;
 mod expression_beam_search;
-mod expression_evaluator;
 mod forward_recursion;
-mod ibdfs;
-mod iterative_search;
-mod lazy_dijkstra;
-mod lookahead_lazy_dijkstra;
 mod solution;
 mod solver_parameters;
 mod transition_with_custom_cost;
@@ -30,88 +20,82 @@ use crate::util;
 use dypdl::variable_type;
 use std::error::Error;
 use std::fmt;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::str;
 
 pub use solution::{CostToDump, SolutionToDump};
 
-/// Factory of a heuristic search solver.
-#[derive(Default)]
-pub struct SolverFactory;
+/// Returns a heuristic search solver specified by a YAML configuration file.
+///
+/// # Errors
+///
+/// If the format is invalid.
+pub fn create_solver<T>(
+    solver_name: &str,
+    config: &yaml_rust::Yaml,
+    model: dypdl::Model,
+) -> Result<Box<dyn dypdl_heuristic_search::Search<T>>, Box<dyn Error>>
+where
+    T: variable_type::Numeric + Ord + fmt::Display + 'static + Send + Sync,
+    <T as str::FromStr>::Err: fmt::Debug,
+    CostToDump: From<T>,
+{
+    match solver_name {
+        "caasdy" => caasdy::load_from_yaml(model, config),
+        "dual_bound_cabs" => dual_bound_cabs::load_from_yaml(model, config),
+        "dual_bound_dfbb" => dual_bound_dfbb::load_from_yaml(model, config),
+        "dual_bound_cbfs" => dual_bound_cbfs::load_from_yaml(model, config),
+        "dual_bound_acps" => dual_bound_acps::load_from_yaml(model, config),
+        "dual_bound_apps" => dual_bound_apps::load_from_yaml(model, config),
+        "dual_bound_dbdfs" => dual_bound_dbdfs::load_from_yaml(model, config),
+        "forward_recursion" => forward_recursion::load_from_yaml(model, config),
+        "dijkstra" => dijkstra::load_from_yaml(model, config),
+        "dual_bound_breadth_first_search" => {
+            dual_bound_breadth_first_search::load_from_yaml(model, config)
+        }
+        "dual_bound_weighted_astar" => dual_bound_weighted_astar::load_from_yaml(model, config),
+        "expression_beam_search" => expression_beam_search::load_from_yaml(model, config),
+        _ => Err(util::YamlContentErr::new(format!("No such solver: {}", solver_name)).into()),
+    }
+}
 
-impl SolverFactory {
-    /// Returns a heuristic search solver specified by a YAML configuration file.
-    ///
-    /// # Errors
-    ///
-    /// if the format is invalid.
-    pub fn create<T>(
-        &self,
-        config: &yaml_rust::Yaml,
-        model: &dypdl::Model,
-    ) -> Result<Box<dyn dypdl_heuristic_search::Solver<T>>, Box<dyn Error>>
-    where
-        T: variable_type::Numeric + Ord + fmt::Display + 'static,
-        <T as str::FromStr>::Err: fmt::Debug,
-        CostToDump: From<T>,
-    {
-        let map = match config {
-            yaml_rust::Yaml::Hash(map) => map,
-            _ => {
-                return Err(util::YamlContentErr::new(format!(
-                    "expected Hash, but found {:?}",
-                    config
-                ))
-                .into());
-            }
-        };
-        let config = match map.get(&yaml_rust::Yaml::from_str("config")) {
-            Some(value) => value.clone(),
-            None => yaml_rust::Yaml::Null,
-        };
-        match map.get(&yaml_rust::Yaml::from_str("solver")) {
-            Some(yaml_rust::Yaml::String(string)) => match &string[..] {
-                "dijkstra" => Ok(Box::new(dijkstra::load_from_yaml(&config)?)),
-                "lazy_dijkstra" => Ok(Box::new(lazy_dijkstra::load_from_yaml(&config)?)),
-                "caasdy" => Ok(Box::new(caasdy::load_from_yaml(&config)?)),
-                "expression_beam" => Ok(Box::new(expression_beam_search::load_from_yaml(
-                    &config, model,
-                )?)),
-                "ibdfs" => Ok(Box::new(ibdfs::load_from_yaml(&config)?)),
-                "dual_bound_weighted_astar" => Ok(Box::new(
-                    dual_bound_weighted_astar::load_from_yaml(&config)?,
-                )),
-                "dual_bound_dfbb" => Ok(Box::new(dual_bound_dfbb::load_from_yaml(&config)?)),
-                "dual_bound_bfdfbb" => Ok(Box::new(dual_bound_bfdfbb::load_from_yaml(&config)?)),
-                "dual_bound_cbfs" => Ok(Box::new(dual_bound_cbfs::load_from_yaml(&config)?)),
-                "dual_bound_acps" => Ok(Box::new(dual_bound_acps::load_from_yaml(&config)?)),
-                "dual_bound_apps" => Ok(Box::new(dual_bound_apps::load_from_yaml(&config)?)),
-                "dual_bound_rrcbfs" => Ok(Box::new(dual_bound_rcbfs::load_from_yaml(&config)?)),
-                "dual_bound_dds" => Ok(Box::new(dual_bound_dds::load_from_yaml(&config)?)),
-                "dual_bound_dbdfs" => Ok(Box::new(dual_bound_dbdfs::load_from_yaml(&config)?)),
-                "dual_bound_anytime_beam" => Ok(Box::new(
-                    dual_bound_anytime_beam_search::load_from_yaml(&config)?,
-                )),
-                "dual_bound_chokudai" => Ok(Box::new(dual_bound_chokudai_search::load_from_yaml(
-                    &config,
-                )?)),
-                "dual_bound_lookahead_bfs" => {
-                    Ok(Box::new(dual_bound_lookahead_bfs::load_from_yaml(&config)?))
-                }
-                "lookahead_lazy_dijkstra" => {
-                    Ok(Box::new(lookahead_lazy_dijkstra::load_from_yaml(&config)?))
-                }
-                "forward_recursion" => Ok(Box::new(forward_recursion::load_from_yaml(&config)?)),
-                "iterative" => Ok(Box::new(iterative_search::load_from_yaml(&config, model)?)),
-                value => {
-                    Err(util::YamlContentErr::new(format!("no such solver {:?}", value,)).into())
-                }
-            },
-            Some(value) => Err(util::YamlContentErr::new(format!(
-                "expected String, but found {:?}",
-                value
-            ))
-            .into()),
-            None => Ok(Box::new(forward_recursion::load_from_yaml(&config)?)),
+/// Solve a problem and dump the history of the search.
+///
+/// # Errors
+///
+/// If the solver causes an error or files cannot be opened.
+pub fn solve_and_dump_solutions<T>(
+    mut solver: Box<dyn dypdl_heuristic_search::Search<T>>,
+    history_filename: &str,
+    solution_filename: &str,
+) -> Result<dypdl_heuristic_search::Solution<T>, Box<dyn Error>>
+where
+    T: variable_type::Numeric + Ord + fmt::Display + 'static,
+    <T as str::FromStr>::Err: fmt::Debug,
+    CostToDump: From<T>,
+{
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(history_filename)?;
+
+    loop {
+        let (solution, terminated) = solver.search_next()?;
+
+        if let Some(cost) = solution.cost {
+            let line = format!(
+                "{}, {}, {}, {}\n",
+                solution.time, cost, solution.expanded, solution.generated
+            );
+            file.write_all(line.as_bytes())?;
+            let solution_to_dump = SolutionToDump::from(solution.clone());
+            solution_to_dump.dump_to_file(solution_filename)?;
+        }
+
+        if terminated {
+            return Ok(solution);
         }
     }
 }

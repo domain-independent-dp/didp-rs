@@ -1,51 +1,32 @@
-use super::expression_evaluator;
 use super::solver_parameters;
 use super::transition_with_custom_cost;
+use crate::dypdl_parser;
 use crate::util;
-use dypdl::variable_type::Numeric;
-use dypdl_heuristic_search::{
-    ExpressionBeamSearch, ExpressionEvaluator, FEvaluatorType, SolverParameters,
-};
+use dypdl::variable_type::{Integer, Numeric, OrderedContinuous};
+use dypdl::CostExpression;
+use dypdl::CostType;
+use dypdl_heuristic_search::search_algorithm::BeamSearchParameters;
+use dypdl_heuristic_search::Search;
+use dypdl_heuristic_search::{CustomExpressionParameters, ExpressionBeamSearch, FEvaluatorType};
 use rustc_hash::FxHashMap;
 use std::error::Error;
 use std::fmt;
+use std::rc::Rc;
 use std::str;
 
 pub fn load_from_yaml<T>(
+    model: dypdl::Model,
     config: &yaml_rust::Yaml,
-    model: &dypdl::Model,
-) -> Result<ExpressionBeamSearch<T>, Box<dyn Error>>
+) -> Result<Box<dyn Search<T>>, Box<dyn Error>>
 where
-    T: Numeric + Ord + fmt::Display,
+    T: Numeric + Ord + fmt::Display + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
     let map = match config {
         yaml_rust::Yaml::Hash(map) => map,
-        yaml_rust::Yaml::Null => {
-            let custom_costs = model
-                .forward_transitions
-                .iter()
-                .map(|t| t.cost.clone())
-                .collect();
-            let forced_custom_costs = model
-                .forward_forced_transitions
-                .iter()
-                .map(|t| t.cost.clone())
-                .collect();
-            return Ok(ExpressionBeamSearch {
-                custom_costs,
-                forced_custom_costs,
-                h_evaluator: ExpressionEvaluator::default(),
-                f_evaluator_type: FEvaluatorType::default(),
-                custom_cost_type: None,
-                beam_sizes: vec![10000],
-                maximize: false,
-                parameters: SolverParameters::default(),
-            });
-        }
         _ => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Hash, but found `{:?}`",
+                "expected Hash for the solver config, but found `{:?}`",
                 config
             ))
             .into())
@@ -53,18 +34,18 @@ where
     };
     let custom_cost_type = match map.get(&yaml_rust::Yaml::from_str("cost_type")) {
         Some(yaml_rust::Yaml::String(string)) => match &string[..] {
-            "integer" => Some(dypdl::CostType::Integer),
-            "continuous" => Some(dypdl::CostType::Continuous),
+            "integer" => dypdl::CostType::Integer,
+            "continuous" => dypdl::CostType::Continuous,
             value => {
                 return Err(
                     util::YamlContentErr::new(format!("unexpected cost type `{}`", value)).into(),
                 )
             }
         },
-        None => None,
+        None => model.cost_type,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String, but found `{:?}`",
+                "expected String for `custom_cost_type`, but found `{:?}`",
                 value
             ))
             .into())
@@ -81,7 +62,7 @@ where
                     }
                     _ => {
                         return Err(util::YamlContentErr::new(format!(
-                            "expected (String, String), but found (`{:?}`, `{:?}`)",
+                            "expected (String, String) for `g`, but found (`{:?}`, `{:?}`)",
                             key, value
                         ))
                         .into())
@@ -89,9 +70,9 @@ where
                 }
             }
             transition_with_custom_cost::load_custom_cost_expressions(
-                model,
+                &model,
                 false,
-                custom_cost_type.as_ref().unwrap_or(&model.cost_type),
+                &custom_cost_type,
                 &g_expressions,
             )?
         }
@@ -116,21 +97,20 @@ where
             .into())
         }
     };
-    let h_evaluator = match map.get(&yaml_rust::Yaml::from_str("h")) {
-        Some(yaml_rust::Yaml::String(value)) => expression_evaluator::load_from_string(
-            value.clone(),
-            model,
-            custom_cost_type.as_ref().unwrap_or(&model.cost_type),
-        )?,
-        None => ExpressionEvaluator::default(),
-        value => {
-            return Err(util::YamlContentErr::new(format!(
-                "expected String, but found `{:?}`",
-                value
-            ))
-            .into())
-        }
+
+    let parameters = FxHashMap::default();
+    let h_expression = match map.get(&yaml_rust::Yaml::from_str("h")) {
+        Some(value) => match custom_cost_type {
+            CostType::Integer => Some(CostExpression::from(
+                dypdl_parser::load_integer_expression_from_yaml(value, &model, &parameters)?,
+            )),
+            CostType::Continuous => Some(CostExpression::from(
+                dypdl_parser::load_continuous_expression_from_yaml(value, &model, &parameters)?,
+            )),
+        },
+        None => None,
     };
+
     let f_evaluator_type = match map.get(&yaml_rust::Yaml::from_str("f")) {
         Some(yaml_rust::Yaml::String(string)) => match &string[..] {
             "+" => FEvaluatorType::Plus,
@@ -154,30 +134,11 @@ where
             .into())
         }
     };
-    let beam_sizes = match map.get(&yaml_rust::Yaml::from_str("beam_size")) {
-        Some(yaml_rust::Yaml::Integer(value)) => vec![*value as usize],
-        Some(yaml_rust::Yaml::Array(array)) => {
-            let mut beams = Vec::new();
-            for v in array {
-                match v {
-                    yaml_rust::Yaml::Integer(value) => {
-                        beams.push(*value as usize);
-                    }
-                    value => {
-                        return Err(util::YamlContentErr::new(format!(
-                            "expected Integer or Array, but found `{:?}`",
-                            value
-                        ))
-                        .into())
-                    }
-                }
-            }
-            beams
-        }
-        None => vec![10000],
+    let beam_size = match map.get(&yaml_rust::Yaml::from_str("beam_size")) {
+        Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer or Array, but found `{:?}`",
+                "expected Integer, but found `{:?}`",
                 value
             ))
             .into())
@@ -194,15 +155,60 @@ where
         }
         None => false,
     };
-    let parameters = solver_parameters::parse_from_map(map)?;
-    Ok(ExpressionBeamSearch {
-        custom_costs,
-        forced_custom_costs,
-        h_evaluator,
-        f_evaluator_type,
-        custom_cost_type,
-        beam_sizes,
-        maximize,
-        parameters,
-    })
+    let keep_all_layers = match map.get(&yaml_rust::Yaml::from_str("keep_all_layers")) {
+        Some(yaml_rust::Yaml::Boolean(value)) => *value,
+        None => false,
+        value => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected Boolean for `keep_all_layers`, but found `{:?}`",
+                value
+            ))
+            .into())
+        }
+    };
+
+    match custom_cost_type {
+        CostType::Integer => {
+            let parameters = BeamSearchParameters::<T, Integer> {
+                beam_size,
+                maximize,
+                f_pruning: false,
+                f_bound: None,
+                keep_all_layers,
+                parameters: solver_parameters::parse_from_map(map)?,
+            };
+            Ok(Box::new(ExpressionBeamSearch::new(
+                Rc::new(model),
+                parameters,
+                CustomExpressionParameters {
+                    custom_costs,
+                    forced_custom_costs,
+                    h_expression,
+                    custom_cost_type,
+                },
+                f_evaluator_type,
+            )))
+        }
+        CostType::Continuous => {
+            let parameters = BeamSearchParameters::<_, OrderedContinuous> {
+                beam_size,
+                maximize,
+                f_pruning: false,
+                f_bound: None,
+                keep_all_layers,
+                parameters: solver_parameters::parse_from_map(map)?,
+            };
+            Ok(Box::new(ExpressionBeamSearch::new(
+                Rc::new(model),
+                parameters,
+                CustomExpressionParameters {
+                    custom_costs,
+                    forced_custom_costs,
+                    h_expression,
+                    custom_cost_type,
+                },
+                f_evaluator_type,
+            )))
+        }
+    }
 }

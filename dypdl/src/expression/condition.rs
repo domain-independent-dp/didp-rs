@@ -4,7 +4,7 @@ use super::integer_expression::IntegerExpression;
 use super::set_expression::SetExpression;
 use super::table_expression::TableExpression;
 use super::{set_condition, SetCondition};
-use crate::state::{DPState, SetVariable};
+use crate::state::{SetVariable, StateInterface};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
 use std::ops;
@@ -339,8 +339,8 @@ impl Condition {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> bool {
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval<T: StateInterface>(&self, state: &T, registry: &TableRegistry) -> bool {
         match self {
             Self::Constant(value) => *value,
             Self::Not(condition) => !condition.eval(state, registry),
@@ -364,7 +364,7 @@ impl Condition {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> Condition {
         match self {
             Self::Not(c) => match c.simplify(registry) {

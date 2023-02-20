@@ -1,5 +1,5 @@
 use super::table_expression::TableExpression;
-use crate::state::DPState;
+use crate::state::StateInterface;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 
@@ -19,8 +19,8 @@ impl<T: Clone> ReferenceExpression<T> {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<'a, U: DPState, F>(
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval<'a, U: StateInterface, F>(
         &'a self,
         state: &'a U,
         registry: &'a TableRegistry,
@@ -41,7 +41,7 @@ impl<T: Clone> ReferenceExpression<T> {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(
         &self,
         registry: &TableRegistry,

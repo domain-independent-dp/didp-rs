@@ -6,7 +6,7 @@ use super::numeric_operator::{
     BinaryOperator, CastOperator, ContinuousBinaryOperator, ContinuousUnaryOperator, UnaryOperator,
 };
 use super::table_vector_expression::TableVectorExpression;
-use crate::state::DPState;
+use crate::state::StateInterface;
 use crate::table_registry::TableRegistry;
 use crate::variable_type::Continuous;
 use std::boxed::Box;
@@ -87,8 +87,8 @@ impl ContinuousVectorExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<U: DPState>(&self, state: &U, registry: &TableRegistry) -> Vec<Continuous> {
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval<U: StateInterface>(&self, state: &U, registry: &TableRegistry) -> Vec<Continuous> {
         self.eval_inner(None, state, registry)
     }
 
@@ -96,8 +96,8 @@ impl ContinuousVectorExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval_cost<U: DPState>(
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval_cost<U: StateInterface>(
         &self,
         cost: Continuous,
         state: &U,
@@ -106,7 +106,7 @@ impl ContinuousVectorExpression {
         self.eval_inner(Some(cost), state, registry)
     }
 
-    pub fn eval_inner<U: DPState>(
+    pub fn eval_inner<U: StateInterface>(
         &self,
         cost: Option<Continuous>,
         state: &U,
@@ -213,7 +213,7 @@ impl ContinuousVectorExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> ContinuousVectorExpression {
         match self {
             Self::Reverse(vector) => match vector.simplify(registry) {

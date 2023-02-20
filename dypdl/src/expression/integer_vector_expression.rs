@@ -4,7 +4,7 @@ use super::element_expression::ElementExpression;
 use super::integer_expression::IntegerExpression;
 use super::numeric_operator::{BinaryOperator, CastOperator, UnaryOperator};
 use super::table_vector_expression::TableVectorExpression;
-use crate::state::DPState;
+use crate::state::StateInterface;
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Continuous, Integer};
 use std::boxed::Box;
@@ -63,8 +63,8 @@ impl IntegerVectorExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<U: DPState>(&self, state: &U, registry: &TableRegistry) -> Vec<Integer> {
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval<U: StateInterface>(&self, state: &U, registry: &TableRegistry) -> Vec<Integer> {
         self.eval_inner(None, state, registry)
     }
 
@@ -72,8 +72,8 @@ impl IntegerVectorExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval_cost<U: DPState>(
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval_cost<U: StateInterface>(
         &self,
         cost: Integer,
         state: &U,
@@ -82,7 +82,7 @@ impl IntegerVectorExpression {
         self.eval_inner(Some(cost), state, registry)
     }
 
-    pub fn eval_inner<U: DPState>(
+    pub fn eval_inner<U: StateInterface>(
         &self,
         cost: Option<Integer>,
         state: &U,

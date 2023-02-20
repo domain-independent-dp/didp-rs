@@ -3,7 +3,7 @@ use super::numeric_operator::{BinaryOperator, MaxMin};
 use super::reference_expression::ReferenceExpression;
 use super::table_expression::TableExpression;
 use super::vector_expression::VectorExpression;
-use crate::state::{DPState, ElementResourceVariable, ElementVariable};
+use crate::state::{ElementResourceVariable, ElementVariable, StateInterface};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::Element;
@@ -282,8 +282,8 @@ impl ElementExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<T: DPState>(&self, state: &T, registry: &TableRegistry) -> Element {
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval<T: StateInterface>(&self, state: &T, registry: &TableRegistry) -> Element {
         match self {
             Self::Constant(x) => *x,
             Self::Variable(i) => state.get_element_variable(*i),
@@ -324,7 +324,7 @@ impl ElementExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &TableRegistry) -> ElementExpression {
         match self {
             Self::Last(vector) => match vector.simplify(registry) {

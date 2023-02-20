@@ -1,5 +1,5 @@
 use crate::expression;
-use crate::state::DPState;
+use crate::state::StateInterface;
 use crate::table_registry;
 
 /// Condition with element parameters.
@@ -18,8 +18,8 @@ impl GroundedCondition {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn is_satisfied<U: DPState>(
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    pub fn is_satisfied<U: StateInterface>(
         &self,
         state: &U,
         registry: &table_registry::TableRegistry,

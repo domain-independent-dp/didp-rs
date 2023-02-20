@@ -288,12 +288,12 @@ fn parse_vector_from<'a>(
     }
 }
 
-fn parse_vector_operation<'a, 'b, 'c>(
+fn parse_vector_operation<'a, 'b>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &'b StateMetadata,
     registry: &'b TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<Option<(VectorExpression, &'a [String])>, ParseErr> {
     match name {
         "reverse" => {
@@ -331,12 +331,12 @@ fn parse_vector_operation<'a, 'b, 'c>(
     }
 }
 
-fn parse_set_reduce_expression<'a, 'b, 'c>(
+fn parse_set_reduce_expression<'a, 'b>(
     op_name: &str,
     tokens: &'a [String],
     metadata: &'b StateMetadata,
     registry: &'b TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<Option<(SetExpression, &'a [String])>, ParseErr> {
     let op = match op_name {
         "union" => SetReduceOperator::Union,
@@ -399,11 +399,11 @@ fn parse_set_reduce_expression<'a, 'b, 'c>(
     }
 }
 
-pub fn parse_set_expression<'a, 'b, 'c>(
+pub fn parse_set_expression<'a, 'b>(
     tokens: &'a [String],
     metadata: &'b StateMetadata,
     registry: &'b TableRegistry,
-    parameters: &'c FxHashMap<String, usize>,
+    parameters: &FxHashMap<String, usize>,
 ) -> Result<(SetExpression, &'a [String]), ParseErr> {
     let (token, rest) = tokens
         .split_first()

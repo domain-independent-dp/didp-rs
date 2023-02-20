@@ -13,7 +13,7 @@ use yaml_rust::Yaml;
 ///
 /// # Errors
 ///
-/// if the format is invalid.
+/// If the format is invalid.
 pub fn load_grounded_conditions_from_yaml(
     value: &Yaml,
     metadata: &StateMetadata,

@@ -1,0 +1,82 @@
+domain: CVRP
+objects:
+    - customer
+state_variables:
+    - name: unvisited
+      type: set
+      object: customer
+    - name: location
+      type: element
+      object: customer
+    - name: load
+      type: integer
+      preference: less
+    - name: vehicles
+      type: integer
+      preference: less
+tables:
+    - name: max_vehicles
+      type: integer
+    - name: capacity
+      type: integer
+    - name: demand
+      type: integer
+      args:
+          - customer
+    - name: distance
+      type: integer
+      args:
+          - customer
+          - customer
+      default: 0
+    - name: min_distance_to
+      type: integer
+      args:
+          - customer
+    - name: min_distance_from
+      type: integer
+      args:
+          - customer
+base_cases:
+    - - (is_empty unvisited)
+      - (= location 0)
+constraints:
+    - condition: >
+          (>= (+ (* (- max_vehicles vehicles) capacity) capacity)
+              (+ load (sum demand unvisited)))
+reduce: min
+cost_type: integer
+transitions:
+    - name: visit
+      parameters:
+          - name: to
+            object: unvisited
+      preconditions:
+          - (<= (+ load (demand to)) capacity)
+      effect:
+          unvisited: (remove to unvisited)
+          location: to
+          load: (+ load (demand to))
+      cost: (+ cost (distance location to))
+    - name: visit-via-depot
+      parameters:
+          - name: to
+            object: unvisited
+      preconditions:
+          - (< vehicles max_vehicles)
+      effect:
+          unvisited: (remove to unvisited)
+          location: to
+          load: (demand to)
+          vehicles: (+ vehicles 1)
+      cost: (+ cost (+ (distance location 0) (distance 0 to)))
+    - name: return
+      preconditions:
+          - (is_empty unvisited)
+          - (!= location 0)
+      effect:
+          location: 0
+      cost: (+ cost (distance location 0))
+dual_bounds:
+    - (+ (sum min_distance_to unvisited) (if (!= location 0) (min_distance_to 0) 0))
+    - (+ (sum min_distance_from unvisited) (if (!= location 0) (min_distance_from location) 0))

@@ -1,0 +1,37 @@
+domain: graph-clear
+objects:
+  - node
+state_variables:
+  - name: clean
+    type: set
+    object: node
+tables:
+  - name: all-nodes
+    type: set
+    object: node
+  - name: a
+    type: integer
+    args:
+      - node
+  - name: b
+    type: integer
+    args:
+      - node
+      - node
+    default: 0
+base_cases:
+  - - (is_subset all-nodes clean)
+reduce: min
+cost_type: integer
+transitions:
+  - name: sweep
+    parameters:
+      - name: c
+        object: node
+    preconditions:
+      - (not (is_in c clean))
+    effect:
+      clean: (add c clean)
+    cost: (max cost (+ (a c) (+ (sum b c all-nodes) (sum b clean (remove c ~clean)))))
+dual_bounds:
+  - 0

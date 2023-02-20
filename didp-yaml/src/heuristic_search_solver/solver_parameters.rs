@@ -1,12 +1,12 @@
 use crate::util;
 use dypdl::variable_type::{Integer, Numeric};
-use dypdl_heuristic_search::SolverParameters;
+use dypdl_heuristic_search::Parameters;
 use std::fmt;
 use std::str;
 
 pub fn parse_from_map<T: Numeric>(
     map: &linked_hash_map::LinkedHashMap<yaml_rust::Yaml, yaml_rust::Yaml>,
-) -> Result<SolverParameters<T>, util::YamlContentErr>
+) -> Result<Parameters<T>, util::YamlContentErr>
 where
     <T as str::FromStr>::Err: fmt::Debug,
 {
@@ -37,9 +37,20 @@ where
             )))
         }
     };
-    Ok(SolverParameters {
+    let get_all_solutions = match map.get(&yaml_rust::Yaml::from_str("get_all_solutions")) {
+        Some(yaml_rust::Yaml::Boolean(value)) => *value,
+        None => false,
+        value => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected Boolean, but found `{:?}`",
+                value
+            )))
+        }
+    };
+    Ok(Parameters {
         primal_bound,
         time_limit,
+        get_all_solutions,
         quiet,
     })
 }

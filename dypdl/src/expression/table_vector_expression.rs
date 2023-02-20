@@ -5,7 +5,7 @@ use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::util;
 use super::vector_expression::VectorExpression;
-use crate::state::DPState;
+use crate::state::StateInterface;
 use crate::table::Table2D;
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
@@ -51,7 +51,7 @@ pub enum TableVectorExpression<T: Numeric> {
     /// A vector constructed by taking the sum of numeric values over a set in a 2D table.
     //
     /// Given table t, vector x, and set y, construct a numeric vector \[\sum_{i \in s} t\[x_0, i\], ..., \sum_{i \in s} t\[x_{n-1}, i\]\].
-    /// If the length of input vectors are different, the longer ones are runcated.
+    /// If the length of input vectors are different, the longer ones are truncated.
     Table2DXReduce(ReduceOperator, usize, VectorExpression, SetExpression),
     /// A vector constructed by taking the sum of numeric values over a set in a 2D table.
     ///
@@ -59,7 +59,7 @@ pub enum TableVectorExpression<T: Numeric> {
     Table2DYReduce(ReduceOperator, usize, SetExpression, VectorExpression),
     /// A vector constructed by taking the sum of numeric values over sets in a 3D table.
     ///
-    /// If the length of input vectors are different, the longer ones are runcated.
+    /// If the length of input vectors are different, the longer ones are truncated.
     Table3DReduce(
         ReduceOperator,
         usize,
@@ -74,8 +74,8 @@ impl<T: Numeric> TableVectorExpression<T> {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<U: DPState>(
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval<U: StateInterface>(
         &self,
         state: &U,
         registry: &TableRegistry,
@@ -259,7 +259,7 @@ impl<T: Numeric> TableVectorExpression<T> {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(
         &self,
         registry: &TableRegistry,
@@ -398,7 +398,7 @@ impl<T: Numeric> TableVectorExpression<T> {
         }
     }
 
-    fn eval_args<'a, I, U: DPState>(
+    fn eval_args<'a, I, U: StateInterface>(
         args: I,
         state: &U,
         registry: &TableRegistry,
@@ -491,7 +491,7 @@ impl<T: Numeric> TableVectorExpression<T> {
         Some(simplified_args)
     }
 
-    fn eval_sum_args<'a, I, U: DPState>(
+    fn eval_sum_args<'a, I, U: StateInterface>(
         args: I,
         state: &U,
         registry: &TableRegistry,

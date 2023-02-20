@@ -1,3 +1,0 @@
-solver: dual_bound_anytime_beam
-config:
-    time_limit: 1800

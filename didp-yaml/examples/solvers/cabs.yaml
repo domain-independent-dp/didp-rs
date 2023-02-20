@@ -1,0 +1,3 @@
+solver: dual_bound_cabs
+config:
+    time_limit: 1800

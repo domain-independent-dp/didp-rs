@@ -10,7 +10,7 @@ use std::error::Error;
 ///
 /// # Errors
 ///
-/// if the format is invalid.
+/// If the format is invalid.
 pub fn load_base_case_from_yaml(
     value: &yaml_rust::Yaml,
     metadata: &StateMetadata,

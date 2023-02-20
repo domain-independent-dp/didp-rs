@@ -5,12 +5,13 @@ use crate::expression::{
 };
 use crate::grounded_condition;
 use crate::state::{
-    ContinuousResourceVariable, ContinuousVariable, DPState, ElementResourceVariable,
-    ElementVariable, IntegerResourceVariable, IntegerVariable, SetVariable, VectorVariable,
+    ContinuousResourceVariable, ContinuousVariable, ElementResourceVariable, ElementVariable,
+    IntegerResourceVariable, IntegerVariable, SetVariable, State, StateInterface, VectorVariable,
 };
 use crate::table_registry;
 use crate::util::ModelErr;
 use crate::variable_type::{Element, FromNumeric, Numeric};
+use std::fmt::Debug;
 
 /// Wrapper for an integer expression or a continuous expression.
 #[derive(Debug, PartialEq, Clone)]
@@ -42,9 +43,9 @@ impl CostExpression {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     #[inline]
-    pub fn eval<T: Numeric, U: DPState>(
+    pub fn eval<T: Numeric, U: StateInterface>(
         &self,
         state: &U,
         registry: &table_registry::TableRegistry,
@@ -59,8 +60,8 @@ impl CostExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval_cost<T: Numeric, U: DPState>(
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval_cost<T: Numeric, U: StateInterface>(
         &self,
         cost: T,
         state: &U,
@@ -80,13 +81,38 @@ impl CostExpression {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(&self, registry: &table_registry::TableRegistry) -> CostExpression {
         match self {
             Self::Integer(expression) => Self::Integer(expression.simplify(registry)),
             Self::Continuous(expression) => Self::Continuous(expression.simplify(registry)),
         }
     }
+}
+
+/// Trait representing something that may be applicable in a state, e.g., a transition.
+pub trait TransitionInterface {
+    /// Returns true if the transition is applicable and false otherwise.
+    fn is_applicable<T: StateInterface>(
+        &self,
+        state: &T,
+        registry: &table_registry::TableRegistry,
+    ) -> bool;
+
+    /// Returns the transitioned state.
+    fn apply<S: StateInterface, T: From<State>>(
+        &self,
+        state: &S,
+        registry: &table_registry::TableRegistry,
+    ) -> T;
+
+    /// Returns the evaluation result of the cost expression.
+    fn eval_cost<U: Numeric, T: StateInterface>(
+        &self,
+        cost: U,
+        state: &T,
+        registry: &table_registry::TableRegistry,
+    ) -> U;
 }
 
 /// Transition.
@@ -112,13 +138,13 @@ pub struct Transition {
     pub cost: CostExpression,
 }
 
-impl Transition {
+impl TransitionInterface for Transition {
     /// Returns true if the transition is applicable and false otherwise.
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn is_applicable<S: DPState>(
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    fn is_applicable<S: StateInterface>(
         &self,
         state: &S,
         registry: &table_registry::TableRegistry,
@@ -142,33 +168,23 @@ impl Transition {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     #[inline]
-    pub fn apply<S: DPState>(&self, state: &S, registry: &table_registry::TableRegistry) -> S {
-        state.apply_effect(&self.effect, registry)
-    }
-
-    /// Updates a state to the transition state.
-    ///
-    /// # Panics
-    ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    #[inline]
-    pub fn apply_in_place<S: DPState>(
+    fn apply<S: StateInterface, T: From<State>>(
         &self,
-        state: &mut S,
+        state: &S,
         registry: &table_registry::TableRegistry,
-    ) {
-        state.apply_effect_in_place(&self.effect, registry)
+    ) -> T {
+        state.apply_effect(&self.effect, registry)
     }
 
     /// Returns the evaluation result of the cost expression.
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     #[inline]
-    pub fn eval_cost<T: Numeric, S: DPState>(
+    fn eval_cost<T: Numeric, S: StateInterface>(
         &self,
         cost: T,
         state: &S,
@@ -176,7 +192,9 @@ impl Transition {
     ) -> T {
         self.cost.eval_cost(cost, state, registry)
     }
+}
 
+impl Transition {
     /// Returns the name of transition considering parameters.
     pub fn get_full_name(&self) -> String {
         let mut full_name = self.name.clone();
@@ -190,6 +208,7 @@ impl Transition {
         full_name
     }
 
+    /// Returns a new transition with the name.
     pub fn new<T>(name: T) -> Transition
     where
         String: From<T>,
@@ -248,13 +267,13 @@ impl Transition {
     }
 }
 
-/// A trait for adding an effect.
+/// Trait for adding an effect.
 pub trait AddEffect<T, U> {
     /// Adds an effect.
     ///
     /// # Errors
     ///
-    /// if an effect is already defined for the vairable.
+    /// If an effect is already defined for the variable.
     fn add_effect<V>(&mut self, v: T, expression: V) -> Result<(), ModelErr>
     where
         U: From<V>;
@@ -532,7 +551,7 @@ mod tests {
     }
 
     #[test]
-    fn appy_effects() {
+    fn apply_effects() {
         let state = generate_state();
         let registry = generate_registry();
         let set_effect1 = SetExpression::SetElementOperation(
@@ -650,7 +669,7 @@ mod tests {
                 continuous_variables: vec![5.0, 2.5, 6.0],
             },
         };
-        let successor = transition.apply(&state, &registry);
+        let successor: State = transition.apply(&state, &registry);
         assert_eq!(successor, expected);
     }
 

@@ -101,6 +101,7 @@ pub trait MaxMin<Rhs = Self> {
 }
 
 impl BinaryOperator {
+    /// Returns the result of the evaluation.
     pub fn eval<T: Num + PartialOrd>(&self, a: T, b: T) -> T {
         match self {
             BinaryOperator::Add => a + b,
@@ -125,16 +126,20 @@ impl BinaryOperator {
         }
     }
 
+    /// Returns the result of the evaluation with `x` and each element in `y`.
     pub fn eval_operation_x<T: Num + PartialOrd + Copy>(&self, x: T, mut y: Vec<T>) -> Vec<T> {
         y.iter_mut().for_each(|y| *y = self.eval(x, *y));
         y
     }
 
+    /// Returns the result of the evaluation with each element in `x` and `y`.
     pub fn eval_operation_y<T: Num + PartialOrd + Copy>(&self, mut x: Vec<T>, y: T) -> Vec<T> {
         x.iter_mut().for_each(|x| *x = self.eval(*x, y));
         x
     }
 
+    /// Returns the result of the evaluation with each element in `x` and each element in `y`.
+    /// If `y` is longer than `x`, the result is truncated to the length of `x`.
     pub fn eval_vector_operation_in_x<T: Num + PartialOrd + Copy>(
         &self,
         mut x: Vec<T>,
@@ -147,6 +152,8 @@ impl BinaryOperator {
         x
     }
 
+    /// Returns the result of the evaluation with each element in `x` and each element in `y`.
+    /// If `x` is longer than `y`, the result is truncated to the length of `y`.
     pub fn eval_vector_operation_in_y<T: Num + PartialOrd + Copy>(
         &self,
         x: &[T],
@@ -164,7 +171,9 @@ impl BinaryOperator {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ContinuousBinaryOperator {
+    /// Power.
     Pow,
+    /// Logarithm.
     Log,
 }
 
@@ -228,9 +237,13 @@ impl ContinuousBinaryOperator {
 /// Operator to reduce a vector to a single value.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ReduceOperator {
+    /// Summation.
     Sum,
+    /// Product.
     Product,
+    /// Maximum.
     Max,
+    /// Minimum.
     Min,
 }
 
@@ -239,7 +252,7 @@ impl ReduceOperator {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty vector.
+    /// Panics if a min/max reduce operation is performed on an empty vector.
     pub fn eval<T: Num + PartialOrd + Copy + Sum + Product>(&self, vector: &[T]) -> T {
         self.eval_iter(vector.iter().copied()).unwrap()
     }

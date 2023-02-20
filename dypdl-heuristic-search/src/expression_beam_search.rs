@@ -1,173 +1,162 @@
-use super::caasdy::FEvaluatorType;
-use crate::beam::NormalBeam;
-use crate::beam_search;
-use crate::expression_evaluator::ExpressionEvaluator;
-use crate::solver;
-use crate::state_registry::StateInRegistry;
-use crate::successor_generator::SuccessorGenerator;
-use crate::transition_with_custom_cost::TransitionWithCustomCost;
+use super::f_evaluator_type::FEvaluatorType;
+use super::search_algorithm::data_structure::beam::Beam;
+use super::search_algorithm::data_structure::state_registry::StateInRegistry;
+use super::search_algorithm::data_structure::{
+    BeamSearchNode, BeamSearchProblemInstance, SuccessorGenerator, TransitionWithCustomCost,
+};
+use super::search_algorithm::util::Parameters;
+use super::search_algorithm::Search;
+use super::search_algorithm::Solution;
+use super::search_algorithm::{beam_search, BeamSearchParameters};
 use dypdl::variable_type;
 use dypdl::CostType;
-use std::cmp;
 use std::error::Error;
 use std::fmt;
-use std::str;
+use std::rc::Rc;
 
-/// Beam search solver using expressions to compute heuristic values.
-///
-/// This solver does not have a guarantee for optimality.
-pub struct ExpressionBeamSearch<T> {
-    /// Cost expressions defining how to compute g-values for each transition.
-    pub custom_costs: Vec<dypdl::CostExpression>,
-    /// Cost expressions defining how to compute g-values for each forced transition.
-    pub forced_custom_costs: Vec<dypdl::CostExpression>,
-    /// Evaluator using a used-defined expression to compute h-values.
-    pub h_evaluator: ExpressionEvaluator,
-    /// How to combine the g-value and h-value to compute the f-value.
-    pub f_evaluator_type: FEvaluatorType,
-    /// The type of g, h, and f-values.
-    pub custom_cost_type: Option<dypdl::CostType>,
-    /// Beam size.
-    pub beam_sizes: Vec<usize>,
-    /// Maximize or not.
-    pub maximize: bool,
-    /// Common parameters for heuristic search solvers.
-    pub parameters: solver::SolverParameters<T>,
+/// Beam search using user-defined cost functions.
+pub struct ExpressionBeamSearch<T, U>
+where
+    T: variable_type::Numeric + fmt::Display + 'static,
+    U: variable_type::Numeric + fmt::Display + 'static,
+{
+    model: Rc<dypdl::Model>,
+    parameters: BeamSearchParameters<T, U>,
+    custom_expression_parameters: CustomExpressionParameters,
+    f_evaluator_type: FEvaluatorType,
+    terminated: bool,
+    solution: Solution<T>,
 }
 
-impl<T> solver::Solver<T> for ExpressionBeamSearch<T>
+/// Parameters for custom cost expressions.
+pub struct CustomExpressionParameters {
+    /// Custom cost expressions for transitions.
+    pub custom_costs: Vec<dypdl::CostExpression>,
+    /// Custom cost expressions for forced transitions.
+    pub forced_custom_costs: Vec<dypdl::CostExpression>,
+    /// Expression for cost estimate .
+    pub h_expression: Option<dypdl::CostExpression>,
+    /// Type of the custom cost.
+    pub custom_cost_type: CostType,
+}
+
+impl<T, U> ExpressionBeamSearch<T, U>
 where
-    T: variable_type::Numeric + Ord + fmt::Display + 'static,
-    <T as str::FromStr>::Err: fmt::Debug,
+    T: variable_type::Numeric + fmt::Display + 'static,
+    U: variable_type::Numeric + fmt::Display + 'static,
 {
-    fn solve(&mut self, model: &dypdl::Model) -> Result<solver::Solution<T>, Box<dyn Error>> {
-        let generator = SuccessorGenerator::with_custom_costs(
+    /// Create a new beam search solver using user-defined cost functions.
+    pub fn new(
+        model: Rc<dypdl::Model>,
+        parameters: BeamSearchParameters<T, U>,
+        custom_expression_parameters: CustomExpressionParameters,
+        f_evaluator_type: FEvaluatorType,
+    ) -> ExpressionBeamSearch<T, U> {
+        let f_evaluator_type = if custom_expression_parameters.h_expression.is_some() {
+            f_evaluator_type
+        } else {
+            FEvaluatorType::Plus
+        };
+
+        ExpressionBeamSearch {
             model,
-            &self.custom_costs,
-            &self.forced_custom_costs,
-            false,
-        );
-        match self.custom_cost_type {
-            Some(CostType::Integer) => self.solve_inner::<variable_type::Integer>(model, generator),
-            Some(CostType::Continuous) => {
-                self.solve_inner::<variable_type::OrderedContinuous>(model, generator)
-            }
-            None => self.solve_inner::<T>(model, generator),
+            parameters,
+            custom_expression_parameters,
+            f_evaluator_type,
+            terminated: false,
+            solution: Solution::default(),
         }
     }
 
-    #[inline]
-    fn set_primal_bound(&mut self, primal_bound: T) {
-        self.parameters.primal_bound = Some(primal_bound)
-    }
+    fn solve_inner<H>(
+        &self,
+        model: Rc<dypdl::Model>,
+        generator: SuccessorGenerator<TransitionWithCustomCost>,
+        h_evaluator: H,
+    ) -> Solution<T>
+    where
+        U: variable_type::Numeric + Ord + fmt::Display + 'static,
+        H: Fn(&StateInRegistry, &dypdl::Model) -> Option<U>,
+    {
+        let beam_constructor = |beam_size| Beam::<T, U, BeamSearchNode<T, U>>::new(beam_size);
+        let parameters = BeamSearchParameters {
+            beam_size: self.parameters.beam_size,
+            maximize: self.parameters.maximize,
+            keep_all_layers: self.parameters.keep_all_layers,
+            f_pruning: self.parameters.f_pruning,
+            f_bound: None,
+            parameters: Parameters {
+                primal_bound: None,
+                time_limit: self.parameters.parameters.time_limit,
+                get_all_solutions: self.parameters.parameters.get_all_solutions,
+                quiet: self.parameters.parameters.quiet,
+            },
+        };
+        let f_evaluator =
+            move |g, h, _: &StateInRegistry, _: &dypdl::Model| self.f_evaluator_type.eval(g, h);
+        let target = StateInRegistry::from(model.target.clone());
+        let problem = BeamSearchProblemInstance {
+            generator,
+            cost: T::zero(),
+            g: U::zero(),
+            target,
+            solution_suffix: &[],
+        };
+        let solution = beam_search(
+            &problem,
+            &beam_constructor,
+            &h_evaluator,
+            f_evaluator,
+            parameters,
+        );
 
-    #[inline]
-    fn get_primal_bound(&self) -> Option<T> {
-        self.parameters.primal_bound
-    }
-
-    #[inline]
-    fn set_time_limit(&mut self, time_limit: f64) {
-        self.parameters.time_limit = Some(time_limit)
-    }
-
-    #[inline]
-    fn get_time_limit(&self) -> Option<f64> {
-        self.parameters.time_limit
-    }
-
-    #[inline]
-    fn set_quiet(&mut self, quiet: bool) {
-        self.parameters.quiet = quiet
-    }
-
-    #[inline]
-    fn get_quiet(&self) -> bool {
-        self.parameters.quiet
+        Solution {
+            cost: solution.cost,
+            best_bound: solution.best_bound,
+            is_optimal: solution.is_optimal,
+            is_infeasible: solution.is_infeasible,
+            transitions: solution
+                .transitions
+                .into_iter()
+                .map(dypdl::Transition::from)
+                .collect(),
+            expanded: solution.expanded,
+            generated: solution.generated,
+            time: solution.time,
+            time_out: solution.time_out,
+        }
     }
 }
 
-impl<T> ExpressionBeamSearch<T> {
-    fn solve_inner<U>(
-        &self,
-        model: &dypdl::Model,
-        generator: SuccessorGenerator<TransitionWithCustomCost>,
-    ) -> Result<solver::Solution<T>, Box<dyn Error>>
-    where
-        T: variable_type::Numeric + fmt::Display + 'static,
-        <U as str::FromStr>::Err: fmt::Debug,
-        U: variable_type::Numeric + Ord + fmt::Display + 'static,
-    {
-        let beam_constructor = NormalBeam::new;
-        let solution = match self.f_evaluator_type {
-            FEvaluatorType::Plus => {
-                let f_evaluator =
-                    Box::new(|g: U, h: U, _: &StateInRegistry, _: &dypdl::Model| g + h);
-                let evaluators = beam_search::EvaluatorsForBeamSearch {
-                    h_evaluator: self.h_evaluator.clone(),
-                    f_evaluator,
-                };
-                beam_search::iterative_beam_search(
-                    model,
-                    &generator,
-                    &evaluators,
-                    &beam_constructor,
-                    &self.beam_sizes,
-                    self.maximize,
-                    self.parameters,
-                )
-            }
-            FEvaluatorType::Max => {
-                let f_evaluator =
-                    Box::new(|g: U, h: U, _: &StateInRegistry, _: &dypdl::Model| cmp::max(g, h));
-                let evaluators = beam_search::EvaluatorsForBeamSearch {
-                    h_evaluator: self.h_evaluator.clone(),
-                    f_evaluator,
-                };
-                beam_search::iterative_beam_search(
-                    model,
-                    &generator,
-                    &evaluators,
-                    &beam_constructor,
-                    &self.beam_sizes,
-                    self.maximize,
-                    self.parameters,
-                )
-            }
-            FEvaluatorType::Min => {
-                let f_evaluator =
-                    Box::new(|g: U, h: U, _: &StateInRegistry, _: &dypdl::Model| cmp::min(g, h));
-                let evaluators = beam_search::EvaluatorsForBeamSearch {
-                    h_evaluator: self.h_evaluator.clone(),
-                    f_evaluator,
-                };
-                beam_search::iterative_beam_search(
-                    model,
-                    &generator,
-                    &evaluators,
-                    &beam_constructor,
-                    &self.beam_sizes,
-                    self.maximize,
-                    self.parameters,
-                )
-            }
-            FEvaluatorType::Overwrite => {
-                let f_evaluator = Box::new(|_, h: U, _: &StateInRegistry, _: &dypdl::Model| h);
-                let evaluators = beam_search::EvaluatorsForBeamSearch {
-                    h_evaluator: self.h_evaluator.clone(),
-                    f_evaluator,
-                };
-                beam_search::iterative_beam_search(
-                    model,
-                    &generator,
-                    &evaluators,
-                    &beam_constructor,
-                    &self.beam_sizes,
-                    self.maximize,
-                    self.parameters,
-                )
-            }
+impl<T, U> Search<T> for ExpressionBeamSearch<T, U>
+where
+    T: variable_type::Numeric + fmt::Display + 'static,
+    U: variable_type::Numeric + Ord + fmt::Display + 'static,
+{
+    fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
+        if self.terminated {
+            return Ok((self.solution.clone(), true));
+        }
+
+        let generator = SuccessorGenerator::from_model_with_custom_costs(
+            self.model.clone(),
+            &self.custom_expression_parameters.custom_costs,
+            &self.custom_expression_parameters.forced_custom_costs,
+            false,
+        );
+
+        let h_evaluator = |state: &StateInRegistry, model: &dypdl::Model| {
+            Some(
+                self.custom_expression_parameters
+                    .h_expression
+                    .as_ref()
+                    .map_or(U::zero(), |expression| {
+                        expression.eval(state, &model.table_registry)
+                    }),
+            )
         };
-        Ok(solution)
+        let solution = self.solve_inner(self.model.clone(), generator, h_evaluator);
+        self.terminated = true;
+        Ok((solution, true))
     }
 }

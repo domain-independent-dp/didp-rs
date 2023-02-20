@@ -11,33 +11,35 @@ To solve a problem using the DyPDL solver, you need to create three files, `doma
 - [YAML Basics](#yaml-basics)
 - [Forbidden Characters](#forbidden-characters)
 - [Domain YAML](#domain-yaml)
-    - [domain](#domain)
-    - [objects](#objects)
-    - [state_variables](#statevariables)
-    - [tables](#tables)
-    - [constraints](#constraints)
-    - [base_cases](#basecases)
-    - [reduce](#reduce)
-    - [cost_type](#cost_type)
-    - [transitions](#transitions)
-    - [dual_bounds](#dualbounds)
+  - [domain](#domain)
+  - [objects](#objects)
+  - [state_variables](#statevariables)
+  - [tables](#tables)
+  - [constraints](#constraints)
+  - [base_cases](#basecases)
+  - [reduce](#reduce)
+  - [cost_type](#cost_type)
+  - [transitions](#transitions)
+  - [dual_bounds](#dualbounds)
 - [Problem YAML](#problem-yaml)
-    - [domain](#domain-1)
-    - [problem](#problem)
-    - [object_numbers](#objectnumbers)
-    - [table_values](#tablevalues)
-    - [target](#target)
-    - [constraints](#constraints-1)
-    - [base_cases](#basecases-1)
-    - [base_states](#basestates)
-    - [transitions](#transitions)
-    - [dual_bounds](#dualbounds-1)
+  - [domain](#domain-1)
+  - [problem](#problem)
+  - [object_numbers](#objectnumbers)
+  - [table_values](#tablevalues)
+  - [target](#target)
+  - [constraints](#constraints-1)
+  - [base_cases](#basecases-1)
+  - [base_states](#basestates)
+  - [transitions](#transitions)
+  - [dual_bounds](#dualbounds-1)
 
 For a config file, see [the solver guide](./solver-guide.md).
 
 ## YAML Basics
+
 In YAML, you can use boolean, integer, real, and string values, a list of these values, and a map consisting of key-value pairs.
 For example, a menu of a sushi restraunt can be represented by a list of maps as follows:
+
 ```yaml
 - name: maguro
   price: 3
@@ -52,10 +54,12 @@ For example, a menu of a sushi restraunt can be represented by a list of maps as
   description: fried shrimp
   cooked: true
 ```
+
 In YAML, `-` is used to represent an element of a list.
 Data on the left sidef of `:` is a key, and data on the right side of `:` is a value.
 Entries in the same list or  must be indented in the same way.
 If you are familiar with JSON, the above data is equivalent to the following JSON.
+
 ```json
 [
     { "name": "maguro", "price": 3, "description": "tuna", "cooked": false },
@@ -63,8 +67,10 @@ If you are familiar with JSON, the above data is equivalent to the following JSO
     { "name": "tempura", "price": 5, "description": "fried shirmp", "cooked": true }
 ]
 ```
+
 In fact, YAML is compatible with JSON, so you can use JSON format inside YAML.
 For example, the following is a valid YAML file representing the same data.
+
 ```yaml
 - { "name": "maguro", "price": 3, "description": "tuna", "cooked": false }
 - { name: sake, price: 3, description: "salmon", "cooked": false }
@@ -73,11 +79,13 @@ For example, the following is a valid YAML file representing the same data.
   description: fried shrimp
   cooked: true
 ```
+
 In YAML, you do not need to use quotations such as `"` and `'` to represent a string.
 However, in the case you want to explicitly represent a digit as a string you should use them.
-For example, `5` is parsed as an integer, but `"5"` is parsed as a string. 
+For example, `5` is parsed as an integer, but `"5"` is parsed as a string.
 
 ## Forbidden Characters
+
 When defining a name of something such as objects and state variables, it should not include following characters.
 
 - white space
@@ -89,9 +97,11 @@ When defining a name of something such as objects and state variables, it should
 Also, avoid using reserved names used in [expressions](./expression-guide.md)
 
 ## Domain YAML
+
 A domain file is used to define problem features that are shared by multiple problem instances.
 
 ### domain
+
 `domain` is optional, and the value is a string describing the name of the problem domain.
 
 #### Example
@@ -101,6 +111,7 @@ domain: TSPTW
 ```
 
 ### objects
+
 `objects` is optional, and the value  is a list of names of object types.
 An object type represent a particular type of entity in a problem.
 Objects are indexed from `0` to `n-1`, where `n` is defined in the problem file with the [`object_numbers`](#objectnumbers) key.
@@ -113,6 +124,7 @@ objects:
 ```
 
 ### state_variables
+
 `state_variables` is required, and the value is a list of maps describing a state variable.
 Each map can have the following keys:
 
@@ -149,6 +161,7 @@ state_variables:
 ```
 
 ### tables
+
 `tables` is optional, and the value is a list of maps describing a table of constants.
 These values can be accessed from expressions.
 Each map can have the following keys:
@@ -191,6 +204,7 @@ tables:
 ```
 
 ### constraints
+
 `constraints` is optional, and the value is a list of conditions represented by strings or maps.
 It describes conditions that must be satisfied by all states.
 
@@ -223,6 +237,7 @@ constraints:
 ```
 
 ### base_cases
+
 `base_cases` is optinal, and the value is a list of lists of conditions.
 You need to do either defining `base_cases` in a domain file, defining `base_cases` in a problem file, or defining `base_states` in a problem file.
 Each condition is defined in the same way as [`constraints`](#constraints).
@@ -238,27 +253,31 @@ base_cases:
 ```
 
 ### reduce
+
 `reduce` is required, and the value is either of `min` or `max`.
 The name `reduce` comes from the fact that we preform a reduce operation to aggregate the results of cost expressions of applocable transitions.
 `min`/`max` means that the problem is minimization/maximizatoin.
 
-
 #### Example
+
 ```yaml
 reduce: min
 ```
 
 ### cost_type
+
 `cost_type` is required, and the value is either of `integer` or `continuous`.
 If `integer`, integer expressions must be used in cost expressions and dual bounds.
 If `continuous`, continuous expressions can be used.
 
 #### Example
+
 ```yaml
 cost_type: integer
 ```
 
 ### transitions
+
 `transitions` is required, and the value is a list of maps.
 Each map has the following keys.
 
@@ -316,6 +335,7 @@ transitions:
 ```
 
 ### dual_bounds
+
 `dual_bounds` is optional, and the value is a list of integer or continuous expressions depending on the [cost type](#costtype).
 
 #### Example
@@ -326,12 +346,15 @@ dual_bounds:
 ```
 
 ## Problem YAML
+
 A problem file is used to define problem features that are specific to particular problem instances.
 
 ### domain
+
 `domain` is optional, and the value is a string describing the name of the problem domain.
 
 ### problem
+
 `problem` is optional, and the value is a string describing the name of the problem instance.
 
 #### Example
@@ -341,6 +364,7 @@ problem: test-instance
 ```
 
 ### object_numbers
+
 `object_numbers` is optional, and the value is a map describing the numbers of objects.
 This must be defined if [`objects`](#objects) is defined in a domain file.
 The names of all object types must be included as keys in the map.
@@ -354,12 +378,14 @@ object_numbers:
 ```
 
 ### target
+
 `target` is required, and the value is a map defining the target state.
 The objective of an DIDP model is to compute the value of the target state.
 The names of all state variables must be included as keys in the map.
 The value is a list of non-negative integer values for a set variable, an non-negative integer value for an element variable, an integer value if for an integer variable, and a real value for a continuous variable.
 
 ### Example
+
 ```yaml
 target:
       unvisited: [ 1, 2, 3 ]
@@ -368,6 +394,7 @@ target:
 ```
 
 ### table_values
+
 `table_values` is optional, and the value is a map defining the values of tables.
 This must be defined if [`tables`](#tables) is defined in a domain file.
 The names of all tables must be included as keys in the map.
@@ -383,6 +410,7 @@ If you do not include a combination of objects as a key in the map, the default 
 If the default value is not defined, an empty set is used for set tables, and `0` is used for element, integer, and continuous tables.
 
 #### Example
+
 ```yaml
 ready_time: { 0: 0, 1: 10, 2: 100, 3: 1000 }
 due_date: { 1: 20000, 2: 100, 3: 1000 }
@@ -392,16 +420,19 @@ distance: { [0, 1]: 10, [0, 2]: 20, [0, 3]: 30, [1, 0]: 10, [1, 2]: 30, [1, 3]: 
 In this case, if you use `(due_date 0)` or `(distance 0 0)` in an expression, it returns the default value.
 
 ### base_cases
+
 `base_case` is optional, and the value is defined exactly the same as in [`base_cases` in a domain file](#basecases).
 You need to do either defining `base_cases` in a domain file, defining `base_cases` in a problem file, or defining `base_states` in a problem file.
 
 ### base_states
+
 `base_states` is optional, and the value is a list of maps describing base states.
 Each map is defined exactly the same as in [`target`](#target).
 You need to do either defining `base_cases` in a domain file, defining `base_cases` in a problem file, or defining `base_states` in a problem file.
 With `base_states`, you can define base cases by directly using states.
 
 #### Example
+
 ```yaml
 target:
       unvisited: []
@@ -410,4 +441,5 @@ target:
 ```
 
 ### dual_bounds
+
 `dual_bounds` is optional, and the value is defined exactly the same as in [`dual_bounds` in a domain file](#dualbounds).

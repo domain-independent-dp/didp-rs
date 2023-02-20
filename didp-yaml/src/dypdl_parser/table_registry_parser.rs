@@ -21,7 +21,7 @@ enum TableReturnType {
 ///
 /// # Errors
 ///
-/// if the format is invalid.
+/// If the format is invalid.
 pub fn load_table_registry_from_yaml(
     tables: &Yaml,
     table_values: &Yaml,

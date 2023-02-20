@@ -26,65 +26,69 @@ define_table_handle!(Table2DHandle);
 define_table_handle!(Table3DHandle);
 define_table_handle!(TableHandle);
 
-/// A trait for adding and updating tables of constants.
+/// Trait for adding and updating tables of constants.
 pub trait TableInterface<T> {
     /// Adds and returns a 1D table.
     ///
     /// # Errors
     ///
-    /// if the name is already used.
+    /// If the name is already used.
     fn add_table_1d<U>(&mut self, name: U, v: Vec<T>) -> Result<Table1DHandle<T>, ModelErr>
     where
         String: From<U>;
 
-    /// Set an item in a 1D table.
-    ///
-    /// # Errors
-    ///
-    /// if the table is not in the model.
-    fn set_table_1d(&mut self, t: Table1DHandle<T>, x: Element, v: T) -> Result<(), ModelErr>;
+    // Disabled since it conflicts with the simplification of an expression.
+    // /// Set an item in a 1D table.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the table is not in the model.
+    // fn set_table_1d(&mut self, t: Table1DHandle<T>, x: Element, v: T) -> Result<(), ModelErr>;
 
-    /// Update a 1D table.
-    ///
-    /// # Errors
-    ///
-    /// if the table is not in the model.
-    fn update_table_1d(&mut self, t: Table1DHandle<T>, v: Vec<T>) -> Result<(), ModelErr>;
+    // Disabled since it conflicts with the simplification of an expression.
+    // /// Update a 1D table.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the table is not in the model.
+    // fn update_table_1d(&mut self, t: Table1DHandle<T>, v: Vec<T>) -> Result<(), ModelErr>;
 
     /// Adds and returns a 2D table.
     ///
     /// # Errors
     ///
-    /// if the name is already used.
+    /// If the name is already used.
     fn add_table_2d<U>(&mut self, name: U, v: Vec<Vec<T>>) -> Result<Table2DHandle<T>, ModelErr>
     where
         String: From<U>;
 
-    /// Set an item in a 2D table.
-    ///
-    /// # Errors
-    ///
-    /// if the table is not in the model.
-    fn set_table_2d(
-        &mut self,
-        t: Table2DHandle<T>,
-        x: Element,
-        y: Element,
-        v: T,
-    ) -> Result<(), ModelErr>;
+    // Disabled since it conflicts with the simplification of an expression.
+    // /// Set an item in a 2D table.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the table is not in the model.
+    // fn set_table_2d(
+    //     &mut self,
+    //     t: Table2DHandle<T>,
+    //     x: Element,
+    //     y: Element,
+    //     v: T,
+    // ) -> Result<(), ModelErr>;
 
-    /// Update a 2D table.
-    ///
-    /// # Errors
-    ///
-    /// if the table is not in the model.
-    fn update_table_2d(&mut self, t: Table2DHandle<T>, v: Vec<Vec<T>>) -> Result<(), ModelErr>;
+    // Disabled since it conflicts with the simplification of an expression.
+    // /// Update a 2D table.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the table is not in the model.
+    // fn update_table_2d(&mut self, t: Table2DHandle<T>, v: Vec<Vec<T>>) -> Result<(), ModelErr>;
 
     /// Adds and returns a 3D table.
     ///
     /// # Errors
     ///
-    /// if the name is already used.
+    /// If the name is already used.
     fn add_table_3d<U>(
         &mut self,
         name: U,
@@ -93,33 +97,35 @@ pub trait TableInterface<T> {
     where
         String: From<U>;
 
-    /// Set an item in a 3D table.
-    ///
-    /// # Errors
-    ///
-    /// if the table is not in the model.
-    fn set_table_3d(
-        &mut self,
-        t: Table3DHandle<T>,
-        x: Element,
-        y: Element,
-        z: Element,
-        v: T,
-    ) -> Result<(), ModelErr>;
+    // Disabled since it conflicts with the simplification of an expression.
+    // /// Set an item in a 3D table.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the table is not in the model.
+    // fn set_table_3d(
+    //     &mut self,
+    //     t: Table3DHandle<T>,
+    //     x: Element,
+    //     y: Element,
+    //     z: Element,
+    //     v: T,
+    // ) -> Result<(), ModelErr>;
 
-    /// Update a 3D table.
-    ///
-    /// # Errors
-    ///
-    /// if the table is not in the model.
-    fn update_table_3d(&mut self, t: Table3DHandle<T>, v: Vec<Vec<Vec<T>>>)
-        -> Result<(), ModelErr>;
+    // Disabled since it conflicts with the simplification of an expression.
+    // /// Update a 3D table.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the table is not in the model.
+    // fn update_table_3d(&mut self, t: Table3DHandle<T>, v: Vec<Vec<Vec<T>>>)
+    //     -> Result<(), ModelErr>;
 
     /// Adds and returns a 3D table.
     ///
     /// # Errors
     ///
-    /// if the name is already used.
+    /// If the name is already used.
     fn add_table<U>(
         &mut self,
         name: U,
@@ -129,31 +135,34 @@ pub trait TableInterface<T> {
     where
         String: From<U>;
 
-    /// Set an item in a table.
-    ///
-    /// # Errors
-    ///
-    /// if the table is not in the model.
-    fn set_table(&mut self, t: TableHandle<T>, key: Vec<Element>, v: T) -> Result<(), ModelErr>;
+    // Disabled since it conflicts with the simplification of an expression.
+    // /// Set an item in a table.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the table is not in the model.
+    // fn set_table(&mut self, t: TableHandle<T>, key: Vec<Element>, v: T) -> Result<(), ModelErr>;
 
-    /// Set the default value of a table.
-    ///
-    /// # Errors
-    ///
-    /// if the table is not in the model.
-    fn set_default(&mut self, t: TableHandle<T>, default: T) -> Result<(), ModelErr>;
+    // Disabled since it conflicts with the simplification of an expression.
+    // /// Set the default value of a table.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the table is not in the model.
+    // fn set_default(&mut self, t: TableHandle<T>, default: T) -> Result<(), ModelErr>;
 
-    /// Update a table.
-    ///
-    /// # Errors
-    ///
-    /// if the table is not in the model.
-    fn update_table(
-        &mut self,
-        t: TableHandle<T>,
-        map: FxHashMap<Vec<Element>, T>,
-        default: T,
-    ) -> Result<(), ModelErr>;
+    // Disabled since it conflicts with the simplification of an expression.
+    // /// Update a table.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the table is not in the model.
+    // fn update_table(
+    //     &mut self,
+    //     t: TableHandle<T>,
+    //     map: FxHashMap<Vec<Element>, T>,
+    //     default: T,
+    // ) -> Result<(), ModelErr>;
 }
 
 /// Tables of constants havint a particular type.
@@ -193,23 +202,23 @@ impl<T> TableInterface<T> for TableData<T> {
         }
     }
 
-    fn set_table_1d(&mut self, t: Table1DHandle<T>, x: Element, v: T) -> Result<(), ModelErr> {
-        self.check_table_1d(t.id())?;
-        self.tables_1d[t.id()].set(x, v);
-        Ok(())
-    }
+    // fn set_table_1d(&mut self, t: Table1DHandle<T>, x: Element, v: T) -> Result<(), ModelErr> {
+    //     self.check_table_1d(t.id())?;
+    //     self.tables_1d[t.id()].set(x, v);
+    //     Ok(())
+    // }
 
-    fn update_table_1d(&mut self, t: Table1DHandle<T>, v: Vec<T>) -> Result<(), ModelErr> {
-        self.check_table_1d(t.id())?;
-        if v.is_empty() {
-            return Err(ModelErr::new(format!(
-                "1D table with id `{}` is updated to be empty",
-                t.id()
-            )));
-        }
-        self.tables_1d[t.id()].update(v);
-        Ok(())
-    }
+    // fn update_table_1d(&mut self, t: Table1DHandle<T>, v: Vec<T>) -> Result<(), ModelErr> {
+    //     self.check_table_1d(t.id())?;
+    //     if v.is_empty() {
+    //         return Err(ModelErr::new(format!(
+    //             "1D table with id `{}` is updated to be empty",
+    //             t.id()
+    //         )));
+    //     }
+    //     self.tables_1d[t.id()].update(v);
+    //     Ok(())
+    // }
 
     fn add_table_2d<U>(&mut self, name: U, v: Vec<Vec<T>>) -> Result<Table2DHandle<T>, ModelErr>
     where
@@ -233,29 +242,29 @@ impl<T> TableInterface<T> for TableData<T> {
         }
     }
 
-    fn set_table_2d(
-        &mut self,
-        t: Table2DHandle<T>,
-        x: Element,
-        y: Element,
-        v: T,
-    ) -> Result<(), ModelErr> {
-        self.check_table_2d(t.id())?;
-        self.tables_2d[t.id()].set(x, y, v);
-        Ok(())
-    }
+    // fn set_table_2d(
+    //     &mut self,
+    //     t: Table2DHandle<T>,
+    //     x: Element,
+    //     y: Element,
+    //     v: T,
+    // ) -> Result<(), ModelErr> {
+    //     self.check_table_2d(t.id())?;
+    //     self.tables_2d[t.id()].set(x, y, v);
+    //     Ok(())
+    // }
 
-    fn update_table_2d(&mut self, t: Table2DHandle<T>, v: Vec<Vec<T>>) -> Result<(), ModelErr> {
-        self.check_table_2d(t.id())?;
-        if v.is_empty() || v[0].is_empty() {
-            return Err(ModelErr::new(format!(
-                "2D table with id `{}` is updated to be empty",
-                t.id()
-            )));
-        }
-        self.tables_2d[t.id()].update(v);
-        Ok(())
-    }
+    // fn update_table_2d(&mut self, t: Table2DHandle<T>, v: Vec<Vec<T>>) -> Result<(), ModelErr> {
+    //     self.check_table_2d(t.id())?;
+    //     if v.is_empty() || v[0].is_empty() {
+    //         return Err(ModelErr::new(format!(
+    //             "2D table with id `{}` is updated to be empty",
+    //             t.id()
+    //         )));
+    //     }
+    //     self.tables_2d[t.id()].update(v);
+    //     Ok(())
+    // }
 
     fn add_table_3d<U>(
         &mut self,
@@ -283,34 +292,34 @@ impl<T> TableInterface<T> for TableData<T> {
         }
     }
 
-    fn set_table_3d(
-        &mut self,
-        t: Table3DHandle<T>,
-        x: Element,
-        y: Element,
-        z: Element,
-        v: T,
-    ) -> Result<(), ModelErr> {
-        self.check_table_3d(t.id())?;
-        self.tables_3d[t.id()].set(x, y, z, v);
-        Ok(())
-    }
+    // fn set_table_3d(
+    //     &mut self,
+    //     t: Table3DHandle<T>,
+    //     x: Element,
+    //     y: Element,
+    //     z: Element,
+    //     v: T,
+    // ) -> Result<(), ModelErr> {
+    //     self.check_table_3d(t.id())?;
+    //     self.tables_3d[t.id()].set(x, y, z, v);
+    //     Ok(())
+    // }
 
-    fn update_table_3d(
-        &mut self,
-        t: Table3DHandle<T>,
-        v: Vec<Vec<Vec<T>>>,
-    ) -> Result<(), ModelErr> {
-        self.check_table_3d(t.id())?;
-        if v.is_empty() || v[0].is_empty() || v[0][0].is_empty() {
-            return Err(ModelErr::new(format!(
-                "3D table with id `{}` is updated to be empty",
-                t.id()
-            )));
-        }
-        self.tables_3d[t.id()].update(v);
-        Ok(())
-    }
+    // fn update_table_3d(
+    //     &mut self,
+    //     t: Table3DHandle<T>,
+    //     v: Vec<Vec<Vec<T>>>,
+    // ) -> Result<(), ModelErr> {
+    //     self.check_table_3d(t.id())?;
+    //     if v.is_empty() || v[0].is_empty() || v[0][0].is_empty() {
+    //         return Err(ModelErr::new(format!(
+    //             "3D table with id `{}` is updated to be empty",
+    //             t.id()
+    //         )));
+    //     }
+    //     self.tables_3d[t.id()].update(v);
+    //     Ok(())
+    // }
 
     fn add_table<U>(
         &mut self,
@@ -333,28 +342,28 @@ impl<T> TableInterface<T> for TableData<T> {
         }
     }
 
-    fn set_table(&mut self, t: TableHandle<T>, key: Vec<Element>, v: T) -> Result<(), ModelErr> {
-        self.check_table(t.id())?;
-        self.tables[t.id()].set(key, v);
-        Ok(())
-    }
+    // fn set_table(&mut self, t: TableHandle<T>, key: Vec<Element>, v: T) -> Result<(), ModelErr> {
+    //     self.check_table(t.id())?;
+    //     self.tables[t.id()].set(key, v);
+    //     Ok(())
+    // }
 
-    fn set_default(&mut self, t: TableHandle<T>, default: T) -> Result<(), ModelErr> {
-        self.check_table(t.id())?;
-        self.tables[t.id()].set_default(default);
-        Ok(())
-    }
+    // fn set_default(&mut self, t: TableHandle<T>, default: T) -> Result<(), ModelErr> {
+    //     self.check_table(t.id())?;
+    //     self.tables[t.id()].set_default(default);
+    //     Ok(())
+    // }
 
-    fn update_table(
-        &mut self,
-        t: TableHandle<T>,
-        map: FxHashMap<Vec<Element>, T>,
-        default: T,
-    ) -> Result<(), ModelErr> {
-        self.check_table(t.id())?;
-        self.tables[t.id()].update(map, default);
-        Ok(())
-    }
+    // fn update_table(
+    //     &mut self,
+    //     t: TableHandle<T>,
+    //     map: FxHashMap<Vec<Element>, T>,
+    //     default: T,
+    // ) -> Result<(), ModelErr> {
+    //     self.check_table(t.id())?;
+    //     self.tables[t.id()].update(map, default);
+    //     Ok(())
+    // }
 }
 
 impl<T> TableData<T> {
@@ -383,7 +392,7 @@ impl<T> TableData<T> {
     ///
     /// # Errors
     ///
-    /// if the id is not used.
+    /// If the id is not used.
     pub fn check_table_1d(&self, id: usize) -> Result<(), ModelErr> {
         let n = self.tables_1d.len();
         if id >= n {
@@ -400,7 +409,7 @@ impl<T> TableData<T> {
     ///
     /// # Errors
     ///
-    /// if the id is not used.
+    /// If the id is not used.
     pub fn check_table_2d(&self, id: usize) -> Result<(), ModelErr> {
         let n = self.tables_2d.len();
         if id >= n {
@@ -417,7 +426,7 @@ impl<T> TableData<T> {
     ///
     /// # Errors
     ///
-    /// if the id is not used.
+    /// If the id is not used.
     pub fn check_table_3d(&self, id: usize) -> Result<(), ModelErr> {
         let n = self.tables_3d.len();
         if id >= n {
@@ -434,7 +443,7 @@ impl<T> TableData<T> {
     ///
     /// # Errors
     ///
-    /// if the id is not used.
+    /// If the id is not used.
     pub fn check_table(&self, id: usize) -> Result<(), ModelErr> {
         let n = self.tables.len();
         if id >= n {
@@ -589,72 +598,72 @@ mod tests {
         assert_eq!(table_data.name_to_table_1d, name_to_table);
     }
 
-    #[test]
-    fn set_table_1d_ok() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.set_table_1d(t, 0, 1);
-        assert!(result.is_ok());
-        assert_eq!(table_data.tables_1d, vec![Table1D::new(vec![1, 1])]);
-    }
+    // #[test]
+    // fn set_table_1d_ok() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.set_table_1d(t, 0, 1);
+    //     assert!(result.is_ok());
+    //     assert_eq!(table_data.tables_1d, vec![Table1D::new(vec![1, 1])]);
+    // }
 
-    #[test]
-    fn set_table_1d_err() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_1d_err() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
 
-        let mut table_data1 = TableData::default();
-        let t = table_data1.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = table_data1.add_table_1d(String::from("t2"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.set_table_1d(t, 0, 1);
-        assert!(result.is_err());
-        assert_eq!(table_data.tables_1d, vec![Table1D::new(vec![0, 1])]);
-    }
+    //     let mut table_data1 = TableData::default();
+    //     let t = table_data1.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = table_data1.add_table_1d(String::from("t2"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.set_table_1d(t, 0, 1);
+    //     assert!(result.is_err());
+    //     assert_eq!(table_data.tables_1d, vec![Table1D::new(vec![0, 1])]);
+    // }
 
-    #[test]
-    fn update_table_1d_ok() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.update_table_1d(t, vec![1, 1]);
-        assert!(result.is_ok());
-        assert_eq!(table_data.tables_1d, vec![Table1D::new(vec![1, 1])]);
-    }
+    // #[test]
+    // fn update_table_1d_ok() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.update_table_1d(t, vec![1, 1]);
+    //     assert!(result.is_ok());
+    //     assert_eq!(table_data.tables_1d, vec![Table1D::new(vec![1, 1])]);
+    // }
 
-    #[test]
-    fn update_table_1d_err() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_1d_err() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
 
-        let mut table_data1 = TableData::default();
-        let t = table_data1.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = table_data1.add_table_1d(String::from("t2"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.update_table_1d(t, vec![1, 1]);
-        assert!(result.is_err());
-        assert_eq!(table_data.tables_1d, vec![Table1D::new(vec![0, 1])]);
-    }
+    //     let mut table_data1 = TableData::default();
+    //     let t = table_data1.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = table_data1.add_table_1d(String::from("t2"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.update_table_1d(t, vec![1, 1]);
+    //     assert!(result.is_err());
+    //     assert_eq!(table_data.tables_1d, vec![Table1D::new(vec![0, 1])]);
+    // }
 
-    #[test]
-    fn update_table_1d_empty_err() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_1d(String::from("t1"), vec![0, 1]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.update_table_1d(t, vec![]);
-        assert!(result.is_err());
-        assert_eq!(table_data.tables_1d, vec![Table1D::new(vec![0, 1])]);
-    }
+    // #[test]
+    // fn update_table_1d_empty_err() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_1d(String::from("t1"), vec![0, 1]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.update_table_1d(t, vec![]);
+    //     assert!(result.is_err());
+    //     assert_eq!(table_data.tables_1d, vec![Table1D::new(vec![0, 1])]);
+    // }
 
     #[test]
     fn add_table_2d_ok() {
@@ -715,83 +724,83 @@ mod tests {
         assert_eq!(table_data.name_to_table_2d, name_to_table);
     }
 
-    #[test]
-    fn set_table_2d_ok() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.set_table_2d(t, 0, 0, 1);
-        assert!(result.is_ok());
-        assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![1, 1]])]);
-    }
+    // #[test]
+    // fn set_table_2d_ok() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.set_table_2d(t, 0, 0, 1);
+    //     assert!(result.is_ok());
+    //     assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![1, 1]])]);
+    // }
 
-    #[test]
-    fn set_table_2d_err() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_2d_err() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
 
-        let mut table_data1 = TableData::default();
-        let t = table_data1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = table_data1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.set_table_2d(t, 0, 0, 1);
-        assert!(result.is_err());
-        assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![0, 1]])]);
-    }
+    //     let mut table_data1 = TableData::default();
+    //     let t = table_data1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = table_data1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.set_table_2d(t, 0, 0, 1);
+    //     assert!(result.is_err());
+    //     assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![0, 1]])]);
+    // }
 
-    #[test]
-    fn update_table_2d_ok() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.update_table_2d(t, vec![vec![1, 1]]);
-        assert!(result.is_ok());
-        assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![1, 1]])]);
-    }
+    // #[test]
+    // fn update_table_2d_ok() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.update_table_2d(t, vec![vec![1, 1]]);
+    //     assert!(result.is_ok());
+    //     assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![1, 1]])]);
+    // }
 
-    #[test]
-    fn update_table_2d_err() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_2d_err() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
 
-        let mut table_data1 = TableData::default();
-        let t = table_data1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = table_data1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.update_table_2d(t, vec![vec![1, 1]]);
-        assert!(result.is_err());
-        assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![0, 1]])]);
-    }
+    //     let mut table_data1 = TableData::default();
+    //     let t = table_data1.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = table_data1.add_table_2d(String::from("t2"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.update_table_2d(t, vec![vec![1, 1]]);
+    //     assert!(result.is_err());
+    //     assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![0, 1]])]);
+    // }
 
-    #[test]
-    fn update_table_2d_empty_1d_ok() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.update_table_2d(t, vec![]);
-        assert!(result.is_err());
-        assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![0, 1]])]);
-    }
+    // #[test]
+    // fn update_table_2d_empty_1d_ok() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.update_table_2d(t, vec![]);
+    //     assert!(result.is_err());
+    //     assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![0, 1]])]);
+    // }
 
-    #[test]
-    fn update_table_2d_empty_2d_ok() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.update_table_2d(t, vec![vec![]]);
-        assert!(result.is_err());
-        assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![0, 1]])]);
-    }
+    // #[test]
+    // fn update_table_2d_empty_2d_ok() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_2d(String::from("t1"), vec![vec![0, 1]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.update_table_2d(t, vec![vec![]]);
+    //     assert!(result.is_err());
+    //     assert_eq!(table_data.tables_2d, vec![Table2D::new(vec![vec![0, 1]])]);
+    // }
 
     #[test]
     fn add_table_3d_ok() {
@@ -868,112 +877,112 @@ mod tests {
         assert_eq!(table_data.name_to_table_3d, name_to_table);
     }
 
-    #[test]
-    fn set_table_3d_ok() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.set_table_3d(t, 0, 0, 0, 1);
-        assert!(result.is_ok());
-        assert_eq!(
-            table_data.tables_3d,
-            vec![Table3D::new(vec![vec![vec![1, 1]]])]
-        );
-    }
+    // #[test]
+    // fn set_table_3d_ok() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.set_table_3d(t, 0, 0, 0, 1);
+    //     assert!(result.is_ok());
+    //     assert_eq!(
+    //         table_data.tables_3d,
+    //         vec![Table3D::new(vec![vec![vec![1, 1]]])]
+    //     );
+    // }
 
-    #[test]
-    fn set_table_3d_err() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_3d_err() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
 
-        let mut table_data1 = TableData::default();
-        let t = table_data1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = table_data1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.set_table_3d(t, 0, 0, 0, 1);
-        assert!(result.is_err());
-        assert_eq!(
-            table_data.tables_3d,
-            vec![Table3D::new(vec![vec![vec![0, 1]]])]
-        );
-    }
+    //     let mut table_data1 = TableData::default();
+    //     let t = table_data1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = table_data1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.set_table_3d(t, 0, 0, 0, 1);
+    //     assert!(result.is_err());
+    //     assert_eq!(
+    //         table_data.tables_3d,
+    //         vec![Table3D::new(vec![vec![vec![0, 1]]])]
+    //     );
+    // }
 
-    #[test]
-    fn update_table_3d_ok() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.update_table_3d(t, vec![vec![vec![1, 1]]]);
-        assert!(result.is_ok());
-        assert_eq!(
-            table_data.tables_3d,
-            vec![Table3D::new(vec![vec![vec![1, 1]]])]
-        );
-    }
+    // #[test]
+    // fn update_table_3d_ok() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.update_table_3d(t, vec![vec![vec![1, 1]]]);
+    //     assert!(result.is_ok());
+    //     assert_eq!(
+    //         table_data.tables_3d,
+    //         vec![Table3D::new(vec![vec![vec![1, 1]]])]
+    //     );
+    // }
 
-    #[test]
-    fn update_table_3d_err() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_3d_err() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
 
-        let mut table_data1 = TableData::default();
-        let t = table_data1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = table_data1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.update_table_3d(t, vec![vec![vec![1, 1]]]);
-        assert!(result.is_err());
-        assert_eq!(
-            table_data.tables_3d,
-            vec![Table3D::new(vec![vec![vec![0, 1]]])]
-        );
-    }
+    //     let mut table_data1 = TableData::default();
+    //     let t = table_data1.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = table_data1.add_table_3d(String::from("t2"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.update_table_3d(t, vec![vec![vec![1, 1]]]);
+    //     assert!(result.is_err());
+    //     assert_eq!(
+    //         table_data.tables_3d,
+    //         vec![Table3D::new(vec![vec![vec![0, 1]]])]
+    //     );
+    // }
 
-    #[test]
-    fn update_table_3d_empty_1d_err() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = table_data.add_table_3d(String::from("t2"), vec![]);
-        assert!(t.is_err());
-        assert_eq!(
-            table_data.tables_3d,
-            vec![Table3D::new(vec![vec![vec![0, 1]]])]
-        );
-    }
+    // #[test]
+    // fn update_table_3d_empty_1d_err() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = table_data.add_table_3d(String::from("t2"), vec![]);
+    //     assert!(t.is_err());
+    //     assert_eq!(
+    //         table_data.tables_3d,
+    //         vec![Table3D::new(vec![vec![vec![0, 1]]])]
+    //     );
+    // }
 
-    #[test]
-    fn update_table_3d_empty_2d_err() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = table_data.add_table_3d(String::from("t2"), vec![vec![]]);
-        assert!(t.is_err());
-        assert_eq!(
-            table_data.tables_3d,
-            vec![Table3D::new(vec![vec![vec![0, 1]]])]
-        );
-    }
+    // #[test]
+    // fn update_table_3d_empty_2d_err() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = table_data.add_table_3d(String::from("t2"), vec![vec![]]);
+    //     assert!(t.is_err());
+    //     assert_eq!(
+    //         table_data.tables_3d,
+    //         vec![Table3D::new(vec![vec![vec![0, 1]]])]
+    //     );
+    // }
 
-    #[test]
-    fn update_table_3d_empty_3d_err() {
-        let mut table_data = TableData::default();
-        let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
-        assert!(t.is_ok());
-        let t = table_data.add_table_3d(String::from("t2"), vec![vec![vec![]]]);
-        assert!(t.is_err());
-        assert_eq!(
-            table_data.tables_3d,
-            vec![Table3D::new(vec![vec![vec![0, 1]]])]
-        );
-    }
+    // #[test]
+    // fn update_table_3d_empty_3d_err() {
+    //     let mut table_data = TableData::default();
+    //     let t = table_data.add_table_3d(String::from("t1"), vec![vec![vec![0, 1]]]);
+    //     assert!(t.is_ok());
+    //     let t = table_data.add_table_3d(String::from("t2"), vec![vec![vec![]]]);
+    //     assert!(t.is_err());
+    //     assert_eq!(
+    //         table_data.tables_3d,
+    //         vec![Table3D::new(vec![vec![vec![0, 1]]])]
+    //     );
+    // }
 
     #[test]
     fn add_table_ok() {
@@ -1017,106 +1026,106 @@ mod tests {
         assert_eq!(table_data.name_to_table, name_to_table);
     }
 
-    #[test]
-    fn set_table_ok() {
-        let mut table_data = TableData::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = table_data.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.set_table(t, vec![0, 0, 0, 0], 1);
-        assert!(result.is_ok());
-        map.insert(vec![0, 0, 0, 0], 1);
-        assert_eq!(table_data.tables, vec![Table::new(map, 0)]);
-    }
+    // #[test]
+    // fn set_table_ok() {
+    //     let mut table_data = TableData::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = table_data.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.set_table(t, vec![0, 0, 0, 0], 1);
+    //     assert!(result.is_ok());
+    //     map.insert(vec![0, 0, 0, 0], 1);
+    //     assert_eq!(table_data.tables, vec![Table::new(map, 0)]);
+    // }
 
-    #[test]
-    fn set_table_err() {
-        let mut table_data = TableData::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = table_data.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_table_err() {
+    //     let mut table_data = TableData::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = table_data.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut table_data1 = TableData::default();
-        let t = table_data1.add_table(String::from("t1"), map.clone(), 1);
-        assert!(t.is_ok());
-        let t = table_data1.add_table(String::from("t2"), map.clone(), 2);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.set_table(t, vec![0, 0, 0, 0], 1);
-        assert!(result.is_err());
-        assert_eq!(table_data.tables, vec![Table::new(map, 0)]);
-    }
+    //     let mut table_data1 = TableData::default();
+    //     let t = table_data1.add_table(String::from("t1"), map.clone(), 1);
+    //     assert!(t.is_ok());
+    //     let t = table_data1.add_table(String::from("t2"), map.clone(), 2);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.set_table(t, vec![0, 0, 0, 0], 1);
+    //     assert!(result.is_err());
+    //     assert_eq!(table_data.tables, vec![Table::new(map, 0)]);
+    // }
 
-    #[test]
-    fn set_default_ok() {
-        let mut table_data = TableData::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = table_data.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.set_default(t, 1);
-        assert!(result.is_ok());
-        assert_eq!(table_data.tables, vec![Table::new(map, 1)]);
-    }
+    // #[test]
+    // fn set_default_ok() {
+    //     let mut table_data = TableData::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = table_data.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.set_default(t, 1);
+    //     assert!(result.is_ok());
+    //     assert_eq!(table_data.tables, vec![Table::new(map, 1)]);
+    // }
 
-    #[test]
-    fn set_default_err() {
-        let mut table_data = TableData::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = table_data.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    // #[test]
+    // fn set_default_err() {
+    //     let mut table_data = TableData::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = table_data.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut table_data1 = TableData::default();
-        let t = table_data1.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = table_data1.add_table(String::from("t2"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let result = table_data.set_default(t, 1);
-        assert!(result.is_err());
-        assert_eq!(table_data.tables, vec![Table::new(map, 0)]);
-    }
+    //     let mut table_data1 = TableData::default();
+    //     let t = table_data1.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = table_data1.add_table(String::from("t2"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let result = table_data.set_default(t, 1);
+    //     assert!(result.is_err());
+    //     assert_eq!(table_data.tables, vec![Table::new(map, 0)]);
+    // }
 
-    #[test]
-    fn update_table_ok() {
-        let mut table_data = TableData::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = table_data.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 2);
-        let result = table_data.update_table(t, map.clone(), 1);
-        assert!(result.is_ok());
-        assert_eq!(table_data.tables, vec![Table::new(map, 1)]);
-    }
+    // #[test]
+    // fn update_table_ok() {
+    //     let mut table_data = TableData::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = table_data.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 2);
+    //     let result = table_data.update_table(t, map.clone(), 1);
+    //     assert!(result.is_ok());
+    //     assert_eq!(table_data.tables, vec![Table::new(map, 1)]);
+    // }
 
-    #[test]
-    fn update_table_err() {
-        let mut table_data = TableData::default();
-        let mut map = FxHashMap::default();
-        map.insert(vec![0, 0, 0, 1], 1);
-        let t = table_data.add_table(String::from("t1"), map.clone(), 0);
-        assert!(t.is_ok());
+    // #[test]
+    // fn update_table_err() {
+    //     let mut table_data = TableData::default();
+    //     let mut map = FxHashMap::default();
+    //     map.insert(vec![0, 0, 0, 1], 1);
+    //     let t = table_data.add_table(String::from("t1"), map.clone(), 0);
+    //     assert!(t.is_ok());
 
-        let mut table_data1 = TableData::default();
-        let t = table_data1.add_table(String::from("t1"), map.clone(), 1);
-        assert!(t.is_ok());
-        let t = table_data1.add_table(String::from("t2"), map.clone(), 2);
-        assert!(t.is_ok());
-        let t = t.unwrap();
-        let mut map2 = FxHashMap::default();
-        map2.insert(vec![0, 0, 0, 1], 2);
-        let result = table_data.update_table(t, map2, 3);
-        assert!(result.is_err());
-        assert_eq!(table_data.tables, vec![Table::new(map, 0)]);
-    }
+    //     let mut table_data1 = TableData::default();
+    //     let t = table_data1.add_table(String::from("t1"), map.clone(), 1);
+    //     assert!(t.is_ok());
+    //     let t = table_data1.add_table(String::from("t2"), map.clone(), 2);
+    //     assert!(t.is_ok());
+    //     let t = t.unwrap();
+    //     let mut map2 = FxHashMap::default();
+    //     map2.insert(vec![0, 0, 0, 1], 2);
+    //     let result = table_data.update_table(t, map2, 3);
+    //     assert!(result.is_err());
+    //     assert_eq!(table_data.tables, vec![Table::new(map, 0)]);
+    // }
 
     #[test]
     fn get_name_set() {

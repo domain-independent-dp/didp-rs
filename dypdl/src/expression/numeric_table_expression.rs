@@ -4,7 +4,7 @@ use super::numeric_operator::ReduceOperator;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::vector_expression::VectorExpression;
-use crate::state::DPState;
+use crate::state::StateInterface;
 use crate::table::{Table1D, Table2D};
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
@@ -67,8 +67,8 @@ impl<T: Numeric> NumericTableExpression<T> {
     ///
     /// # Panics
     ///
-    /// if the cost of the transitioned state is used or an empty set or vector is passed to a reduce operation or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<U: DPState>(
+    /// Panics if the cost of the transitioned state is used or an empty set or vector is passed to a reduce operation or a min/max reduce operation is performed on an empty set or vector.
+    pub fn eval<U: StateInterface>(
         &self,
         state: &U,
         registry: &TableRegistry,
@@ -323,7 +323,7 @@ impl<T: Numeric> NumericTableExpression<T> {
     ///
     /// # Panics
     ///
-    /// if a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if a min/max reduce operation is performed on an empty set or vector.
     pub fn simplify(
         &self,
         registry: &TableRegistry,

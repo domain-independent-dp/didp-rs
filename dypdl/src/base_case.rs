@@ -16,9 +16,9 @@ impl BaseCase {
     ///
     /// # Panics
     ///
-    /// if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     #[inline]
-    pub fn is_satisfied<U: state::DPState>(
+    pub fn is_satisfied<U: state::StateInterface>(
         &self,
         state: &U,
         registry: &table_registry::TableRegistry,
