@@ -9,5 +9,5 @@ license = "MIT"
 
 [dependencies]
 ordered-float = "3.0"
-dypdl = { path = "../dypdl" }
+dypdl = { path = "../dypdl", version = "0.1.0" }
 rustc-hash = "1.1"

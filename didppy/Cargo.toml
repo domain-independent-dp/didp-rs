@@ -11,8 +11,8 @@ name = "didppy"
 crate-type = ["cdylib"]
 
 [dependencies]
-dypdl = { path = "../dypdl" }
-dypdl-heuristic-search = { path = "../dypdl-heuristic-search" }
+dypdl = { path = "../dypdl", version = "0.1.0" }
+dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.1.0" }
 rustc-hash = "1.1"
 
 [dependencies.pyo3]
