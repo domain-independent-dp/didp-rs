@@ -1,12 +1,22 @@
-name: Rust
+name: test-dypdl
 
 on:
   push:
+    paths:
+      - "dypdl/**"
+      - "!**.md"
     branches:
       - main
   pull_request:
+    paths:
+      - "dypdl/**"
+      - "!**.md"
     branches:
       - main
+
+defaults:
+  run:
+    working-directory: dypdl
 
 jobs:
   test:
@@ -14,10 +24,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        rust: [stable, beta, nightly]
+        rust: [stable]
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-      - run: cargo test --no-default-features
+      - run: cargo test
