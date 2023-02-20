@@ -2,6 +2,8 @@
 name = "didppy"
 version = "0.1.0"
 edition = "2021"
+description = "Python interface for Dynamic Programming Description Language (DyPDL) and DyPDL solvers."
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
