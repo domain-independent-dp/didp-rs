@@ -1,4 +1,4 @@
-name: test-didp-yaml
+name: didp-yaml
 
 on:
   push:

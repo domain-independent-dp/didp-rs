@@ -1,29 +1,25 @@
-name: test-didppy
+name: dypdl-heuristic-search
 
 on:
   push:
     paths:
-      - "didppy/**"
-      - "!didppy/docs/**"
-      - "!didppy/examples/**"
+      - "dypdl-heuristic-search/**"
       - "!**.md"
     branches:
       - main
   pull_request:
     paths:
-      - "didppy/**"
-      - "!didppy/docs/**"
-      - "!didppy/examples/**"
+      - "dypdl-heuristic-search/**"
       - "!**.md"
     branches:
       - main
 
 defaults:
   run:
-    working-directory: didppy
+    working-directory: dypdl-heuristic-search
 
 jobs:
-  rust-test:
+  test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -34,4 +30,4 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-      - run: cargo test --no-default-features
+      - run: cargo test
