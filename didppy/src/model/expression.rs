@@ -548,7 +548,7 @@ impl From<SetUnion> for SetExpression {
 
 /// Set expression.
 ///
-/// If an operator (`+`, `-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
+/// If an operator (`-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
 ///
 /// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a `:class:Condition` is returned.
 ///
@@ -560,30 +560,28 @@ impl From<SetUnion> for SetExpression {
 /// >>> model = dp.Model()
 /// >>> state = model.target_state
 /// >>> obj = model.add_object_type(number=4)
-/// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-/// >>> expr = dp.SetExpr(cst)
-/// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
-/// >>> (expr + cst).eval(state, model)
-/// {0, 1, 2}
-/// >>> (expr - cst).eval(state, model)
+/// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+/// >>> expr = dp.SetExpr(const)
+/// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
+/// >>> (expr - const).eval(state, model)
 /// {0}
-/// >>> (expr & cst).eval(state, model)
+/// >>> (expr & const).eval(state, model)
 /// {1}
-/// >>> (expr ^ cst).eval(state, model)
+/// >>> (expr ^ const).eval(state, model)
 /// {0, 2}
-/// >>> (expr | cst).eval(state, model)
+/// >>> (expr | const).eval(state, model)
 /// {0, 1, 2}
-/// >>> (expr < cst).eval(state, model)
+/// >>> (expr < const).eval(state, model)
 /// False
-/// >>> (expr <= cst).eval(state, model)
+/// >>> (expr <= const).eval(state, model)
 /// False
-/// >>> (expr == cst).eval(state, model)
+/// >>> (expr == const).eval(state, model)
 /// False
-/// >>> (expr != cst).eval(state, model)
+/// >>> (expr != const).eval(state, model)
 /// True
-/// >>> (expr > cst).eval(state, model)
+/// >>> (expr > const).eval(state, model)
 /// False
-/// >>> (expr >= cst).eval(state, model)
+/// >>> (expr >= const).eval(state, model)
 /// False
 #[pyclass(name = "SetExpr")]
 #[pyo3(text_signature = "(value)")]
@@ -623,10 +621,6 @@ impl SetExprPy {
         ConditionPy(condition)
     }
 
-    fn __add__(&self, other: SetUnion) -> SetExprPy {
-        self.__or__(other)
-    }
-
     fn __sub__(&self, other: SetUnion) -> SetExprPy {
         SetExprPy(self.clone().0 - SetExpression::from(other))
     }
@@ -644,10 +638,6 @@ impl SetExprPy {
         SetExprPy(self.clone().0 | SetExpression::from(other))
     }
 
-    fn __radd__(&self, other: SetUnion) -> SetExprPy {
-        self.__add__(other)
-    }
-
     fn __rsub__(&self, other: SetUnion) -> SetExprPy {
         SetExprPy(SetExpression::from(other) - self.clone().0)
     }
@@ -662,6 +652,100 @@ impl SetExprPy {
 
     fn __ror__(&self, other: SetUnion) -> SetExprPy {
         self.__or__(other)
+    }
+
+    /// isdisjoint(other)
+    ///
+    /// Checks if two sets are disjoint.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> const = model.create_set_const(object_type=obj, value=[2, 3])
+    /// >>> expr.isdisjoint(const).eval(state, model)
+    /// True
+    #[pyo3(signature = (other))]
+    fn isdisjoint(&self, other: SetUnion) -> ConditionPy {
+        self.__and__(other).is_empty()
+    }
+
+    /// issubset(other)
+    ///
+    /// Checks if this set is a subset of another set.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1, 2])
+    /// >>> expr.issubset(const).eval(state, model)
+    /// True
+    #[pyo3(signature = (other))]
+    fn issubset(&self, other: SetUnion) -> ConditionPy {
+        let lhs = self.clone().0;
+        let rhs = SetExpression::from(other);
+        ConditionPy(lhs.is_subset(rhs))
+    }
+
+    /// issuperset(other)
+    ///
+    /// Checks if this set is a superset of another set.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0])
+    /// >>> expr.issuperset(const).eval(state, model)
+    /// True
+    #[pyo3(signature = (other))]
+    fn issuperset(&self, other: SetUnion) -> ConditionPy {
+        let lhs = self.clone().0;
+        let rhs = SetExpression::from(other);
+        ConditionPy(rhs.is_subset(lhs))
     }
 
     /// add(element)
@@ -691,8 +775,8 @@ impl SetExprPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> expr = dp.SetExpr(cst)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
     /// >>> expr.add(2).eval(state, model)
     /// {0, 1, 2}
     #[pyo3(signature = (element))]
@@ -728,12 +812,48 @@ impl SetExprPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> expr = dp.SetExpr(cst)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
     /// >>> expr.remove(1).eval(state, model)
     /// {0}
     #[pyo3(signature = (element))]
     fn remove(&self, element: ElementUnion) -> SetExprPy {
+        self.discard(element)
+    }
+
+    /// discard(element)
+    ///
+    /// Removes an element from a set.
+    ///
+    /// This method does not change the instance itself.
+    ///
+    /// Parameters
+    /// ----------
+    /// element: ElementExpr, ElementVar, ElementResourceVar, or int
+    ///     Element removed from the set.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The set where the element is removed.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> expr.discard(1).eval(state, model)
+    /// {0}
+    #[pyo3(signature = (element))]
+    fn discard(&self, element: ElementUnion) -> SetExprPy {
         let element = ElementExpression::from(element);
         SetExprPy(self.clone().0.remove(element))
     }
@@ -760,10 +880,10 @@ impl SetExprPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> expr = dp.SetExpr(cst)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
-    /// >>> expr.difference(cst).eval(state, model)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> expr.difference(const).eval(state, model)
     /// {0}
     #[pyo3(signature = (other))]
     fn difference(&self, other: SetUnion) -> SetExprPy {
@@ -793,10 +913,10 @@ impl SetExprPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> expr = dp.SetExpr(cst)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
-    /// >>> expr.intersection(cst).eval(state, model)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> expr.intersection(const).eval(state, model)
     /// {1}
     #[pyo3(signature = (other))]
     fn intersection(&self, other: SetUnion) -> SetExprPy {
@@ -826,10 +946,10 @@ impl SetExprPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> expr = dp.SetExpr(cst)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
-    /// >>> expr.symmetric_difference(cst).eval(state, model)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> expr.symmetric_difference(const).eval(state, model)
     /// {0, 2}
     #[pyo3(signature = (other))]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
@@ -859,10 +979,10 @@ impl SetExprPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> expr = dp.SetExpr(cst)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
-    /// >>> expr.union(cst).eval(state, model)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> expr.union(const).eval(state, model)
     /// {0, 1, 2}
     #[pyo3(signature = (other))]
     fn union(&self, other: SetUnion) -> SetExprPy {
@@ -894,8 +1014,8 @@ impl SetExprPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> expr = dp.SetExpr(cst)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
     /// >>> expr.contains(0).eval(state, model)
     /// True
     #[pyo3(signature = (element))]
@@ -917,8 +1037,8 @@ impl SetExprPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> expr = dp.SetExpr(cst)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
     /// >>> expr.len().eval(state, model)
     /// 2
     #[pyo3(signature = ())]
@@ -939,8 +1059,8 @@ impl SetExprPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> expr = dp.SetExpr(cst)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
     /// >>> expr.is_empty().eval(state, model)
     /// False
     #[pyo3(signature = ())]
@@ -961,8 +1081,8 @@ impl SetExprPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> expr = dp.SetExpr(cst)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(const)
     /// >>> expr.complement().eval(state, model)
     /// {2, 3}
     #[pyo3(signature = ())]
@@ -1013,7 +1133,7 @@ impl SetExprPy {
 
 /// Set variable.
 ///
-/// If an operator (`+`, `-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
+/// If an operator (`-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
 ///
 /// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a `:class:Condition` is returned.
 ///
@@ -1025,31 +1145,29 @@ impl SetExprPy {
 /// >>> model = dp.Model()
 /// >>> obj = model.add_object_type(number=4)
 /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
-/// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+/// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
 /// >>> state = model.target_state
 /// >>> state[var]
 /// {0, 1}
-/// >>> (var + cst).eval(state, model)
-/// {0, 1, 2}
-/// >>> (var - cst).eval(state, model)
+/// >>> (var - const).eval(state, model)
 /// {0}
-/// >>> (var & cst).eval(state, model)
+/// >>> (var & const).eval(state, model)
 /// {1}
-/// >>> (var ^ cst).eval(state, model)
+/// >>> (var ^ const).eval(state, model)
 /// {0, 2}
-/// >>> (var | cst).eval(state, model)
+/// >>> (var | const).eval(state, model)
 /// {0, 1, 2}
-/// >>> (var < cst).eval(state, model)
+/// >>> (var < const).eval(state, model)
 /// False
-/// >>> (var <= cst).eval(state, model)
+/// >>> (var <= const).eval(state, model)
 /// False
-/// >>> (var == cst).eval(state, model)
+/// >>> (var == const).eval(state, model)
 /// False
-/// >>> (var != cst).eval(state, model)
+/// >>> (var != const).eval(state, model)
 /// True
-/// >>> (var > cst).eval(state, model)
+/// >>> (var > const).eval(state, model)
 /// False
-/// >>> (var >= cst).eval(state, model)
+/// >>> (var >= const).eval(state, model)
 /// False
 #[pyclass(name = "SetVar")]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -1089,10 +1207,6 @@ impl SetVarPy {
         ConditionPy(condition)
     }
 
-    fn __add__(&self, other: SetUnion) -> SetExprPy {
-        self.__or__(other)
-    }
-
     fn __sub__(&self, other: SetUnion) -> SetExprPy {
         SetExprPy(self.0 - SetExpression::from(other))
     }
@@ -1110,10 +1224,6 @@ impl SetVarPy {
         SetExprPy(self.0 | SetExpression::from(other))
     }
 
-    fn __radd__(&self, other: SetUnion) -> SetExprPy {
-        self.__add__(other)
-    }
-
     fn __rsub__(&self, other: SetUnion) -> SetExprPy {
         SetExprPy(SetExpression::from(other) - self.0)
     }
@@ -1128,6 +1238,97 @@ impl SetVarPy {
 
     fn __ror__(&self, other: SetUnion) -> SetExprPy {
         self.__or__(other)
+    }
+
+    /// isdisjoint(other)
+    ///
+    /// Checks if two sets are disjoint.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[2, 3])
+    /// >>> state = model.target_state
+    /// >>> var.isdisjoint(const).eval(state, model)
+    /// True
+    #[pyo3(signature = (other))]
+    fn isdisjoint(&self, other: SetUnion) -> ConditionPy {
+        self.__and__(other).is_empty()
+    }
+
+    /// issubset(other)
+    ///
+    /// Checks if this set is a subset of another set.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1, 2])
+    /// >>> state = model.target_state
+    /// >>> var.issubset(const).eval(state, model)
+    /// True
+    #[pyo3(signature = (other))]
+    fn issubset(&self, other: SetUnion) -> ConditionPy {
+        let lhs = self.0;
+        let rhs = SetExpression::from(other);
+        ConditionPy(lhs.is_subset(rhs))
+    }
+
+    /// issuperset(other)
+    ///
+    /// Checks if this set is a superset of another set.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0])
+    /// >>> state = model.target_state
+    /// >>> expr.issuperset(const).eval(state, model)
+    /// True
+    #[pyo3(signature = (other))]
+    fn issuperset(&self, other: SetUnion) -> ConditionPy {
+        let lhs = self.0;
+        let rhs = SetExpression::from(other);
+        ConditionPy(rhs.is_subset(lhs))
     }
 
     /// add(element)
@@ -1198,6 +1399,41 @@ impl SetVarPy {
     /// {0}
     #[pyo3(signature = (element))]
     fn remove(&self, element: ElementUnion) -> SetExprPy {
+        self.discard(element)
+    }
+
+    /// discard(element)
+    ///
+    /// Removes an element from a set.
+    ///
+    /// This method does not change the instance itself.
+    ///
+    /// Parameters
+    /// ----------
+    /// element: ElementExpr, ElementVar, ElementResourceVar, or int
+    ///     Element removed from the set.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The set where the element is removed.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.discard(1).eval(state, model)
+    /// {0}
+    #[pyo3(signature = (element))]
+    fn discard(&self, element: ElementUnion) -> SetExprPy {
         let element = ElementExpression::from(element);
         SetExprPy(self.0.remove(element))
     }
@@ -1225,9 +1461,9 @@ impl SetVarPy {
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> state = model.target_state
-    /// >>> var.difference(cst).eval(state, model)
+    /// >>> var.difference(const).eval(state, model)
     /// {0}
     #[pyo3(signature = (other))]
     fn difference(&self, other: SetUnion) -> SetExprPy {
@@ -1257,9 +1493,9 @@ impl SetVarPy {
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> state = model.target_state
-    /// >>> var.intersection(cst).eval(state, model)
+    /// >>> var.intersection(const).eval(state, model)
     /// {1}
     fn intersection(&self, other: SetUnion) -> SetExprPy {
         self.__and__(other)
@@ -1288,9 +1524,9 @@ impl SetVarPy {
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> state = model.target_state
-    /// >>> var.symmetric_difference(cst).eval(state, model)
+    /// >>> var.symmetric_difference(const).eval(state, model)
     /// {0, 2}
     #[pyo3(signature = (other))]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
@@ -1320,9 +1556,9 @@ impl SetVarPy {
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> state = model.target_state
-    /// >>> var.union(cst).eval(state, model)
+    /// >>> var.union(const).eval(state, model)
     /// {0, 1, 2}
     #[pyo3(signature = (other))]
     fn union(&self, other: SetUnion) -> SetExprPy {
@@ -1452,7 +1688,7 @@ impl From<SetConstPy> for SetExpression {
 
 /// Set constant.
 ///
-/// If an operator (`+`, `-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
+/// If an operator (`-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
 ///
 /// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a `:class:Condition` is returned.
 ///
@@ -1464,29 +1700,27 @@ impl From<SetConstPy> for SetExpression {
 /// >>> model = dp.Model()
 /// >>> state = model.target_state
 /// >>> obj = model.add_object_type(number=4)
-/// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+/// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
 /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
-/// >>> (cst + other).eval(state, model)
-/// {0, 1, 2}
-/// >>> (cst - other).eval(state, model)
+/// >>> (const - other).eval(state, model)
 /// {0}
-/// >>> (cst & other).eval(state, model)
+/// >>> (const & other).eval(state, model)
 /// {1}
-/// >>> (cst ^ other).eval(state, model)
+/// >>> (const ^ other).eval(state, model)
 /// {0, 2}
-/// >>> (cst | other).eval(state, model)
+/// >>> (const | other).eval(state, model)
 /// {0, 1, 2}
-/// >>> (cst < other).eval(state, model)
+/// >>> (const < other).eval(state, model)
 /// False
-/// >>> (cst <= other).eval(state, model)
+/// >>> (const <= other).eval(state, model)
 /// False
-/// >>> (cst == other).eval(state, model)
+/// >>> (const == other).eval(state, model)
 /// False
-/// >>> (cst != other).eval(state, model)
+/// >>> (const != other).eval(state, model)
 /// True
-/// >>> (cst > other).eval(state, model)
+/// >>> (const > other).eval(state, model)
 /// False
-/// >>> (cst >= other).eval(state, model)
+/// >>> (const >= other).eval(state, model)
 /// False
 #[pymethods]
 impl SetConstPy {
@@ -1502,10 +1736,6 @@ impl SetConstPy {
             CompareOp::Gt => rhs.clone().is_subset(lhs.clone()) & !lhs.is_subset(rhs),
         };
         ConditionPy(condition)
-    }
-
-    fn __add__(&self, other: SetUnion) -> SetExprPy {
-        self.__or__(other)
     }
 
     fn __sub__(&self, other: SetUnion) -> SetExprPy {
@@ -1525,10 +1755,6 @@ impl SetConstPy {
         SetExprPy(self.clone().0 | SetExpression::from(other))
     }
 
-    fn __radd__(&self, other: SetUnion) -> SetExprPy {
-        self.__add__(other)
-    }
-
     fn __rsub__(&self, other: SetUnion) -> SetExprPy {
         SetExprPy(SetExpression::from(other) - self.clone().0)
     }
@@ -1543,6 +1769,97 @@ impl SetConstPy {
 
     fn __ror__(&self, other: SetUnion) -> SetExprPy {
         self.__or__(other)
+    }
+
+    /// isdisjoint(other)
+    ///
+    /// Checks if two sets are disjoint.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> other = model.create_set_const(object_type=obj, value=[2, 3])
+    /// >>> const.isdisjoint(other).eval(state, model)
+    /// True
+    #[pyo3(signature = (other))]
+    fn isdisjoint(&self, other: SetUnion) -> ConditionPy {
+        self.__and__(other).is_empty()
+    }
+
+    /// issubset(other)
+    ///
+    /// Checks if this set is a subset of another set.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> other = model.create_set_const(object_type=obj, value=[0, 1, 2])
+    /// >>> const.issubset(other).eval(state, model)
+    /// True
+    #[pyo3(signature = (other))]
+    fn issubset(&self, other: SetUnion) -> ConditionPy {
+        let lhs = SetExpression::from(self.clone().0);
+        let rhs = SetExpression::from(other);
+        ConditionPy(lhs.is_subset(rhs))
+    }
+
+    /// issuperset(other)
+    ///
+    /// Checks if this set is a superset of another set.
+    ///
+    /// Parameters
+    /// ----------
+    /// other: SetExpr, SetVar, or SetConst
+    ///    The other set.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///    The condition that the two sets are disjoint.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> other = model.create_set_const(object_type=obj, value=[0])
+    /// >>> cost.issuperset(other).eval(state, model)
+    /// True
+    #[pyo3(signature = (other))]
+    fn issuperset(&self, other: SetUnion) -> ConditionPy {
+        let lhs = SetExpression::from(self.clone().0);
+        let rhs = SetExpression::from(other);
+        ConditionPy(rhs.is_subset(lhs))
     }
 
     /// add(element)
@@ -1566,8 +1883,8 @@ impl SetConstPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> cst.add(2).eval(state, model)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const.add(2).eval(state, model)
     /// {0, 1, 2}
     #[pyo3(signature = (element))]
     fn add(&self, element: ElementUnion) -> SetExprPy {
@@ -1603,11 +1920,46 @@ impl SetConstPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> cst.remove(1).eval(state, model)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const.remove(1).eval(state, model)
     /// {0}
     #[pyo3(signature = (element))]
     fn remove(&self, element: ElementUnion) -> SetExprPy {
+        self.discard(element)
+    }
+
+    /// discard(element)
+    ///
+    /// Removes an element from a set.
+    ///
+    /// This method does not change the instance itself.
+    ///
+    /// Parameters
+    /// ----------
+    /// element: ElementExpr, ElementVar, ElementResourceVar, or int
+    ///     Element removed from the set.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The set where the element is removed.
+    ///
+    /// Raises
+    /// ------
+    /// OverflowError
+    ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const.discard(1).eval(state, model)
+    /// {0}
+    #[pyo3(signature = (element))]
+    fn discard(&self, element: ElementUnion) -> SetExprPy {
         let set = SetExpression::from(self.clone());
         let element = ElementExpression::from(element);
         SetExprPy(set.remove(element))
@@ -1641,9 +1993,9 @@ impl SetConstPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
     /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
-    /// >>> cst.difference(other).eval(state, model)
+    /// >>> const.difference(other).eval(state, model)
     /// {0}
     #[pyo3(signature = (other))]
     fn difference(&self, other: SetUnion) -> SetExprPy {
@@ -1673,9 +2025,9 @@ impl SetConstPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
     /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
-    /// >>> cst.intersection(other).eval(state, model)
+    /// >>> const.intersection(other).eval(state, model)
     /// {1}
     #[pyo3(signature = (other))]
     fn intersection(&self, other: SetUnion) -> SetExprPy {
@@ -1705,9 +2057,9 @@ impl SetConstPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
     /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
-    /// >>> cst.symmetric_difference(other).eval(state, model)
+    /// >>> const.symmetric_difference(other).eval(state, model)
     /// {0, 2}
     #[pyo3(signature = (other))]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
@@ -1737,9 +2089,9 @@ impl SetConstPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
     /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
-    /// >>> cst.union(other).eval(state, model)
+    /// >>> const.union(other).eval(state, model)
     /// {0, 1, 2}
     #[pyo3(signature = (other))]
     fn union(&self, other: SetUnion) -> SetExprPy {
@@ -1771,8 +2123,8 @@ impl SetConstPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> cst.contains(0).eval(state, model)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const.contains(0).eval(state, model)
     /// True
     #[pyo3(signature = (element))]
     fn contains(&self, element: ElementUnion) -> ConditionPy {
@@ -1794,8 +2146,8 @@ impl SetConstPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> cst.len().eval(state, model)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const.len().eval(state, model)
     /// 2
     #[pyo3(signature = ())]
     fn len(&self) -> IntExprPy {
@@ -1816,8 +2168,8 @@ impl SetConstPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> cst.is_empty().eval(state, model)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const.is_empty().eval(state, model)
     /// False
     #[pyo3(signature = ())]
     fn is_empty(&self) -> ConditionPy {
@@ -1838,8 +2190,8 @@ impl SetConstPy {
     /// >>> model = dp.Model()
     /// >>> state = model.target_state
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> cst.complement().eval(state, model)
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const.complement().eval(state, model)
     /// {2, 3}
     #[pyo3(signature = ())]
     fn complement(&self) -> SetExprPy {
@@ -1859,8 +2211,8 @@ impl SetConstPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=4)
-    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
-    /// >>> cst.eval()
+    /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> const.eval()
     /// {0, 1}
     #[pyo3(signature = ())]
     fn eval(&self) -> HashSet<Element> {
@@ -5145,22 +5497,6 @@ mod tests {
     }
 
     #[test]
-    fn set_expr_add() {
-        let expression = SetExprPy(SetExpression::Reference(ReferenceExpression::Variable(0)));
-        let other = SetUnion::Expr(SetExprPy(SetExpression::Reference(
-            ReferenceExpression::Variable(1),
-        )));
-        assert_eq!(
-            expression.__add__(other),
-            SetExprPy(SetExpression::SetOperation(
-                SetOperator::Union,
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
-            ))
-        );
-    }
-
-    #[test]
     fn set_expr_sub() {
         let expression = SetExprPy(SetExpression::Reference(ReferenceExpression::Variable(0)));
         let other = SetUnion::Expr(SetExprPy(SetExpression::Reference(
@@ -5224,22 +5560,6 @@ mod tests {
         )));
         assert_eq!(
             expression.__or__(other),
-            SetExprPy(SetExpression::SetOperation(
-                SetOperator::Union,
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
-            ))
-        );
-    }
-
-    #[test]
-    fn set_expr_radd() {
-        let expression = SetExprPy(SetExpression::Reference(ReferenceExpression::Variable(0)));
-        let other = SetUnion::Expr(SetExprPy(SetExpression::Reference(
-            ReferenceExpression::Variable(1),
-        )));
-        assert_eq!(
-            expression.__radd__(other),
             SetExprPy(SetExpression::SetOperation(
                 SetOperator::Union,
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
@@ -5662,32 +5982,6 @@ mod tests {
     }
 
     #[test]
-    fn set_var_add() {
-        let mut model = Model::default();
-        let ob = model.add_object_type("something", 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = model.add_set_variable("v", ob, Set::with_capacity(10));
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        let expression = SetVarPy(v);
-
-        let other = SetUnion::Expr(SetExprPy(SetExpression::Reference(
-            ReferenceExpression::Variable(1),
-        )));
-        assert_eq!(
-            expression.__add__(other),
-            SetExprPy(SetExpression::SetOperation(
-                SetOperator::Union,
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
-                    v.id()
-                ))),
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
-            ))
-        );
-    }
-
-    #[test]
     fn set_var_sub() {
         let mut model = Model::default();
         let ob = model.add_object_type("something", 10);
@@ -5791,32 +6085,6 @@ mod tests {
         )));
         assert_eq!(
             expression.__or__(other),
-            SetExprPy(SetExpression::SetOperation(
-                SetOperator::Union,
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
-                    v.id()
-                ))),
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
-            ))
-        );
-    }
-
-    #[test]
-    fn set_var_radd() {
-        let mut model = Model::default();
-        let ob = model.add_object_type("something", 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = model.add_set_variable("v", ob, Set::with_capacity(10));
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        let expression = SetVarPy(v);
-
-        let other = SetUnion::Expr(SetExprPy(SetExpression::Reference(
-            ReferenceExpression::Variable(1),
-        )));
-        assert_eq!(
-            expression.__radd__(other),
             SetExprPy(SetExpression::SetOperation(
                 SetOperator::Union,
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(
@@ -6315,24 +6583,6 @@ mod tests {
     }
 
     #[test]
-    fn set_const_add() {
-        let expression = SetConstPy(Set::with_capacity(10));
-        let other = SetUnion::Expr(SetExprPy(SetExpression::Reference(
-            ReferenceExpression::Variable(1),
-        )));
-        assert_eq!(
-            expression.__add__(other),
-            SetExprPy(SetExpression::SetOperation(
-                SetOperator::Union,
-                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
-                    Set::with_capacity(10)
-                ))),
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
-            ))
-        );
-    }
-
-    #[test]
     fn set_const_sub() {
         let expression = SetConstPy(Set::with_capacity(10));
         let other = SetUnion::Expr(SetExprPy(SetExpression::Reference(
@@ -6404,24 +6654,6 @@ mod tests {
         )));
         assert_eq!(
             expression.__or__(other),
-            SetExprPy(SetExpression::SetOperation(
-                SetOperator::Union,
-                Box::new(SetExpression::Reference(ReferenceExpression::Constant(
-                    Set::with_capacity(10)
-                ))),
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
-            ))
-        );
-    }
-
-    #[test]
-    fn set_const_radd() {
-        let expression = SetConstPy(Set::with_capacity(10));
-        let other = SetUnion::Expr(SetExprPy(SetExpression::Reference(
-            ReferenceExpression::Variable(1),
-        )));
-        assert_eq!(
-            expression.__radd__(other),
             SetExprPy(SetExpression::SetOperation(
                 SetOperator::Union,
                 Box::new(SetExpression::Reference(ReferenceExpression::Constant(
