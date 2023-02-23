@@ -11,8 +11,8 @@ use std::rc::Rc;
 ///
 /// This performs CABS using the dual bound as the heuristic function.
 ///
-/// To apply this solver, the cost must be computed in the form of `x + state_cost`, `x * state_cost`, `dp.max(x, state_cost)`,
-/// or `dp.min(x, state_cost)` where, `state_cost` is either of `dp.IntExpr.state_cost()` and `dp.FloatExpr.state_cost()`,
+/// To apply this solver, the cost must be computed in the form of `x + state_cost`, `x * state_cost`, `didppy.max(x, state_cost)`,
+/// or `didppy.min(x, state_cost)` where, `state_cost` is either of :func:`didppy.IntExpr.state_cost()` and :func:`didppy.FloatExpr.state_cost()`,
 /// and `x` is a value independent of `state_cost`.
 /// Otherwise, it cannot compute the cost correctly and may not produce the optimal solution.
 ///
@@ -22,10 +22,10 @@ use std::rc::Rc;
 ///     DyPDL model to solve.
 /// f_operator: FOperator, default: FOperator.Plus
 ///     Operator to combine a g-value and the dual bound to compute the f-value.
-///     If the cost is computed by `+`, this should be `FOperator.Plus`.
-///     If the cost is computed by `*`, this should be `FOperator.Product`.
-///     If the cost is computed by `max`, this should be `FOperator.Max`.
-///     If the cost is computed by `min`, this should be `FOperator.Min`.
+///     If the cost is computed by `+`, this should be :attr:`~FOperator.Plus`.
+///     If the cost is computed by `*`, this should be :attr:`~FOperator.Product`.
+///     If the cost is computed by `max`, this should be :attr:`~FOperator.Max`.
+///     If the cost is computed by `min`, this should be :attr:`~FOperator.Min`.
 /// initial_beam_size: int, default: 1
 ///     Initial beam size.
 /// keep_all_layers: bool, default: False
@@ -55,14 +55,18 @@ use std::rc::Rc;
 /// Proceedings of the 15th National Conference on Artificial Intelligence/Innovative Applications of Artificial Intelligence (AAAI/IAAI), pp. 425-430, 1998.
 ///
 /// Examples
-/// -------
+/// --------
 /// Example with `+` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> x = model.add_int_var(target=1)
 /// >>> model.add_base_case([x == 0])
-/// >>> t = dp.Transition(name="decrement", cost=1 + dp.IntExpr.state_cost(), effects=[(x, x - 1)])
+/// >>> t = dp.Transition(
+/// ...     name="decrement",
+/// ...     cost=1 + dp.IntExpr.state_cost(),
+/// ...     effects=[(x, x - 1)]
+/// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
 /// >>> solver = dp.CABS(model, quiet=True)
@@ -76,7 +80,11 @@ use std::rc::Rc;
 /// >>> model = dp.Model()
 /// >>> x = model.add_int_var(target=2)
 /// >>> model.add_base_case([x == 0])
-/// >>> t = dp.Transition(name="decrement", cost=dp.max(x, dp.IntExpr.state_cost()), effects=[(x, x - 1)])
+/// >>> t = dp.Transition(
+/// ...     name="decrement",
+/// ...     cost=dp.max(x, dp.IntExpr.state_cost()),
+/// ...     effects=[(x, x - 1)]
+/// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
 /// >>> solver = dp.CABS(model, f_operator=dp.FOperator.Max, quiet=True)
@@ -166,6 +174,24 @@ impl CabsPy {
     /// -------
     /// Solution
     ///     Solution.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> x = model.add_int_var(target=1)
+    /// >>> model.add_base_case([x == 0])
+    /// >>> t = dp.Transition(
+    /// ...     name="decrement",
+    /// ...     cost=1 + dp.IntExpr.state_cost(),
+    /// ...     effects=[(x, x - 1)]
+    /// ... )
+    /// >>> model.add_transition(t)
+    /// >>> model.add_dual_bound(x)
+    /// >>> solver = dp.CABS(model, quiet=True)
+    /// >>> solution = solver.search()
+    /// >>> solution.cost
+    /// 1
     #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()
@@ -181,6 +207,26 @@ impl CabsPy {
     ///     Solution.
     /// terminated: bool
     ///     Whether the search is terminated.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> x = model.add_int_var(target=1)
+    /// >>> model.add_base_case([x == 0])
+    /// >>> t = dp.Transition(
+    /// ...     name="decrement",
+    /// ...     cost=1 + dp.IntExpr.state_cost(),
+    /// ...     effects=[(x, x - 1)]
+    /// ... )
+    /// >>> model.add_transition(t)
+    /// >>> model.add_dual_bound(x)
+    /// >>> solver = dp.CABS(model, quiet=True)
+    /// >>> solution, terminated = solver.search_next()
+    /// >>> solution.cost
+    /// 1
+    /// >>> terminated
+    /// True
     #[pyo3(signature = ())]
     fn search_next(&mut self) -> PyResult<(SolutionPy, bool)> {
         self.0.search_next()

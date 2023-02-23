@@ -47,7 +47,9 @@ def solve(n, node_weights, edge_weights, time_limit=None):
 
     model.add_dual_bound(0)
 
-    solver = dp.CAASDy(model, time_limit=time_limit)
+    solver = dp.CABS(
+        model, f_operator=dp.FOperator.Max, time_limit=time_limit, quiet=False
+    )
     solution = solver.search()
 
     if solution.is_infeasible:

@@ -41,6 +41,14 @@ Functions
    didppy.log
    didppy.float
 
+State
+-----
+.. autosummary::
+   :nosignatures:
+   :toctree: _autosummary
+
+   didppy.State
+
 Variables
 ---------
 .. autosummary::
@@ -82,12 +90,13 @@ Tables of Constants
    didppy.BoolTable3D
    didppy.BoolTable
 
-Set
----
+Others
+------
 .. autosummary::
    :nosignatures:
    :toctree: _autosummary
 
+   didppy.ObjectType
    didppy.SetConst
 
 Solving

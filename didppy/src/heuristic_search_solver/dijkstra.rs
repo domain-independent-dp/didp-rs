@@ -10,8 +10,8 @@ use std::rc::Rc;
 ///
 /// This performs Dijkstra's algorithm.
 ///
-/// To apply this solver, the cost must be computed in the form of `x + state_cost`, `x * state_cost`, `dp.max(x, state_cost)`,
-/// or `dp.min(x, state_cost)` where, `state_cost` is either of `dp.IntExpr.state_cost()` and `dp.FloatExpr.state_cost()`,
+/// To apply this solver, the cost must be computed in the form of `x + state_cost`, `x * state_cost`, `didppy.max(x, state_cost)`,
+/// or `didppy.min(x, state_cost)` where, `state_cost` is either of :func:`didppy.IntExpr.state_cost()` and :func:`didppy.FloatExpr.state_cost()`,
 /// and `x` is a value independent of `state_cost`.
 /// In addition, the model must be minimization.
 /// Otherwise, it cannot compute the cost correctly and may not produce the optimal solution.
@@ -35,14 +35,18 @@ use std::rc::Rc;
 ///     If `time_limit` or `initial_registry_capacity` is negative.
 ///
 /// Examples
-/// -------
+/// --------
 /// Example with `+` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> x = model.add_int_var(target=1)
 /// >>> model.add_base_case([x == 0])
-/// >>> t = dp.Transition(name="decrement", cost=1 + dp.IntExpr.state_cost(), effects=[(x, x - 1)])
+/// >>> t = dp.Transition(
+/// ...     name="decrement",
+/// ...     cost=1 + dp.IntExpr.state_cost(),
+/// ...     effects=[(x, x - 1)]
+/// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
 /// >>> solver = dp.Dijkstra(model, quiet=True)
@@ -56,7 +60,11 @@ use std::rc::Rc;
 /// >>> model = dp.Model()
 /// >>> x = model.add_int_var(target=2)
 /// >>> model.add_base_case([x == 0])
-/// >>> t = dp.Transition(name="decrement", cost=dp.max(x, dp.IntExpr.state_cost()), effects=[(x, x - 1)])
+/// >>> t = dp.Transition(
+/// ...     name="decrement",
+/// ...     cost=dp.max(x, dp.IntExpr.state_cost()),
+/// ...     effects=[(x, x - 1)]
+/// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
 /// >>> solver = dp.Dijkstra(model, f_operator=dp.FOperator.Max, quiet=True)
@@ -125,6 +133,24 @@ impl DijkstraPy {
     /// -------
     /// Solution
     ///     Solution.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> x = model.add_int_var(target=1)
+    /// >>> model.add_base_case([x == 0])
+    /// >>> t = dp.Transition(
+    /// ...     name="decrement",
+    /// ...     cost=1 + dp.IntExpr.state_cost(),
+    /// ...     effects=[(x, x - 1)]
+    /// ... )
+    /// >>> model.add_transition(t)
+    /// >>> model.add_dual_bound(x)
+    /// >>> solver = dp.Dijkstra(model, quiet=True)
+    /// >>> solution = solver.search()
+    /// >>> print(solution.cost)
+    /// 1
     #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()

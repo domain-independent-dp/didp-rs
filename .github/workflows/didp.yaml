@@ -1,0 +1,37 @@
+name: didp
+
+on:
+  push:
+    paths:
+      - "!**.md"
+      - "!dypdl/**"
+      - "!dypdl-heuristic-search/**"
+      - "!didp-yaml/**"
+      - "!didppy/**"
+      - "!.github/**"
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "!**.md"
+      - "!dypdl/**"
+      - "!dypdl-heuristic-search/**"
+      - "!didp-yaml/**"
+      - "!didppy/**"
+      - "!.github/**"
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - run: cargo test --no-default-features

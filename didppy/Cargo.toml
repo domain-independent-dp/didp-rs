@@ -1,6 +1,6 @@
 [package]
 name = "didppy"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Python interface for Dynamic Programming Description Language (DyPDL) and DyPDL solvers."
 license = "MIT"
@@ -20,4 +20,5 @@ version = "0.18"
 
 [features]
 extension-module = ["pyo3/extension-module"]
-default = ["extension-module"]
+abi3 = ["pyo3/abi3-py37"]
+default = ["extension-module", "abi3"]

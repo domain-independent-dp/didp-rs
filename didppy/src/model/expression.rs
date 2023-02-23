@@ -1,7 +1,39 @@
+use dypdl::expression::*;
 use dypdl::prelude::*;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::pyclass::CompareOp;
+use std::collections::HashSet;
+
+use crate::ModelPy;
+
+use super::state::StatePy;
+
+#[derive(FromPyObject, Debug, PartialEq, Clone)]
+pub enum ExprUnion {
+    #[pyo3(transparent, annotation = "ElementExpr")]
+    Element(ElementExprPy),
+    #[pyo3(transparent, annotation = "SetExpr")]
+    Set(SetExprPy),
+    #[pyo3(transparent, annotation = "IntExpr")]
+    Int(IntExprPy),
+    #[pyo3(transparent, annotation = "FloatExpr")]
+    Float(FloatExprPy),
+    #[pyo3(transparent, annotation = "Condition")]
+    Condition(ConditionPy),
+}
+
+impl IntoPy<Py<PyAny>> for ExprUnion {
+    fn into_py(self, py: Python<'_>) -> Py<PyAny> {
+        match self {
+            Self::Element(expr) => expr.into_py(py),
+            Self::Set(expr) => expr.into_py(py),
+            Self::Int(expr) => expr.into_py(py),
+            Self::Float(expr) => expr.into_py(py),
+            Self::Condition(expr) => expr.into_py(py),
+        }
+    }
+}
 
 #[derive(FromPyObject, Debug, PartialEq, Eq, Clone, Copy)]
 pub enum VarUnion {
@@ -66,8 +98,11 @@ impl From<ElementUnion> for ElementExpression {
 
 /// Element expression.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int` is applied, a `Condition` is returned.
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`) with an `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int` is applied, a new `ElementExpr` is returned.
+/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a new :class:`ElementExpr` is returned.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a :class:`Condition` is returned.
+///
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
 ///
 /// Parameters
 /// ----------
@@ -78,7 +113,41 @@ impl From<ElementUnion> for ElementExpression {
 /// ------
 /// OverflowError
 ///     If the value is negative.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> state = model.target_state
+/// >>> expr = dp.ElementExpr(3)
+/// >>> expr.eval(state, model)
+/// 3
+/// >>> (expr + 1).eval(state, model)
+/// 4
+/// >>> (expr - 1).eval(state, model)
+/// 2
+/// >>> (expr * 2).eval(state, model)
+/// 6
+/// >>> (expr / 2).eval(state, model)
+/// 1
+/// >>> (expr // 2).eval(state, model)
+/// 1
+/// >>> (expr % 2).eval(state, model)
+/// 1
+/// >>> (expr < 3).eval(state, model)
+/// False
+/// >>> (expr <= 3).eval(state, model)
+/// True
+/// >>> (expr == 3).eval(state, model)
+/// True
+/// >>> (expr != 3).eval(state, model)
+/// False
+/// >>> (expr > 3).eval(state, model)
+/// False
+/// >>> (expr >= 3).eval(state, model)
+/// True
 #[pyclass(name = "ElementExpr")]
+#[pyo3(text_signature = "(value)")]
 #[derive(Debug, PartialEq, Clone)]
 pub struct ElementExprPy(ElementExpression);
 
@@ -88,9 +157,9 @@ impl From<ElementExprPy> for ElementExpression {
     }
 }
 
-impl ElementExprPy {
-    pub fn new(expr: ElementExpression) -> Self {
-        Self(expr)
+impl From<ElementExpression> for ElementExprPy {
+    fn from(expression: ElementExpression) -> Self {
+        Self(expression)
     }
 }
 
@@ -162,12 +231,86 @@ impl ElementExprPy {
     fn __rmod__(&self, other: ElementUnion) -> ElementExprPy {
         ElementExprPy(ElementExpression::from(other) % self.clone().0)
     }
+
+    /// eval(state, model)
+    ///
+    /// Evaluates the expression.
+    ///
+    /// Parameters
+    /// ----------
+    /// state : State
+    ///     State.
+    /// model : Model
+    ///     DyPDL Model.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Value of the expression.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If the expression is not valid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_element_var(object_type=obj, target=0)
+    /// >>> expr = var + 1
+    /// >>> state = model.target_state
+    /// >>> expr.eval(state, model)
+    /// 1
+    #[pyo3(signature = (state, model))]
+    fn eval(&self, state: &StatePy, model: &ModelPy) -> Element {
+        self.0
+            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+    }
 }
 
 /// Element variable.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int` is applied, a `Condition` is returned.
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`) with an `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int` is applied, a new `ElementExpr` is returned.
+/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a new :class:`ElementExpr` is returned.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a :class:`Condition` is returned.
+///
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> obj = model.add_object_type(number=4)
+/// >>> var = model.add_element_var(object_type=obj, target=3)
+/// >>> state = model.target_state
+/// >>> state[var]
+/// 3
+/// >>> (var + 1).eval(state, model)
+/// 4
+/// >>> (var - 1).eval(state, model)
+/// 2
+/// >>> (var * 2).eval(state, model)
+/// 6
+/// >>> (var / 2).eval(state, model)
+/// 1
+/// >>> (var // 2).eval(state, model)
+/// 1
+/// >>> (var % 2).eval(state, model)
+/// 1
+/// >>> (var < 3).eval(state, model)
+/// False
+/// >>> (var <= 3).eval(state, model)
+/// True
+/// >>> (var == 3).eval(state, model)
+/// True
+/// >>> (var != 3).eval(state, model)
+/// False
+/// >>> (var > 3).eval(state, model)
+/// False
+/// >>> (var >= 3).eval(state, model)
+/// True
 #[pyclass(name = "ElementVar")]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ElementVarPy(ElementVariable);
@@ -178,15 +321,15 @@ impl From<ElementVarPy> for ElementVariable {
     }
 }
 
-impl From<ElementVarPy> for ElementExpression {
-    fn from(v: ElementVarPy) -> Self {
-        v.0.into()
+impl From<ElementVariable> for ElementVarPy {
+    fn from(v: ElementVariable) -> Self {
+        Self(v)
     }
 }
 
-impl ElementVarPy {
-    pub fn new(v: ElementVariable) -> ElementVarPy {
-        ElementVarPy(v)
+impl From<ElementVarPy> for ElementExpression {
+    fn from(v: ElementVarPy) -> Self {
+        v.0.into()
     }
 }
 
@@ -257,8 +400,45 @@ impl ElementVarPy {
 
 /// Element resource variable.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int` is applied, a `Condition` is returned.
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`) with an `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int` is applied, a new `ElementExpr` is returned.
+/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a new :class:`ElementExpr` is returned.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a :class:`Condition` is returned.
+///
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> obj = model.add_object_type(number=4)
+/// >>> var = model.add_element_resource_var(object_type=obj, target=3, less_is_better=True)
+/// >>> state = model.target_state
+/// >>> state[var]
+/// 3
+/// >>> (var + 1).eval(state, model)
+/// 4
+/// >>> (var - 1).eval(state, model)
+/// 2
+/// >>> (var * 2).eval(state, model)
+/// 6
+/// >>> (var / 2).eval(state, model)
+/// 1
+/// >>> (var // 2).eval(state, model)
+/// 1
+/// >>> (var % 2).eval(state, model)
+/// 1
+/// >>> (var < 3).eval(state, model)
+/// False
+/// >>> (var <= 3).eval(state, model)
+/// True
+/// >>> (var == 3).eval(state, model)
+/// True
+/// >>> (var != 3).eval(state, model)
+/// False
+/// >>> (var > 3).eval(state, model)
+/// False
+/// >>> (var >= 3).eval(state, model)
+/// True
 #[pyclass(name = "ElementResourceVar")]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ElementResourceVarPy(ElementResourceVariable);
@@ -269,15 +449,15 @@ impl From<ElementResourceVarPy> for ElementResourceVariable {
     }
 }
 
-impl From<ElementResourceVarPy> for ElementExpression {
-    fn from(v: ElementResourceVarPy) -> Self {
-        v.0.into()
+impl From<ElementResourceVariable> for ElementResourceVarPy {
+    fn from(v: ElementResourceVariable) -> Self {
+        Self(v)
     }
 }
 
-impl ElementResourceVarPy {
-    pub fn new(v: ElementResourceVariable) -> ElementResourceVarPy {
-        ElementResourceVarPy(v)
+impl From<ElementResourceVarPy> for ElementExpression {
+    fn from(v: ElementResourceVarPy) -> Self {
+        v.0.into()
     }
 }
 
@@ -368,9 +548,45 @@ impl From<SetUnion> for SetExpression {
 
 /// Set expression.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a `SetExpr`, `SetVar`, or `SetConst` is applied, a `Condition` is returned.
-/// If an operator (`+`, `-`, `&`, `^`, `|`) with a `SetExpr`, `SetVar`, or `SetConst` is applied, a new `SetExpr` is returned.
+/// If an operator (`+`, `-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a `:class:Condition` is returned.
+///
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> state = model.target_state
+/// >>> obj = model.add_object_type(number=4)
+/// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+/// >>> expr = dp.SetExpr(cst)
+/// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+/// >>> (expr + cst).eval(state, model)
+/// {0, 1, 2}
+/// >>> (expr - cst).eval(state, model)
+/// {0}
+/// >>> (expr & cst).eval(state, model)
+/// {1}
+/// >>> (expr ^ cst).eval(state, model)
+/// {0, 2}
+/// >>> (expr | cst).eval(state, model)
+/// {0, 1, 2}
+/// >>> (expr < cst).eval(state, model)
+/// False
+/// >>> (expr <= cst).eval(state, model)
+/// False
+/// >>> (expr == cst).eval(state, model)
+/// False
+/// >>> (expr != cst).eval(state, model)
+/// True
+/// >>> (expr > cst).eval(state, model)
+/// False
+/// >>> (expr >= cst).eval(state, model)
+/// False
 #[pyclass(name = "SetExpr")]
+#[pyo3(text_signature = "(value)")]
 #[derive(Debug, PartialEq, Clone)]
 pub struct SetExprPy(SetExpression);
 
@@ -380,14 +596,19 @@ impl From<SetExprPy> for SetExpression {
     }
 }
 
-impl SetExprPy {
-    pub fn new(expression: SetExpression) -> SetExprPy {
+impl From<SetExpression> for SetExprPy {
+    fn from(expression: SetExpression) -> Self {
         SetExprPy(expression)
     }
 }
 
 #[pymethods]
 impl SetExprPy {
+    #[new]
+    fn new_py(value: SetConstPy) -> Self {
+        Self::from(SetExpression::from(value))
+    }
+
     fn __richcmp__(&self, other: SetUnion, op: CompareOp) -> ConditionPy {
         let lhs = self.clone().0;
         let rhs = SetExpression::from(other);
@@ -463,6 +684,17 @@ impl SetExprPy {
     /// ------
     /// OverflowError
     ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(cst)
+    /// >>> expr.add(2).eval(state, model)
+    /// {0, 1, 2}
     #[pyo3(signature = (element))]
     fn add(&self, element: ElementUnion) -> SetExprPy {
         let element = ElementExpression::from(element);
@@ -489,6 +721,17 @@ impl SetExprPy {
     /// ------
     /// OverflowError
     ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(cst)
+    /// >>> expr.remove(1).eval(state, model)
+    /// {0}
     #[pyo3(signature = (element))]
     fn remove(&self, element: ElementUnion) -> SetExprPy {
         let element = ElementExpression::from(element);
@@ -510,6 +753,18 @@ impl SetExprPy {
     /// -------
     /// SetExpr
     ///     The set where all elements in `other` are removed.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(cst)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> expr.difference(cst).eval(state, model)
+    /// {0}
     #[pyo3(signature = (other))]
     fn difference(&self, other: SetUnion) -> SetExprPy {
         self.__sub__(other)
@@ -531,6 +786,18 @@ impl SetExprPy {
     /// -------
     /// SetExpr
     ///     The intersection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(cst)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> expr.intersection(cst).eval(state, model)
+    /// {1}
     #[pyo3(signature = (other))]
     fn intersection(&self, other: SetUnion) -> SetExprPy {
         self.__and__(other)
@@ -552,6 +819,18 @@ impl SetExprPy {
     /// -------
     /// SetExpr
     ///     The symmetric difference set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(cst)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> expr.symmetric_difference(cst).eval(state, model)
+    /// {0, 2}
     #[pyo3(signature = (other))]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
         self.__xor__(other)
@@ -573,6 +852,18 @@ impl SetExprPy {
     /// -------
     /// SetExpr
     ///     The union.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(cst)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> expr.union(cst).eval(state, model)
+    /// {0, 1, 2}
     #[pyo3(signature = (other))]
     fn union(&self, other: SetUnion) -> SetExprPy {
         self.__or__(other)
@@ -596,6 +887,17 @@ impl SetExprPy {
     /// ------
     /// OverflowError
     ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(cst)
+    /// >>> expr.contains(0).eval(state, model)
+    /// True
     #[pyo3(signature = (element))]
     fn contains(&self, element: ElementUnion) -> ConditionPy {
         let element = ElementExpression::from(element);
@@ -608,6 +910,17 @@ impl SetExprPy {
     /// -------
     /// IntExpr
     ///     The cardinality.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(cst)
+    /// >>> expr.len().eval(state, model)
+    /// 2
     #[pyo3(signature = ())]
     pub fn len(&self) -> IntExprPy {
         IntExprPy(self.clone().0.len())
@@ -619,6 +932,17 @@ impl SetExprPy {
     /// -------
     /// Condition
     ///     The condition checking if the set is empty.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(cst)
+    /// >>> expr.is_empty().eval(state, model)
+    /// False
     #[pyo3(signature = ())]
     pub fn is_empty(&self) -> ConditionPy {
         ConditionPy(self.clone().0.is_empty())
@@ -630,16 +954,103 @@ impl SetExprPy {
     /// -------
     /// SetExpr
     ///     The complement set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> expr = dp.SetExpr(cst)
+    /// >>> expr.complement().eval(state, model)
+    /// {2, 3}
     #[pyo3(signature = ())]
     pub fn complement(&self) -> SetExprPy {
         SetExprPy(!self.clone().0)
+    }
+
+    /// eval(state, model)
+    ///
+    /// Evaluates the expression.
+    ///
+    /// Parameters
+    /// ----------
+    /// state : State
+    ///     State.
+    /// model : Model
+    ///     DyPDL Model.
+    ///
+    /// Returns
+    /// -------
+    /// set
+    ///     Value of the expression.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If the expression is not valid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0])
+    /// >>> expr = var.add(1)
+    /// >>> state = model.target_state
+    /// >>> expr.eval(state, model)
+    /// {0, 1}
+    #[pyo3(signature = (state, model))]
+    fn eval(&self, state: &StatePy, model: &ModelPy) -> HashSet<usize> {
+        HashSet::from_iter(
+            self.0
+                .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+                .ones(),
+        )
     }
 }
 
 /// Set variable.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a `SetExpr`, `SetVar`, or `SetConst` is applied, a `Condition` is returned.
-/// If an operator (`+`, `-`, `&`, `^`, `|`) with a `SetExpr`, `SetVar`, or `SetConst` is applied, a new `SetExpr` is returned.
+/// If an operator (`+`, `-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a `:class:Condition` is returned.
+///
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> obj = model.add_object_type(number=4)
+/// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+/// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+/// >>> state = model.target_state
+/// >>> state[var]
+/// {0, 1}
+/// >>> (var + cst).eval(state, model)
+/// {0, 1, 2}
+/// >>> (var - cst).eval(state, model)
+/// {0}
+/// >>> (var & cst).eval(state, model)
+/// {1}
+/// >>> (var ^ cst).eval(state, model)
+/// {0, 2}
+/// >>> (var | cst).eval(state, model)
+/// {0, 1, 2}
+/// >>> (var < cst).eval(state, model)
+/// False
+/// >>> (var <= cst).eval(state, model)
+/// False
+/// >>> (var == cst).eval(state, model)
+/// False
+/// >>> (var != cst).eval(state, model)
+/// True
+/// >>> (var > cst).eval(state, model)
+/// False
+/// >>> (var >= cst).eval(state, model)
+/// False
 #[pyclass(name = "SetVar")]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct SetVarPy(SetVariable);
@@ -650,15 +1061,15 @@ impl From<SetVarPy> for SetVariable {
     }
 }
 
-impl From<SetVarPy> for SetExpression {
-    fn from(v: SetVarPy) -> Self {
-        v.0.into()
+impl From<SetVariable> for SetVarPy {
+    fn from(v: SetVariable) -> Self {
+        Self(v)
     }
 }
 
-impl SetVarPy {
-    pub fn new(v: SetVariable) -> SetVarPy {
-        SetVarPy(v)
+impl From<SetVarPy> for SetExpression {
+    fn from(v: SetVarPy) -> Self {
+        v.0.into()
     }
 }
 
@@ -739,6 +1150,16 @@ impl SetVarPy {
     /// ------
     /// OverflowError
     ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.add(2).eval(state, model)
+    /// {0, 1, 2}
     #[pyo3(signature = (element))]
     fn add(&self, element: ElementUnion) -> SetExprPy {
         let element = ElementExpression::from(element);
@@ -765,6 +1186,16 @@ impl SetVarPy {
     /// ------
     /// OverflowError
     ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.remove(1).eval(state, model)
+    /// {0}
     #[pyo3(signature = (element))]
     fn remove(&self, element: ElementUnion) -> SetExprPy {
         let element = ElementExpression::from(element);
@@ -787,6 +1218,17 @@ impl SetVarPy {
     /// -------
     /// SetExpr
     ///     The set where all elements in `other` are removed.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> state = model.target_state
+    /// >>> var.difference(cst).eval(state, model)
+    /// {0}
     #[pyo3(signature = (other))]
     fn difference(&self, other: SetUnion) -> SetExprPy {
         self.__sub__(other)
@@ -808,6 +1250,17 @@ impl SetVarPy {
     /// -------
     /// SetExpr
     ///     The intersection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> state = model.target_state
+    /// >>> var.intersection(cst).eval(state, model)
+    /// {1}
     fn intersection(&self, other: SetUnion) -> SetExprPy {
         self.__and__(other)
     }
@@ -828,6 +1281,17 @@ impl SetVarPy {
     /// -------
     /// SetExpr
     ///     The symmetric difference set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> state = model.target_state
+    /// >>> var.symmetric_difference(cst).eval(state, model)
+    /// {0, 2}
     #[pyo3(signature = (other))]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
         self.__xor__(other)
@@ -849,6 +1313,17 @@ impl SetVarPy {
     /// -------
     /// SetExpr
     ///     The union.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> cst = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> state = model.target_state
+    /// >>> var.union(cst).eval(state, model)
+    /// {0, 1, 2}
     #[pyo3(signature = (other))]
     fn union(&self, other: SetUnion) -> SetExprPy {
         self.__or__(other)
@@ -872,6 +1347,16 @@ impl SetVarPy {
     /// ------
     /// OverflowError
     ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.contains(0).eval(state, model)
+    /// True
     #[pyo3(signature = (element))]
     fn contains(&self, element: ElementUnion) -> ConditionPy {
         let element = ElementExpression::from(element);
@@ -884,6 +1369,16 @@ impl SetVarPy {
     /// -------
     /// IntExpr
     ///     The cardinality.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.len().eval(state, model)
+    /// 2
     #[pyo3(signature = ())]
     fn len(&self) -> IntExprPy {
         IntExprPy(self.0.len())
@@ -895,6 +1390,16 @@ impl SetVarPy {
     /// -------
     /// Condition
     ///     The condition checking if the set is empty.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.is_empty().eval(state, model)
+    /// False
     #[pyo3(signature = ())]
     fn is_empty(&self) -> ConditionPy {
         ConditionPy(self.0.is_empty())
@@ -906,12 +1411,23 @@ impl SetVarPy {
     /// -------
     /// SetExpr
     ///     The complement set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> var.complement().eval(state, model)
+    /// {2, 3}
     #[pyo3(signature = ())]
     fn complement(&self) -> SetExprPy {
         SetExprPy(!self.0)
     }
 }
 
+/// Set constant.
 #[pyclass(name = "SetConst")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetConstPy(Set);
@@ -922,22 +1438,56 @@ impl From<SetConstPy> for Set {
     }
 }
 
+impl From<Set> for SetConstPy {
+    fn from(set: Set) -> Self {
+        Self(set)
+    }
+}
+
 impl From<SetConstPy> for SetExpression {
     fn from(set: SetConstPy) -> Self {
         set.0.into()
     }
 }
 
-impl SetConstPy {
-    pub fn new(set: Set) -> SetConstPy {
-        SetConstPy(set)
-    }
-}
-
 /// Set constant.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a `SetExpr`, `SetVar`, or `SetConst` is applied, a `Condition` is returned.
-/// If an operator (`+`, `-`, `&`, `^`, `|`) with a `SetExpr`, `SetVar`, or `SetConst` is applied, a new `SetExpr` is returned.
+/// If an operator (`+`, `-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a `:class:Condition` is returned.
+///
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> state = model.target_state
+/// >>> obj = model.add_object_type(number=4)
+/// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+/// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
+/// >>> (cst + other).eval(state, model)
+/// {0, 1, 2}
+/// >>> (cst - other).eval(state, model)
+/// {0}
+/// >>> (cst & other).eval(state, model)
+/// {1}
+/// >>> (cst ^ other).eval(state, model)
+/// {0, 2}
+/// >>> (cst | other).eval(state, model)
+/// {0, 1, 2}
+/// >>> (cst < other).eval(state, model)
+/// False
+/// >>> (cst <= other).eval(state, model)
+/// False
+/// >>> (cst == other).eval(state, model)
+/// False
+/// >>> (cst != other).eval(state, model)
+/// True
+/// >>> (cst > other).eval(state, model)
+/// False
+/// >>> (cst >= other).eval(state, model)
+/// False
 #[pymethods]
 impl SetConstPy {
     fn __richcmp__(&self, other: SetUnion, op: CompareOp) -> ConditionPy {
@@ -1009,6 +1559,16 @@ impl SetConstPy {
     /// -------
     /// SetExpr
     ///     The set where the element is added.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> cst.add(2).eval(state, model)
+    /// {0, 1, 2}
     #[pyo3(signature = (element))]
     fn add(&self, element: ElementUnion) -> SetExprPy {
         let set = SetExpression::from(self.clone());
@@ -1036,6 +1596,16 @@ impl SetConstPy {
     /// ------
     /// OverflowError
     ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> cst.remove(1).eval(state, model)
+    /// {0}
     #[pyo3(signature = (element))]
     fn remove(&self, element: ElementUnion) -> SetExprPy {
         let set = SetExpression::from(self.clone());
@@ -1064,6 +1634,17 @@ impl SetConstPy {
     /// ------
     /// OverflowError
     ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> cst.difference(other).eval(state, model)
+    /// {0}
     #[pyo3(signature = (other))]
     fn difference(&self, other: SetUnion) -> SetExprPy {
         self.__sub__(other)
@@ -1085,6 +1666,17 @@ impl SetConstPy {
     /// -------
     /// SetExpr
     ///     The intersection.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> cst.intersection(other).eval(state, model)
+    /// {1}
     #[pyo3(signature = (other))]
     fn intersection(&self, other: SetUnion) -> SetExprPy {
         self.__and__(other)
@@ -1106,6 +1698,17 @@ impl SetConstPy {
     /// -------
     /// SetExpr
     ///     The symmetric difference set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> cst.symmetric_difference(other).eval(state, model)
+    /// {0, 2}
     #[pyo3(signature = (other))]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
         self.__xor__(other)
@@ -1127,6 +1730,17 @@ impl SetConstPy {
     /// -------
     /// SetExpr
     ///     The union.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
+    /// >>> cst.union(other).eval(state, model)
+    /// {0, 1, 2}
     #[pyo3(signature = (other))]
     fn union(&self, other: SetUnion) -> SetExprPy {
         self.__or__(other)
@@ -1150,6 +1764,16 @@ impl SetConstPy {
     /// ------
     /// OverflowError
     ///     If `element` is `int` and negative.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> cst.contains(0).eval(state, model)
+    /// True
     #[pyo3(signature = (element))]
     fn contains(&self, element: ElementUnion) -> ConditionPy {
         let set = SetExpression::from(self.clone());
@@ -1163,6 +1787,16 @@ impl SetConstPy {
     /// -------
     /// IntExpr
     ///     The cardinality.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> cst.len().eval(state, model)
+    /// 2
     #[pyo3(signature = ())]
     fn len(&self) -> IntExprPy {
         let set = SetExpression::from(self.clone());
@@ -1175,6 +1809,16 @@ impl SetConstPy {
     /// -------
     /// Condition
     ///     The condition checking if the set is empty.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> cst.is_empty().eval(state, model)
+    /// False
     #[pyo3(signature = ())]
     fn is_empty(&self) -> ConditionPy {
         let set = SetExpression::from(self.clone());
@@ -1187,10 +1831,40 @@ impl SetConstPy {
     /// -------
     /// SetExpr
     ///     The complement set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> cst.complement().eval(state, model)
+    /// {2, 3}
     #[pyo3(signature = ())]
     fn complement(&self) -> SetExprPy {
         let set = SetExpression::from(self.clone());
         SetExprPy(!set)
+    }
+
+    /// Returns the set.
+    ///
+    /// Returns
+    /// -------
+    /// set
+    ///     The set.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> cst = model.create_set_const(object_type=obj, value=[0, 1])
+    /// >>> cst.eval()
+    /// {0, 1}
+    #[pyo3(signature = ())]
+    fn eval(&self) -> HashSet<Element> {
+        HashSet::from_iter(self.0.ones())
     }
 }
 
@@ -1242,16 +1916,68 @@ impl IntoPy<Py<PyAny>> for IntOrFloatExpr {
 
 /// Integer expression.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an `IntExpr`, `IntVar`, `IntResourceVar`, `FloatExpr`, `FloatVar`, `FloatResourceVar`, `int`, or `float` is applied, a `Condition` is returned.
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `%`) with an `IntExpr`, `IntVar`, `IntResourceVar`, or `int` is applied, a new `IntExpr` is returned.
-/// For division (`/`) and power (`**`), a `FloatExpr` is returned.
-/// If an arithmetic operator with an `FloatExpr`, `FloatVar`, `FloatResourceVar`, or `float` is applied, a `FloatExpr` is returned.
+/// If an arithmetic operator (`+`, `-`, `*`, `//`, `%`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, or `int` is applied, a new :class:`IntExpr` is returned.
+/// For division (`/`) and power (`**`), a :class:`FloatExpr` is returned.
+/// If an arithmetic operator with an :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or `float` is applied, a :class:`FloatExpr` is returned.
+/// If `abs` is applied, a new :class:`IntExpr` is returned.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+///
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
 ///
 /// Parameters
 /// ----------
 /// value : int
 ///     A value from which a constant expression is created.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> state = model.target_state
+/// >>> expr = dp.IntExpr(3)
+/// >>> expr.eval(state, model)
+/// 3
+/// >>> (-expr).eval(state, model)
+/// -3
+/// >>> (expr + 1).eval(state, model)
+/// 4
+/// >>> (expr + 1.5).eval(state, model)
+/// 4.5
+/// >>> (expr - 1).eval(state, model)
+/// 2
+/// >>> (expr * 2).eval(state, model)
+/// 6
+/// >>> (expr / 2).eval(state, model)
+/// 1.5
+/// >>> (expr // 2).eval(state, model)
+/// 1
+/// >>> (expr % 2).eval(state, model)
+/// 1
+/// >>> abs(expr).eval(state, model)
+/// 3
+/// >>> (expr ** 2).eval(state, model)
+/// 9.0
+/// >>> pow(expr, 2).eval(state, model)
+/// 9.0
+/// >>> (2 ** expr).eval(state, model)
+/// 8.0
+/// >>> pow(2, expr).eval(state, model)
+/// 8.0
+/// >>> (expr < 3).eval(state, model)
+/// False
+/// >>> (expr <= 3).eval(state, model)
+/// True
+/// >>> (expr == 3).eval(state, model)
+/// True
+/// >>> (expr != 3).eval(state, model)
+/// False
+/// >>> (expr > 3).eval(state, model)
+/// False
+/// >>> (expr >= 3).eval(state, model)
+/// True
 #[pyclass(name = "IntExpr")]
+#[pyo3(text_signature = "(value)")]
 #[derive(Debug, PartialEq, Clone)]
 pub struct IntExprPy(IntegerExpression);
 
@@ -1261,9 +1987,9 @@ impl From<IntExprPy> for IntegerExpression {
     }
 }
 
-impl IntExprPy {
-    pub fn new(expr: IntegerExpression) -> Self {
-        Self(expr)
+impl From<IntegerExpression> for IntExprPy {
+    fn from(expression: IntegerExpression) -> Self {
+        Self(expression)
     }
 }
 
@@ -1280,6 +2006,15 @@ impl IntExprPy {
     /// -------
     /// IntExpr
     ///     The cost of the transitioned state.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> cost = dp.IntExpr.state_cost() + 1
+    /// >>> cost.eval_cost(1, state, model)
+    /// 2
     #[pyo3(signature = ())]
     #[staticmethod]
     fn state_cost() -> IntExprPy {
@@ -1439,14 +2174,143 @@ impl IntExprPy {
             FloatExprPy(result)
         }
     }
+
+    /// eval(state, model)
+    ///
+    /// Evaluates the expression.
+    ///
+    /// Parameters
+    /// ----------
+    /// state : State
+    ///     State.
+    /// model : Model
+    ///     DyPDL Model.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Value of the expression.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If the expression is not valid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=0)
+    /// >>> expr = var + 1
+    /// >>> state = model.target_state
+    /// >>> expr.eval(state, model)
+    /// 1
+    #[pyo3(signature = (state, model))]
+    fn eval(&self, state: &StatePy, model: &ModelPy) -> Integer {
+        self.0
+            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+    }
+
+    /// eval_cost(cost, state, model)
+    ///
+    /// Evaluates the cost expression.
+    ///
+    /// Parameters
+    /// ----------
+    /// cost : int
+    ///     State cost.
+    /// state : State
+    ///     State.
+    /// model : Model
+    ///     DyPDL Model.
+    ///
+    /// Returns
+    /// -------
+    /// int
+    ///     Value of the expression.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If the expression is not valid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=0)
+    /// >>> expr = var + dp.IntExpr.state_cost()
+    /// >>> state = model.target_state
+    /// >>> expr.eval_cost(1, state, model)
+    /// 1
+    #[pyo3(signature = (cost, state, model))]
+    fn eval_cost(&self, cost: Integer, state: &StatePy, model: &ModelPy) -> Integer {
+        self.0.eval_cost(
+            cost,
+            state.inner_as_ref(),
+            &model.inner_as_ref().table_registry,
+        )
+    }
 }
 
 /// Integer variable.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an `IntExpr`, `IntVar`, `IntResourceVar`, `FloatExpr`, `FloatVar`, `FloatResourceVar`, `int`, or `float` is applied, a `Condition` is returned.
-/// If an arithmetic operator (`+`, `-`, `*`, `//`, `%`) with an `IntExpr`, `IntVar`, `IntResourceVar`, or `int` is applied, a new `IntExpr` is returned.
-/// For division (`/`) and power (`**`), a `FloatExpr` is returned.
-/// If an arithmetic operator with an `FloatExpr`, `FloatVar`, `FloatResourceVar`, or `float` is applied, a `FloatExpr` is returned.
+/// If an arithmetic operator (`+`, `-`, `*`, `//`, `%`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, or `int` is applied, a new :class:`IntExpr` is returned.
+/// For division (`/`) and power (`**`), a :class:`FloatExpr` is returned.
+/// If an arithmetic operator with an :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or `float` is applied, a :class:`FloatExpr` is returned.
+/// If `abs` is applied, a new :class:`IntExpr` is returned.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+///
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+///
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> var = model.add_int_var(target=3)
+/// >>> state = model.target_state
+/// >>> state[var]
+/// 3
+/// >>> (-var).eval(state, model)
+/// -3
+/// >>> (var + 1).eval(state, model)
+/// 4
+/// >>> (var + 1.5).eval(state, model)
+/// 4.5
+/// >>> (var - 1).eval(state, model)
+/// 2
+/// >>> (var * 2).eval(state, model)
+/// 6
+/// >>> (var / 2).eval(state, model)
+/// 1.5
+/// >>> (var // 2).eval(state, model)
+/// 1
+/// >>> (var % 2).eval(state, model)
+/// 1
+/// >>> abs(var).eval(state, model)
+/// 3
+/// >>> (var ** 2).eval(state, model)
+/// 9.0
+/// >>> pow(var, 2).eval(state, model)
+/// 9.0
+/// >>> (2 ** var).eval(state, model)
+/// 8.0
+/// >>> pow(2, var).eval(state, model)
+/// 8.0
+/// >>> (var < 3).eval(state, model)
+/// False
+/// >>> (var <= 3).eval(state, model)
+/// True
+/// >>> (var == 3).eval(state, model)
+/// True
+/// >>> (var != 3).eval(state, model)
+/// False
+/// >>> (var > 3).eval(state, model)
+/// False
+/// >>> (var >= 3).eval(state, model)
+/// True
 #[pyclass(name = "IntVar")]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct IntVarPy(IntegerVariable);
@@ -1457,15 +2321,15 @@ impl From<IntVarPy> for IntegerVariable {
     }
 }
 
-impl From<IntVarPy> for IntegerExpression {
-    fn from(v: IntVarPy) -> Self {
-        v.0.into()
+impl From<IntegerVariable> for IntVarPy {
+    fn from(v: IntegerVariable) -> Self {
+        Self(v)
     }
 }
 
-impl IntVarPy {
-    pub fn new(v: IntegerVariable) -> IntVarPy {
-        IntVarPy(v)
+impl From<IntVarPy> for IntegerExpression {
+    fn from(v: IntVarPy) -> Self {
+        v.0.into()
     }
 }
 
@@ -1628,10 +2492,62 @@ impl IntVarPy {
 
 /// Integer resource variable.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an `IntExpr`, `IntVar`, `IntResourceVar`, `FloatExpr`, `FloatVar`, `FloatResourceVar`, `int`, or `float` is applied, a `Condition` is returned.
-/// If an arithmetic operator (`+`, `-`, `*`, `//`, `%`) with an `IntExpr`, `IntVar`, `IntResourceVar`, or `int` is applied, a new `IntExpr` is returned.
-/// For division (`/`) and power (`**`), a `FloatExpr` is returned.
-/// If an arithmetic operator with an `FloatExpr`, `FloatVar`, `FloatResourceVar`, or `float` is applied, a `FloatExpr` is returned.
+/// If an arithmetic operator (`+`, `-`, `*`, `//`, `%`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, or `int` is applied, a new :class:`IntExpr` is returned.
+/// For division (`/`) and power (`**`), a :class:`FloatExpr` is returned.
+/// If an arithmetic operator with an :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or `float` is applied, a :class:`FloatExpr` is returned.
+/// If `abs` is applied, a new :class:`IntExpr` is returned.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+///
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+///
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> var = model.add_int_resource_var(target=3, less_is_better=True)
+/// >>> state = model.target_state
+/// >>> state[var]
+/// 3
+/// >>> (-var).eval(state, model)
+/// -3
+/// >>> (var + 1).eval(state, model)
+/// 4
+/// >>> (var + 1.5).eval(state, model)
+/// 4.5
+/// >>> (var - 1).eval(state, model)
+/// 2
+/// >>> (var * 2).eval(state, model)
+/// 6
+/// >>> (var / 2).eval(state, model)
+/// 1.5
+/// >>> (var // 2).eval(state, model)
+/// 1
+/// >>> (var % 2).eval(state, model)
+/// 1
+/// >>> abs(var).eval(state, model)
+/// 3
+/// >>> (var ** 2).eval(state, model)
+/// 9.0
+/// >>> pow(var, 2).eval(state, model)
+/// 9.0
+/// >>> (2 ** var).eval(state, model)
+/// 8.0
+/// >>> pow(2, var).eval(state, model)
+/// 8.0
+/// >>> (var < 3).eval(state, model)
+/// False
+/// >>> (var <= 3).eval(state, model)
+/// True
+/// >>> (var == 3).eval(state, model)
+/// True
+/// >>> (var != 3).eval(state, model)
+/// False
+/// >>> (var > 3).eval(state, model)
+/// False
+/// >>> (var >= 3).eval(state, model)
+/// True
 #[pyclass(name = "IntResourceVar")]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct IntResourceVarPy(IntegerResourceVariable);
@@ -1642,15 +2558,15 @@ impl From<IntResourceVarPy> for IntegerResourceVariable {
     }
 }
 
-impl From<IntResourceVarPy> for IntegerExpression {
-    fn from(v: IntResourceVarPy) -> Self {
-        v.0.into()
+impl From<IntegerResourceVariable> for IntResourceVarPy {
+    fn from(v: IntegerResourceVariable) -> Self {
+        Self(v)
     }
 }
 
-impl IntResourceVarPy {
-    pub fn new(v: IntegerResourceVariable) -> IntResourceVarPy {
-        IntResourceVarPy(v)
+impl From<IntResourceVarPy> for IntegerExpression {
+    fn from(v: IntResourceVarPy) -> Self {
+        v.0.into()
     }
 }
 
@@ -1848,14 +2764,66 @@ impl From<FloatUnion> for ContinuousExpression {
 
 /// Continuous expression.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an `IntExpr`, `IntVar`, `IntResourceVar`, `FloatExpr`, `FloatVar`, `FloatResourceVar`, `int`, or `float` is applied, a `Condition` is returned.
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`, `**`) with an `IntExpr`, `IntVar`, `IntResourceVar`, `FloatExpr`, `FloatVar`, `FloatResourceVar`, `int`, or `float` is applied, a new `FloatExpr` is returned.
-/// `round`, `trunc`, `floor`, and `ceil` return an `IntExpr`.
+/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`, `**`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a new :class:`FloatExpr` is returned.
+/// If `abs` is applied, a new :class:`FloatExpr` is returned.
+/// `round`, `trunc`, `floor`, and `ceil` return an :class:`IntExpr`.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+///
+/// Note that :class:`didppy.max` and :class:`didppy.min` should be used instead of :class:`max` and :class:`min` as comparison operators are overloaded.
 ///
 /// Parameters
 /// ----------
 /// value : float
 ///     A value from which a constant expression is created.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> state = model.target_state
+/// >>> expr = dp.FloatExpr(3.5)
+/// >>> expr.eval(state, model)
+/// 3.5
+/// >>> (-expr).eval(state, model)
+/// -3.5
+/// >>> (expr + 1.5).eval(state, model)
+/// 5.0
+/// >>> (expr + 1).eval(state, model)
+/// 4.5
+/// >>> (expr - 1.5).eval(state, model)
+/// 2.0
+/// >>> (expr * 2.5).eval(state, model)
+/// 8.75
+/// >>> (expr / 2.5).eval(state, model)
+/// 1.4
+/// >>> (expr // 2.5).eval(state, model)
+/// 1.0
+/// >>> (expr % 2.5).eval(state, model)
+/// 1.0
+/// >>> abs(expr).eval(state, model)
+/// 3.5
+/// >>> (expr ** 2.0).eval(state, model)
+/// 12.25
+/// >>> pow(expr, 2.0).eval(state, model)
+/// 12.25
+/// >>> (1.0 ** expr).eval(state, model)
+/// 1.0
+/// >>> pow(1.0, expr).eval(state, model)
+/// 1.0
+/// >>> round(expr).eval(state, model)
+/// 4
+/// >>> import math
+/// >>> math.trunc(expr).eval(state, model)
+/// 3
+/// >>> math.floor(expr).eval(state, model)
+/// 3
+/// >>> math.ceil(expr).eval(state, model)
+/// 4
+/// >>> (expr < 3.0).eval(state, model)
+/// False
+/// >>> (expr > 3.0).eval(state, model)
+/// True
 #[pyclass(name = "FloatExpr")]
 #[derive(Debug, PartialEq, Clone)]
 pub struct FloatExprPy(ContinuousExpression);
@@ -1866,9 +2834,9 @@ impl From<FloatExprPy> for ContinuousExpression {
     }
 }
 
-impl FloatExprPy {
-    pub fn new(expr: ContinuousExpression) -> Self {
-        Self(expr)
+impl From<ContinuousExpression> for FloatExprPy {
+    fn from(expression: ContinuousExpression) -> Self {
+        Self(expression)
     }
 }
 
@@ -1885,6 +2853,15 @@ impl FloatExprPy {
     /// -------
     /// FloatExpr
     ///     The cost of the transitioned state.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> cost = dp.FloatExpr.state_cost() + 1.5
+    /// >>> cost.eval_cost(1.5, state, model)
+    /// 3.0
     #[pyo3(signature = ())]
     #[staticmethod]
     fn state_cost() -> FloatExprPy {
@@ -1996,13 +2973,142 @@ impl FloatExprPy {
     fn __ceil__(&self) -> IntExprPy {
         IntExprPy(IntegerExpression::ceil(self.0.clone()))
     }
+
+    /// eval(state, model)
+    ///
+    /// Evaluates the expression.
+    ///
+    /// Parameters
+    /// ----------
+    /// state : State
+    ///     State.
+    /// model : Model
+    ///     DyPDL Model.
+    ///
+    /// Returns
+    /// -------
+    /// float
+    ///     Value of the expression.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If the expression is not valid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_float_var(target=1.5)
+    /// >>> expr = var + 1.5
+    /// >>> state = model.target_state
+    /// >>> expr.eval(state, model)
+    /// 3.0
+    #[pyo3(signature = (state, model))]
+    fn eval(&self, state: &StatePy, model: &ModelPy) -> Continuous {
+        self.0
+            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+    }
+
+    /// eval_cost(cost, state, model)
+    ///
+    /// Evaluates the cost expression.
+    ///
+    /// Parameters
+    /// ----------
+    /// cost : float
+    ///     State cost.
+    /// state : State
+    ///     State.
+    /// model : Model
+    ///     DyPDL Model.
+    ///
+    /// Returns
+    /// -------
+    /// float
+    ///     Value of the expression.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If the expression is not valid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_float_var(target=1.5)
+    /// >>> expr = var + dp.FloatExpr.state_cost()
+    /// >>> state = model.target_state
+    /// >>> expr.eval_cost(1.5, state, model)
+    /// 3.0
+    #[pyo3(signature = (cost, state, model))]
+    fn eval_cost(&self, cost: Continuous, state: &StatePy, model: &ModelPy) -> Continuous {
+        self.0.eval_cost(
+            cost,
+            state.inner_as_ref(),
+            &model.inner_as_ref().table_registry,
+        )
+    }
 }
 
 /// Continuous variable.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an `IntExpr`, `IntVar`, `IntResourceVar`, `FloatExpr`, `FloatVar`, `FloatResourceVar`, `int`, or `float` is applied, a `Condition` is returned.
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`, `**`) with an `IntExpr`, `IntVar`, `IntResourceVar`, `FloatExpr`, `FloatVar`, `FloatResourceVar`, `int`, or `float` is applied, a new `FloatExpr` is returned.
-/// `round`, `trunc`, `floor`, and `ceil` return an `IntExpr`.
+/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`, `**`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a new :class:`FloatExpr` is returned.
+/// If `abs` is applied, a new :class:`FloatExpr` is returned.
+/// `round`, `trunc`, `floor`, and `ceil` return an :class:`IntExpr`.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+///
+/// Note that :class:`didppy.max` and :class:`didppy.min` should be used instead of :class:`max` and :class:`min` as comparison operators are overloaded.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> var = model.add_float_var(target=3.5)
+/// >>> state = model.target_state
+/// >>> state[var]
+/// 3.5
+/// >>> (-var).eval(state, model)
+/// -3.5
+/// >>> (var + 1.5).eval(state, model)
+/// 5.0
+/// >>> (var + 1).eval(state, model)
+/// 4.5
+/// >>> (var - 1.5).eval(state, model)
+/// 2.0
+/// >>> (var * 2.5).eval(state, model)
+/// 8.75
+/// >>> (var / 2.5).eval(state, model)
+/// 1.4
+/// >>> (var // 2.5).eval(state, model)
+/// 1.0
+/// >>> (var % 2.5).eval(state, model)
+/// 1.0
+/// >>> abs(var).eval(state, model)
+/// 3.5
+/// >>> (var ** 2.0).eval(state, model)
+/// 12.25
+/// >>> pow(var, 2.0).eval(state, model)
+/// 12.25
+/// >>> (1.0 ** var).eval(state, model)
+/// 1.0
+/// >>> pow(1.0, var).eval(state, model)
+/// 1.0
+/// >>> round(var).eval(state, model)
+/// 4
+/// >>> import math
+/// >>> math.trunc(var).eval(state, model)
+/// 3
+/// >>> math.floor(var).eval(state, model)
+/// 3
+/// >>> math.ceil(var).eval(state, model)
+/// 4
+/// >>> (var < 3.0).eval(state, model)
+/// False
+/// >>> (var > 3.0).eval(state, model)
+/// True
 #[pyclass(name = "FloatVar")]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FloatVarPy(ContinuousVariable);
@@ -2013,15 +3119,15 @@ impl From<FloatVarPy> for ContinuousVariable {
     }
 }
 
-impl From<FloatVarPy> for ContinuousExpression {
-    fn from(v: FloatVarPy) -> Self {
-        v.0.into()
+impl From<ContinuousVariable> for FloatVarPy {
+    fn from(v: ContinuousVariable) -> Self {
+        Self(v)
     }
 }
 
-impl FloatVarPy {
-    pub fn new(v: ContinuousVariable) -> FloatVarPy {
-        FloatVarPy(v)
+impl From<FloatVarPy> for ContinuousExpression {
+    fn from(v: FloatVarPy) -> Self {
+        v.0.into()
     }
 }
 
@@ -2136,9 +3242,61 @@ impl FloatVarPy {
 
 /// Continuous resource variable.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an `IntExpr`, `IntVar`, `IntResourceVar`, `FloatExpr`, `FloatVar`, `FloatResourceVar`, `int`, or `float` is applied, a `Condition` is returned.
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`, `**`) with an `IntExpr`, `IntVar`, `IntResourceVar`, `FloatExpr`, `FloatVar`, `FloatResourceVar`, `int`, or `float` is applied, a new `FloatExpr` is returned.
-/// `round`, `trunc`, `floor`, and `ceil` return an `IntExpr`.
+/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`, `**`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a new :class:`FloatExpr` is returned.
+/// If `abs` is applied, a new :class:`FloatExpr` is returned.
+/// `round`, `trunc`, `floor`, and `ceil` return an :class:`IntExpr`.
+///
+/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+///
+/// Note that :class:`didppy.max` and :class:`didppy.min` should be used instead of :class:`max` and :class:`min` as comparison operators are overloaded.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> var = model.add_float_resource_var(target=3.5, less_is_better=True)
+/// >>> state = model.target_state
+/// >>> state[var]
+/// 3.5
+/// >>> (-var).eval(state, model)
+/// -3.5
+/// >>> (var + 1.5).eval(state, model)
+/// 5.0
+/// >>> (var + 1).eval(state, model)
+/// 4.5
+/// >>> (var - 1.5).eval(state, model)
+/// 2.0
+/// >>> (var * 2.5).eval(state, model)
+/// 8.75
+/// >>> (var / 2.5).eval(state, model)
+/// 1.4
+/// >>> (var // 2.5).eval(state, model)
+/// 1.0
+/// >>> (var % 2.5).eval(state, model)
+/// 1.0
+/// >>> abs(var).eval(state, model)
+/// 3.5
+/// >>> (var ** 2.0).eval(state, model)
+/// 12.25
+/// >>> pow(var, 2.0).eval(state, model)
+/// 12.25
+/// >>> (1.0 ** var).eval(state, model)
+/// 1.0
+/// >>> pow(1.0, var).eval(state, model)
+/// 1.0
+/// >>> round(var).eval(state, model)
+/// 4
+/// >>> import math
+/// >>> math.trunc(var).eval(state, model)
+/// 3
+/// >>> math.floor(var).eval(state, model)
+/// 3
+/// >>> math.ceil(var).eval(state, model)
+/// 4
+/// >>> (var < 3.0).eval(state, model)
+/// False
+/// >>> (var > 3.0).eval(state, model)
+/// True
 #[pyclass(name = "FloatResourceVar")]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FloatResourceVarPy(ContinuousResourceVariable);
@@ -2149,15 +3307,15 @@ impl From<FloatResourceVarPy> for ContinuousResourceVariable {
     }
 }
 
-impl From<FloatResourceVarPy> for ContinuousExpression {
-    fn from(v: FloatResourceVarPy) -> Self {
-        v.0.into()
+impl From<ContinuousResourceVariable> for FloatResourceVarPy {
+    fn from(v: ContinuousResourceVariable) -> Self {
+        Self(v)
     }
 }
 
-impl FloatResourceVarPy {
-    pub fn new(v: ContinuousResourceVariable) -> FloatResourceVarPy {
-        FloatResourceVarPy(v)
+impl From<FloatResourceVarPy> for ContinuousExpression {
+    fn from(v: FloatResourceVarPy) -> Self {
+        v.0.into()
     }
 }
 
@@ -2281,6 +3439,15 @@ impl FloatResourceVarPy {
 /// -------
 /// FloatExpr
 ///     The square root.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> state = model.target_state
+/// >>> expr = dp.FloatExpr(4.0)
+/// >>> dp.sqrt(expr).eval(state, model)
+/// 2.0
 #[pyfunction]
 #[pyo3(signature = (x))]
 pub fn sqrt(x: FloatUnion) -> FloatExprPy {
@@ -2300,6 +3467,16 @@ pub fn sqrt(x: FloatUnion) -> FloatExprPy {
 /// -------
 /// FloatExpr
 ///     The logarithm.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> state = model.target_state
+/// >>> x = dp.FloatExpr(4.0)
+/// >>> y = dp.FloatExpr(2.0)
+/// >>> dp.log(x, y).eval(state, model)
+/// 2.0
 #[pyfunction]
 #[pyo3(signature = (x, y))]
 pub fn log(x: FloatUnion, y: FloatUnion) -> FloatExprPy {
@@ -2319,121 +3496,137 @@ pub fn log(x: FloatUnion, y: FloatUnion) -> FloatExprPy {
 /// -------
 /// FloatExpr
 ///     The continuous expression.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> state = model.target_state
+/// >>> expr = dp.IntExpr(4)
+/// >>> dp.float(expr).eval(state, model)
+/// 4.0
 #[pyfunction]
 #[pyo3(signature = (x))]
 pub fn float(x: IntUnion) -> FloatExprPy {
     FloatExprPy(ContinuousExpression::from(IntegerExpression::from(x)))
 }
 
-#[derive(FromPyObject, Debug, PartialEq, Clone)]
-pub enum NumericArgUnion {
-    #[pyo3(transparent)]
-    Element(ElementUnion),
-    #[pyo3(transparent)]
-    Int(IntUnion),
-    #[pyo3(transparent)]
-    Float(FloatUnion),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum NumericReturnUnion {
-    Element(ElementExprPy),
-    Int(IntExprPy),
-    Float(FloatExprPy),
-}
-
-impl IntoPy<Py<PyAny>> for NumericReturnUnion {
-    fn into_py(self, py: Python<'_>) -> Py<PyAny> {
-        match self {
-            Self::Element(expr) => expr.into_py(py),
-            Self::Int(expr) => expr.into_py(py),
-            Self::Float(expr) => expr.into_py(py),
-        }
-    }
-}
-
 /// Returns an expression representing the greater value.
 ///
 /// Parameters
 /// ----------
-/// x: ElementExpr, ElementVar, ElementResourceVar, IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, or float
+/// x: ElementExpr, ElementVar, ElementResourceVar, IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, SetExpr, SetConst, SetVar, int, or float
 ///     First input.
-/// y: ElementExpr, ElementVar, ElementResourceVar, IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, or float
+/// y: ElementExpr, ElementVar, ElementResourceVar, IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, SetExpr, SetConst, SetVar, int, or float
 ///     Second input.
 ///
 /// Returns
 /// -------
-/// ElementExpr, IntExpr, or FloatExpr
+/// ElementExpr, IntExpr, FloatExpr, or SetExpr
 ///     The greater value.
 ///
 /// Raises
 /// ------
 /// TypeError
 ///     If the types of `x` and `y` mismatch.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> var = model.add_int_var(target=2)
+/// >>> dp.max(var, 1).eval(model.target_state, model)
+/// 2
 #[pyfunction]
 #[pyo3(signature = (x, y))]
-pub fn max(x: &PyAny, y: &PyAny) -> PyResult<NumericReturnUnion> {
+pub fn max(x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
     let result: (PyResult<IntUnion>, PyResult<IntUnion>) = (x.extract(), y.extract());
     if let (Ok(x), Ok(y)) = result {
         let x = IntegerExpression::from(x);
         let y = IntegerExpression::from(y);
-        return Ok(NumericReturnUnion::Int(IntExprPy(x.max(y))));
+        return Ok(ExprUnion::Int(IntExprPy(x.max(y))));
     }
     let result: (PyResult<FloatUnion>, PyResult<FloatUnion>) = (x.extract(), y.extract());
     if let (Ok(x), Ok(y)) = result {
         let x = ContinuousExpression::from(x);
         let y = ContinuousExpression::from(y);
-        return Ok(NumericReturnUnion::Float(FloatExprPy(x.max(y))));
+        return Ok(ExprUnion::Float(FloatExprPy(x.max(y))));
     }
     let result: (PyResult<ElementUnion>, PyResult<ElementUnion>) = (x.extract(), y.extract());
     if let (Ok(x), Ok(y)) = result {
         let x = ElementExpression::from(x);
         let y = ElementExpression::from(y);
-        return Ok(NumericReturnUnion::Element(ElementExprPy(x.max(y))));
+        return Ok(ExprUnion::Element(ElementExprPy(x.max(y))));
     }
-    Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), or (ElementExpr, ElementExpr)"))
+    let result: (PyResult<SetUnion>, PyResult<SetUnion>) = (x.extract(), y.extract());
+    if let (Ok(x), Ok(y)) = result {
+        let x = SetExpression::from(x);
+        let y = SetExpression::from(y);
+        return Ok(ExprUnion::Set(SetExprPy(
+            Condition::Set(Box::new(SetCondition::IsSubset(x.clone(), y.clone())))
+                .if_then_else(y, x),
+        )));
+    }
+    Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), (ElementExpr, ElementExpr), or (SetExpr, SetExpr)"))
 }
 
 /// Returns an expression representing the smaller value.
 ///
 /// Parameters
 /// ----------
-/// x: ElementExpr, ElementVar, ElementResourceVar, IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, or float
+/// x: ElementExpr, ElementVar, ElementResourceVar, IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, SetExpr, SetConst, SetVar, int, or float
 ///     First input.
-/// y: ElementExpr, ElementVar, ElementResourceVar, IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, or float
+/// y: ElementExpr, ElementVar, ElementResourceVar, IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, SetExpr, SetConst, SetVar, int, or float
 ///     Second input.
 ///
 /// Returns
 /// -------
-/// ElementExpr, IntExpr, or FloatExpr
+/// ElementExpr, IntExpr, FloatExpr, or SetExpr
 ///     The smaller value.
 ///
 /// Raises
 /// ------
 /// TypeError
 ///     If the types of `x` and `y` mismatch.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> var = model.add_int_var(target=2)
+/// >>> dp.min(var, 1).eval(model.target_state, model)
+/// 1
 #[pyfunction]
 #[pyo3(signature = (x, y))]
-pub fn min(x: &PyAny, y: &PyAny) -> PyResult<NumericReturnUnion> {
+pub fn min(x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
     let result: (PyResult<IntUnion>, PyResult<IntUnion>) = (x.extract(), y.extract());
     if let (Ok(x), Ok(y)) = result {
         let x = IntegerExpression::from(x);
         let y = IntegerExpression::from(y);
-        return Ok(NumericReturnUnion::Int(IntExprPy(x.min(y))));
+        return Ok(ExprUnion::Int(IntExprPy(x.min(y))));
     }
     let result: (PyResult<FloatUnion>, PyResult<FloatUnion>) = (x.extract(), y.extract());
     if let (Ok(x), Ok(y)) = result {
         let x = ContinuousExpression::from(x);
         let y = ContinuousExpression::from(y);
-        return Ok(NumericReturnUnion::Float(FloatExprPy(x.min(y))));
+        return Ok(ExprUnion::Float(FloatExprPy(x.min(y))));
     }
     let result: (PyResult<ElementUnion>, PyResult<ElementUnion>) = (x.extract(), y.extract());
     if let (Ok(x), Ok(y)) = result {
         let x = ElementExpression::from(x);
         let y = ElementExpression::from(y);
-        return Ok(NumericReturnUnion::Element(ElementExprPy(x.min(y))));
+        return Ok(ExprUnion::Element(ElementExprPy(x.min(y))));
     }
-    Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), or (ElementExpr, ElementExpr)"))
+    let result: (PyResult<SetUnion>, PyResult<SetUnion>) = (x.extract(), y.extract());
+    if let (Ok(x), Ok(y)) = result {
+        let x = SetExpression::from(x);
+        let y = SetExpression::from(y);
+        return Ok(ExprUnion::Set(SetExprPy(
+            Condition::Set(Box::new(SetCondition::IsSubset(y.clone(), x.clone())))
+                .if_then_else(y, x),
+        )));
+    }
+    Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), (ElementExpr, ElementExpr), (SetExpr, SetExpr), and (Condition, Condition)"))
 }
 
 /// Condition.
@@ -2441,19 +3634,35 @@ pub fn min(x: &PyAny, y: &PyAny) -> PyResult<NumericReturnUnion> {
 /// The negation of a condition can be crated by `~x`.
 /// The conjunction of two conditions can be crated by `x & y`.
 /// The disjunction of two conditions can be crated by `x | y`.
+///
+/// Examples
+/// --------
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> var = model.add_int_var(target=4)
+/// >>> state = model.target_state
+/// >>> condition = var >= 4
+/// >>> condition.eval(state, model)
+/// True
+/// >>> (~condition).eval(state, model)
+/// False
+/// >>> (condition & (var <= 5)).eval(state, model)
+/// True
+/// >>> (condition | (var <= 5)).eval(state, model)
+/// True
 #[pyclass(name = "Condition")]
 #[derive(Debug, PartialEq, Clone)]
 pub struct ConditionPy(Condition);
 
-impl ConditionPy {
-    pub fn new(condition: Condition) -> ConditionPy {
-        ConditionPy(condition)
-    }
-}
-
 impl From<ConditionPy> for Condition {
     fn from(condition: ConditionPy) -> Self {
         condition.0
+    }
+}
+
+impl From<Condition> for ConditionPy {
+    fn from(condition: Condition) -> Self {
+        ConditionPy(condition)
     }
 }
 
@@ -2492,21 +3701,28 @@ impl ConditionPy {
     /// ------
     /// TypeError
     ///     If the types of `x` and `y` mismatch.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> expr = (var >= 0).if_then_else(2, 3)
+    /// >>> expr.eval(model.target_state, model)
+    /// 2
     #[pyo3(signature = (x, y))]
-    fn if_then_else(&self, x: &PyAny, y: &PyAny) -> PyResult<NumericReturnUnion> {
+    fn if_then_else(&self, x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
         let result: (PyResult<IntUnion>, PyResult<IntUnion>) = (x.extract(), y.extract());
         if let (Ok(x), Ok(y)) = result {
             let x = IntegerExpression::from(x);
             let y = IntegerExpression::from(y);
-            return Ok(NumericReturnUnion::Int(IntExprPy(
-                self.clone().0.if_then_else(x, y),
-            )));
+            return Ok(ExprUnion::Int(IntExprPy(self.clone().0.if_then_else(x, y))));
         }
         let result: (PyResult<FloatUnion>, PyResult<FloatUnion>) = (x.extract(), y.extract());
         if let (Ok(x), Ok(y)) = result {
             let x = ContinuousExpression::from(x);
             let y = ContinuousExpression::from(y);
-            return Ok(NumericReturnUnion::Float(FloatExprPy(
+            return Ok(ExprUnion::Float(FloatExprPy(
                 self.clone().0.if_then_else(x, y),
             )));
         }
@@ -2514,18 +3730,59 @@ impl ConditionPy {
         if let (Ok(x), Ok(y)) = result {
             let x = ElementExpression::from(x);
             let y = ElementExpression::from(y);
-            return Ok(NumericReturnUnion::Element(ElementExprPy(
+            return Ok(ExprUnion::Element(ElementExprPy(
                 self.clone().0.if_then_else(x, y),
             )));
         }
-        Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), or (ElementExpr, ElementExpr)"))
+        let result: (PyResult<SetUnion>, PyResult<SetUnion>) = (x.extract(), y.extract());
+        if let (Ok(x), Ok(y)) = result {
+            let x = SetExpression::from(x);
+            let y = SetExpression::from(y);
+            return Ok(ExprUnion::Set(SetExprPy(self.clone().0.if_then_else(x, y))));
+        }
+        Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), (SetExpr, SetExpr), and (ElementExpr, ElementExpr)"))
+    }
+
+    /// eval(state, model)
+    ///
+    /// Evaluates the condition.
+    ///
+    /// Parameters
+    /// ----------
+    /// state : State
+    ///     State.
+    /// model : Model
+    ///     DyPDL Model.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     Value of the condition.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If the condition is not valid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=0)
+    /// >>> condition = var >= 0
+    /// >>> state = model.target_state
+    /// >>> condition.eval(state, model)
+    /// True
+    #[pyo3(signature = (state, model))]
+    fn eval(&self, state: &StatePy, model: &ModelPy) -> bool {
+        self.0
+            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dypdl::expression::*;
 
     #[test]
     fn element_expression_from_expr() {
@@ -2589,7 +3846,7 @@ mod tests {
     #[test]
     fn element_expr_new() {
         assert_eq!(
-            ElementExprPy::new(ElementExpression::Constant(0)),
+            ElementExprPy::from(ElementExpression::Constant(0)),
             ElementExprPy(ElementExpression::Constant(0))
         );
     }
@@ -2892,7 +4149,7 @@ mod tests {
         let v = model.add_element_variable("v", ob, 0);
         assert!(v.is_ok());
         let v = v.unwrap();
-        assert_eq!(ElementVarPy::new(v), ElementVarPy(v));
+        assert_eq!(ElementVarPy::from(v), ElementVarPy(v));
     }
 
     #[test]
@@ -3329,7 +4586,7 @@ mod tests {
         let v = model.add_element_resource_variable("v", ob, false, 0);
         assert!(v.is_ok());
         let v = v.unwrap();
-        assert_eq!(ElementResourceVarPy::new(v), ElementResourceVarPy(v));
+        assert_eq!(ElementResourceVarPy::from(v), ElementResourceVarPy(v));
     }
 
     #[test]
@@ -3776,7 +5033,7 @@ mod tests {
     #[test]
     fn set_expr_new() {
         assert_eq!(
-            SetExprPy::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            SetExprPy::from(SetExpression::Reference(ReferenceExpression::Variable(0))),
             SetExprPy(SetExpression::Reference(ReferenceExpression::Variable(0)))
         );
     }
@@ -4247,7 +5504,7 @@ mod tests {
         let v = model.add_set_variable("v", ob, Set::with_capacity(10));
         assert!(v.is_ok());
         let v = v.unwrap();
-        assert_eq!(SetVarPy::new(v), SetVarPy(v));
+        assert_eq!(SetVarPy::from(v), SetVarPy(v));
     }
 
     #[test]
@@ -4942,7 +6199,7 @@ mod tests {
     #[test]
     fn set_const_new() {
         assert_eq!(
-            SetConstPy::new(Set::with_capacity(10)),
+            SetConstPy::from(Set::with_capacity(10)),
             SetConstPy(Set::with_capacity(10))
         );
     }
@@ -5467,7 +6724,7 @@ mod tests {
     #[test]
     fn int_expr_new() {
         assert_eq!(
-            IntExprPy::new(IntegerExpression::Constant(0)),
+            IntExprPy::from(IntegerExpression::Constant(0)),
             IntExprPy(IntegerExpression::Constant(0))
         );
     }
@@ -6130,7 +7387,7 @@ mod tests {
         let v = model.add_integer_variable("v", 0);
         assert!(v.is_ok());
         let v = v.unwrap();
-        assert_eq!(IntVarPy::new(v), IntVarPy(v));
+        assert_eq!(IntVarPy::from(v), IntVarPy(v));
     }
 
     #[test]
@@ -6976,7 +8233,7 @@ mod tests {
         let v = model.add_integer_resource_variable("v", false, 0);
         assert!(v.is_ok());
         let v = v.unwrap();
-        assert_eq!(IntResourceVarPy::new(v), IntResourceVarPy(v));
+        assert_eq!(IntResourceVarPy::from(v), IntResourceVarPy(v));
     }
 
     #[test]
@@ -7895,7 +9152,7 @@ mod tests {
     #[test]
     fn float_expr_new() {
         assert_eq!(
-            FloatExprPy::new(ContinuousExpression::Constant(0.0)),
+            FloatExprPy::from(ContinuousExpression::Constant(0.0)),
             FloatExprPy(ContinuousExpression::Constant(0.0))
         );
     }
@@ -8342,7 +9599,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
 
-        assert_eq!(FloatVarPy::new(v), FloatVarPy(v));
+        assert_eq!(FloatVarPy::from(v), FloatVarPy(v));
     }
 
     #[test]
@@ -8905,7 +10162,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
 
-        assert_eq!(FloatResourceVarPy::new(v), FloatResourceVarPy(v));
+        assert_eq!(FloatResourceVarPy::from(v), FloatResourceVarPy(v));
     }
 
     #[test]
@@ -9489,7 +10746,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
-            NumericReturnUnion::Int(IntExprPy(IntegerExpression::BinaryOperation(
+            ExprUnion::Int(IntExprPy(IntegerExpression::BinaryOperation(
                 BinaryOperator::Max,
                 Box::new(IntegerExpression::Constant(4)),
                 Box::new(IntegerExpression::Constant(2)),
@@ -9511,7 +10768,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
-            NumericReturnUnion::Float(FloatExprPy(ContinuousExpression::BinaryOperation(
+            ExprUnion::Float(FloatExprPy(ContinuousExpression::BinaryOperation(
                 BinaryOperator::Max,
                 Box::new(ContinuousExpression::Constant(4.0)),
                 Box::new(ContinuousExpression::Constant(2.0)),
@@ -9533,7 +10790,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
-            NumericReturnUnion::Element(ElementExprPy(ElementExpression::BinaryOperation(
+            ExprUnion::Element(ElementExprPy(ElementExpression::BinaryOperation(
                 BinaryOperator::Max,
                 Box::new(ElementExpression::Constant(4)),
                 Box::new(ElementExpression::Constant(2)),
@@ -9569,7 +10826,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
-            NumericReturnUnion::Int(IntExprPy(IntegerExpression::BinaryOperation(
+            ExprUnion::Int(IntExprPy(IntegerExpression::BinaryOperation(
                 BinaryOperator::Min,
                 Box::new(IntegerExpression::Constant(4)),
                 Box::new(IntegerExpression::Constant(2)),
@@ -9591,7 +10848,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
-            NumericReturnUnion::Float(FloatExprPy(ContinuousExpression::BinaryOperation(
+            ExprUnion::Float(FloatExprPy(ContinuousExpression::BinaryOperation(
                 BinaryOperator::Min,
                 Box::new(ContinuousExpression::Constant(4.0)),
                 Box::new(ContinuousExpression::Constant(2.0)),
@@ -9613,7 +10870,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
-            NumericReturnUnion::Element(ElementExprPy(ElementExpression::BinaryOperation(
+            ExprUnion::Element(ElementExprPy(ElementExpression::BinaryOperation(
                 BinaryOperator::Min,
                 Box::new(ElementExpression::Constant(4)),
                 Box::new(ElementExpression::Constant(2)),
@@ -9644,7 +10901,7 @@ mod tests {
     #[test]
     fn condition_new() {
         assert_eq!(
-            ConditionPy::new(Condition::Constant(true)),
+            ConditionPy::from(Condition::Constant(true)),
             ConditionPy(Condition::Constant(true))
         );
     }
@@ -9698,7 +10955,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
-            NumericReturnUnion::Int(IntExprPy(IntegerExpression::If(
+            ExprUnion::Int(IntExprPy(IntegerExpression::If(
                 Box::new(Condition::Constant(true)),
                 Box::new(IntegerExpression::Constant(0)),
                 Box::new(IntegerExpression::Constant(1))
@@ -9721,7 +10978,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
-            NumericReturnUnion::Float(FloatExprPy(ContinuousExpression::If(
+            ExprUnion::Float(FloatExprPy(ContinuousExpression::If(
                 Box::new(Condition::Constant(true)),
                 Box::new(ContinuousExpression::Constant(0.0)),
                 Box::new(ContinuousExpression::Constant(1.0))
@@ -9744,7 +11001,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             result.unwrap(),
-            NumericReturnUnion::Element(ElementExprPy(ElementExpression::If(
+            ExprUnion::Element(ElementExprPy(ElementExpression::If(
                 Box::new(Condition::Constant(true)),
                 Box::new(ElementExpression::Constant(0)),
                 Box::new(ElementExpression::Constant(1))

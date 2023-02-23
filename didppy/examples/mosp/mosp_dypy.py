@@ -39,7 +39,9 @@ def solve(item_to_patterns, pattern_to_items, time_limit=None):
 
     model.add_dual_bound(0)
 
-    solver = dp.CABS(model, time_limit=time_limit, quiet=False)
+    solver = dp.CABS(
+        model, f_operator=dp.FOperator.Max, time_limit=time_limit, quiet=False
+    )
     solution = solver.search()
 
     if solution.is_infeasible:

@@ -28,36 +28,6 @@ use std::rc::Rc;
 /// ------
 /// OverflowError
 ///     If `time_limit` or `initial_registry_capacity` is negative.
-///
-/// Examples
-/// -------
-/// Example with `+` operator.
-///
-/// >>> import didppy as dp
-/// >>> model = dp.Model()
-/// >>> x = model.add_int_var(target=1)
-/// >>> model.add_base_case([x == 0])
-/// >>> t = dp.Transition(name="decrement", cost=1 + dp.IntExpr.state_cost(), effects=[(x, x - 1)])
-/// >>> model.add_transition(t)
-/// >>> model.add_dual_bound(x)
-/// >>> solver = dp.Dijkstra(model, quiet=True)
-/// >>> solution = solver.search()
-/// >>> print(solution.cost)
-/// 1
-///
-/// Example with `max` operator.
-///
-/// >>> import didppy as dp
-/// >>> model = dp.Model()
-/// >>> x = model.add_int_var(target=2)
-/// >>> model.add_base_case([x == 0])
-/// >>> t = dp.Transition(name="decrement", cost=dp.max(x, dp.IntExpr.state_cost()), effects=[(x, x - 1)])
-/// >>> model.add_transition(t)
-/// >>> model.add_dual_bound(x)
-/// >>> solver = dp.Dijkstra(model, f_operator=dp.FOperator.Max, quiet=True)
-/// >>> solution = solver.search()
-/// >>> print(solution.cost)
-/// 2
 #[pyclass(unsendable, name = "ForwardRecursion")]
 #[pyo3(text_signature = "(model, time_limit=None, quiet=False, initial_registry_capacity=1000000)")]
 pub struct ForwardRecursionPy(
@@ -116,6 +86,24 @@ impl ForwardRecursionPy {
     /// -------
     /// Solution
     ///     Solution.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> x = model.add_int_var(target=1)
+    /// >>> model.add_base_case([x == 0])
+    /// >>> t = dp.Transition(
+    /// ...     name="decrement",
+    /// ...     cost=1 + dp.IntExpr.state_cost(),
+    /// ...     effects=[(x, x - 1)]
+    /// ... )
+    /// >>> model.add_transition(t)
+    /// >>> model.add_dual_bound(x)
+    /// >>> solver = dp.Dijkstra(model, quiet=True)
+    /// >>> solution = solver.search()
+    /// >>> print(solution.cost)
+    /// 1
     #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()

@@ -11,29 +11,11 @@ use std::rc::Rc;
 ///
 /// This performs weighted A* using the dual bound as the heuristic function.
 ///
-/// To apply this solver, the cost must be computed in the form of `x + state_cost`, `x * state_cost`, `dp.max(x, state_cost)`,
-/// or `dp.min(x, state_cost)` where, `state_cost` is either of `dp.IntExpr.state_cost()` and `dp.FloatExpr.state_cost()`,
+/// To apply this solver, the cost must be computed in the form of `x + state_cost`, `x * state_cost`, `didppy.max(x, state_cost)`,
+/// or `didppy.min(x, state_cost)` where, `state_cost` is either of :func:`didppy.IntExpr.state_cost()` and :func:`didppy.FloatExpr.state_cost()`,
 /// and `x` is a value independent of `state_cost`.
 /// In addition, the model must be minimization.
 /// Otherwise, it cannot compute the cost correctly and may not produce the optimal solution.
-///
-/// Parameters
-/// ----------
-/// model: Model
-///     DyPDL model to solve.
-/// time_limit: int or None, default: None
-///     Time limit.
-/// quiet: bool, default: False
-///     Suppress the log output or not.
-/// initial_registry_capacity: int, default: 1000000
-///     Initial size of the data structure storing all generated states.
-/// lazy: bool, default: False
-///     Lazily generate a state when it is expanded.
-///
-/// Raises
-/// ------
-/// OverflowError
-///     If `time_limit` or `initial_registry_capacity` is negative.
 ///
 /// Parameters
 /// ----------
@@ -43,10 +25,10 @@ use std::rc::Rc;
 ///     Weight of the h-value.
 /// f_operator: FOperator, default: FOperator.Plus
 ///     Operator to combine a g-value and the dual bound to compute the f-value.
-///     If the cost is computed by `+`, this should be `FOperator.Plus`.
-///     If the cost is computed by `*`, this should be `FOperator.Product`.
-///     If the cost is computed by `max`, this should be `FOperator.Max`.
-///     If the cost is computed by `min`, this should be `FOperator.Min`.
+///     If the cost is computed by `+`, this should be :attr:`~FOperator.Plus`.
+///     If the cost is computed by `*`, this should be :attr:`~FOperator.Product`.
+///     If the cost is computed by `max`, this should be :attr:`~FOperator.Max`.
+///     If the cost is computed by `min`, this should be :attr:`~FOperator.Min`.
 /// primal_bound: int, float, or None, default: None
 ///     Primal bound.
 /// time_limit: int or None, default: None
@@ -66,17 +48,21 @@ use std::rc::Rc;
 ///     If `time_limit` or `initial_registry_capacity` is negative.
 ///
 /// Examples
-/// -------
+/// --------
 /// Example with `+` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> x = model.add_int_var(target=1)
 /// >>> model.add_base_case([x == 0])
-/// >>> t = dp.Transition(name="decrement", cost=1 + dp.IntExpr.state_cost(), effects=[(x, x - 1)])
+/// >>> t = dp.Transition(
+/// ...     name="decrement",
+/// ...     cost=1 + dp.IntExpr.state_cost(),
+/// ...     effects=[(x, x - 1)]
+/// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
-/// >>> solver = dp.WeightedAstar(model, 1.5, quiet=True)
+/// >>> solver = dp.WeightedAstar(model, weight=1.5, quiet=True)
 /// >>> solution = solver.search()
 /// >>> print(solution.cost)
 /// 1
@@ -87,10 +73,14 @@ use std::rc::Rc;
 /// >>> model = dp.Model()
 /// >>> x = model.add_int_var(target=2)
 /// >>> model.add_base_case([x == 0])
-/// >>> t = dp.Transition(name="decrement", cost=dp.max(x, dp.IntExpr.state_cost()), effects=[(x, x - 1)])
+/// >>> t = dp.Transition(
+/// ...     name="decrement",
+/// ...     cost=dp.max(x, dp.IntExpr.state_cost()),
+/// ...     effects=[(x, x - 1)]
+/// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
-/// >>> solver = dp.WeightedAstar(model, 1.5, f_operator=dp.FOperator.Max, quiet=True)
+/// >>> solver = dp.WeightedAstar(model, weight=1.5, f_operator=dp.FOperator.Max, quiet=True)
 /// >>> solution = solver.search()
 /// >>> print(solution.cost)
 /// 2
@@ -181,6 +171,24 @@ impl WeightedAstarPy {
     /// -------
     /// Solution
     ///     Solution.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> x = model.add_int_var(target=1)
+    /// >>> model.add_base_case([x == 0])
+    /// >>> t = dp.Transition(
+    /// ...     name="decrement",
+    /// ...     cost=1 + dp.IntExpr.state_cost(),
+    /// ...     effects=[(x, x - 1)]
+    /// ... )
+    /// >>> model.add_transition(t)
+    /// >>> model.add_dual_bound(x)
+    /// >>> solver = dp.WeightedAstar(model, weight=1.5, quiet=True)
+    /// >>> solution = solver.search()
+    /// >>> solution.cost
+    /// 1
     #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()
@@ -196,6 +204,26 @@ impl WeightedAstarPy {
     ///     Solution.
     /// terminated: bool
     ///     Whether the search is terminated.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> x = model.add_int_var(target=1)
+    /// >>> model.add_base_case([x == 0])
+    /// >>> t = dp.Transition(
+    /// ...     name="decrement",
+    /// ...     cost=1 + dp.IntExpr.state_cost(),
+    /// ...     effects=[(x, x - 1)]
+    /// ... )
+    /// >>> model.add_transition(t)
+    /// >>> model.add_dual_bound(x)
+    /// >>> solver = dp.WeightedAstar(model, weight=1.5, quiet=True)
+    /// >>> solution, terminated = solver.search_next()
+    /// >>> solution.cost
+    /// 1
+    /// >>> terminated
+    /// True
     #[pyo3(signature = ())]
     fn search_next(&mut self) -> PyResult<(SolutionPy, bool)> {
         self.0.search_next()

@@ -37,7 +37,7 @@ pub struct SolutionPy {
     /// bool : If the problem is infeasible or not.
     #[pyo3(get)]
     pub is_infeasible: bool,
-    /// list of transitions: Sequence of transitions corresponding to the solution
+    /// list of Transition : Sequence of transitions corresponding to the solution
     #[pyo3(get)]
     pub transitions: Vec<TransitionPy>,
     /// int : Number of expanded nodes.
@@ -64,7 +64,7 @@ impl From<Solution<Integer>> for SolutionPy {
             transitions: solution
                 .transitions
                 .into_iter()
-                .map(TransitionPy::new)
+                .map(TransitionPy::from)
                 .collect(),
             expanded: solution.expanded,
             generated: solution.generated,
@@ -86,7 +86,7 @@ impl From<Solution<OrderedContinuous>> for SolutionPy {
             transitions: solution
                 .transitions
                 .into_iter()
-                .map(TransitionPy::new)
+                .map(TransitionPy::from)
                 .collect(),
             expanded: solution.expanded,
             generated: solution.generated,
@@ -152,7 +152,7 @@ mod tests {
                 best_bound: Some(WrappedCost::Int(0)),
                 is_optimal: true,
                 is_infeasible: false,
-                transitions: vec![TransitionPy::new(Transition::default())],
+                transitions: vec![TransitionPy::from(Transition::default())],
                 expanded: 1,
                 generated: 1,
                 time: 0.0,
@@ -181,7 +181,7 @@ mod tests {
                 best_bound: Some(WrappedCost::Float(0.0)),
                 is_optimal: true,
                 is_infeasible: false,
-                transitions: vec![TransitionPy::new(Transition::default())],
+                transitions: vec![TransitionPy::from(Transition::default())],
                 expanded: 1,
                 generated: 1,
                 time: 0.0,
