@@ -52,10 +52,10 @@ class TestElementBinaryOperator:
 
     add_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                add_cases.append((lhs, rhs, 5))
+                add_cases.append((three, two, 5))
 
     @pytest.mark.parametrize("lhs, rhs, expected", add_cases)
     def test_add(self, lhs, rhs, expected):
@@ -63,10 +63,10 @@ class TestElementBinaryOperator:
 
     sub_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                sub_cases.append((lhs, rhs, 1))
+                sub_cases.append((three, two, 1))
 
     @pytest.mark.parametrize("lhs, rhs, expected", sub_cases)
     def test_sub(self, lhs, rhs, expected):
@@ -74,10 +74,10 @@ class TestElementBinaryOperator:
 
     mul_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                mul_cases.append((lhs, rhs, 6))
+                mul_cases.append((three, two, 6))
 
     @pytest.mark.parametrize("lhs, rhs, expected", mul_cases)
     def test_mul(self, lhs, rhs, expected):
@@ -85,10 +85,10 @@ class TestElementBinaryOperator:
 
     truediv_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                truediv_cases.append((lhs, rhs, 1))
+                truediv_cases.append((three, two, 1))
 
     @pytest.mark.parametrize("lhs, rhs, expected", truediv_cases)
     def test_truediv(self, lhs, rhs, expected):
@@ -96,10 +96,10 @@ class TestElementBinaryOperator:
 
     floordiv_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                floordiv_cases.append((lhs, rhs, 1))
+                floordiv_cases.append((three, two, 1))
 
     @pytest.mark.parametrize("lhs, rhs, expected", floordiv_cases)
     def test_floordiv(self, lhs, rhs, expected):
@@ -107,10 +107,10 @@ class TestElementBinaryOperator:
 
     mod_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                mod_cases.append((lhs, rhs, 1))
+                mod_cases.append((three, two, 1))
 
     @pytest.mark.parametrize("lhs, rhs, expected", mod_cases)
     def test_mod(self, lhs, rhs, expected):
@@ -120,15 +120,11 @@ class TestElementBinaryOperator:
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                lt_cases.append((lhs, rhs, False))
-
-    for i, lhs in enumerate([two_expr, two_var, two_resource_var, 2]):
-        for j, rhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-            if i < 3 or j < 3:
-                lt_cases.append((lhs, rhs, True))
+                lt_cases.append((three, two, False))
+                lt_cases.append((two, three, True))
 
     @pytest.mark.parametrize("lhs, rhs, expected", lt_cases)
     def test_lt(self, lhs, rhs, expected):
@@ -138,15 +134,11 @@ class TestElementBinaryOperator:
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                le_cases.append((lhs, rhs, False))
-
-    for i, lhs in enumerate([two_expr, two_var, two_resource_var, 2]):
-        for j, rhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-            if i < 3 or j < 3:
-                le_cases.append((lhs, rhs, True))
+                le_cases.append((three, two, False))
+                le_cases.append((two, three, True))
 
     @pytest.mark.parametrize("lhs, rhs, expected", le_cases)
     def test_le(self, lhs, rhs, expected):
@@ -156,10 +148,10 @@ class TestElementBinaryOperator:
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                eq_cases.append((lhs, rhs, False))
+                eq_cases.append((three, two, False))
 
     @pytest.mark.parametrize("lhs, rhs, expected", eq_cases)
     def test_eq(self, lhs, rhs, expected):
@@ -169,10 +161,10 @@ class TestElementBinaryOperator:
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                ne_cases.append((lhs, rhs, True))
+                ne_cases.append((three, two, True))
 
     @pytest.mark.parametrize("lhs, rhs, expected", ne_cases)
     def test_ne(self, lhs, rhs, expected):
@@ -182,37 +174,29 @@ class TestElementBinaryOperator:
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                ge_cases.append((lhs, rhs, True))
-
-    for i, lhs in enumerate([two_expr, two_var, two_resource_var, 2]):
-        for j, rhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-            if i < 3 or j < 3:
-                ge_cases.append((lhs, rhs, False))
+                ge_cases.append((three, two, True))
+                ge_cases.append((two, three, False))
 
     @pytest.mark.parametrize("lhs, rhs, expected", ge_cases)
     def test_ge(self, lhs, rhs, expected):
         assert (lhs >= rhs).eval(self.state, self.model) == expected
 
     gt_cases = [
-        (value, value, True) for value in [three_expr, three_var, three_resource_var]
+        (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                gt_cases.append((lhs, rhs, True))
-
-    for i, lhs in enumerate([two_expr, two_var, two_resource_var, 2]):
-        for j, rhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-            if i < 3 or j < 3:
-                gt_cases.append((lhs, rhs, False))
+                gt_cases.append((three, two, True))
+                gt_cases.append((two, three, False))
 
     @pytest.mark.parametrize("lhs, rhs, expected", gt_cases)
     def test_gt(self, lhs, rhs, expected):
-        assert (lhs >= rhs).eval(self.state, self.model) == expected
+        assert (lhs > rhs).eval(self.state, self.model) == expected
 
 
 set_eval_cases = [
@@ -413,21 +397,18 @@ class TestSetBinaryOperator:
 
     or_cases = []
 
-    for lhs in [const, expr, var]:
-        for rhs in [empty_const, empty_expr, empty_var]:
-            or_cases.append((lhs, rhs, {0, 1}))
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            or_cases.append((value, other, {0, 1}))
 
-    for lhs in [const, expr, var]:
-        for rhs in [overlap_const, overlap_expr, overlap_var]:
-            or_cases.append((lhs, rhs, {0, 1, 2}))
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            or_cases.append((value, other, {0, 1, 2}))
 
-    for lhs in [const, expr, var]:
-        for rhs in [subset_const, subset_expr, subset_var]:
-            or_cases.append((lhs, rhs, {0, 1}))
+        for other in [subset_const, subset_expr, subset_var]:
+            or_cases.append((value, other, {0, 1}))
 
-    for lhs in [const, expr, var]:
-        for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-            or_cases.append((lhs, rhs, {0, 1, 2, 3}))
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            or_cases.append((value, other, {0, 1, 2, 3}))
 
     @pytest.mark.parametrize("lhs, rhs, expected", or_cases)
     def test_or(self, lhs, rhs, expected):
@@ -439,21 +420,18 @@ class TestSetBinaryOperator:
 
     sub_cases = []
 
-    for lhs in [const, expr, var]:
-        for rhs in [empty_const, empty_expr, empty_var]:
-            sub_cases.append((lhs, rhs, {0, 1}))
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            sub_cases.append((value, other, {0, 1}))
 
-    for lhs in [const, expr, var]:
-        for rhs in [overlap_const, overlap_expr, overlap_var]:
-            sub_cases.append((lhs, rhs, {0}))
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            sub_cases.append((value, other, {0}))
 
-    for lhs in [const, expr, var]:
-        for rhs in [subset_const, subset_expr, subset_var]:
-            sub_cases.append((lhs, rhs, {1}))
+        for other in [subset_const, subset_expr, subset_var]:
+            sub_cases.append((value, other, {1}))
 
-    for lhs in [const, expr, var]:
-        for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-            sub_cases.append((lhs, rhs, {0, 1}))
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            sub_cases.append((value, other, {0, 1}))
 
     @pytest.mark.parametrize("lhs, rhs, expected", sub_cases)
     def test_sub(self, lhs, rhs, expected):
@@ -465,21 +443,18 @@ class TestSetBinaryOperator:
 
     and_cases = []
 
-    for lhs in [const, expr, var]:
-        for rhs in [empty_const, empty_expr, empty_var]:
-            and_cases.append((lhs, rhs, set()))
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            and_cases.append((value, other, set()))
 
-    for lhs in [const, expr, var]:
-        for rhs in [overlap_const, overlap_expr, overlap_var]:
-            and_cases.append((lhs, rhs, {1}))
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            and_cases.append((value, other, {1}))
 
-    for lhs in [const, expr, var]:
-        for rhs in [subset_const, subset_expr, subset_var]:
-            and_cases.append((lhs, rhs, {0}))
+        for other in [subset_const, subset_expr, subset_var]:
+            and_cases.append((value, other, {0}))
 
-    for lhs in [const, expr, var]:
-        for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-            and_cases.append((lhs, rhs, set()))
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            and_cases.append((value, other, set()))
 
     @pytest.mark.parametrize("lhs, rhs, expected", and_cases)
     def test_and(self, lhs, rhs, expected):
@@ -491,21 +466,18 @@ class TestSetBinaryOperator:
 
     xor_cases = []
 
-    for lhs in [const, expr, var]:
-        for rhs in [empty_const, empty_expr, empty_var]:
-            xor_cases.append((lhs, rhs, {0, 1}))
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            xor_cases.append((value, other, {0, 1}))
 
-    for lhs in [const, expr, var]:
-        for rhs in [overlap_const, overlap_expr, overlap_var]:
-            xor_cases.append((lhs, rhs, {0, 2}))
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            xor_cases.append((value, other, {0, 2}))
 
-    for lhs in [const, expr, var]:
-        for rhs in [subset_const, subset_expr, subset_var]:
-            xor_cases.append((lhs, rhs, {1}))
+        for other in [subset_const, subset_expr, subset_var]:
+            xor_cases.append((value, other, {1}))
 
-    for lhs in [const, expr, var]:
-        for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-            xor_cases.append((lhs, rhs, {0, 1, 2, 3}))
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            xor_cases.append((value, other, {0, 1, 2, 3}))
 
     @pytest.mark.parametrize("lhs, rhs, expected", xor_cases)
     def test_xor(self, lhs, rhs, expected):
@@ -517,37 +489,22 @@ class TestSetBinaryOperator:
 
     lt_cases = [(value, value, False) for value in [const, expr, var]]
 
-    for lhs in [const, expr, var]:
-        for rhs in [empty_const, empty_expr, empty_var]:
-            lt_cases.append((lhs, rhs, False))
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            lt_cases.append((value, other, False))
+            lt_cases.append((other, value, True))
 
-    for lhs in [const, expr, var]:
-        for rhs in [overlap_const, overlap_expr, overlap_var]:
-            lt_cases.append((lhs, rhs, False))
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            lt_cases.append((value, other, False))
+            lt_cases.append((other, other, False))
 
-    for lhs in [const, expr, var]:
-        for rhs in [subset_const, subset_expr, subset_var]:
-            lt_cases.append((lhs, rhs, False))
+        for other in [subset_const, subset_expr, subset_var]:
+            lt_cases.append((value, other, False))
+            lt_cases.append((other, value, True))
 
-    for lhs in [const, expr, var]:
-        for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-            lt_cases.append((lhs, rhs, False))
-
-    for lhs in [empty_const, empty_expr, empty_var]:
-        for rhs in [const, expr, var]:
-            lt_cases.append((lhs, rhs, True))
-
-    for lhs in [overlap_const, overlap_expr, overlap_var]:
-        for rhs in [const, expr, var]:
-            lt_cases.append((lhs, rhs, False))
-
-    for lhs in [subset_const, subset_expr, subset_var]:
-        for rhs in [const, expr, var]:
-            lt_cases.append((lhs, rhs, True))
-
-    for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-        for lhs in [const, expr, var]:
-            lt_cases.append((lhs, rhs, False))
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            lt_cases.append((value, other, False))
+            lt_cases.append((other, value, False))
 
     @pytest.mark.parametrize("lhs, rhs, expected", lt_cases)
     def test_lt(self, lhs, rhs, expected):
@@ -555,37 +512,22 @@ class TestSetBinaryOperator:
 
     le_cases = [(value, value, True) for value in [const, expr, var]]
 
-    for lhs in [const, expr, var]:
-        for rhs in [empty_const, empty_expr, empty_var]:
-            le_cases.append((lhs, rhs, False))
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            le_cases.append((value, other, False))
+            le_cases.append((other, value, True))
 
-    for lhs in [const, expr, var]:
-        for rhs in [overlap_const, overlap_expr, overlap_var]:
-            le_cases.append((lhs, rhs, False))
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            le_cases.append((value, other, False))
+            le_cases.append((other, value, False))
 
-    for lhs in [const, expr, var]:
-        for rhs in [subset_const, subset_expr, subset_var]:
-            le_cases.append((lhs, rhs, False))
+        for other in [subset_const, subset_expr, subset_var]:
+            le_cases.append((value, other, False))
+            le_cases.append((other, value, True))
 
-    for lhs in [const, expr, var]:
-        for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-            le_cases.append((lhs, rhs, False))
-
-    for lhs in [empty_const, empty_expr, empty_var]:
-        for rhs in [const, expr, var]:
-            le_cases.append((lhs, rhs, True))
-
-    for lhs in [overlap_const, overlap_expr, overlap_var]:
-        for rhs in [const, expr, var]:
-            le_cases.append((lhs, rhs, False))
-
-    for lhs in [subset_const, subset_expr, subset_var]:
-        for rhs in [const, expr, var]:
-            le_cases.append((lhs, rhs, True))
-
-    for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-        for lhs in [const, expr, var]:
-            le_cases.append((lhs, rhs, False))
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            le_cases.append((value, other, False))
+            le_cases.append((other, value, False))
 
     @pytest.mark.parametrize("lhs, rhs, expected", le_cases)
     def test_le(self, lhs, rhs, expected):
@@ -597,37 +539,22 @@ class TestSetBinaryOperator:
 
     eq_cases = [(value, value, True) for value in [const, expr, var]]
 
-    for lhs in [const, expr, var]:
-        for rhs in [empty_const, empty_expr, empty_var]:
-            eq_cases.append((lhs, rhs, False))
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            eq_cases.append((value, other, False))
+            eq_cases.append((other, value, False))
 
-    for lhs in [const, expr, var]:
-        for rhs in [overlap_const, overlap_expr, overlap_var]:
-            eq_cases.append((lhs, rhs, False))
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            eq_cases.append((value, other, False))
+            eq_cases.append((other, value, False))
 
-    for lhs in [const, expr, var]:
-        for rhs in [subset_const, subset_expr, subset_var]:
-            eq_cases.append((lhs, rhs, False))
+        for other in [subset_const, subset_expr, subset_var]:
+            eq_cases.append((value, other, False))
+            eq_cases.append((other, value, False))
 
-    for lhs in [const, expr, var]:
-        for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-            eq_cases.append((lhs, rhs, False))
-
-    for lhs in [empty_const, empty_expr, empty_var]:
-        for rhs in [const, expr, var]:
-            eq_cases.append((lhs, rhs, False))
-
-    for lhs in [overlap_const, overlap_expr, overlap_var]:
-        for rhs in [const, expr, var]:
-            eq_cases.append((lhs, rhs, False))
-
-    for lhs in [subset_const, subset_expr, subset_var]:
-        for rhs in [const, expr, var]:
-            eq_cases.append((lhs, rhs, False))
-
-    for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-        for lhs in [const, expr, var]:
-            eq_cases.append((lhs, rhs, False))
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            eq_cases.append((value, other, False))
+            eq_cases.append((other, value, False))
 
     @pytest.mark.parametrize("lhs, rhs, expected", eq_cases)
     def test_eq(self, lhs, rhs, expected):
@@ -635,37 +562,22 @@ class TestSetBinaryOperator:
 
     ne_cases = [(value, value, False) for value in [const, expr, var]]
 
-    for lhs in [const, expr, var]:
-        for rhs in [empty_const, empty_expr, empty_var]:
-            ne_cases.append((lhs, rhs, True))
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            ne_cases.append((value, other, True))
+            ne_cases.append((other, value, True))
 
-    for lhs in [const, expr, var]:
-        for rhs in [overlap_const, overlap_expr, overlap_var]:
-            ne_cases.append((lhs, rhs, True))
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            ne_cases.append((value, other, True))
+            ne_cases.append((other, value, True))
 
-    for lhs in [const, expr, var]:
-        for rhs in [subset_const, subset_expr, subset_var]:
-            ne_cases.append((lhs, rhs, True))
+        for other in [subset_const, subset_expr, subset_var]:
+            ne_cases.append((value, other, True))
+            ne_cases.append((other, value, True))
 
-    for lhs in [const, expr, var]:
-        for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-            ne_cases.append((lhs, rhs, True))
-
-    for lhs in [empty_const, empty_expr, empty_var]:
-        for rhs in [const, expr, var]:
-            ne_cases.append((lhs, rhs, True))
-
-    for lhs in [overlap_const, overlap_expr, overlap_var]:
-        for rhs in [const, expr, var]:
-            ne_cases.append((lhs, rhs, True))
-
-    for lhs in [subset_const, subset_expr, subset_var]:
-        for rhs in [const, expr, var]:
-            ne_cases.append((lhs, rhs, True))
-
-    for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-        for lhs in [const, expr, var]:
-            ne_cases.append((lhs, rhs, True))
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            ne_cases.append((value, other, True))
+            ne_cases.append((other, value, True))
 
     @pytest.mark.parametrize("lhs, rhs, expected", ne_cases)
     def test_ne(self, lhs, rhs, expected):
@@ -673,37 +585,22 @@ class TestSetBinaryOperator:
 
     ge_cases = [(value, value, True) for value in [const, expr, var]]
 
-    for lhs in [const, expr, var]:
-        for rhs in [empty_const, empty_expr, empty_var]:
-            ge_cases.append((lhs, rhs, True))
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            ge_cases.append((value, other, True))
+            ge_cases.append((other, value, False))
 
-    for lhs in [const, expr, var]:
-        for rhs in [overlap_const, overlap_expr, overlap_var]:
-            ge_cases.append((lhs, rhs, False))
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            ge_cases.append((value, other, False))
+            ge_cases.append((other, value, False))
 
-    for lhs in [const, expr, var]:
-        for rhs in [subset_const, subset_expr, subset_var]:
-            ge_cases.append((lhs, rhs, True))
+        for other in [subset_const, subset_expr, subset_var]:
+            ge_cases.append((value, other, True))
+            ge_cases.append((other, value, False))
 
-    for lhs in [const, expr, var]:
-        for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-            ge_cases.append((lhs, rhs, False))
-
-    for lhs in [empty_const, empty_expr, empty_var]:
-        for rhs in [const, expr, var]:
-            ge_cases.append((lhs, rhs, False))
-
-    for lhs in [overlap_const, overlap_expr, overlap_var]:
-        for rhs in [const, expr, var]:
-            ge_cases.append((lhs, rhs, False))
-
-    for lhs in [subset_const, subset_expr, subset_var]:
-        for rhs in [const, expr, var]:
-            ge_cases.append((lhs, rhs, False))
-
-    for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-        for lhs in [const, expr, var]:
-            ge_cases.append((lhs, rhs, False))
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            ge_cases.append((value, other, False))
+            ge_cases.append((other, value, False))
 
     @pytest.mark.parametrize("lhs, rhs, expected", ge_cases)
     def test_ge(self, lhs, rhs, expected):
@@ -715,37 +612,22 @@ class TestSetBinaryOperator:
 
     gt_cases = [(value, value, False) for value in [const, expr, var]]
 
-    for lhs in [const, expr, var]:
-        for rhs in [empty_const, empty_expr, empty_var]:
-            gt_cases.append((lhs, rhs, True))
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            gt_cases.append((value, other, True))
+            gt_cases.append((other, value, False))
 
-    for lhs in [const, expr, var]:
-        for rhs in [overlap_const, overlap_expr, overlap_var]:
-            gt_cases.append((lhs, rhs, False))
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            gt_cases.append((value, other, False))
+            gt_cases.append((other, value, False))
 
-    for lhs in [const, expr, var]:
-        for rhs in [subset_const, subset_expr, subset_var]:
-            gt_cases.append((lhs, rhs, True))
+        for other in [subset_const, subset_expr, subset_var]:
+            gt_cases.append((value, other, True))
+            gt_cases.append((other, value, False))
 
-    for lhs in [const, expr, var]:
-        for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-            gt_cases.append((lhs, rhs, False))
-
-    for lhs in [empty_const, empty_expr, empty_var]:
-        for rhs in [const, expr, var]:
-            gt_cases.append((lhs, rhs, False))
-
-    for lhs in [overlap_const, overlap_expr, overlap_var]:
-        for rhs in [const, expr, var]:
-            gt_cases.append((lhs, rhs, False))
-
-    for lhs in [subset_const, subset_expr, subset_var]:
-        for rhs in [const, expr, var]:
-            gt_cases.append((lhs, rhs, False))
-
-    for rhs in [disjoint_const, disjoint_expr, disjoint_var]:
-        for lhs in [const, expr, var]:
-            gt_cases.append((lhs, rhs, False))
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            gt_cases.append((value, other, False))
+            gt_cases.append((other, value, False))
 
     @pytest.mark.parametrize("lhs, rhs, expected", gt_cases)
     def test_gt(self, lhs, rhs, expected):
@@ -784,7 +666,6 @@ class TestSetElementOperator:
         for one in [one_expr, one_var, one_resource_var, 1]:
             add_cases.append((value, one, {0, 1}))
 
-    for value in [const, expr, var]:
         for two in [two_expr, two_var, two_resource_var, 2]:
             add_cases.append((value, two, {0, 1, 2}))
 
@@ -792,7 +673,6 @@ class TestSetElementOperator:
         for one in [one_expr, one_var, one_resource_var, 1]:
             add_cases.append((empty, one, {1}))
 
-    for empty in [empty_const, empty_expr, empty_var]:
         for two in [two_expr, two_var, two_resource_var, 2]:
             add_cases.append((empty, two, {2}))
 
@@ -806,7 +686,6 @@ class TestSetElementOperator:
         for one in [one_expr, one_var, one_resource_var, 1]:
             discard_cases.append((value, one, {0}))
 
-    for value in [const, expr, var]:
         for two in [two_expr, two_var, two_resource_var, 2]:
             discard_cases.append((value, two, {0, 1}))
 
@@ -814,7 +693,6 @@ class TestSetElementOperator:
         for one in [one_expr, one_var, one_resource_var, 1]:
             discard_cases.append((empty, one, set()))
 
-    for empty in [empty_const, empty_expr, empty_var]:
         for two in [two_expr, two_var, two_resource_var, 2]:
             discard_cases.append((empty, two, set()))
 
@@ -832,7 +710,6 @@ class TestSetElementOperator:
         for one in [one_expr, one_var, one_resource_var, 1]:
             contains_cases.append((value, one, True))
 
-    for value in [const, expr, var]:
         for two in [two_expr, two_var, two_resource_var, 2]:
             contains_cases.append((value, two, False))
 
@@ -840,7 +717,6 @@ class TestSetElementOperator:
         for one in [one_expr, one_var, one_resource_var, 1]:
             contains_cases.append((empty, one, False))
 
-    for empty in [empty_const, empty_expr, empty_var]:
         for two in [two_expr, two_var, two_resource_var, 2]:
             contains_cases.append((empty, two, False))
 
@@ -849,12 +725,21 @@ class TestSetElementOperator:
         assert value.contains(element).eval(self.state, self.model) == expected
 
 
-def test_int_expr():
+int_expr_cases = [(3, 3), (-3, -3)]
+
+
+@pytest.mark.parametrize("value, expected", int_expr_cases)
+def test_int_expr(value, expected):
     model = dp.Model()
     state = model.target_state
-    expr = dp.IntExpr(3)
+    expr = dp.IntExpr(value)
 
-    assert expr.eval(state, model) == 3
+    assert expr.eval(state, model) == expected
+
+
+def test_int_expr_float():
+    with pytest.raises(TypeError):
+        dp.IntExpr(3.5)
 
 
 def test_int_expr_eval_cost():
@@ -944,10 +829,10 @@ class TestIntBinaryOperator:
 
     add_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                add_cases.append((lhs, rhs, 5))
+                add_cases.append((three, two, 5))
 
     @pytest.mark.parametrize("lhs, rhs, expected", add_cases)
     def test_add(self, lhs, rhs, expected):
@@ -955,10 +840,10 @@ class TestIntBinaryOperator:
 
     sub_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                sub_cases.append((lhs, rhs, 1))
+                sub_cases.append((three, two, 1))
 
     @pytest.mark.parametrize("lhs, rhs, expected", sub_cases)
     def test_sub(self, lhs, rhs, expected):
@@ -966,10 +851,10 @@ class TestIntBinaryOperator:
 
     mul_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                mul_cases.append((lhs, rhs, 6))
+                mul_cases.append((three, two, 6))
 
     @pytest.mark.parametrize("lhs, rhs, expected", mul_cases)
     def test_mul(self, lhs, rhs, expected):
@@ -977,10 +862,10 @@ class TestIntBinaryOperator:
 
     mod_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                mod_cases.append((lhs, rhs, 1))
+                mod_cases.append((three, two, 1))
 
     @pytest.mark.parametrize("lhs, rhs, expected", mod_cases)
     def test_mod(self, lhs, rhs, expected):
@@ -988,10 +873,10 @@ class TestIntBinaryOperator:
 
     truediv_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                truediv_cases.append((lhs, rhs, pytest.approx(1.5)))
+                truediv_cases.append((three, two, pytest.approx(1.5)))
 
     @pytest.mark.parametrize("lhs, rhs, expected", truediv_cases)
     def test_truediv(self, lhs, rhs, expected):
@@ -999,10 +884,10 @@ class TestIntBinaryOperator:
 
     floordiv_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                floordiv_cases.append((lhs, rhs, 1))
+                floordiv_cases.append((three, two, 1))
 
     @pytest.mark.parametrize("lhs, rhs, expected", floordiv_cases)
     def test_floordiv(self, lhs, rhs, expected):
@@ -1010,10 +895,10 @@ class TestIntBinaryOperator:
 
     pow_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                pow_cases.append((lhs, rhs, pytest.approx(9.0)))
+                pow_cases.append((three, two, pytest.approx(9.0)))
 
     @pytest.mark.parametrize("lhs, rhs, expected", pow_cases)
     def test_pow_op(self, lhs, rhs, expected):
@@ -1025,13 +910,13 @@ class TestIntBinaryOperator:
 
     pow_modulo_cases = []
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             for k, modulo in enumerate(
                 [modulo_expr, modulo_var, modulo_resource_var, 4.0]
             ):
                 if i < 3 or j < 3:
-                    pow_modulo_cases.append((lhs, rhs, modulo, pytest.approx(1.0)))
+                    pow_modulo_cases.append((three, two, modulo, pytest.approx(1.0)))
 
     @pytest.mark.parametrize("lhs, rhs, modulo, expected", pow_modulo_cases)
     def test_pow_modulo(self, lhs, rhs, modulo, expected):
@@ -1041,15 +926,11 @@ class TestIntBinaryOperator:
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                lt_cases.append((lhs, rhs, False))
-
-    for i, lhs in enumerate([two_expr, two_var, two_resource_var, 2]):
-        for j, rhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-            if i < 3 or j < 3:
-                lt_cases.append((lhs, rhs, True))
+                lt_cases.append((three, two, False))
+                lt_cases.append((two, three, True))
 
     @pytest.mark.parametrize("lhs, rhs, expected", lt_cases)
     def test_lt(self, lhs, rhs, expected):
@@ -1059,15 +940,11 @@ class TestIntBinaryOperator:
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                le_cases.append((lhs, rhs, False))
-
-    for i, lhs in enumerate([two_expr, two_var, two_resource_var, 2]):
-        for j, rhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-            if i < 3 or j < 3:
-                le_cases.append((lhs, rhs, True))
+                le_cases.append((three, two, False))
+                le_cases.append((two, three, True))
 
     @pytest.mark.parametrize("lhs, rhs, expected", le_cases)
     def test_le(self, lhs, rhs, expected):
@@ -1077,10 +954,10 @@ class TestIntBinaryOperator:
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                eq_cases.append((lhs, rhs, False))
+                eq_cases.append((three, two, False))
 
     @pytest.mark.parametrize("lhs, rhs, expected", eq_cases)
     def test_eq(self, lhs, rhs, expected):
@@ -1090,10 +967,10 @@ class TestIntBinaryOperator:
         (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                ne_cases.append((lhs, rhs, True))
+                ne_cases.append((three, two, True))
 
     @pytest.mark.parametrize("lhs, rhs, expected", ne_cases)
     def test_ne(self, lhs, rhs, expected):
@@ -1103,45 +980,45 @@ class TestIntBinaryOperator:
         (value, value, True) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                ge_cases.append((lhs, rhs, True))
-
-    for i, lhs in enumerate([two_expr, two_var, two_resource_var, 2]):
-        for j, rhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-            if i < 3 or j < 3:
-                ge_cases.append((lhs, rhs, False))
+                ge_cases.append((three, two, True))
+                ge_cases.append((two, three, False))
 
     @pytest.mark.parametrize("lhs, rhs, expected", ge_cases)
     def test_ge(self, lhs, rhs, expected):
         assert (lhs >= rhs).eval(self.state, self.model) == expected
 
     gt_cases = [
-        (value, value, True) for value in [three_expr, three_var, three_resource_var]
+        (value, value, False) for value in [three_expr, three_var, three_resource_var]
     ]
 
-    for i, lhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-        for j, rhs in enumerate([two_expr, two_var, two_resource_var, 2]):
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
             if i < 3 or j < 3:
-                gt_cases.append((lhs, rhs, True))
-
-    for i, lhs in enumerate([two_expr, two_var, two_resource_var, 2]):
-        for j, rhs in enumerate([three_expr, three_var, three_resource_var, 3]):
-            if i < 3 or j < 3:
-                gt_cases.append((lhs, rhs, False))
+                gt_cases.append((three, two, True))
+                gt_cases.append((two, three, False))
 
     @pytest.mark.parametrize("lhs, rhs, expected", gt_cases)
     def test_gt(self, lhs, rhs, expected):
-        assert (lhs >= rhs).eval(self.state, self.model) == expected
+        assert (lhs > rhs).eval(self.state, self.model) == expected
 
 
-def test_float_expr():
+float_expr_cases = [
+    (3.5, pytest.approx(3.5)),
+    (-3.5, pytest.approx(-3.5)),
+    (3, pytest.approx(3.0)),
+]
+
+
+@pytest.mark.parametrize("value, expected", float_expr_cases)
+def test_float_expr(value, expected):
     model = dp.Model()
     state = model.target_state
-    expr = dp.FloatExpr(3.5)
+    expr = dp.FloatExpr(value)
 
-    assert expr.eval(state, model) == pytest.approx(3.5)
+    assert expr.eval(state, model) == expected
 
 
 def test_float_expr_eval_cost():
@@ -1348,3 +1225,1018 @@ def test_float_resource_var_ceil(value, expected):
     state = model.target_state
 
     assert ceil(var).eval(state, model) == expected
+
+
+class TestFloatBinaryOperator:
+    model = dp.Model()
+
+    three_expr = dp.FloatExpr(0.3)
+    three_var = model.add_float_var(target=0.3)
+    three_resource_var = model.add_float_resource_var(target=0.3, less_is_better=True)
+
+    two_expr = dp.FloatExpr(0.2)
+    two_var = model.add_float_var(target=0.2)
+    two_resource_var = model.add_float_resource_var(target=0.2, less_is_better=True)
+
+    modulo_expr = dp.FloatExpr(0.4)
+    modulo_var = model.add_float_var(target=0.4)
+    modulo_resource_var = model.add_float_resource_var(target=0.4, less_is_better=True)
+
+    int_expr = dp.IntExpr(2)
+    int_var = model.add_int_var(target=2)
+    int_resource_var = model.add_int_resource_var(target=2, less_is_better=True)
+
+    state = model.target_state
+
+    add_cases = []
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                add_cases.append((three, two, pytest.approx(0.5)))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                add_cases.append((float_value, int_value, pytest.approx(2.3)))
+                add_cases.append((int_value, float_value, pytest.approx(2.3)))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", add_cases)
+    def test_add(self, lhs, rhs, expected):
+        assert (lhs + rhs).eval(self.state, self.model) == expected
+
+    sub_cases = []
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                sub_cases.append((three, two, pytest.approx(0.1)))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                sub_cases.append((float_value, int_value, pytest.approx(-1.7)))
+                sub_cases.append((int_value, float_value, pytest.approx(1.7)))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", sub_cases)
+    def test_sub(self, lhs, rhs, expected):
+        assert (lhs - rhs).eval(self.state, self.model) == expected
+
+    mul_cases = []
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                mul_cases.append((three, two, pytest.approx(0.06)))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                mul_cases.append((float_value, int_value, pytest.approx(0.6)))
+                mul_cases.append((int_value, float_value, pytest.approx(0.6)))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", mul_cases)
+    def test_mul(self, lhs, rhs, expected):
+        assert (lhs * rhs).eval(self.state, self.model) == expected
+
+    mod_cases = []
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                mod_cases.append((three, two, pytest.approx(0.1)))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                mod_cases.append(
+                    (float_value, int_value, pytest.approx(pytest.approx(0.3)))
+                )
+                mod_cases.append(
+                    (int_value, float_value, pytest.approx(pytest.approx(0.2)))
+                )
+
+    @pytest.mark.parametrize("lhs, rhs, expected", mod_cases)
+    def test_mod(self, lhs, rhs, expected):
+        assert (lhs % rhs).eval(self.state, self.model) == expected
+
+    truediv_cases = []
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                truediv_cases.append((three, two, pytest.approx(1.5)))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                truediv_cases.append(
+                    (float_value, int_value, pytest.approx(pytest.approx(0.15)))
+                )
+                truediv_cases.append(
+                    (int_value, float_value, pytest.approx(pytest.approx(2 / 0.3)))
+                )
+
+    @pytest.mark.parametrize("lhs, rhs, expected", truediv_cases)
+    def test_truediv(self, lhs, rhs, expected):
+        assert (lhs / rhs).eval(self.state, self.model) == expected
+
+    floordiv_cases = []
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                floordiv_cases.append((three, two, pytest.approx(1.0)))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                floordiv_cases.append(
+                    (float_value, int_value, pytest.approx(pytest.approx(0.0)))
+                )
+                floordiv_cases.append(
+                    (int_value, float_value, pytest.approx(pytest.approx(6.0)))
+                )
+
+    @pytest.mark.parametrize("lhs, rhs, expected", floordiv_cases)
+    def test_floordiv(self, lhs, rhs, expected):
+        assert (lhs // rhs).eval(self.state, self.model) == expected
+
+    pow_cases = []
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                pow_cases.append((three, two, pytest.approx(0.3**0.2)))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                pow_cases.append(
+                    (float_value, int_value, pytest.approx(pytest.approx(0.09)))
+                )
+                pow_cases.append(
+                    (int_value, float_value, pytest.approx(pytest.approx(2**0.3)))
+                )
+
+    @pytest.mark.parametrize("lhs, rhs, expected", pow_cases)
+    def test_pow_op(self, lhs, rhs, expected):
+        assert (lhs**rhs).eval(self.state, self.model) == expected
+
+    @pytest.mark.parametrize("lhs, rhs, expected", pow_cases)
+    def test_pow(self, lhs, rhs, expected):
+        assert pow(lhs, rhs).eval(self.state, self.model) == expected
+
+    pow_modulo_cases = []
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            for k, modulo in enumerate(
+                [modulo_expr, modulo_var, modulo_resource_var, 0.4]
+            ):
+                pow_modulo_cases.append(
+                    (three, two, modulo, pytest.approx(0.3**0.2 % 0.4))
+                )
+
+    @pytest.mark.parametrize("lhs, rhs, modulo, expected", pow_modulo_cases)
+    def test_pow_modulo(self, lhs, rhs, modulo, expected):
+        assert pow(lhs, rhs, modulo).eval(self.state, self.model) == expected
+
+    lt_cases = [
+        (value, value, False) for value in [three_expr, three_var, three_resource_var]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                lt_cases.append((three, two, False))
+                lt_cases.append((two, three, True))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                lt_cases.append((float_value, int_value, True))
+                lt_cases.append((int_value, float_value, False))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", lt_cases)
+    def test_lt(self, lhs, rhs, expected):
+        assert (lhs < rhs).eval(self.state, self.model) == expected
+
+    le_cases = [
+        (value, value, True) for value in [three_expr, three_var, three_resource_var]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                le_cases.append((three, two, False))
+                le_cases.append((two, three, True))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                le_cases.append((float_value, int_value, True))
+                le_cases.append((int_value, float_value, False))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", le_cases)
+    def test_le(self, lhs, rhs, expected):
+        assert (lhs <= rhs).eval(self.state, self.model) == expected
+
+    eq_cases = [
+        (value, value, True) for value in [three_expr, three_var, three_resource_var]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                eq_cases.append((three, two, False))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                eq_cases.append((float_value, int_value, False))
+                eq_cases.append((int_value, float_value, False))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", eq_cases)
+    def test_eq(self, lhs, rhs, expected):
+        assert (lhs == rhs).eval(self.state, self.model) == expected
+
+    ne_cases = [
+        (value, value, False) for value in [three_expr, three_var, three_resource_var]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                ne_cases.append((three, two, True))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                ne_cases.append((float_value, int_value, True))
+                ne_cases.append((int_value, float_value, True))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", ne_cases)
+    def test_ne(self, lhs, rhs, expected):
+        assert (lhs != rhs).eval(self.state, self.model) == expected
+
+    ge_cases = [
+        (value, value, True) for value in [three_expr, three_var, three_resource_var]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                ge_cases.append((three, two, True))
+                ge_cases.append((two, three, False))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                ge_cases.append((float_value, int_value, False))
+                ge_cases.append((int_value, float_value, True))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", ge_cases)
+    def test_ge(self, lhs, rhs, expected):
+        assert (lhs >= rhs).eval(self.state, self.model) == expected
+
+    gt_cases = [
+        (value, value, False) for value in [three_expr, three_var, three_resource_var]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                gt_cases.append((three, two, True))
+                gt_cases.append((two, three, False))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                gt_cases.append((float_value, int_value, False))
+                gt_cases.append((int_value, float_value, True))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", gt_cases)
+    def test_gt(self, lhs, rhs, expected):
+        assert (lhs > rhs).eval(self.state, self.model) == expected
+
+
+class TestSqrt:
+    model = dp.Model()
+
+    int_expr = dp.IntExpr(4)
+    int_var = model.add_int_var(target=4)
+    int_resource_var = model.add_int_resource_var(target=4, less_is_better=True)
+
+    float_expr = dp.FloatExpr(4.0)
+    float_var = model.add_float_var(target=4.0)
+    float_resource_var = model.add_float_resource_var(target=4.0, less_is_better=True)
+
+    state = model.target_state
+
+    cases = [
+        (int_expr, pytest.approx(2.0)),
+        (int_var, pytest.approx(2.0)),
+        (int_resource_var, pytest.approx(2.0)),
+        (4, pytest.approx(2.0)),
+        (float_expr, pytest.approx(2.0)),
+        (float_var, pytest.approx(2.0)),
+        (float_resource_var, pytest.approx(2.0)),
+        (4.0, pytest.approx(2.0)),
+    ]
+
+    @pytest.mark.parametrize("value, expected", cases)
+    def test(self, value, expected):
+        assert dp.sqrt(value).eval(self.state, self.model) == expected
+
+    nan_cases = [-1, dp.IntExpr(-1), dp.FloatExpr(-1.0)]
+
+    @pytest.mark.parametrize("value", nan_cases)
+    def test_nan(self, value):
+        import math
+
+        assert math.isnan(dp.sqrt(value).eval(self.state, self.model))
+
+
+class TestLog:
+    model = dp.Model()
+
+    three_expr = dp.FloatExpr(0.3)
+    three_var = model.add_float_var(target=0.3)
+    three_resource_var = model.add_float_resource_var(target=0.3, less_is_better=True)
+
+    two_expr = dp.FloatExpr(0.2)
+    two_var = model.add_float_var(target=0.2)
+    two_resource_var = model.add_float_resource_var(target=0.2, less_is_better=True)
+
+    int_expr = dp.IntExpr(2)
+    int_var = model.add_int_var(target=2)
+    int_resource_var = model.add_int_resource_var(target=2, less_is_better=True)
+
+    state = model.target_state
+
+    cases = []
+
+    import math
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            if i < 3 or j < 3:
+                cases.append((three, two, pytest.approx(math.log(0.3, 0.2))))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            if i < 3 or j < 3:
+                cases.append((float_value, int_value, pytest.approx(math.log(0.3, 2))))
+                cases.append((int_value, float_value, pytest.approx(math.log(2, 0.3))))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", cases)
+    def test(self, lhs, rhs, expected):
+        assert dp.log(lhs, rhs).eval(self.state, self.model) == expected
+
+    nan_cases = [
+        (-2, 1),
+        (1, -1),
+        (dp.IntExpr(-2), 1),
+        (1, dp.IntExpr(-1)),
+        (dp.FloatExpr(-2), 1),
+        (1, dp.FloatExpr(-1)),
+    ]
+
+    @pytest.mark.parametrize("lhs, rhs", nan_cases)
+    def test_nan(self, lhs, rhs):
+        import math
+
+        assert math.isnan(dp.log(lhs, rhs).eval(self.state, self.model))
+
+
+class TestFloat:
+    model = dp.Model()
+
+    int_expr = dp.IntExpr(2)
+    int_var = model.add_int_var(target=2)
+    int_resource_var = model.add_int_resource_var(target=2, less_is_better=True)
+
+    float_expr = dp.FloatExpr(2.5)
+    float_var = model.add_float_var(target=2.5)
+    float_resource_var = model.add_float_resource_var(target=2.5, less_is_better=True)
+
+    state = model.target_state
+
+    cases = [
+        (int_expr, pytest.approx(2.0)),
+        (int_var, pytest.approx(2.0)),
+        (int_resource_var, pytest.approx(2.0)),
+        (2, pytest.approx(2.0)),
+    ]
+
+    @pytest.mark.parametrize("value, expected", cases)
+    def test(self, value, expected):
+        assert dp.float(value).eval(self.state, self.model) == expected
+
+    error_cases = [float_expr, float_var, float_resource_var, 2.5]
+
+    @pytest.mark.parametrize("value", error_cases)
+    def test_error(self, value):
+        with pytest.raises(TypeError):
+            dp.float(value)
+
+
+class TestElementMax:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+
+    three_expr = dp.ElementExpr(3)
+    three_var = model.add_element_var(object_type=obj, target=3)
+    three_resource_var = model.add_element_resource_var(
+        object_type=obj, target=3, less_is_better=True
+    )
+
+    two_expr = dp.ElementExpr(2)
+    two_var = model.add_element_var(object_type=obj, target=2)
+    two_resource_var = model.add_element_resource_var(
+        object_type=obj, target=2, less_is_better=False
+    )
+
+    state = model.target_state
+
+    cases = [
+        (three, three, 3) for three in [three_expr, three_var, three_resource_var, 3]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
+            cases.append((three, two, 3))
+            cases.append((two, three, 3))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", cases)
+    def test(self, lhs, rhs, expected):
+        assert dp.max(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestSetMax:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+
+    const = model.create_set_const(object_type=obj, value=[0, 1])
+    expr = dp.SetExpr(const)
+    var = model.add_set_var(object_type=obj, target=[0, 1])
+
+    empty_const = model.create_set_const(object_type=obj, value=[])
+    empty_expr = dp.SetExpr(empty_const)
+    empty_var = model.add_set_var(object_type=obj, target=[])
+
+    overlap_const = model.create_set_const(object_type=obj, value=[1, 2])
+    overlap_expr = dp.SetExpr(overlap_const)
+    overlap_var = model.add_set_var(object_type=obj, target=[1, 2])
+
+    subset_const = model.create_set_const(object_type=obj, value=[0])
+    subset_expr = dp.SetExpr(subset_const)
+    subset_var = model.add_set_var(object_type=obj, target=[0])
+
+    disjoint_const = model.create_set_const(object_type=obj, value=[2, 3])
+    disjoint_expr = dp.SetExpr(disjoint_const)
+    disjoint_var = model.add_set_var(object_type=obj, target=[2, 3])
+
+    state = model.target_state
+
+    cases = [(value, value, {0, 1}) for value in [const, expr, var]]
+
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            cases.append((value, other, {0, 1}))
+            cases.append((other, value, {0, 1}))
+
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            cases.append((value, other, {0, 1}))
+            cases.append((other, value, {1, 2}))
+
+        for other in [subset_const, subset_expr, subset_var]:
+            cases.append((value, other, {0, 1}))
+            cases.append((other, value, {0, 1}))
+
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            cases.append((value, other, {0, 1}))
+            cases.append((other, value, {2, 3}))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", cases)
+    def test(self, lhs, rhs, expected):
+        assert dp.max(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestIntMax:
+    model = dp.Model()
+
+    three_expr = dp.IntExpr(3)
+    three_var = model.add_int_var(target=3)
+    three_resource_var = model.add_int_resource_var(target=3, less_is_better=True)
+
+    two_expr = dp.IntExpr(2)
+    two_var = model.add_int_var(target=2)
+    two_resource_var = model.add_int_resource_var(target=2, less_is_better=True)
+
+    state = model.target_state
+
+    cases = [
+        (value, value, 3) for value in [three_expr, three_var, three_resource_var, 3]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
+            cases.append((three, two, 3))
+            cases.append((two, three, 3))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", cases)
+    def test(self, lhs, rhs, expected):
+        assert dp.max(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestFloatMax:
+    model = dp.Model()
+
+    three_expr = dp.FloatExpr(0.3)
+    three_var = model.add_float_var(target=0.3)
+    three_resource_var = model.add_float_resource_var(target=0.3, less_is_better=True)
+
+    two_expr = dp.FloatExpr(0.2)
+    two_var = model.add_float_var(target=0.2)
+    two_resource_var = model.add_float_resource_var(target=0.2, less_is_better=True)
+
+    int_expr = dp.IntExpr(2)
+    int_var = model.add_int_var(target=2)
+    int_resource_var = model.add_int_resource_var(target=2, less_is_better=True)
+
+    state = model.target_state
+
+    cases = [
+        (value, value, pytest.approx(0.3))
+        for value in [three_expr, three_var, three_resource_var, 0.3]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            cases.append((three, two, pytest.approx(0.3)))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            cases.append((float_value, int_value, pytest.approx(2.0)))
+            cases.append((int_value, float_value, pytest.approx(2.0)))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", cases)
+    def test(self, lhs, rhs, expected):
+        assert dp.max(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestElementMin:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+
+    three_expr = dp.ElementExpr(3)
+    three_var = model.add_element_var(object_type=obj, target=3)
+    three_resource_var = model.add_element_resource_var(
+        object_type=obj, target=3, less_is_better=True
+    )
+
+    two_expr = dp.ElementExpr(2)
+    two_var = model.add_element_var(object_type=obj, target=2)
+    two_resource_var = model.add_element_resource_var(
+        object_type=obj, target=2, less_is_better=False
+    )
+
+    state = model.target_state
+
+    cases = [
+        (three, three, 3) for three in [three_expr, three_var, three_resource_var, 3]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
+            cases.append((three, two, 2))
+            cases.append((two, three, 2))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", cases)
+    def test(self, lhs, rhs, expected):
+        assert dp.min(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestSetMin:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+
+    const = model.create_set_const(object_type=obj, value=[0, 1])
+    expr = dp.SetExpr(const)
+    var = model.add_set_var(object_type=obj, target=[0, 1])
+
+    empty_const = model.create_set_const(object_type=obj, value=[])
+    empty_expr = dp.SetExpr(empty_const)
+    empty_var = model.add_set_var(object_type=obj, target=[])
+
+    overlap_const = model.create_set_const(object_type=obj, value=[1, 2])
+    overlap_expr = dp.SetExpr(overlap_const)
+    overlap_var = model.add_set_var(object_type=obj, target=[1, 2])
+
+    subset_const = model.create_set_const(object_type=obj, value=[0])
+    subset_expr = dp.SetExpr(subset_const)
+    subset_var = model.add_set_var(object_type=obj, target=[0])
+
+    disjoint_const = model.create_set_const(object_type=obj, value=[2, 3])
+    disjoint_expr = dp.SetExpr(disjoint_const)
+    disjoint_var = model.add_set_var(object_type=obj, target=[2, 3])
+
+    state = model.target_state
+
+    cases = [(value, value, {0, 1}) for value in [const, expr, var]]
+
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            cases.append((value, other, set()))
+            cases.append((other, value, set()))
+
+        for other in [overlap_const, overlap_expr, overlap_var]:
+            cases.append((value, other, {0, 1}))
+            cases.append((other, value, {1, 2}))
+
+        for other in [subset_const, subset_expr, subset_var]:
+            cases.append((value, other, {0}))
+            cases.append((other, value, {0}))
+
+        for other in [disjoint_const, disjoint_expr, disjoint_var]:
+            cases.append((value, other, {0, 1}))
+            cases.append((other, value, {2, 3}))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", cases)
+    def test(self, lhs, rhs, expected):
+        assert dp.min(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestIntMin:
+    model = dp.Model()
+
+    three_expr = dp.IntExpr(3)
+    three_var = model.add_int_var(target=3)
+    three_resource_var = model.add_int_resource_var(target=3, less_is_better=True)
+
+    two_expr = dp.IntExpr(2)
+    two_var = model.add_int_var(target=2)
+    two_resource_var = model.add_int_resource_var(target=2, less_is_better=True)
+
+    state = model.target_state
+
+    cases = [
+        (value, value, 3) for value in [three_expr, three_var, three_resource_var, 3]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
+            cases.append((three, two, 2))
+            cases.append((two, three, 2))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", cases)
+    def test(self, lhs, rhs, expected):
+        assert dp.min(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestFloatMin:
+    model = dp.Model()
+
+    three_expr = dp.FloatExpr(0.3)
+    three_var = model.add_float_var(target=0.3)
+    three_resource_var = model.add_float_resource_var(target=0.3, less_is_better=True)
+
+    two_expr = dp.FloatExpr(0.2)
+    two_var = model.add_float_var(target=0.2)
+    two_resource_var = model.add_float_resource_var(target=0.2, less_is_better=True)
+
+    int_expr = dp.IntExpr(2)
+    int_var = model.add_int_var(target=2)
+    int_resource_var = model.add_int_resource_var(target=2, less_is_better=True)
+
+    state = model.target_state
+
+    cases = [
+        (value, value, pytest.approx(0.3))
+        for value in [three_expr, three_var, three_resource_var, 0.3]
+    ]
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            cases.append((three, two, pytest.approx(0.2)))
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            cases.append((float_value, int_value, pytest.approx(0.3)))
+            cases.append((int_value, float_value, pytest.approx(0.3)))
+
+    @pytest.mark.parametrize("lhs, rhs, expected", cases)
+    def test(self, lhs, rhs, expected):
+        assert dp.min(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestMaxMinError:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+
+    element_expr = dp.ElementExpr(1)
+    element_var = model.add_element_var(object_type=obj, target=1)
+    element_resource_var = model.add_element_resource_var(
+        object_type=obj, target=1, less_is_better=True
+    )
+
+    set_const = model.create_set_const(object_type=obj, value=[1, 2])
+    set_expr = dp.SetExpr(set_const)
+    set_var = model.add_set_var(object_type=obj, target=[1, 2])
+
+    int_expr = dp.IntExpr(1)
+    int_var = model.add_int_var(target=1)
+    int_resource_var = model.add_int_resource_var(target=1, less_is_better=True)
+
+    float_expr = dp.FloatExpr(1.0)
+    float_var = model.add_float_var(target=1.0)
+    float_resource_var = model.add_float_resource_var(target=1.0, less_is_better=True)
+
+    state = model.target_state
+
+    cases = []
+
+    for set_value in [set_const, set_expr, set_var]:
+        for element_value in [element_expr, element_var, element_resource_var, 1]:
+            cases.append((set_value, element_value))
+            cases.append((element_value, set_value))
+
+        for int_value in [int_expr, int_var, int_resource_var]:
+            cases.append((set_value, int_value))
+            cases.append((int_value, set_value))
+
+        for float_value in [float_expr, float_var, float_resource_var, 1.0]:
+            cases.append((set_value, float_value))
+            cases.append((float_value, set_value))
+
+    for element_value in [element_expr, element_var, element_resource_var]:
+        cases.append((element_var, -1))
+
+        for int_value in [int_expr, int_var, int_resource_var]:
+            cases.append((element_value, int_value))
+            cases.append((int_value, element_value))
+
+        for float_value in [float_expr, float_var, float_resource_var, 1.0]:
+            cases.append((element_value, float_value))
+            cases.append((float_value, element_value))
+
+    @pytest.mark.parametrize("lhs, rhs", cases)
+    def test_max(self, lhs, rhs):
+        with pytest.raises(TypeError):
+            dp.max(lhs, rhs)
+
+    @pytest.mark.parametrize("lhs, rhs", cases)
+    def test_min(self, lhs, rhs):
+        with pytest.raises(TypeError):
+            dp.min(lhs, rhs)
+
+
+condition_eval_cases = [
+    (dp.IntExpr(2) > dp.IntExpr(1), True),
+    (dp.IntExpr(2) < dp.IntExpr(1), False),
+]
+
+
+@pytest.mark.parametrize("condition, expected", condition_eval_cases)
+def test_condition_eval(condition, expected):
+    model = dp.Model()
+    state = model.target_state
+
+    assert condition.eval(state, model) == expected
+
+
+condition_invert_cases = [
+    (dp.IntExpr(2) > dp.IntExpr(1), False),
+    (dp.IntExpr(2) < dp.IntExpr(1), True),
+]
+
+
+@pytest.mark.parametrize("condition, expected", condition_invert_cases)
+def test_condition_invert(condition, expected):
+    model = dp.Model()
+    state = model.target_state
+
+    assert (~condition).eval(state, model) == expected
+
+
+condition_and_cases = [
+    (dp.IntExpr(2) > dp.IntExpr(1), dp.IntExpr(3) > dp.IntExpr(2), True),
+    (dp.IntExpr(2) < dp.IntExpr(1), dp.IntExpr(3) > dp.IntExpr(2), False),
+    (dp.IntExpr(2) > dp.IntExpr(1), dp.IntExpr(3) < dp.IntExpr(2), False),
+    (dp.IntExpr(2) < dp.IntExpr(1), dp.IntExpr(3) < dp.IntExpr(2), False),
+]
+
+
+@pytest.mark.parametrize("lhs, rhs, expected", condition_and_cases)
+def test_condition_and(lhs, rhs, expected):
+    model = dp.Model()
+    state = model.target_state
+
+    assert (lhs & rhs).eval(state, model) == expected
+
+
+condition_or_cases = [
+    (dp.IntExpr(2) > dp.IntExpr(1), dp.IntExpr(3) > dp.IntExpr(2), True),
+    (dp.IntExpr(2) < dp.IntExpr(1), dp.IntExpr(3) > dp.IntExpr(2), True),
+    (dp.IntExpr(2) > dp.IntExpr(1), dp.IntExpr(3) < dp.IntExpr(2), True),
+    (dp.IntExpr(2) < dp.IntExpr(1), dp.IntExpr(3) < dp.IntExpr(2), False),
+]
+
+
+@pytest.mark.parametrize("lhs, rhs, expected", condition_or_cases)
+def test_condition_or(lhs, rhs, expected):
+    model = dp.Model()
+    state = model.target_state
+
+    assert (lhs | rhs).eval(state, model) == expected
+
+
+class TestElementIfThenElse:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+
+    three_expr = dp.ElementExpr(3)
+    three_var = model.add_element_var(object_type=obj, target=3)
+    three_resource_var = model.add_element_resource_var(
+        object_type=obj, target=3, less_is_better=True
+    )
+
+    two_expr = dp.ElementExpr(2)
+    two_var = model.add_element_var(object_type=obj, target=2)
+    two_resource_var = model.add_element_resource_var(
+        object_type=obj, target=2, less_is_better=False
+    )
+
+    state = model.target_state
+
+    cases = []
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
+            cases.append((dp.IntExpr(2) > dp.IntExpr(1), three, two, 3))
+            cases.append((dp.IntExpr(2) < dp.IntExpr(1), three, two, 2))
+
+    @pytest.mark.parametrize("condition, lhs, rhs, expected", cases)
+    def test(self, condition, lhs, rhs, expected):
+        assert condition.if_then_else(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestSetIfThenElse:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+
+    const = model.create_set_const(object_type=obj, value=[0, 1])
+    expr = dp.SetExpr(const)
+    var = model.add_set_var(object_type=obj, target=[0, 1])
+
+    empty_const = model.create_set_const(object_type=obj, value=[])
+    empty_expr = dp.SetExpr(empty_const)
+    empty_var = model.add_set_var(object_type=obj, target=[])
+
+    state = model.target_state
+
+    cases = []
+
+    for value in [const, expr, var]:
+        for other in [empty_const, empty_expr, empty_var]:
+            cases.append((dp.IntExpr(2) > dp.IntExpr(1), value, other, {0, 1}))
+            cases.append((dp.IntExpr(2) < dp.IntExpr(1), value, other, set()))
+
+    @pytest.mark.parametrize("condition, lhs, rhs, expected", cases)
+    def test(self, condition, lhs, rhs, expected):
+        assert condition.if_then_else(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestIntIfThenElse:
+    model = dp.Model()
+
+    three_expr = dp.IntExpr(3)
+    three_var = model.add_int_var(target=3)
+    three_resource_var = model.add_int_resource_var(target=3, less_is_better=True)
+
+    two_expr = dp.IntExpr(2)
+    two_var = model.add_int_var(target=2)
+    two_resource_var = model.add_int_resource_var(target=2, less_is_better=True)
+
+    state = model.target_state
+
+    cases = []
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 2]):
+            cases.append((dp.IntExpr(2) > dp.IntExpr(1), three, two, 3))
+            cases.append((dp.IntExpr(2) < dp.IntExpr(1), three, two, 2))
+
+    @pytest.mark.parametrize("condition, lhs, rhs, expected", cases)
+    def test(self, condition, lhs, rhs, expected):
+        assert condition.if_then_else(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestFloatIfThenElse:
+    model = dp.Model()
+
+    three_expr = dp.FloatExpr(0.3)
+    three_var = model.add_float_var(target=0.3)
+    three_resource_var = model.add_float_resource_var(target=0.3, less_is_better=True)
+
+    two_expr = dp.FloatExpr(0.2)
+    two_var = model.add_float_var(target=0.2)
+    two_resource_var = model.add_float_resource_var(target=0.2, less_is_better=True)
+
+    int_expr = dp.IntExpr(2)
+    int_var = model.add_int_var(target=2)
+    int_resource_var = model.add_int_resource_var(target=2, less_is_better=True)
+
+    state = model.target_state
+
+    cases = []
+
+    for i, three in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, two in enumerate([two_expr, two_var, two_resource_var, 0.2]):
+            cases.append(
+                (dp.IntExpr(2) > dp.IntExpr(1), three, two, pytest.approx(0.3))
+            )
+            cases.append(
+                (dp.IntExpr(2) < dp.IntExpr(1), three, two, pytest.approx(0.2))
+            )
+
+    for i, float_value in enumerate([three_expr, three_var, three_resource_var, 0.3]):
+        for j, int_value in enumerate([int_expr, int_var, int_resource_var, 2]):
+            cases.append(
+                (
+                    dp.IntExpr(2) > dp.IntExpr(1),
+                    float_value,
+                    int_value,
+                    pytest.approx(0.3),
+                )
+            )
+            cases.append(
+                (
+                    dp.IntExpr(2) < dp.IntExpr(1),
+                    float_value,
+                    int_value,
+                    pytest.approx(2.0),
+                )
+            )
+
+    @pytest.mark.parametrize("condition, lhs, rhs, expected", cases)
+    def test(self, condition, lhs, rhs, expected):
+        assert condition.if_then_else(lhs, rhs).eval(self.state, self.model) == expected
+
+
+class TestIfThenElseError:
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+
+    element_expr = dp.ElementExpr(1)
+    element_var = model.add_element_var(object_type=obj, target=1)
+    element_resource_var = model.add_element_resource_var(
+        object_type=obj, target=1, less_is_better=True
+    )
+
+    set_const = model.create_set_const(object_type=obj, value=[1, 2])
+    set_expr = dp.SetExpr(set_const)
+    set_var = model.add_set_var(object_type=obj, target=[1, 2])
+
+    int_expr = dp.IntExpr(1)
+    int_var = model.add_int_var(target=1)
+    int_resource_var = model.add_int_resource_var(target=1, less_is_better=True)
+
+    float_expr = dp.FloatExpr(1.0)
+    float_var = model.add_float_var(target=1.0)
+    float_resource_var = model.add_float_resource_var(target=1.0, less_is_better=True)
+
+    state = model.target_state
+
+    cases = []
+
+    for set_value in [set_const, set_expr, set_var]:
+        for element_value in [element_expr, element_var, element_resource_var, 1]:
+            cases.append((set_value, element_value))
+            cases.append((element_value, set_value))
+
+        for int_value in [int_expr, int_var, int_resource_var]:
+            cases.append((set_value, int_value))
+            cases.append((int_value, set_value))
+
+        for float_value in [float_expr, float_var, float_resource_var, 1.0]:
+            cases.append((set_value, float_value))
+            cases.append((float_value, set_value))
+
+    for element_value in [element_expr, element_var, element_resource_var]:
+        cases.append((element_var, -1))
+
+        for int_value in [int_expr, int_var, int_resource_var]:
+            cases.append((element_value, int_value))
+            cases.append((int_value, element_value))
+
+        for float_value in [float_expr, float_var, float_resource_var, 1.0]:
+            cases.append((element_value, float_value))
+            cases.append((float_value, element_value))
+
+    @pytest.mark.parametrize("lhs, rhs", cases)
+    def test(self, lhs, rhs):
+        with pytest.raises(TypeError):
+            (dp.IntExpr(2) > dp.IntExpr(1)).if_then_else(lhs, rhs)
