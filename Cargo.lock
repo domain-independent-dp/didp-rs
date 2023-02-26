@@ -59,6 +59,7 @@ dependencies = [
  "dypdl",
  "dypdl-heuristic-search",
  "pyo3",
+ "pyo3-build-config",
  "rustc-hash",
 ]
 

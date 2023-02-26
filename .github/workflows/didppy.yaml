@@ -51,7 +51,8 @@ jobs:
       - name: Install built wheel - x86_64
         run: |
           pip install didppy --no-index --find-links dist --force-reinstall
-          python -c "import didppy"
+          pip install pytest
+          pytest -v
       - name: Build wheels - universal2
         uses: PyO3/maturin-action@v1
         with:
@@ -59,7 +60,8 @@ jobs:
       - name: Install built wheel - universal2
         run: |
           pip install didppy --no-index --find-links dist --force-reinstall
-          python -c "import didppy"
+          pip install pytest
+          pytest -v
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
@@ -87,7 +89,8 @@ jobs:
       - name: Install built wheel
         run: |
           pip install didppy --no-index --find-links dist --force-reinstall
-          python -c "import didppy"
+          pip install pytest
+          python -m pytest -v
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
@@ -116,7 +119,8 @@ jobs:
         if: matrix.target == 'x86_64'
         run: |
           pip install didppy --no-index --find-links dist --force-reinstall
-          python -c "import didppy"
+          pip install pytest
+          pytest -v
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
@@ -153,7 +157,8 @@ jobs:
             pip3 install -U pip
           run: |
             pip3 install didppy --no-index --find-links dist/ --force-reinstall
-            python3 -c "import didppy"
+            pip install pytest
+            pytest -v
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
@@ -190,7 +195,8 @@ jobs:
             apk add py3-pip
             pip3 install -U pip
             pip3 install didppy --no-index --find-links /io/dist/ --force-reinstall
-            python3 -c "import didppy"
+            pip install pytest
+            pytest -v
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:
@@ -229,7 +235,8 @@ jobs:
             pip3 install -U pip
           run: |
             pip3 install didppy --no-index --find-links dist/ --force-reinstall
-            python3 -c "import didppy"
+            pip install pytest
+            pytest -v
       - name: Upload wheels
         uses: actions/upload-artifact@v3
         with:

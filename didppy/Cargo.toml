@@ -22,3 +22,6 @@ version = "0.18"
 extension-module = ["pyo3/extension-module"]
 abi3 = ["pyo3/abi3-py37"]
 default = ["extension-module", "abi3"]
+
+[build-dependencies]
+pyo3-build-config = "0.18"
