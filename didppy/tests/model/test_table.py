@@ -1020,11 +1020,13 @@ class TestIntTable2D:
     table = model.add_int_table([[3, 2], [2, 3]])
     state = model.target_state
 
-    cases = (
-        [(zero, zero, 3) for zero in [zero_expr, zero_var, zero_resource_var, 0]]
-        + [(one, one, 3) for one in [one_expr, one_var, one_resource_var, 1]]
-        + [(value, value, 10) for value in [set_const, set_expr, set_var]]
-    )
+    cases = [
+        (zero, zero, 3) for zero in [zero_expr, zero_var, zero_resource_var, 0]
+    ] + [(one, one, 3) for one in [one_expr, one_var, one_resource_var, 1]]
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            cases.append((x, y, 10))
 
     for zero in [zero_expr, zero_var, zero_resource_var, 0]:
         for one in [one_expr, one_var, one_resource_var, 1]:
@@ -1040,7 +1042,11 @@ class TestIntTable2D:
     def test(self, x, y, expected):
         assert self.table[x, y].eval(self.state, self.model) == expected
 
-    product_cases = [(value, value, 36) for value in [set_const, set_expr, set_var]]
+    product_cases = []
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            product_cases.append((x, y, 36))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
@@ -1051,7 +1057,11 @@ class TestIntTable2D:
     def test_product(self, x, y, expected):
         assert self.table.product(x, y).eval(self.state, self.model) == expected
 
-    max_cases = [(value, value, 3) for value in [set_const, set_expr, set_var]]
+    max_cases = []
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            max_cases.append((x, y, 3))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
@@ -1063,6 +1073,10 @@ class TestIntTable2D:
         assert self.table.max(x, y).eval(self.state, self.model) == expected
 
     min_cases = [(value, value, 2) for value in [set_const, set_expr, set_var]]
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            min_cases.append((x, y, 2))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
@@ -1128,8 +1142,12 @@ class TestIntTable3D:
         [(zero, zero, zero, 3) for zero in [zero_expr, zero_var, zero_resource_var, 0]]
         + [(one, one, one, 3) for one in [one_expr, one_var, one_resource_var, 1]]
         + [(two, two, two, 3) for two in [two_expr, two_var, two_resource_var, 2]]
-        + [(value, value, value, 22) for value in [set_const, set_expr, set_var]]
     )
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            for z in [set_const, set_expr, set_var]:
+                cases.append((x, y, z, 22))
 
     for zero in [zero_expr, zero_var, zero_resource_var, 0]:
         for one in [one_expr, one_var, one_resource_var, 1]:
@@ -1181,9 +1199,12 @@ class TestIntTable3D:
     def test(self, x, y, z, expected):
         assert self.table[x, y, z].eval(self.state, self.model) == expected
 
-    product_cases = [
-        (value, value, value, 2304) for value in [set_const, set_expr, set_var]
-    ]
+    product_cases = []
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            for z in [set_const, set_expr, set_var]:
+                product_cases.append((x, y, z, 2304))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
@@ -1198,7 +1219,12 @@ class TestIntTable3D:
     def test_product(self, x, y, z, expected):
         assert self.table.product(x, y, z).eval(self.state, self.model) == expected
 
-    max_cases = [(value, value, value, 4) for value in [set_const, set_expr, set_var]]
+    max_cases = []
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            for z in [set_const, set_expr, set_var]:
+                max_cases.append((x, y, z, 4))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
@@ -1213,7 +1239,12 @@ class TestIntTable3D:
     def test_max(self, x, y, z, expected):
         assert self.table.max(x, y, z).eval(self.state, self.model) == expected
 
-    min_cases = [(value, value, value, 2) for value in [set_const, set_expr, set_var]]
+    min_cases = []
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            for z in [set_const, set_expr, set_var]:
+                min_cases.append((x, y, z, 2))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
@@ -1449,20 +1480,17 @@ class TestFloatTable2D:
     table = model.add_float_table([[0.3, 0.2], [0.2, 0.3]])
     state = model.target_state
 
-    cases = (
-        [
-            (zero, zero, pytest.approx(0.3))
-            for zero in [zero_expr, zero_var, zero_resource_var, 0]
-        ]
-        + [
-            (one, one, pytest.approx(0.3))
-            for one in [one_expr, one_var, one_resource_var, 1]
-        ]
-        + [
-            (value, value, pytest.approx(1.0))
-            for value in [set_const, set_expr, set_var]
-        ]
-    )
+    cases = [
+        (zero, zero, pytest.approx(0.3))
+        for zero in [zero_expr, zero_var, zero_resource_var, 0]
+    ] + [
+        (one, one, pytest.approx(0.3))
+        for one in [one_expr, one_var, one_resource_var, 1]
+    ]
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            cases.append((x, y, pytest.approx(1.0)))
 
     for zero in [zero_expr, zero_var, zero_resource_var, 0]:
         for one in [one_expr, one_var, one_resource_var, 1]:
@@ -1478,10 +1506,11 @@ class TestFloatTable2D:
     def test(self, x, y, expected):
         assert self.table[x, y].eval(self.state, self.model) == expected
 
-    product_cases = [
-        (value, value, pytest.approx(0.0036))
-        for value in [set_const, set_expr, set_var]
-    ]
+    product_cases = []
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            product_cases.append((x, y, pytest.approx(0.0036)))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
@@ -1492,9 +1521,11 @@ class TestFloatTable2D:
     def test_product(self, x, y, expected):
         assert self.table.product(x, y).eval(self.state, self.model) == expected
 
-    max_cases = [
-        (value, value, pytest.approx(0.3)) for value in [set_const, set_expr, set_var]
-    ]
+    max_cases = []
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            max_cases.append((x, y, pytest.approx(0.3)))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
@@ -1505,9 +1536,11 @@ class TestFloatTable2D:
     def test_max(self, x, y, expected):
         assert self.table.max(x, y).eval(self.state, self.model) == expected
 
-    min_cases = [
-        (value, value, pytest.approx(0.2)) for value in [set_const, set_expr, set_var]
-    ]
+    min_cases = []
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            min_cases.append((x, y, pytest.approx(0.2)))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
@@ -1582,11 +1615,12 @@ class TestFloatTable3D:
             (two, two, two, pytest.approx(0.3))
             for two in [two_expr, two_var, two_resource_var, 2]
         ]
-        + [
-            (value, value, value, pytest.approx(2.2))
-            for value in [set_const, set_expr, set_var]
-        ]
     )
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            for z in [set_const, set_expr, set_var]:
+                cases.append((x, y, z, pytest.approx(2.2)))
 
     for zero in [zero_expr, zero_var, zero_resource_var, 0]:
         for one in [one_expr, one_var, one_resource_var, 1]:
@@ -1638,10 +1672,12 @@ class TestFloatTable3D:
     def test(self, x, y, z, expected):
         assert self.table[x, y, z].eval(self.state, self.model) == expected
 
-    product_cases = [
-        (value, value, value, pytest.approx(2.304e-5))
-        for value in [set_const, set_expr, set_var]
-    ]
+    product_cases = []
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            for z in [set_const, set_expr, set_var]:
+                product_cases.append((x, y, z, pytest.approx(2.304e-5)))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
@@ -1656,10 +1692,12 @@ class TestFloatTable3D:
     def test_product(self, x, y, z, expected):
         assert self.table.product(x, y, z).eval(self.state, self.model) == expected
 
-    max_cases = [
-        (value, value, value, pytest.approx(0.4))
-        for value in [set_const, set_expr, set_var]
-    ]
+    max_cases = []
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            for z in [set_const, set_expr, set_var]:
+                max_cases.append((x, y, z, pytest.approx(0.4)))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
@@ -1674,10 +1712,12 @@ class TestFloatTable3D:
     def test_max(self, x, y, z, expected):
         assert self.table.max(x, y, z).eval(self.state, self.model) == expected
 
-    min_cases = [
-        (value, value, value, pytest.approx(0.2))
-        for value in [set_const, set_expr, set_var]
-    ]
+    min_cases = []
+
+    for x in [set_const, set_expr, set_var]:
+        for y in [set_const, set_expr, set_var]:
+            for z in [set_const, set_expr, set_var]:
+                min_cases.append((x, y, z, pytest.approx(0.2)))
 
     for value in [set_const, set_expr, set_var]:
         for zero in [zero_expr, zero_var, zero_resource_var, 0]:
