@@ -509,7 +509,7 @@ impl ModelPy {
     /// ------
     /// TypeError
     ///     If the type of `cost` and the cost type mismatches.
-    /// RuntimeError
+    /// PanicException
     ///     If expressions in the transitions are not valid.
     ///
     /// Examples

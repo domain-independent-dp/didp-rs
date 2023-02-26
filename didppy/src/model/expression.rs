@@ -250,7 +250,7 @@ impl ElementExprPy {
     ///
     /// Raises
     /// ------
-    /// RuntimeError
+    /// PanicException
     ///     If the expression is not valid.
     ///
     /// Examples
@@ -1108,7 +1108,7 @@ impl SetExprPy {
     ///
     /// Raises
     /// ------
-    /// RuntimeError
+    /// PanicException
     ///     If the expression is not valid.
     ///
     /// Examples
@@ -2545,7 +2545,7 @@ impl IntExprPy {
     ///
     /// Raises
     /// ------
-    /// RuntimeError
+    /// PanicException
     ///     If the expression is not valid.
     ///
     /// Examples
@@ -2583,7 +2583,7 @@ impl IntExprPy {
     ///
     /// Raises
     /// ------
-    /// RuntimeError
+    /// PanicException
     ///     If the expression is not valid.
     ///
     /// Examples
@@ -3344,7 +3344,7 @@ impl FloatExprPy {
     ///
     /// Raises
     /// ------
-    /// RuntimeError
+    /// PaniceError
     ///     If the expression is not valid.
     ///
     /// Examples
@@ -3382,7 +3382,7 @@ impl FloatExprPy {
     ///
     /// Raises
     /// ------
-    /// RuntimeError
+    /// PanicException
     ///     If the expression is not valid.
     ///
     /// Examples
@@ -3978,7 +3978,7 @@ pub fn min(x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
                 .if_then_else(y, x),
         )));
     }
-    Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), (ElementExpr, ElementExpr), (SetExpr, SetExpr), and (Condition, Condition)"))
+    Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), (ElementExpr, ElementExpr), or (SetExpr, SetExpr)"))
 }
 
 /// Condition.
@@ -4092,7 +4092,7 @@ impl ConditionPy {
             let y = SetExpression::from(y);
             return Ok(ExprUnion::Set(SetExprPy(self.clone().0.if_then_else(x, y))));
         }
-        Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), (SetExpr, SetExpr), and (ElementExpr, ElementExpr)"))
+        Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), (ElementExpr, ElementExpr), or (SetExpr, SetExpr)"))
     }
 
     /// eval(state, model)
@@ -4113,7 +4113,7 @@ impl ConditionPy {
     ///
     /// Raises
     /// ------
-    /// RuntimeError
+    /// PanicException
     ///     If the condition is not valid.
     ///
     /// Examples

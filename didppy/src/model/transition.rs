@@ -459,6 +459,11 @@ impl TransitionPy {
     /// bool
     ///     True if the transition is applicable in the given state.
     ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If preconditions are invalid.
+    ///
     /// Examples
     /// --------
     /// >>> import didppy as dp
@@ -488,6 +493,11 @@ impl TransitionPy {
     /// -------
     /// State
     ///    State after applying the transition.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If preconditions are invalid.
     ///
     /// Examples
     /// --------
@@ -526,6 +536,8 @@ impl TransitionPy {
     /// ------
     /// TypeError
     ///     If the type of `cost` mismatches the cost type of `model`.
+    /// PanicException
+    ///     If the cost expression is invalid.
     ///
     /// Examples
     /// --------

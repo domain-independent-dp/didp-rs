@@ -14,6 +14,16 @@ def test_element_expr_raise():
         dp.ElementExpr(-1)
 
 
+def test_element_expr_eval_raise():
+    model = dp.Model()
+    state = model.target_state
+
+    with pytest.raises(BaseException):
+        (dp.IntExpr.state_cost() > 0).if_then_else(
+            dp.ElementExpr(0), dp.ElementExpr(1)
+        ).eval(state, model)
+
+
 def test_element_var():
     model = dp.Model()
     obj = model.add_object_type(number=4)
@@ -218,6 +228,18 @@ def test_set_expr(value, expected):
     state = model.target_state
 
     assert expr.eval(state, model) == expected
+
+
+def test_set_expr_eval_raise():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    const = model.create_set_const(object_type=obj, value=[0, 1])
+    state = model.target_state
+
+    with pytest.raises(BaseException):
+        (dp.IntExpr.state_cost() > 0).if_then_else(
+            dp.SetExpr(const), dp.SetExpr(const)
+        ).eval(state, model)
 
 
 @pytest.mark.parametrize("value, expected", set_eval_cases)
@@ -737,6 +759,14 @@ def test_int_expr(value, expected):
     assert expr.eval(state, model) == expected
 
 
+def test_int_expr_eval_raise():
+    model = dp.Model()
+    state = model.target_state
+
+    with pytest.raises(BaseException):
+        dp.IntExpr.state_cost().eval(state, model)
+
+
 def test_int_expr_float():
     with pytest.raises(TypeError):
         dp.IntExpr(3.5)
@@ -1019,6 +1049,14 @@ def test_float_expr(value, expected):
     expr = dp.FloatExpr(value)
 
     assert expr.eval(state, model) == expected
+
+
+def test_float_expr_eval_raise():
+    model = dp.Model()
+    state = model.target_state
+
+    with pytest.raises(BaseException):
+        dp.FloatExpr.state_cost().eval(state, model)
 
 
 def test_float_expr_eval_cost():
@@ -2005,6 +2043,14 @@ def test_condition_eval(condition, expected):
     state = model.target_state
 
     assert condition.eval(state, model) == expected
+
+
+def test_condition_eval_error():
+    model = dp.Model()
+    state = model.target_state
+
+    with pytest.raises(BaseException):
+        (dp.IntExpr.state_cost() > 0).eval(state, model)
 
 
 condition_invert_cases = [
