@@ -6,6 +6,20 @@ use crate::table_registry;
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct BaseCase(Vec<GroundedCondition>);
 
+impl From<Vec<GroundedCondition>> for BaseCase {
+    #[inline]
+    fn from(conditions: Vec<GroundedCondition>) -> Self {
+        Self(conditions)
+    }
+}
+
+impl From<BaseCase> for Vec<GroundedCondition> {
+    #[inline]
+    fn from(base_case: BaseCase) -> Self {
+        base_case.0
+    }
+}
+
 impl BaseCase {
     #[inline]
     pub fn new(conditions: Vec<GroundedCondition>) -> BaseCase {
@@ -34,6 +48,38 @@ mod tests {
     use super::*;
     use crate::expression::*;
     use crate::variable_type;
+
+    #[test]
+    fn to_base_case() {
+        let conditions = vec![
+            GroundedCondition {
+                condition: Condition::Constant(true),
+                ..Default::default()
+            },
+            GroundedCondition {
+                condition: Condition::Constant(false),
+                ..Default::default()
+            },
+        ];
+        let base_case = BaseCase::from(conditions.clone());
+        assert_eq!(base_case.0, conditions);
+    }
+
+    #[test]
+    fn from_base_case() {
+        let conditions = vec![
+            GroundedCondition {
+                condition: Condition::Constant(true),
+                ..Default::default()
+            },
+            GroundedCondition {
+                condition: Condition::Constant(false),
+                ..Default::default()
+            },
+        ];
+        let base_case = BaseCase::from(conditions.clone());
+        assert_eq!(Vec::<GroundedCondition>::from(base_case), conditions);
+    }
 
     #[test]
     fn is_satisfied() {

@@ -28,7 +28,7 @@ use std::rc::Rc;
 ///     If the cost is computed by `min`, this should be :attr:`~FOperator.Min`.
 /// primal_bound: int, float, or None, default: None
 ///     Primal bound.
-/// time_limit: int or None, default: None
+/// time_limit: int, float, or None, default: None
 ///     Time limit.
 /// get_all_solutions: bool, default: False
 ///     Return a solution if it is not improving when `search_next()` is called.
@@ -44,6 +44,8 @@ use std::rc::Rc;
 /// TypeError
 ///     If the type of `primal_bound` and the cost type of `model` are different.
 /// OverflowError
+///     If `initial_registry_capacity` is negative.
+/// PanicException
 ///     If `time_limit` is negative.
 ///
 /// References
@@ -175,6 +177,11 @@ impl DfbbPy {
     /// Solution
     ///     Solution.
     ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If the model is invalid.
+    ///
     /// Examples
     /// --------
     /// >>> import didppy as dp
@@ -207,6 +214,11 @@ impl DfbbPy {
     ///     Solution.
     /// terminated: bool
     ///     Whether the search is terminated.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If the model is invalid.
     ///
     /// Examples
     /// --------

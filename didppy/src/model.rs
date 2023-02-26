@@ -1,4 +1,4 @@
-///! A module for modeling.
+//! A module for modeling.
 mod expression;
 mod state;
 mod table;
@@ -366,9 +366,8 @@ impl ModelPy {
         } else {
             Model::integer_cost_model()
         });
-        if maximize {
-            model.set_maximize();
-        }
+        model.set_maximize(maximize);
+
         model
     }
 
@@ -376,6 +375,16 @@ impl ModelPy {
     #[getter]
     fn maximize(&self) -> bool {
         self.0.reduce_function == ReduceFunction::Max
+    }
+
+    // bool : Maximize the cost or not.
+    #[setter]
+    fn set_maximize(&mut self, maximize: bool) {
+        if maximize {
+            self.0.set_reduce_function(ReduceFunction::Max)
+        } else {
+            self.0.set_reduce_function(ReduceFunction::Min)
+        }
     }
 
     /// bool : If the cost is represented by a continuous value or not.
@@ -393,157 +402,6 @@ impl ModelPy {
     #[setter]
     fn set_target_state(&mut self, state: state::StatePy) {
         self.0.target = state.into();
-    }
-
-    /// check_state_constr(state)
-    ///
-    /// Checks if the state satisfies all the state constraints.
-    ///
-    /// Parameters
-    /// ----------
-    /// state: State
-    ///     State to be checked.
-    ///
-    /// Returns
-    /// -------
-    /// bool
-    ///     True if the state satisfies all the state constraints.
-    ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model()
-    /// >>> var = model.add_int_var(target=4)
-    /// >>> model.add_state_constr(var >= 0)
-    /// >>> model.check_state_constr(model.target_state)
-    /// True
-    #[pyo3(signature = (state))]
-    fn check_state_constr(&self, state: &state::StatePy) -> bool {
-        self.0.check_constraints(state.inner_as_ref())
-    }
-
-    /// is_base(state)
-    ///
-    /// Checks if the state is a base state.
-    ///
-    /// Parameters
-    /// ----------
-    /// state: State
-    ///     State to be checked.
-    ///
-    /// Returns
-    /// -------
-    /// bool
-    ///     True if the state is a base state.
-    ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model()
-    /// >>> var = model.add_int_var(target=4)
-    /// >>> model.add_base_case([var == 4])
-    /// >>> model.is_base(model.target_state)
-    /// True
-    #[pyo3(signature = (state))]
-    fn is_base(&self, state: &state::StatePy) -> bool {
-        self.0.is_base(state.inner_as_ref())
-    }
-
-    /// eval_dual_bound(state)
-    ///
-    /// Evaluates the dual bound on the cost of the state.
-    ///
-    /// Parameters
-    /// ----------
-    /// state: State
-    ///     State to be evaluated.
-    ///
-    /// Returns
-    /// -------
-    /// int, float, or None
-    ///     The dual bound on the cost of the state.
-    ///     None if no dual bound is defined.
-    ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model()
-    /// >>> var = model.add_int_var(target=4)
-    /// >>> model.eval_dual_bound(model.target_state)
-    /// >>> model.add_dual_bound(var)
-    /// >>> model.eval_dual_bound(model.target_state)
-    /// 4
-    #[pyo3(signature = (state))]
-    fn eval_dual_bound(&self, state: &state::StatePy) -> Option<IntOrFloat> {
-        match self.0.cost_type {
-            CostType::Integer => self
-                .0
-                .eval_dual_bound(state.inner_as_ref())
-                .map(IntOrFloat::Int),
-            CostType::Continuous => self
-                .0
-                .eval_dual_bound::<_, OrderedContinuous>(state.inner_as_ref())
-                .map(|x| IntOrFloat::Float(x.to_continuous())),
-        }
-    }
-
-    /// validate_forward(transitions, cost, quiet)
-    ///
-    /// Validates a solution consists of forward transitions.
-    ///
-    /// Parameters
-    /// ----------
-    /// transitions: list of Transition
-    ///     Transitions in the solution.
-    /// cost: int or float
-    ///     Cost of the solution.
-    /// quiet: bool, default: False
-    ///     Suppress output messages.
-    ///
-    /// Returns
-    /// -------
-    /// bool
-    ///     True if the solution is valid.
-    ///
-    /// Raises
-    /// ------
-    /// TypeError
-    ///     If the type of `cost` and the cost type mismatches.
-    /// PanicException
-    ///     If expressions in the transitions are not valid.
-    ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model()
-    /// >>> var = model.add_int_var(target=1)
-    /// >>> model.add_base_case([var == 0])
-    /// >>> t = dp.Transition(
-    /// ...     name="t",
-    /// ...     effects=[(var, var - 1)],
-    /// ...     cost=dp.IntExpr.state_cost() + 1,
-    /// ... )
-    /// >>> model.add_transition(t)
-    /// >>> model.validate_forward([t], 1)
-    /// True
-    #[pyo3(signature = (transitions, cost, quiet = false))]
-    fn validate_forward(
-        &self,
-        transitions: Vec<TransitionPy>,
-        cost: &PyAny,
-        quiet: bool,
-    ) -> PyResult<bool> {
-        let transitions = transitions
-            .iter()
-            .map(|t| Transition::from(t.clone()))
-            .collect::<Vec<_>>();
-        if self.float_cost() {
-            let cost: Continuous = cost.extract()?;
-            Ok(self.0.validate_forward(&transitions, cost, !quiet))
-        } else {
-            let cost: Integer = cost.extract()?;
-            Ok(self.0.validate_forward(&transitions, cost, !quiet))
-        }
     }
 
     /// get_object_type(name)
@@ -716,7 +574,7 @@ impl ModelPy {
     /// RuntimeError
     ///     If the object type is not included in the model.
     ///     If an element in `value` is greater than or equal to the number of objects.
-    /// OverflowError
+    /// TypeError
     ///     If an element in `value` is negative.
     ///
     /// Examples
@@ -1000,7 +858,7 @@ impl ModelPy {
     ///     If `object_type` is not included in the model.
     ///     If a value in `target` is greater than or equal to the number of the objects.
     ///     If `name` is already used.
-    /// OverflowError
+    /// TypeError
     ///     If a value in `target` is negative.
     ///
     /// Examples
@@ -1657,6 +1515,16 @@ impl ModelPy {
         }
     }
 
+    /// list of Condition : State constraints.   
+    #[getter]
+    fn state_constrs(&self) -> Vec<ConditionPy> {
+        self.0
+            .state_constraints
+            .iter()
+            .map(|constraint| ConditionPy::from(constraint.condition.clone()))
+            .collect()
+    }
+
     /// add_state_constr(condition)
     ///
     /// Adds a state constraint to the model.
@@ -1671,6 +1539,8 @@ impl ModelPy {
     /// RuntimeError
     ///     If the condition is invalid.
     ///     E.g., it uses a variable not included in the model or the cost of the transitioned state.
+    /// PanicException
+    ///     If an index of a table is out of range.
     ///
     /// Examples
     /// --------
@@ -1688,6 +1558,53 @@ impl ModelPy {
         }
     }
 
+    /// check_state_constr(state)
+    ///
+    /// Checks if the state satisfies all the state constraints.
+    ///
+    /// Parameters
+    /// ----------
+    /// state: State
+    ///     State to be checked.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     True if the state satisfies all the state constraints.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If state constraints are invalid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> model.add_state_constr(var >= 0)
+    /// >>> model.check_state_constr(model.target_state)
+    /// True
+    #[pyo3(signature = (state))]
+    fn check_state_constr(&self, state: &state::StatePy) -> bool {
+        self.0.check_constraints(state.inner_as_ref())
+    }
+
+    /// list of list of Conditions : Base cases.
+    #[getter]
+    fn base_cases(&self) -> Vec<Vec<ConditionPy>> {
+        self.0
+            .base_cases
+            .iter()
+            .map(|base_case| {
+                Vec::from(base_case.clone())
+                    .into_iter()
+                    .map(|condition| ConditionPy::from(condition.condition))
+                    .collect()
+            })
+            .collect()
+    }
+
     /// add_base_case(conditions)
     ///
     /// Adds a base case to the model.
@@ -1702,6 +1619,8 @@ impl ModelPy {
     /// RuntimeError
     ///     If one of `conditions` is invalid.
     ///     E.g., it uses a variable not included in the model or the cost of the transitioned state.
+    /// PanicException
+    ///     If an index of a table is out of range.
     ///
     /// Examples
     /// --------
@@ -1720,36 +1639,36 @@ impl ModelPy {
         }
     }
 
-    /// set_minimize()
+    /// is_base(state)
     ///
-    /// Sets the objective to minimization.
+    /// Checks if the state is a base state.
     ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model(maximize=True)
-    /// >>> model.set_minimize()
-    /// >>> model.maximize
-    /// False
-    #[pyo3(signature = ())]
-    fn set_minimize(&mut self) {
-        self.0.set_reduce_function(ReduceFunction::Min)
-    }
-
-    /// set_maximize()
+    /// Parameters
+    /// ----------
+    /// state: State
+    ///     State to be checked.
     ///
-    /// Sets the objective to maximization.
+    /// Returns
+    /// -------
+    /// bool
+    ///     True if the state is a base state.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If base cases are invalid.
     ///
     /// Examples
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> model.set_maximize()
-    /// >>> model.maximize
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> model.add_base_case([var == 4])
+    /// >>> model.is_base(model.target_state)
     /// True
-    #[pyo3(signature = ())]
-    fn set_maximize(&mut self) {
-        self.0.set_reduce_function(ReduceFunction::Max)
+    #[pyo3(signature = (state))]
+    fn is_base(&self, state: &state::StatePy) -> bool {
+        self.0.is_base(state.inner_as_ref())
     }
 
     /// get_transitions(forced, backward)
@@ -1816,6 +1735,8 @@ impl ModelPy {
     ///     If an expression used in the transition is invalid.
     ///     E.g., it uses a variable not included in the model.
     ///     If the cost type of the model is integer and a transition with a continuous cost expression is added.
+    /// PanicException
+    ///     If an index of a table is out of range.
     ///
     /// Examples
     /// --------
@@ -1849,6 +1770,19 @@ impl ModelPy {
         }
     }
 
+    /// list of IntExpr or FloatExpr : Dual bounds.
+    #[getter]
+    fn dual_bounds(&self) -> Vec<IntOrFloatExpr> {
+        self.0
+            .dual_bounds
+            .iter()
+            .map(|x| match x.clone() {
+                CostExpression::Integer(x) => IntOrFloatExpr::Int(IntExprPy::from(x)),
+                CostExpression::Continuous(x) => IntOrFloatExpr::Float(FloatExprPy::from(x)),
+            })
+            .collect()
+    }
+
     /// add_dual_bound(bound)
     ///
     /// Adds a dual bound to the model.
@@ -1864,6 +1798,8 @@ impl ModelPy {
     ///     If `bound` is invalid.
     ///     E.g., it uses a variable not included in the model or the cost of the transitioned state.
     ///     If the cost type of model is integer, and `bound` is :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or `float`.
+    /// PanicException
+    ///     If an index of a table is out of range.
     ///
     /// Examples
     /// --------
@@ -1882,6 +1818,108 @@ impl ModelPy {
         match result {
             Ok(_) => Ok(()),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// eval_dual_bound(state)
+    ///
+    /// Evaluates the dual bound on the cost of the state.
+    ///
+    /// Parameters
+    /// ----------
+    /// state: State
+    ///     State to be evaluated.
+    ///
+    /// Returns
+    /// -------
+    /// int, float, or None
+    ///     The dual bound on the cost of the state.
+    ///     None if no dual bound is defined.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If dual bounds are invalid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> model.eval_dual_bound(model.target_state)
+    /// >>> model.add_dual_bound(var)
+    /// >>> model.eval_dual_bound(model.target_state)
+    /// 4
+    #[pyo3(signature = (state))]
+    fn eval_dual_bound(&self, state: &state::StatePy) -> Option<IntOrFloat> {
+        match self.0.cost_type {
+            CostType::Integer => self
+                .0
+                .eval_dual_bound(state.inner_as_ref())
+                .map(IntOrFloat::Int),
+            CostType::Continuous => self
+                .0
+                .eval_dual_bound::<_, OrderedContinuous>(state.inner_as_ref())
+                .map(|x| IntOrFloat::Float(x.to_continuous())),
+        }
+    }
+
+    /// validate_forward(transitions, cost, quiet)
+    ///
+    /// Validates a solution consists of forward transitions.
+    ///
+    /// Parameters
+    /// ----------
+    /// transitions: list of Transition
+    ///     Transitions in the solution.
+    /// cost: int or float
+    ///     Cost of the solution.
+    /// quiet: bool, default: False
+    ///     Suppress output messages.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     True if the solution is valid.
+    ///
+    /// Raises
+    /// ------
+    /// TypeError
+    ///     If the type of `cost` and the cost type mismatches.
+    /// PanicException
+    ///     If expressions in the transitions are not valid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=1)
+    /// >>> model.add_base_case([var == 0])
+    /// >>> t = dp.Transition(
+    /// ...     name="t",
+    /// ...     effects=[(var, var - 1)],
+    /// ...     cost=dp.IntExpr.state_cost() + 1,
+    /// ... )
+    /// >>> model.add_transition(t)
+    /// >>> model.validate_forward([t], 1)
+    /// True
+    #[pyo3(signature = (transitions, cost, quiet = false))]
+    fn validate_forward(
+        &self,
+        transitions: Vec<TransitionPy>,
+        cost: &PyAny,
+        quiet: bool,
+    ) -> PyResult<bool> {
+        let transitions = transitions
+            .iter()
+            .map(|t| Transition::from(t.clone()))
+            .collect::<Vec<_>>();
+        if self.float_cost() {
+            let cost: Continuous = cost.extract()?;
+            Ok(self.0.validate_forward(&transitions, cost, !quiet))
+        } else {
+            let cost: Integer = cost.extract()?;
+            Ok(self.0.validate_forward(&transitions, cost, !quiet))
         }
     }
 
@@ -1918,9 +1956,9 @@ impl ModelPy {
     ///     If `name` is already used.
     /// TypeError
     ///     If `table` is `dict` and `default` is `None`.
+    ///     If `table` is `dict` and one of its keys contains a negative value.
     /// OverflowError
     ///     If a value in `table` or `default` is negative.
-    ///     If `table` is `dict` and one of its keys contains a negative value.
     ///
     /// Examples
     /// --------
@@ -5323,7 +5361,7 @@ mod tests {
             reduce_function: ReduceFunction::Max,
             ..Default::default()
         });
-        model.set_minimize();
+        model.set_maximize(false);
         assert_eq!(
             model.0,
             Model {
@@ -5339,7 +5377,7 @@ mod tests {
             reduce_function: ReduceFunction::Min,
             ..Default::default()
         });
-        model.set_maximize();
+        model.set_maximize(true);
         assert_eq!(
             model.0,
             Model {

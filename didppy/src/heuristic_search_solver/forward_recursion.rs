@@ -17,7 +17,7 @@ use std::rc::Rc;
 /// ----------
 /// model: Model
 ///     DyPDL model to solve.
-/// time_limit: int or None, default: None
+/// time_limit: int, float, or None, default: None
 ///     Time limit.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
@@ -27,7 +27,7 @@ use std::rc::Rc;
 /// Raises
 /// ------
 /// OverflowError
-///     If `time_limit` or `initial_registry_capacity` is negative.
+///     If `initial_registry_capacity` is negative.
 #[pyclass(unsendable, name = "ForwardRecursion")]
 #[pyo3(text_signature = "(model, time_limit=None, quiet=False, initial_registry_capacity=1000000)")]
 pub struct ForwardRecursionPy(
@@ -86,6 +86,11 @@ impl ForwardRecursionPy {
     /// -------
     /// Solution
     ///     Solution.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If the model is invalid.
     ///
     /// Examples
     /// --------

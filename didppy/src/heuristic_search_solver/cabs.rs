@@ -32,7 +32,7 @@ use std::rc::Rc;
 ///     Keep all layers of the search graph for duplicate detection in memory.
 /// primal_bound: int, float, or None, default: None
 ///     Primal bound.
-/// time_limit: int or None, default: None
+/// time_limit: int, float, or None, default: None
 ///     Time limit.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
@@ -41,7 +41,7 @@ use std::rc::Rc;
 /// ------
 /// TypeError
 ///     If `primal_bound` is `float` and `model` is float cost.
-/// OverflowError
+/// PanicException
 ///     If `time_limit` is negative.
 ///
 /// References
@@ -175,6 +175,11 @@ impl CabsPy {
     /// Solution
     ///     Solution.
     ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If the model is invalid.
+    ///
     /// Examples
     /// --------
     /// >>> import didppy as dp
@@ -207,6 +212,11 @@ impl CabsPy {
     ///     Solution.
     /// terminated: bool
     ///     Whether the search is terminated.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If the model is invalid.
     ///
     /// Examples
     /// --------

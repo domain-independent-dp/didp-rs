@@ -26,10 +26,10 @@ use std::rc::Rc;
 ///
 /// Parameters
 /// ----------
-/// beam_size: int
-///     Beam size.
 /// model: Model
 ///     DyPDL model to solve.
+/// beam_size: int
+///     Beam size.
 /// h_expression: IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, float, or None, default: None
 ///     Expression to compute an h-value.
 /// custom_cost_dict: dict[str, Union[IntExpr|IntVar|IntResourceVar|FloatExpr|FloatVar|FloatResourceVar|int|float] or None, default: None
@@ -54,7 +54,7 @@ use std::rc::Rc;
 /// float_custom_cost: bool or None, default: None
 ///     Use continuous values for g-, h-, and f-values.
 ///     The cost type of the model is used if `None`.
-/// time_limit: int or None, default: None
+/// time_limit: int, float, or None, default: None
 ///     Time limit.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
@@ -64,7 +64,7 @@ use std::rc::Rc;
 /// TypeError
 ///     If the custom cost type is int and `h_evaluator` or a value in `custom_cost_dict` is `FloatExpr`, `FloatVar`, `FloatResourceVar`, or `float`.
 /// OverflowError
-///     If a value in `beam_size` or `time_limit` is negative.
+///     If `beam_size` is negative.
 ///
 /// Examples
 /// --------
@@ -305,6 +305,11 @@ impl ExpressionBeamSearchPy {
     /// -------
     /// Solution
     ///     Solution.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If the model is invalid.
     ///
     /// Examples
     /// --------
