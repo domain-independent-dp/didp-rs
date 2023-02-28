@@ -54,9 +54,9 @@
 //! // The cost is the sum of the travel time and the cost of the next state.
 //! return_to_depot.set_cost(distance.element(location, 0) + IntegerExpression::Cost);
 //! // Update the current location to the depot.
-//! return_to_depot.add_effect(location, 0);
+//! return_to_depot.add_effect(location, 0).unwrap();
 //! // Increase the current time.
-//! return_to_depot.add_effect(time, time + distance.element(location, 0));
+//! return_to_depot.add_effect(time, time + distance.element(location, 0)).unwrap();
 //! // Add the transition to the model.
 //! // When this transition is applicable, no need to consider other transitions.
 //! model.add_forward_forced_transition(return_to_depot.clone());
@@ -67,25 +67,25 @@
 //!     let mut visit = Transition::new(format!("visit {}", j));
 //!     visit.set_cost(distance.element(location, j) + IntegerExpression::Cost);
 //!     // Remove j from the set of unvisited customers.
-//!     visit.add_effect(unvisited, unvisited.remove(j));
-//!     visit.add_effect(location, j);
+//!     visit.add_effect(unvisited, unvisited.remove(j)).unwrap();
+//!     visit.add_effect(location, j).unwrap();
 //!     // Wait until the ready time.
 //!     let arrival_time = time + distance.element(location, j);
 //!     let start_time = IntegerExpression::max(arrival_time.clone(), ready_time.element(j));
-//!     visit.add_effect(time, start_time);
+//!     visit.add_effect(time, start_time).unwrap();
 //!     // The time window must be satisfied.
 //!     visit.add_precondition(
 //!         Condition::comparison_i(ComparisonOperator::Le, arrival_time, due_date.element(j))
 //!     );
 //!     // Add the transition to the model.
-//!     model.add_forward_transition(visit.clone());
+//!     model.add_forward_transition(visit.clone()).unwrap();
 //!     visits.push(visit);
 //! }
 //!
 //! // Define a base case.
 //! // If all customers are visited and the current location is the depot, the cost is 0.
 //! let is_depot = Condition::comparison_e(ComparisonOperator::Eq, location, 0);
-//! model.add_base_case(vec![unvisited.is_empty(), is_depot.clone()]);
+//! model.add_base_case(vec![unvisited.is_empty(), is_depot.clone()]).unwrap();
 //!
 //! // Define redundant information, which is possibly useful for a solver.
 //! // Define state constraints.
@@ -96,7 +96,7 @@
 //!     let on_time = Condition::comparison_i(
 //!         ComparisonOperator::Le, arrival_time, due_date.element(j)
 //!     );
-//!     model.add_state_constraint(!unvisited.contains(j) | on_time);
+//!     model.add_state_constraint(!unvisited.contains(j) | on_time).unwrap();
 //! }
 //!
 //! // Define a dual bound.
@@ -116,7 +116,7 @@
 //! ).unwrap();
 //! let to_depot: IntegerExpression = is_depot.if_then_else(0, min_distance_to.element(0));
 //! let dual_bound: IntegerExpression = min_distance_to.sum(unvisited) + to_depot;
-//! model.add_dual_bound(dual_bound);
+//! model.add_dual_bound(dual_bound).unwrap();
 //!
 //! // Solution.
 //! let solution = [visits[2].clone(), visits[3].clone(), visits[1].clone(), visits[0].clone()];
