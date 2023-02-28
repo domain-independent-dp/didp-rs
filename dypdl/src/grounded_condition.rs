@@ -9,7 +9,7 @@ pub struct GroundedCondition {
     pub elements_in_set_variable: Vec<(usize, usize)>,
     /// Pairs of parameters and indices of vector variables.
     pub elements_in_vector_variable: Vec<(usize, usize)>,
-    /// Condition
+    /// Condition.
     pub condition: expression::Condition,
 }
 

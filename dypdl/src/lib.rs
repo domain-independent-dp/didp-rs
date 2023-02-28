@@ -58,7 +58,9 @@ use std::panic;
 /// Type of numeric values to represent the costs of states.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CostType {
+    /// Integer value.
     Integer,
+    /// Continuous value.
     Continuous,
 }
 
@@ -123,32 +125,6 @@ pub struct Model {
 }
 
 impl Model {
-    /// Returns a model whose cost is integer.
-    pub fn integer_cost_model() -> Model {
-        Model {
-            cost_type: CostType::Integer,
-            ..Default::default()
-        }
-    }
-
-    /// Returns a model whose cost is continuous.
-    pub fn continuous_cost_model() -> Model {
-        Model {
-            cost_type: CostType::Continuous,
-            ..Default::default()
-        }
-    }
-
-    /// Set the objective to minimization.
-    pub fn set_minimize(&mut self) {
-        self.reduce_function = ReduceFunction::Min;
-    }
-
-    /// Set the objective to maximization.
-    pub fn set_maximize(&mut self) {
-        self.reduce_function = ReduceFunction::Max;
-    }
-
     /// Returns true if a state satisfies all state constraints and false otherwise.
     ///
     /// # Examples
@@ -209,41 +185,6 @@ impl Model {
                 .base_states
                 .iter()
                 .any(|base| base.is_satisfied(state, &self.state_metadata))
-    }
-
-    /// Returns true if there is a resource variable and false otherwise.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dypdl::prelude::*;
-    ///
-    /// let mut model = Model::default();
-    /// let variable = model.add_integer_variable("variable", 2).unwrap();
-    /// assert!(!model.has_resource_variables());
-    ///
-    /// let variable = model.add_integer_resource_variable("variable", true, 2).unwrap();
-    /// assert!(model.has_resource_variables());
-    /// ```
-    pub fn has_resource_variables(&self) -> bool {
-        self.state_metadata.has_resource_variables()
-    }
-
-    /// Returns true if a dual bound is defined and false otherwise.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dypdl::prelude::*;
-    ///
-    /// let mut model = Model::default();
-    /// assert!(!model.has_dual_bounds());
-    ///
-    /// model.add_dual_bound(IntegerExpression::from(0)).unwrap();
-    /// assert!(model.has_dual_bounds());
-    /// ```
-    pub fn has_dual_bounds(&self) -> bool {
-        !self.dual_bounds.is_empty()
     }
 
     /// Evaluate the dual bound given a state.
@@ -365,7 +306,7 @@ impl Model {
     /// let transitions = [transition];
     /// let cost = 1;
     ///
-    /// assert!(model.validate_forward(&transitions, cost, false));
+    /// assert!(model.validate_forward(&transitions, cost, true));
     /// ```
     pub fn validate_forward<T: variable_type::Numeric + fmt::Display>(
         &self,
@@ -410,6 +351,67 @@ impl Model {
             println!("The cost {} does not match the actual cost {}. This is possibly due to the cost is continuous.", cost, validation_cost)
         }
         true
+    }
+
+    /// Returns true if there is a resource variable and false otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 2).unwrap();
+    /// assert!(!model.has_resource_variables());
+    ///
+    /// let variable = model.add_integer_resource_variable("variable", true, 2).unwrap();
+    /// assert!(model.has_resource_variables());
+    /// ```
+    pub fn has_resource_variables(&self) -> bool {
+        self.state_metadata.has_resource_variables()
+    }
+
+    /// Returns true if a dual bound is defined and false otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// assert!(!model.has_dual_bounds());
+    ///
+    /// model.add_dual_bound(IntegerExpression::from(0)).unwrap();
+    /// assert!(model.has_dual_bounds());
+    /// ```
+    pub fn has_dual_bounds(&self) -> bool {
+        !self.dual_bounds.is_empty()
+    }
+
+    /// Creates a model whose cost is integer.
+    pub fn integer_cost_model() -> Model {
+        Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        }
+    }
+
+    /// Creates a model whose cost is continuous.
+    pub fn continuous_cost_model() -> Model {
+        Model {
+            cost_type: CostType::Continuous,
+            ..Default::default()
+        }
+    }
+
+    /// Set the objective to minimization.
+    pub fn set_minimize(&mut self) {
+        self.reduce_function = ReduceFunction::Min;
+    }
+
+    /// Set the objective to maximization.
+    pub fn set_maximize(&mut self) {
+        self.reduce_function = ReduceFunction::Max;
     }
 
     /// Returns object type given a name.

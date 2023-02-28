@@ -38,7 +38,7 @@ pub enum IntegerExpression {
     ),
     /// The cardinality of a set expression.
     Cardinality(SetExpression),
-    /// The length of a set expression.
+    /// The cardinality of a set expression.
     Length(VectorExpression),
     /// A constant in an integer table.
     Table(Box<NumericTableExpression<Integer>>),
@@ -139,6 +139,8 @@ impl ops::Add for IntegerExpression {
 
     /// Returns an expression representing the addition.
     ///
+    /// # Examples
+    ///
     /// ```
     /// use dypdl::prelude::*;
     ///
@@ -160,6 +162,8 @@ impl ops::Sub for IntegerExpression {
     type Output = IntegerExpression;
 
     /// Returns an expression representing the subtraction.
+    ///
+    /// # Examples
     ///
     /// ```
     /// use dypdl::prelude::*;
@@ -183,6 +187,8 @@ impl ops::Mul for IntegerExpression {
 
     /// Returns an expression representing the multiplication.
     ///
+    /// # Examples
+    ///
     /// ```
     /// use dypdl::prelude::*;
     ///
@@ -204,6 +210,8 @@ impl ops::Div for IntegerExpression {
     type Output = IntegerExpression;
 
     /// Returns an expression representing the division.
+    ///
+    /// # Examples
     ///
     /// ```
     /// use dypdl::prelude::*;
@@ -227,6 +235,8 @@ impl ops::Rem for IntegerExpression {
 
     /// Returns an expression representing the remainder.
     ///
+    /// # Examples
+    ///
     /// ```
     /// use dypdl::prelude::*;
     ///
@@ -249,6 +259,8 @@ impl MaxMin for IntegerExpression {
 
     /// Returns an expression representing the maximum.
     ///
+    /// # Examples
+    ///
     /// ```
     /// use dypdl::prelude::*;
     ///
@@ -266,6 +278,8 @@ impl MaxMin for IntegerExpression {
     }
 
     /// Returns an expression representing the minimum.
+    ///
+    /// # Examples
     ///
     /// ```
     /// use dypdl::prelude::*;
@@ -285,7 +299,9 @@ impl MaxMin for IntegerExpression {
 }
 
 impl SetExpression {
-    /// Returns an expression representing the length of a set.
+    /// Returns an expression representing the cardinality of a set.
+    ///
+    /// # Examples
     ///
     /// ```
     /// use dypdl::prelude::*;
@@ -307,7 +323,9 @@ impl SetExpression {
 }
 
 impl SetVariable {
-    /// Returns an expression representing the length of a set.
+    /// Returns an expression representing the cardinality of a set.
+    ///
+    /// # Examples
     ///
     /// ```
     /// use dypdl::prelude::*;
@@ -1494,10 +1512,11 @@ impl IntegerExpression {
     /// ```
     /// use dypdl::prelude::*;
     ///
-    /// let model = Model::default();
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 1).unwrap();
     /// let state = model.target.clone();
     ///
-    /// let expression = IntegerExpression::from(1);
+    /// let expression = IntegerExpression::from(variable);
     /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
     /// ```
     #[inline]

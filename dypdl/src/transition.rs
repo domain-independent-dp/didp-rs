@@ -118,7 +118,7 @@ impl CostExpression {
     }
 }
 
-/// Trait representing something that may be applicable in a state, e.g., a transition.
+/// Trait representing a transition.
 pub trait TransitionInterface {
     /// Returns true if the transition is applicable and false otherwise.
     fn is_applicable<T: StateInterface>(

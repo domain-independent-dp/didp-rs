@@ -185,12 +185,12 @@ pub enum ContinuousBinaryOperator {
     Log,
 }
 
-/// A trait for binary arithmetic opeartor specific to continuous values.
+/// A trait for binary arithmetic operator specific to continuous values.
 pub trait ContinuousBinaryOperation<Rhs = Self> {
     type Output;
-    /// Returns the value to the power of the other.
+    /// Returns an expression representing the power.
     fn pow(self, rhs: Rhs) -> Self::Output;
-    /// Returns the logarithm of the value given a base.
+    /// Returns an expression representing the logarithm.
     fn log(self, rhs: Rhs) -> Self::Output;
 }
 
