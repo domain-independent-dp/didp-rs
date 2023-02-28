@@ -13,8 +13,18 @@ pub struct GroundedCondition {
     pub condition: expression::Condition,
 }
 
+impl From<expression::Condition> for GroundedCondition {
+    /// Creates a grounded condition from a condition without parameters.
+    fn from(condition: expression::Condition) -> Self {
+        GroundedCondition {
+            condition,
+            ..Default::default()
+        }
+    }
+}
+
 impl GroundedCondition {
-    /// Returns true if the condition is satisfied, false if the condition is not satisifed, and None if an parameter is not included in the corresponding set or vector variable.
+    /// Returns true if the condition is satisfied, false if the condition is not satisfied, and None if an parameter is not included in the corresponding set or vector variable.
     ///
     /// # Panics
     ///
@@ -70,6 +80,24 @@ mod tests {
             },
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn from_test() {
+        let condition = GroundedCondition {
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
+                ElementExpression::Variable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            ))),
+            ..Default::default()
+        };
+        assert_eq!(
+            condition,
+            GroundedCondition::from(Condition::Set(Box::new(SetCondition::IsIn(
+                ElementExpression::Variable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            ))))
+        );
     }
 
     #[test]

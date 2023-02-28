@@ -35,8 +35,15 @@ impl TimeKeeper {
 
     /// Returns the remaining time.
     pub fn remaining_time_limit(&self) -> Option<f64> {
-        self.time_limit
-            .map(|time_limit| (time_limit - (time::Instant::now() - self.start)).as_secs_f64())
+        self.time_limit.map(|time_limit| {
+            let elapsed = time::Instant::now() - self.start;
+
+            if elapsed > time_limit {
+                0.0
+            } else {
+                (time_limit - elapsed).as_secs_f64()
+            }
+        })
     }
 
     /// Returns whether the time limit is reached.

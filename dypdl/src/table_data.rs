@@ -27,6 +27,31 @@ define_table_handle!(Table3DHandle);
 define_table_handle!(TableHandle);
 
 /// Trait for adding and updating tables of constants.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use rustc_hash::FxHashMap;
+///
+/// let mut model = Model::default();
+///
+/// assert!(model.add_table_1d("table_1d", vec![1, 2]).is_ok());
+///
+/// assert!(model.add_table_2d("table_2d", vec![vec![1, 2], vec![3, 4]]).is_ok());
+///
+/// assert!(
+///     model.add_table_3d(
+///         "table_3d",
+///         vec![vec![vec![1, 2], vec![3, 4]], vec![vec![5, 6], vec![7, 8]]]
+///     ).is_ok()
+/// );
+///
+/// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 1), (vec![1, 1, 1, 1], 2)]);
+/// assert!(
+///     model.add_table("table", map, 0).is_ok()
+/// );
+/// ```
 pub trait TableInterface<T> {
     /// Adds and returns a 1D table.
     ///
@@ -168,14 +193,23 @@ pub trait TableInterface<T> {
 /// Tables of constants havint a particular type.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct TableData<T> {
+    /// Map from a name to a constant.
     pub name_to_constant: FxHashMap<String, T>,
+    /// 1-dimensional tables.
     pub tables_1d: Vec<table::Table1D<T>>,
+    /// Map from a name to a 1-dimensional table.
     pub name_to_table_1d: FxHashMap<String, usize>,
+    /// 2-dimensional tables.
     pub tables_2d: Vec<table::Table2D<T>>,
+    /// Map from a name to a 2-dimensional table.
     pub name_to_table_2d: FxHashMap<String, usize>,
+    /// 3-dimensional tables.
     pub tables_3d: Vec<table::Table3D<T>>,
+    /// Map from a name to a 3-dimensional table.
     pub name_to_table_3d: FxHashMap<String, usize>,
+    /// Multi-dimensional tables implemented by a map.
     pub tables: Vec<table::Table<T>>,
+    /// Map from a name to a multi-dimensional table.
     pub name_to_table: FxHashMap<String, usize>,
 }
 

@@ -30,6 +30,7 @@ use std::rc::Rc;
 ///     Primal bound on the optimal cost (upper/lower bound for minimization/maximization).
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
+///     The count starts when a solver is created.
 /// get_all_solutions: bool, default: False
 ///     Return a new solution even if it is not improving when `search_next()` is called.
 /// quiet: bool, default: False

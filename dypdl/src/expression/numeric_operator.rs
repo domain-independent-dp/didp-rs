@@ -5,9 +5,9 @@ use std::iter::{Product, Sum};
 /// Unary arithmetic operator.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum UnaryOperator {
-    /// Negative
+    /// Negative.
     Neg,
-    /// Absolute value
+    /// Absolute value.
     Abs,
 }
 
@@ -30,6 +30,7 @@ impl UnaryOperator {
 /// Unary arithmetic operator specific to continuous values.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ContinuousUnaryOperator {
+    /// Square root.
     Sqrt,
 }
 
@@ -79,24 +80,31 @@ impl CastOperator {
     }
 }
 
-// Binary arithmetic operator.
+/// Binary arithmetic operator.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum BinaryOperator {
+    /// Addition.
     Add,
+    /// Subtraction.
     Sub,
+    /// Multiplication.
     Mul,
+    // Division.
     Div,
+    /// Remainder.
     Rem,
+    /// Maximum.
     Max,
+    /// Minimum.
     Min,
 }
 
 /// A trait for max/min binary operation.
 pub trait MaxMin<Rhs = Self> {
     type Output;
-    /// Returns the greater value.
+    /// Returns an expression representing the maximum.
     fn max(self, rhs: Rhs) -> Self::Output;
-    /// Returns the smalelr value.
+    /// Returns an expression representing the minimum.
     fn min(self, rhs: Rhs) -> Self::Output;
 }
 

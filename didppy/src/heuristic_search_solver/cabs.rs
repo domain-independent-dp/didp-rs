@@ -16,6 +16,10 @@ use std::rc::Rc;
 /// and `x` is a value independent of `state_cost`.
 /// Otherwise, it cannot compute the cost correctly and may not produce the optimal solution.
 ///
+/// CABS searches layer by layer, where the i th layer contains states that can be reached with i transitions.
+/// By default, this solver only keeps states in the current layer to check for duplicates.
+/// If `keep_all_layers` is `True`, CABS keeps states in all layers to check for duplicates.
+///
 /// Parameters
 /// ----------
 /// model: Model
@@ -34,6 +38,7 @@ use std::rc::Rc;
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
+///     The count starts when a solver is created.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
 ///

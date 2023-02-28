@@ -11,14 +11,14 @@ pub type Set = fixedbitset::FixedBitSet;
 pub type Vector = Vec<usize>;
 /// Element value.
 pub type Element = usize;
-/// Integer value.
+/// Integer numeric value.
 pub type Integer = i32;
-/// Continuous value.
+/// Continuous numeric value.
 pub type Continuous = f64;
-/// Continuous value with a total order.
+/// Continuous numeric value with a total order.
 pub type OrderedContinuous = ordered_float::OrderedFloat<Continuous>;
 
-/// Trait representing a numeric value.
+/// Numeric value.
 pub trait Numeric:
     num_traits::Num
     + ToNumeric
@@ -41,15 +41,21 @@ impl Numeric for OrderedContinuous {}
 
 /// Trait for converting to numeric values.
 pub trait ToNumeric {
+    /// Convert to an integer value.
     fn to_integer(self) -> Integer;
+    /// Convert to a continuous value.
     fn to_continuous(self) -> Continuous;
 }
 
 /// Trait for converting from numeric values.
 pub trait FromNumeric {
+    /// Convert from an integer value.
     fn from_integer(n: Integer) -> Self;
+    /// Convert from a continuos value.
     fn from_continuous(n: Continuous) -> Self;
+    /// Convert from usize.
     fn from_usize(n: usize) -> Self;
+    /// Convert from value that can be converted to a numeric value.
     fn from<T: ToNumeric>(n: T) -> Self;
 }
 

@@ -75,7 +75,25 @@ pub enum Condition {
     Table(Box<TableExpression<bool>>),
 }
 
-/// A trait to produce if-then-else expression.
+/// A trait to produce an if-then-else expression.
+///
+/// # Example
+///
+/// ```
+/// use dypdl::prelude::*;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 1).unwrap();
+/// let state = model.target.clone();
+///
+/// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 1);
+/// let expression: IntegerExpression = condition.if_then_else(variable, 0);
+/// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+///
+/// let condition = Condition::comparison_i(ComparisonOperator::Gt, variable, 1);
+/// let expression: IntegerExpression = condition.if_then_else(variable, IntegerExpression::from(0));
+/// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+/// ```
 pub trait IfThenElse<T> {
     /// Returns an if-then-else expression, which returns a if this condition holds and b otherwise.
     fn if_then_else<U, V>(self, a: U, b: V) -> T
@@ -84,10 +102,12 @@ pub trait IfThenElse<T> {
 }
 
 impl Default for Condition {
+    /// Returns `Condition::Constant(false)`.
     fn default() -> Condition {
         Self::Constant(false)
     }
 }
+
 impl ops::Not for Condition {
     type Output = Condition;
 

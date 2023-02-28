@@ -21,7 +21,7 @@ use crate::variable_type::{Continuous, Integer};
 use std::boxed::Box;
 use std::ops;
 
-/// Numeric expression with the continuous value type.
+/// Continuous numeric expression.
 #[derive(Debug, PartialEq, Clone)]
 pub enum ContinuousExpression {
     /// Constant.
@@ -129,37 +129,37 @@ impl From<IntegerResourceVariable> for ContinuousExpression {
 }
 
 impl ContinuousExpression {
-    /// Retruns the absolute value.
+    /// Returns the absolute value.
     #[inline]
     pub fn abs(self) -> ContinuousExpression {
         Self::UnaryOperation(UnaryOperator::Abs, Box::new(self))
     }
 
-    /// Retruns the square root.
+    /// Returns the square root.
     #[inline]
     pub fn sqrt(self) -> ContinuousExpression {
         Self::ContinuousUnaryOperation(ContinuousUnaryOperator::Sqrt, Box::new(self))
     }
 
-    /// Retruns the floor.
+    /// Returns the floor.
     #[inline]
     pub fn floor(self) -> ContinuousExpression {
         Self::Round(CastOperator::Floor, Box::new(self))
     }
 
-    /// Retruns the ceiling.
+    /// Returns the ceiling.
     #[inline]
     pub fn ceil(self) -> ContinuousExpression {
         Self::Round(CastOperator::Ceil, Box::new(self))
     }
 
-    /// Retruns the rounded value.
+    /// Returns the rounded value.
     #[inline]
     pub fn round(self) -> ContinuousExpression {
         Self::Round(CastOperator::Round, Box::new(self))
     }
 
-    /// Retruns the truncated value.
+    /// Returns the truncated value.
     #[inline]
     pub fn trunc(self) -> ContinuousExpression {
         Self::Round(CastOperator::Trunc, Box::new(self))

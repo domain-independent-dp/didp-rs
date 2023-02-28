@@ -17,7 +17,7 @@ use crate::variable_type::{Continuous, Integer};
 use std::boxed::Box;
 use std::ops;
 
-/// Numeric expression with the integer value type.
+/// Integer numeric expression.
 #[derive(Debug, PartialEq, Clone)]
 pub enum IntegerExpression {
     /// Constant.
@@ -59,6 +59,7 @@ pub enum IntegerExpression {
 }
 
 impl Default for IntegerExpression {
+    /// Returns an expression representing a constant zero.
     #[inline]
     fn default() -> Self {
         Self::Constant(0)
@@ -66,6 +67,7 @@ impl Default for IntegerExpression {
 }
 
 impl From<Integer> for IntegerExpression {
+    /// Returns an expression representing the constant.
     #[inline]
     fn from(v: Integer) -> Self {
         Self::Constant(v)
@@ -73,6 +75,7 @@ impl From<Integer> for IntegerExpression {
 }
 
 impl From<IntegerVariable> for IntegerExpression {
+    /// Returns an expression representing the variable.
     #[inline]
     fn from(v: IntegerVariable) -> Self {
         Self::Variable(v.id())
@@ -80,6 +83,7 @@ impl From<IntegerVariable> for IntegerExpression {
 }
 
 impl From<IntegerResourceVariable> for IntegerExpression {
+    /// Returns an expression representing the resource variable.
     #[inline]
     fn from(v: IntegerResourceVariable) -> Self {
         Self::ResourceVariable(v.id())
@@ -87,6 +91,20 @@ impl From<IntegerResourceVariable> for IntegerExpression {
 }
 
 impl IntegerExpression {
+    /// Returns an expression representing the abstract value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let expression = IntegerExpression::from(-1);
+    /// let expression = expression.abs();
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     #[inline]
     pub fn abs(self) -> IntegerExpression {
         Self::UnaryOperation(UnaryOperator::Abs, Box::new(self))
@@ -96,6 +114,20 @@ impl IntegerExpression {
 impl ops::Neg for IntegerExpression {
     type Output = IntegerExpression;
 
+    /// Returns an expression representing the negative value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let expression = IntegerExpression::from(1);
+    /// let expression = -expression;
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), -1);
+    /// ```
     #[inline]
     fn neg(self) -> Self::Output {
         Self::UnaryOperation(UnaryOperator::Neg, Box::new(self))
@@ -105,6 +137,19 @@ impl ops::Neg for IntegerExpression {
 impl ops::Add for IntegerExpression {
     type Output = IntegerExpression;
 
+    /// Returns an expression representing the addition.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = IntegerExpression::from(2);
+    /// let b = IntegerExpression::from(3);
+    /// let expression = a + b;
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// ```
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
         IntegerExpression::BinaryOperation(BinaryOperator::Add, Box::new(self), Box::new(rhs))
@@ -114,6 +159,19 @@ impl ops::Add for IntegerExpression {
 impl ops::Sub for IntegerExpression {
     type Output = IntegerExpression;
 
+    /// Returns an expression representing the subtraction.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = IntegerExpression::from(2);
+    /// let b = IntegerExpression::from(3);
+    /// let expression = a - b;
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), -1);
+    /// ```
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
         IntegerExpression::BinaryOperation(BinaryOperator::Sub, Box::new(self), Box::new(rhs))
@@ -123,6 +181,19 @@ impl ops::Sub for IntegerExpression {
 impl ops::Mul for IntegerExpression {
     type Output = IntegerExpression;
 
+    /// Returns an expression representing the multiplication.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = IntegerExpression::from(2);
+    /// let b = IntegerExpression::from(3);
+    /// let expression = a * b;
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 6);
+    /// ```
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         IntegerExpression::BinaryOperation(BinaryOperator::Mul, Box::new(self), Box::new(rhs))
@@ -132,6 +203,19 @@ impl ops::Mul for IntegerExpression {
 impl ops::Div for IntegerExpression {
     type Output = IntegerExpression;
 
+    /// Returns an expression representing the division.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = IntegerExpression::from(2);
+    /// let b = IntegerExpression::from(3);
+    /// let expression = a / b;
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+    /// ```
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
         IntegerExpression::BinaryOperation(BinaryOperator::Div, Box::new(self), Box::new(rhs))
@@ -141,6 +225,19 @@ impl ops::Div for IntegerExpression {
 impl ops::Rem for IntegerExpression {
     type Output = IntegerExpression;
 
+    /// Returns an expression representing the remainder.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = IntegerExpression::from(2);
+    /// let b = IntegerExpression::from(3);
+    /// let expression = a % b;
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     #[inline]
     fn rem(self, rhs: Self) -> Self::Output {
         IntegerExpression::BinaryOperation(BinaryOperator::Rem, Box::new(self), Box::new(rhs))
@@ -150,11 +247,37 @@ impl ops::Rem for IntegerExpression {
 impl MaxMin for IntegerExpression {
     type Output = IntegerExpression;
 
+    /// Returns an expression representing the maximum.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = IntegerExpression::from(2);
+    /// let b = IntegerExpression::from(3);
+    /// let expression = a.max(b);
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
+    /// ```
     #[inline]
     fn max(self, rhs: Self) -> Self::Output {
         IntegerExpression::BinaryOperation(BinaryOperator::Max, Box::new(self), Box::new(rhs))
     }
 
+    /// Returns an expression representing the minimum.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = IntegerExpression::from(2);
+    /// let b = IntegerExpression::from(3);
+    /// let expression = a.min(b);
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     #[inline]
     fn min(self, rhs: Self) -> Self::Output {
         IntegerExpression::BinaryOperation(BinaryOperator::Min, Box::new(self), Box::new(rhs))
@@ -162,6 +285,21 @@ impl MaxMin for IntegerExpression {
 }
 
 impl SetExpression {
+    /// Returns an expression representing the length of a set.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = SetExpression::from(set);
+    /// let expression = expression.len();
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     #[inline]
     pub fn len(self) -> IntegerExpression {
         IntegerExpression::Cardinality(self)
@@ -169,6 +307,21 @@ impl SetExpression {
 }
 
 impl SetVariable {
+    /// Returns an expression representing the length of a set.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = variable.len();
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     #[inline]
     pub fn len(self) -> IntegerExpression {
         IntegerExpression::Cardinality(SetExpression::from(self))
@@ -177,6 +330,21 @@ impl SetVariable {
 
 impl Table1DHandle<Integer> {
     /// Returns a constant in a 1D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = Table1DHandle::<Integer>::element(&table, variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     #[inline]
     pub fn element<T>(&self, x: T) -> IntegerExpression
     where
@@ -189,6 +357,22 @@ impl Table1DHandle<Integer> {
     }
 
     /// Returns the sum of constants over a set expression in a 1D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.sum(variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// ```
     #[inline]
     pub fn sum<T>(&self, x: T) -> IntegerExpression
     where
@@ -202,6 +386,22 @@ impl Table1DHandle<Integer> {
     }
 
     /// Returns the product of constants over a set expression in a 1D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.product(variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 6);
+    /// ```
     #[inline]
     pub fn product<T>(&self, x: T) -> IntegerExpression
     where
@@ -215,6 +415,22 @@ impl Table1DHandle<Integer> {
     }
 
     /// Returns the maximum of constants over a set expression in a 1D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.max(variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
+    /// ```
     #[inline]
     pub fn max<T>(&self, x: T) -> IntegerExpression
     where
@@ -228,6 +444,22 @@ impl Table1DHandle<Integer> {
     }
 
     /// Returns the minimum of constants over a set expression in a 1D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![2, 3]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.min(variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     #[inline]
     pub fn min<T>(&self, x: T) -> IntegerExpression
     where
@@ -243,6 +475,21 @@ impl Table1DHandle<Integer> {
 
 impl Table2DHandle<Integer> {
     /// Returns a constant in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = Table2DHandle::<Integer>::element(&table, variable, 1);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
+    /// ```
     #[inline]
     pub fn element<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -257,6 +504,23 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the sum of constants over a set expression in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_set_variable("x", object_type, set).unwrap();
+    /// let y = model.add_element_variable("y", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.sum_x(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 6);
+    /// ```
     #[inline]
     pub fn sum_x<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -272,6 +536,23 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the sum of constants over a set expression in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.add_element_variable("x", object_type, 0).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.sum_y(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// ```
     #[inline]
     pub fn sum_y<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -287,6 +568,22 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the sum of constants over two set expressions in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.sum(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 14);
+    /// ```
     #[inline]
     pub fn sum<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -302,6 +599,23 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the product of constants over a set expression in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_set_variable("x", object_type, set).unwrap();
+    /// let y = model.add_element_variable("y", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.product_x(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 8);
+    /// ```
     #[inline]
     pub fn product_x<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -317,6 +631,23 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the product of constants over a set expression in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.add_element_variable("x", object_type, 0).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.product_y(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 6);
+    /// ```
     #[inline]
     pub fn product_y<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -332,6 +663,22 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the product of constants over two set expressions in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.product(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 120);
+    /// ```
     #[inline]
     pub fn product<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -347,6 +694,22 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the maximum of constants over a set expression in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_set_variable("x", object_type, set).unwrap();
+    /// let y = model.add_element_variable("y", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.max_x(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 4);
     #[inline]
     pub fn max_x<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -362,6 +725,22 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the maximum of constants over a set expression in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.add_element_variable("x", object_type, 0).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.max_y(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
     #[inline]
     pub fn max_y<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -377,6 +756,22 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the maximum of constants over two set expressions in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.max(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// ```
     #[inline]
     pub fn max<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -392,6 +787,22 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the minimum of constants over a set expression in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_set_variable("x", object_type, set).unwrap();
+    /// let y = model.add_element_variable("y", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.min_x(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
     #[inline]
     pub fn min_x<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -407,6 +818,22 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the minimum of constants over a set expression in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.add_element_variable("x", object_type, 0).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.min_y(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
     #[inline]
     pub fn min_y<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -422,6 +849,22 @@ impl Table2DHandle<Integer> {
     }
 
     /// Returns the minimum of constants over two set expressions in a 2D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![2, 3], vec![4, 5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.min(x, y);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     #[inline]
     pub fn min<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -440,6 +883,24 @@ impl Table2DHandle<Integer> {
 impl Table3DHandle<Integer> {
     #[inline]
     /// Returns a constant in a 3D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![vec![vec![2, 3], vec![4, 5]], vec![vec![6, 7], vec![8, 9]]]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = Table3DHandle::<Integer>::element(&table, variable, variable + 1, 1);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// ```
     pub fn element<T, U, V>(&self, x: T, y: U, z: V) -> IntegerExpression
     where
         ElementExpression: From<T>,
@@ -455,6 +916,29 @@ impl Table3DHandle<Integer> {
     }
 
     /// Returns the sum of constants over set expressions in a 3D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![vec![vec![2, 3], vec![4, 5]], vec![vec![6, 7], vec![8, 9]]]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.sum(set_variable, element_variable, 1);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 10);
+    ///
+    /// let expression = table.sum(set, set_variable, set_variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 44);
+    /// ```
     #[inline]
     pub fn sum<T, U, V>(&self, x: T, y: U, z: V) -> IntegerExpression
     where
@@ -472,6 +956,29 @@ impl Table3DHandle<Integer> {
     }
 
     /// Returns the product of constants over set expressions in a 3D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![vec![vec![2, 3], vec![4, 5]], vec![vec![6, 7], vec![8, 9]]]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.product(set_variable, element_variable, 1);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 21);
+    ///
+    /// let expression = table.product(set, set_variable, set_variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 362880);
+    /// ```
     #[inline]
     pub fn product<T, U, V>(&self, x: T, y: U, z: V) -> IntegerExpression
     where
@@ -489,6 +996,29 @@ impl Table3DHandle<Integer> {
     }
 
     /// Returns the maximum of constants over set expressions in a 3D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![vec![vec![2, 3], vec![4, 5]], vec![vec![6, 7], vec![8, 9]]]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.max(set_variable, element_variable, 1);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 7);
+    ///
+    /// let expression = table.max(set, set_variable, set_variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 9);
+    /// ```
     #[inline]
     pub fn max<T, U, V>(&self, x: T, y: U, z: V) -> IntegerExpression
     where
@@ -506,6 +1036,29 @@ impl Table3DHandle<Integer> {
     }
 
     /// Returns the minimum of constants over set expressions in a 3D integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![vec![vec![2, 3], vec![4, 5]], vec![vec![6, 7], vec![8, 9]]]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.min(set_variable, element_variable, 1);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
+    ///
+    /// let expression = table.min(set, set_variable, set_variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     #[inline]
     pub fn min<T, U, V>(&self, x: T, y: U, z: V) -> IntegerExpression
     where
@@ -525,6 +1078,29 @@ impl Table3DHandle<Integer> {
 
 impl TableHandle<Integer> {
     /// Returns a constant in an integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 1), (vec![1, 1, 1, 1], 2)]);
+    /// let table = model.add_table("table", map, 0).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ElementExpression::from(variable),
+    ///     ElementExpression::from(0),
+    ///     ElementExpression::from(0),
+    ///     ElementExpression::from(0),
+    /// ];
+    /// let expression = TableHandle::<Integer>::element(&table, indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     #[inline]
     pub fn element<T>(&self, indices: Vec<T>) -> IntegerExpression
     where
@@ -535,6 +1111,32 @@ impl TableHandle<Integer> {
     }
 
     /// Returns the sum of constants over set expressions in an integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 1), (vec![1, 1, 1, 1], 2)]);
+    /// let table = model.add_table("table", map, 0).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(set),
+    ///     ArgumentExpression::from(set_variable),
+    ///     ArgumentExpression::from(element_variable),
+    ///     ArgumentExpression::from(0),
+    /// ];
+    /// let expression = table.sum(indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     #[inline]
     pub fn sum<T>(&self, indices: Vec<T>) -> IntegerExpression
     where
@@ -549,6 +1151,32 @@ impl TableHandle<Integer> {
     }
 
     /// Returns the product of constants over set expressions in an integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 1), (vec![1, 1, 1, 1], 2)]);
+    /// let table = model.add_table("table", map, 0).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(set),
+    ///     ArgumentExpression::from(set_variable),
+    ///     ArgumentExpression::from(element_variable),
+    ///     ArgumentExpression::from(0),
+    /// ];
+    /// let expression = table.product(indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+    /// ```
     #[inline]
     pub fn product<T>(&self, indices: Vec<T>) -> IntegerExpression
     where
@@ -563,6 +1191,32 @@ impl TableHandle<Integer> {
     }
 
     /// Returns the maximum of constants over set expressions in an integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 1), (vec![1, 1, 1, 1], 2)]);
+    /// let table = model.add_table("table", map, 0).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(set),
+    ///     ArgumentExpression::from(set_variable),
+    ///     ArgumentExpression::from(element_variable),
+    ///     ArgumentExpression::from(0),
+    /// ];
+    /// let expression = table.max(indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     #[inline]
     pub fn max<T>(&self, indices: Vec<T>) -> IntegerExpression
     where
@@ -577,6 +1231,32 @@ impl TableHandle<Integer> {
     }
 
     /// Returns the minimum of constants over set expressions in an integer table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 1), (vec![1, 1, 1, 1], 2)]);
+    /// let table = model.add_table("table", map, 0).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(set),
+    ///     ArgumentExpression::from(set_variable),
+    ///     ArgumentExpression::from(element_variable),
+    ///     ArgumentExpression::from(0),
+    /// ];
+    /// let expression = table.min(indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+    /// ```
     #[inline]
     pub fn min<T>(&self, indices: Vec<T>) -> IntegerExpression
     where
@@ -608,7 +1288,7 @@ impl IfThenElse<IntegerExpression> for Condition {
 macro_rules! impl_unary_ops {
     ($T:ty) => {
         impl $T {
-            /// Returns the aboslute value
+            /// Returns an expression representing the absolute value
             #[inline]
             pub fn abs(self) -> IntegerExpression {
                 IntegerExpression::from(self).abs()
@@ -618,6 +1298,7 @@ macro_rules! impl_unary_ops {
         impl ops::Neg for $T {
             type Output = IntegerExpression;
 
+            /// Returns an expression representing the negative value
             #[inline]
             fn neg(self) -> Self::Output {
                 -IntegerExpression::from(self)
@@ -631,6 +1312,7 @@ macro_rules! impl_binary_ops {
         impl ops::Add<$U> for $T {
             type Output = IntegerExpression;
 
+            /// Returns an expression representing the addition.
             #[inline]
             fn add(self, rhs: $U) -> IntegerExpression {
                 IntegerExpression::from(self) + IntegerExpression::from(rhs)
@@ -640,6 +1322,7 @@ macro_rules! impl_binary_ops {
         impl ops::Sub<$U> for $T {
             type Output = IntegerExpression;
 
+            /// Returns an expression representing the subtraction.
             #[inline]
             fn sub(self, rhs: $U) -> IntegerExpression {
                 IntegerExpression::from(self) - IntegerExpression::from(rhs)
@@ -649,6 +1332,7 @@ macro_rules! impl_binary_ops {
         impl ops::Mul<$U> for $T {
             type Output = IntegerExpression;
 
+            /// Returns an expression representing the multiplication.
             #[inline]
             fn mul(self, rhs: $U) -> IntegerExpression {
                 IntegerExpression::from(self) * IntegerExpression::from(rhs)
@@ -658,6 +1342,7 @@ macro_rules! impl_binary_ops {
         impl ops::Div<$U> for $T {
             type Output = IntegerExpression;
 
+            /// Returns an expression representing the division.
             #[inline]
             fn div(self, rhs: $U) -> IntegerExpression {
                 IntegerExpression::from(self) / IntegerExpression::from(rhs)
@@ -667,6 +1352,7 @@ macro_rules! impl_binary_ops {
         impl ops::Rem<$U> for $T {
             type Output = IntegerExpression;
 
+            /// Returns an expression representing the remainder.
             #[inline]
             fn rem(self, rhs: $U) -> IntegerExpression {
                 IntegerExpression::from(self) % IntegerExpression::from(rhs)
@@ -708,6 +1394,20 @@ impl_binary_ops!(IntegerResourceVariable, IntegerResourceVariable);
 
 impl IntegerExpression {
     /// Returns an integer expression by taking the floor of the continuous expression.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = ContinuousExpression::from(1.5);
+    /// let expression = IntegerExpression::floor(expression);
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     pub fn floor<T>(x: T) -> IntegerExpression
     where
         ContinuousExpression: From<T>,
@@ -716,6 +1416,20 @@ impl IntegerExpression {
     }
 
     /// Returns an integer expression by taking the ceiling of the continuous expression.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = ContinuousExpression::from(1.5);
+    /// let expression = IntegerExpression::ceil(expression);
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     pub fn ceil<T>(x: T) -> IntegerExpression
     where
         ContinuousExpression: From<T>,
@@ -724,6 +1438,20 @@ impl IntegerExpression {
     }
 
     /// Returns an integer expression by rounding the continuous expression.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = ContinuousExpression::from(1.5);
+    /// let expression = IntegerExpression::round(expression);
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     pub fn round<T>(x: T) -> IntegerExpression
     where
         ContinuousExpression: From<T>,
@@ -732,6 +1460,20 @@ impl IntegerExpression {
     }
 
     /// Returns an integer expression by truncating the continuous expression.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = ContinuousExpression::from(1.5);
+    /// let expression = IntegerExpression::trunc(expression);
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     pub fn trunc<T>(x: T) -> IntegerExpression
     where
         ContinuousExpression: From<T>,
@@ -746,6 +1488,18 @@ impl IntegerExpression {
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = IntegerExpression::from(1);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     #[inline]
     pub fn eval<U: StateInterface>(&self, state: &U, registry: &TableRegistry) -> Integer {
         self.eval_inner(None, state, registry)
@@ -756,6 +1510,18 @@ impl IntegerExpression {
     /// # Panics
     ///
     /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = IntegerExpression::Cost + 1;
+    /// assert_eq!(expression.eval_cost(1, &state, &model.table_registry), 2);
+    /// ```
     #[inline]
     pub fn eval_cost<U: StateInterface>(
         &self,

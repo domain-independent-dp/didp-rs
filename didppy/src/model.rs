@@ -381,9 +381,9 @@ impl ModelPy {
     #[setter]
     fn set_maximize(&mut self, maximize: bool) {
         if maximize {
-            self.0.set_reduce_function(ReduceFunction::Max)
+            self.0.set_maximize();
         } else {
-            self.0.set_reduce_function(ReduceFunction::Min)
+            self.0.set_minimize();
         }
     }
 

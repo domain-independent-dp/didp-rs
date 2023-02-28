@@ -39,20 +39,20 @@ pub trait StateInterface: Sized {
     /// Panics if no variable has the id of `i`.
     fn get_element_variable(&self, i: usize) -> Element;
 
-    /// Returns the number of element variables;
+    /// Returns the number of integer numeric variables;
     fn get_number_of_integer_variables(&self) -> usize;
 
-    /// Returns the value of an integer variable.
+    /// Returns the value of an integer numeric variable.
     ///
     /// # Panics
     ///
     /// Panics if no variable has the id of `i`.
     fn get_integer_variable(&self, i: usize) -> Integer;
 
-    /// Returns the number of element variables;
+    /// Returns the number of continuous numeric variables;
     fn get_number_of_continuous_variables(&self) -> usize;
 
-    /// Returns the value of a continuous variable.
+    /// Returns the value of a continuous numeric variable.
     ///
     /// # Panics
     ///
@@ -196,18 +196,26 @@ pub trait StateInterface: Sized {
 /// State variables other than resource variables.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct SignatureVariables {
+    /// Set variables.
     pub set_variables: Vec<Set>,
+    /// Vector variables.
     pub vector_variables: Vec<Vector>,
+    /// Element variables.
     pub element_variables: Vec<Element>,
+    /// Integer numeric variables.
     pub integer_variables: Vec<Integer>,
+    /// Continuous numeric variables.
     pub continuous_variables: Vec<Continuous>,
 }
 
 /// Resource variables.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct ResourceVariables {
+    /// Element variables.
     pub element_variables: Vec<Element>,
+    /// Integer numeric variables.
     pub integer_variables: Vec<Integer>,
+    /// Continuous numeric variables.
     pub continuous_variables: Vec<Continuous>,
 }
 
@@ -221,81 +229,332 @@ pub struct State {
 }
 
 impl StateInterface for State {
+    /// Returns the number of set variables.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_number_of_set_variables(), 1);
+    /// ```
     #[inline]
     fn get_number_of_set_variables(&self) -> usize {
         self.signature_variables.set_variables.len()
     }
 
+    /// Returns the value of a set variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no variable has the id of `i`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set.clone()).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_set_variable(variable.id()), &set);
+    /// ```
     #[inline]
     fn get_set_variable(&self, i: usize) -> &Set {
         &self.signature_variables.set_variables[i]
     }
 
+    /// Returns the number of vector variables;
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_number_of_vector_variables(), 1);
+    /// ```
     #[inline]
     fn get_number_of_vector_variables(&self) -> usize {
         self.signature_variables.vector_variables.len()
     }
 
+    /// Returns the value of a vector variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no variable has the id of `i`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let variable = model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_vector_variable(variable.id()), &vec![0, 1, 2, 3]);
     #[inline]
     fn get_vector_variable(&self, i: usize) -> &Vector {
         &self.signature_variables.vector_variables[i]
     }
 
+    /// Returns the number of vector variables;
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_number_of_element_variables(), 1);
+    /// ```
     #[inline]
     fn get_number_of_element_variables(&self) -> usize {
         self.signature_variables.element_variables.len()
     }
 
+    /// Returns the value of an element variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no variable has the id of `i`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_element_variable(variable.id()), 0);
+    /// ```
     #[inline]
     fn get_element_variable(&self, i: usize) -> Element {
         self.signature_variables.element_variables[i]
     }
 
+    /// Returns the number of integer numeric variables;
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_integer_variable("variable", 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_number_of_integer_variables(), 1);
+    /// ```
     #[inline]
     fn get_number_of_integer_variables(&self) -> usize {
         self.signature_variables.integer_variables.len()
     }
 
+    /// Returns the value of an integer numeric variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no variable has the id of `i`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_integer_variable(variable.id()), 0);
+    /// ```
     #[inline]
     fn get_integer_variable(&self, i: usize) -> Integer {
         self.signature_variables.integer_variables[i]
     }
 
+    /// Returns the number of continuous numeric variables;
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_continuous_variable("variable", 0.5).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_number_of_continuous_variables(), 1);
+    /// ```
     #[inline]
     fn get_number_of_continuous_variables(&self) -> usize {
         self.signature_variables.continuous_variables.len()
     }
 
+    /// Returns the value of a continuous numeric variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no variable has the id of `i`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use approx::assert_relative_eq;
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_continuous_variable("variable", 0.5).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_relative_eq!(state.get_continuous_variable(variable.id()), 0.5);
+    /// ```
     #[inline]
     fn get_continuous_variable(&self, i: usize) -> Continuous {
         self.signature_variables.continuous_variables[i]
     }
 
+    /// Returns the number of element resource variables;
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// model.add_element_resource_variable("variable", object_type, false, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_number_of_element_resource_variables(), 1);
+    /// ```
     #[inline]
     fn get_number_of_element_resource_variables(&self) -> usize {
         self.resource_variables.element_variables.len()
     }
 
+    /// Returns the value of an element resource variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no variable has the id of `i`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let variable = model.add_element_resource_variable("variable", object_type, false, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_element_resource_variable(variable.id()), 0);
+    /// ```
     #[inline]
     fn get_element_resource_variable(&self, i: usize) -> Element {
         self.resource_variables.element_variables[i]
     }
 
+    /// Returns the number of integer resource variables;
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_integer_resource_variable("variable", false, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_number_of_integer_resource_variables(), 1);
+    /// ```
     #[inline]
     fn get_number_of_integer_resource_variables(&self) -> usize {
         self.resource_variables.integer_variables.len()
     }
 
+    /// Returns the value of an integer resource variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no variable has the id of `i`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_resource_variable("variable", false, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_integer_resource_variable(variable.id()), 0);
+    /// ```
     #[inline]
     fn get_integer_resource_variable(&self, i: usize) -> Integer {
         self.resource_variables.integer_variables[i]
     }
 
+    /// Returns the number of continuous resource variables;
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_continuous_resource_variable("variable", false, 0.5).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_eq!(state.get_number_of_continuous_resource_variables(), 1);
+    /// ```
     #[inline]
     fn get_number_of_continuous_resource_variables(&self) -> usize {
         self.resource_variables.continuous_variables.len()
     }
 
+    /// Returns the value of a continuous resource variable.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no variable has the id of `i`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use approx::assert_relative_eq;
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_continuous_resource_variable("variable", false, 0.5).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// assert_relative_eq!(state.get_continuous_resource_variable(variable.id()), 0.5);
+    /// ```
     #[inline]
     fn get_continuous_resource_variable(&self, i: usize) -> Continuous {
         self.resource_variables.continuous_variables[i]
@@ -303,6 +562,11 @@ impl StateInterface for State {
 }
 
 impl State {
+    /// Returns if the given state is equal to the current state.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the state metadata is wrong.
     pub fn is_satisfied<U: StateInterface>(&self, state: &U, metadata: &StateMetadata) -> bool {
         for i in 0..metadata.number_of_element_variables() {
             if self.get_element_variable(i) != state.get_element_variable(i) {
@@ -447,60 +711,162 @@ pub struct StateMetadata {
 
 impl StateMetadata {
     /// Returns the number of object types.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_object_type("object", 4).unwrap();
+    ///
+    /// assert_eq!(model.state_metadata.number_of_object_types(), 1);
+    /// ```
     #[inline]
     pub fn number_of_object_types(&self) -> usize {
         self.object_type_names.len()
     }
 
     /// Returns the number of set variables.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// model.add_set_variable("variable", object_type, set).unwrap();
+    ///
+    /// assert_eq!(model.state_metadata.number_of_set_variables(), 1);
+    /// ```
     #[inline]
     pub fn number_of_set_variables(&self) -> usize {
         self.set_variable_names.len()
     }
 
     /// Returns the number of vector variables.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).unwrap();
+    ///
+    /// assert_eq!(model.state_metadata.number_of_vector_variables(), 1);
+    /// ```
     #[inline]
     pub fn number_of_vector_variables(&self) -> usize {
         self.vector_variable_names.len()
     }
 
     /// Returns the number of element variables.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// model.add_element_variable("variable", object_type, 0).unwrap();
+    ///
+    /// assert_eq!(model.state_metadata.number_of_element_variables(), 1);
+    /// ```
     #[inline]
     pub fn number_of_element_variables(&self) -> usize {
         self.element_variable_names.len()
     }
 
     /// Returns the number of integer variables.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_integer_variable("variable", 0).unwrap();
+    ///
+    /// assert_eq!(model.state_metadata.number_of_integer_variables(), 1);
+    /// ```
     #[inline]
     pub fn number_of_integer_variables(&self) -> usize {
         self.integer_variable_names.len()
     }
 
     /// Returns the number of continuous variables.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_continuous_variable("variable", 0.5).unwrap();
+    ///
+    /// assert_eq!(model.state_metadata.number_of_continuous_variables(), 1);
+    /// ```
     #[inline]
     pub fn number_of_continuous_variables(&self) -> usize {
         self.continuous_variable_names.len()
     }
 
     /// Returns the number of element resource variables.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// model.add_element_resource_variable("variable", object_type, false, 0).unwrap();
+    ///
+    /// assert_eq!(model.state_metadata.number_of_element_resource_variables(), 1);
+    /// ```
     #[inline]
     pub fn number_of_element_resource_variables(&self) -> usize {
         self.element_resource_variable_names.len()
     }
 
     /// Returns the number of integer resource variables.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_integer_resource_variable("variable", false, 0).unwrap();
+    ///
+    /// assert_eq!(model.state_metadata.number_of_integer_resource_variables(), 1);
+    /// ```
     #[inline]
     pub fn number_of_integer_resource_variables(&self) -> usize {
         self.integer_resource_variable_names.len()
     }
 
     /// Returns the number of continuous resource variables.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_continuous_resource_variable("variable", false, 0.5).unwrap();
+    ///
+    /// assert_eq!(model.state_metadata.number_of_continuous_resource_variables(), 1);
+    /// ```
     #[inline]
     pub fn number_of_continuous_resource_variables(&self) -> usize {
         self.continuous_resource_variable_names.len()
     }
 
-    /// Retruns true if there is a resource variable and false otherwise.
+    /// Returns true if there is a resource variable and false otherwise.
     pub fn has_resource_variables(&self) -> bool {
         self.number_of_element_resource_variables() > 0
             || self.number_of_integer_resource_variables() > 0
@@ -541,6 +907,37 @@ impl StateMetadata {
     }
 
     /// Returns the dominance relation between two states.
+    ///
+    /// # Panics
+    ///
+    /// Panics the metadata is wrong.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use std::cmp::Ordering;
+    ///
+    /// let mut model = Model::default();
+    /// let v1 = model.add_integer_resource_variable("v1", false, 1).unwrap();
+    /// let v2 = model.add_continuous_resource_variable("v2", true, 1.5).unwrap();
+    /// let a = model.target.clone();
+    ///
+    /// model.set_target(v1, 0).unwrap();
+    /// model.set_target(v2, 2.5).unwrap();
+    /// let b = model.target.clone();
+    /// assert_eq!(model.state_metadata.dominance(&a, &b), Some(Ordering::Greater));
+    ///
+    /// model.set_target(v1, 1).unwrap();
+    /// model.set_target(v2, 0.5).unwrap();
+    /// let b = model.target.clone();
+    /// assert_eq!(model.state_metadata.dominance(&a, &b), Some(Ordering::Less));
+    ///
+    /// model.set_target(v1, 0).unwrap();
+    /// model.set_target(v2, 0.5).unwrap();
+    /// let b = model.target.clone();
+    /// assert_eq!(model.state_metadata.dominance(&a, &b), None);
+    /// ```
     pub fn dominance<U: StateInterface, V: StateInterface>(
         &self,
         a: &U,
@@ -778,7 +1175,7 @@ impl StateMetadata {
         }
     }
 
-    /// Retunrs the number of objects associated with the type.
+    /// Returns the number of objects associated with the type.
     ///
     /// # Errors
     ///
@@ -788,16 +1185,17 @@ impl StateMetadata {
         Ok(self.object_numbers[ob.id()])
     }
 
-    /// Change the number of objects.
-    ///
-    /// # Errors
-    ///
-    /// If the object type is not in the model.
-    pub fn set_number_of_object(&mut self, ob: ObjectType, number: usize) -> Result<(), ModelErr> {
-        self.check_object(ob)?;
-        self.object_numbers[ob.id()] = number;
-        Ok(())
-    }
+    // Disabled because it is inconsistent with the other modeling interfaces.
+    // /// Change the number of objects.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the object type is not in the model.
+    // pub fn set_number_of_object(&mut self, ob: ObjectType, number: usize) -> Result<(), ModelErr> {
+    //     self.check_object(ob)?;
+    //     self.object_numbers[ob.id()] = number;
+    //     Ok(())
+    // }
 
     /// Create a set of objects associated with the type.
     ///
@@ -1188,6 +1586,18 @@ impl_check_variable!(
 );
 
 /// Trait for getting the object type.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+///
+/// let mut model = Model::default();
+/// let object_type = model.add_object_type("object", 4).unwrap();
+/// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+///
+/// assert!(model.get_object_type_of(variable).is_ok())
+/// ```
 pub trait GetObjectTypeOf<T> {
     /// Returns the object type of the variable.
     ///
@@ -1214,6 +1624,19 @@ impl_get_object_type_of!(SetVariable, set_variable_to_object);
 impl_get_object_type_of!(VectorVariable, vector_variable_to_object);
 
 /// Trait for accessing preference of resource variables.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_resource_variable("variable", true, 0).unwrap();
+///
+/// assert!(model.get_preference(variable).unwrap());
+/// assert!(model.set_preference(variable, false).is_ok());
+/// assert!(!model.get_preference(variable).unwrap());
+/// ```
 pub trait AccessPreference<T> {
     /// Returns the preference of a resource variable.
     ///
@@ -2458,12 +2881,12 @@ mod tests {
         let result = metadata.get_number_of_objects(ob);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 10);
-        let result = metadata.set_number_of_object(ob, 5);
-        assert!(result.is_ok());
-        assert_eq!(metadata.object_numbers, vec![5]);
-        let result = metadata.get_number_of_objects(ob);
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), 5);
+        // let result = metadata.set_number_of_object(ob, 5);
+        // assert!(result.is_ok());
+        // assert_eq!(metadata.object_numbers, vec![5]);
+        // let result = metadata.get_number_of_objects(ob);
+        // assert!(result.is_ok());
+        // assert_eq!(result.unwrap(), 5);
     }
 
     #[test]
@@ -2477,12 +2900,12 @@ mod tests {
         assert!(ob.is_ok());
         let ob = metadata2.add_object_type(String::from("other"), 10);
         assert!(ob.is_ok());
-        let ob = ob.unwrap();
+        // let ob = ob.unwrap();
 
-        let result = metadata1.set_number_of_object(ob, 5);
-        assert!(result.is_err());
-        let result = metadata1.get_number_of_objects(ob);
-        assert!(result.is_err());
+        // let result = metadata1.set_number_of_object(ob, 5);
+        // assert!(result.is_err());
+        // let result = metadata1.get_number_of_objects(ob);
+        // assert!(result.is_err());
 
         assert_eq!(metadata1.object_type_names, vec![String::from("something")]);
         assert_eq!(metadata1.object_numbers, vec![10]);

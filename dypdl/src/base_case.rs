@@ -21,6 +21,7 @@ impl From<BaseCase> for Vec<GroundedCondition> {
 }
 
 impl BaseCase {
+    /// Creates a new base case.
     #[inline]
     pub fn new(conditions: Vec<GroundedCondition>) -> BaseCase {
         BaseCase(conditions)

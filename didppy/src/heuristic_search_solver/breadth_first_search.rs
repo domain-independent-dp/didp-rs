@@ -16,6 +16,10 @@ use std::rc::Rc;
 /// and `x` is a value independent of `state_cost`.
 /// Otherwise, it may not produce the optimal solution.
 ///
+/// Breadth-first searches layer by layer, where the i th layer contains states that can be reached with i transitions.
+/// By default, this solver only keeps states in the current layer to check for duplicates.
+/// If `keep_all_layers` is `True`, this solver keeps states in all layers to check for duplicates.
+///
 /// Parameters
 /// ----------
 /// model: Model
