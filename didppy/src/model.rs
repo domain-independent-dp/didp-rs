@@ -300,6 +300,7 @@ impl IntoPy<Py<PyAny>> for FloatTableUnion {
     }
 }
 
+#[allow(rustdoc::broken_intra_doc_links)]
 /// DyPDL model.
 ///
 /// Parameters
