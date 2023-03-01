@@ -1,6 +1,130 @@
 //! # DyPDL
 //!
 //! A library for Dynamic Programming Description Language (DyPDL).
+//!
+//! # Examples
+//!
+//! Example to model TSPTW.
+//!
+//! ```
+//! use dypdl::prelude::*;
+//!
+//! // TSPTW instance.
+//! // 0 is the depot, and 1, 2, and 3 are customers.
+//! let n_customers = 4;
+//! // Beginnings of time windows.
+//! let ready_time = vec![0, 5, 0, 8];
+//! // Ends of time windows.
+//! let due_date = vec![0, 16, 10, 14];
+//! // Travel time.
+//! let distance_matrix = vec![
+//!     vec![0, 3, 4, 5],
+//!     vec![3, 0, 5, 4],
+//!     vec![4, 5, 0, 3],
+//!     vec![5, 4, 3, 0],
+//! ];
+//!
+//! // Minimization and integer cost by default.
+//! let mut model = Model::default();
+//!
+//! // Define an object type.
+//! let customer = model.add_object_type("customer", n_customers).unwrap();
+//!
+//! // Define state variables.
+//! // Unvisited customers, initially 1, 2, and 3.
+//! let unvisited = model.create_set(customer, &[1, 2, 3]).unwrap();
+//! let unvisited = model.add_set_variable("U", customer, unvisited).unwrap();
+//! // Current location, initially 0.
+//! let location = model.add_element_variable("i", customer, 0).unwrap();
+//! // Current time, less is better, initially 0.
+//! let time = model.add_integer_resource_variable("t", true, 0).unwrap();
+//!
+//! // Define tables of constants.
+//! let ready_time: Table1DHandle<Integer> = model.add_table_1d("a", ready_time).unwrap();
+//! let due_date: Table1DHandle<Integer> = model.add_table_1d("b", due_date).unwrap();
+//! let distance: Table2DHandle<Integer> = model.add_table_2d(
+//!     "c", distance_matrix.clone()
+//! ).unwrap();
+//!
+//! // Define transitions.
+//! let mut visits = vec![];
+//!
+//! // Returning to the depot;
+//! let mut return_to_depot = Transition::new("return to depot");
+//! // The cost is the sum of the travel time and the cost of the next state.
+//! return_to_depot.set_cost(distance.element(location, 0) + IntegerExpression::Cost);
+//! // Update the current location to the depot.
+//! return_to_depot.add_effect(location, 0).unwrap();
+//! // Increase the current time.
+//! return_to_depot.add_effect(time, time + distance.element(location, 0)).unwrap();
+//! // Add the transition to the model.
+//! // When this transition is applicable, no need to consider other transitions.
+//! model.add_forward_forced_transition(return_to_depot.clone());
+//! visits.push(return_to_depot);
+//!
+//! for j in 1..n_customers {
+//!     // Visiting each customer.
+//!     let mut visit = Transition::new(format!("visit {}", j));
+//!     visit.set_cost(distance.element(location, j) + IntegerExpression::Cost);
+//!     // Remove j from the set of unvisited customers.
+//!     visit.add_effect(unvisited, unvisited.remove(j)).unwrap();
+//!     visit.add_effect(location, j).unwrap();
+//!     // Wait until the ready time.
+//!     let arrival_time = time + distance.element(location, j);
+//!     let start_time = IntegerExpression::max(arrival_time.clone(), ready_time.element(j));
+//!     visit.add_effect(time, start_time).unwrap();
+//!     // The time window must be satisfied.
+//!     visit.add_precondition(
+//!         Condition::comparison_i(ComparisonOperator::Le, arrival_time, due_date.element(j))
+//!     );
+//!     // Add the transition to the model.
+//!     model.add_forward_transition(visit.clone()).unwrap();
+//!     visits.push(visit);
+//! }
+//!
+//! // Define a base case.
+//! // If all customers are visited and the current location is the depot, the cost is 0.
+//! let is_depot = Condition::comparison_e(ComparisonOperator::Eq, location, 0);
+//! model.add_base_case(vec![unvisited.is_empty(), is_depot.clone()]).unwrap();
+//!
+//! // Define redundant information, which is possibly useful for a solver.
+//! // Define state constraints.
+//! for j in 1..n_customers {
+//!     // The shortest arrival time, assuming the triangle inequality.
+//!     let arrival_time = time + distance.element(location, j);
+//!     // The salesperson must be able to visit each unvisited customer before the deadline.
+//!     let on_time = Condition::comparison_i(
+//!         ComparisonOperator::Le, arrival_time, due_date.element(j)
+//!     );
+//!     model.add_state_constraint(!unvisited.contains(j) | on_time).unwrap();
+//! }
+//!
+//! // Define a dual bound.
+//! // The minimum distance to each customer.
+//! let min_distance_to = distance_matrix.iter()
+//!     .enumerate()
+//!     .map(|(j, row)| row.iter().enumerate().filter_map(|(k, d)| {
+//!             if j == k {
+//!                None
+//!             } else {
+//!                Some(*d)
+//!             }
+//!         })
+//!     .min().unwrap()).collect();
+//! let min_distance_to: Table1DHandle<Integer> = model.add_table_1d(
+//!     "c_min", min_distance_to
+//! ).unwrap();
+//! let to_depot: IntegerExpression = is_depot.if_then_else(0, min_distance_to.element(0));
+//! let dual_bound: IntegerExpression = min_distance_to.sum(unvisited) + to_depot;
+//! model.add_dual_bound(dual_bound).unwrap();
+//!
+//! // Solution.
+//! let solution = [visits[2].clone(), visits[3].clone(), visits[1].clone(), visits[0].clone()];
+//! // Solution cost.
+//! let cost = 14;
+//! // Verify the solution.
+//! assert!(model.validate_forward(&solution, cost, true));
+//! ```
 
 mod base_case;
 mod effect;
@@ -45,9 +169,9 @@ pub mod prelude {
         Continuous, ContinuousResourceVariable, ContinuousVariable, CostExpression, CostType,
         Element, ElementResourceVariable, ElementVariable, GetObjectTypeOf, Integer,
         IntegerResourceVariable, IntegerVariable, Model, ObjectType, ReduceFunction,
-        ResourceVariables, Set, SetVariable, SignatureVariables, State, StateMetadata,
-        Table1DHandle, Table2DHandle, Table3DHandle, TableHandle, TableInterface, Transition,
-        Vector, VectorVariable,
+        ResourceVariables, Set, SetVariable, SignatureVariables, State, StateInterface,
+        StateMetadata, Table1DHandle, Table2DHandle, Table3DHandle, TableHandle, TableInterface,
+        Transition, TransitionInterface, Vector, VectorVariable,
     };
 }
 
@@ -58,11 +182,14 @@ use std::panic;
 /// Type of numeric values to represent the costs of states.
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CostType {
+    /// Integer value.
     Integer,
+    /// Continuous value.
     Continuous,
 }
 
 impl Default for CostType {
+    /// Returns `CostType::Integer`.
     #[inline]
     fn default() -> Self {
         Self::Integer
@@ -83,6 +210,7 @@ pub enum ReduceFunction {
 }
 
 impl Default for ReduceFunction {
+    /// Returns `ReduceFunction::Min`.
     #[inline]
     fn default() -> Self {
         Self::Min
@@ -121,23 +249,25 @@ pub struct Model {
 }
 
 impl Model {
-    /// Returns a model whose cost is integer.
-    pub fn integer_cost_model() -> Model {
-        Model {
-            cost_type: CostType::Integer,
-            ..Default::default()
-        }
-    }
-
-    /// Returns a model whose cost is continuous.
-    pub fn continuous_cost_model() -> Model {
-        Model {
-            cost_type: CostType::Continuous,
-            ..Default::default()
-        }
-    }
-
     /// Returns true if a state satisfies all state constraints and false otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
+    /// model.add_state_constraint(condition).unwrap();
+    /// assert!(model.check_constraints(&state));
+    ///
+    /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 3);
+    /// model.add_state_constraint(condition).unwrap();
+    /// assert!(!model.check_constraints(&state));
+    /// ```
     pub fn check_constraints<U: StateInterface>(&self, state: &U) -> bool {
         self.state_constraints.iter().all(|constraint| {
             constraint
@@ -151,6 +281,26 @@ impl Model {
     /// # Panics
     ///
     /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a base case.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
+    /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 1);
+    /// model.add_base_case(vec![a, b]).unwrap();
+    /// assert!(!model.is_base(&state));
+    ///
+    /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
+    /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 2);
+    /// model.add_base_case(vec![a, b]).unwrap();
+    /// assert!(model.is_base(&state));
+    /// ```
     pub fn is_base<U: StateInterface>(&self, state: &U) -> bool {
         self.base_cases
             .iter()
@@ -161,21 +311,27 @@ impl Model {
                 .any(|base| base.is_satisfied(state, &self.state_metadata))
     }
 
-    /// Returns true if there is a resource variable and false otherwise.
-    pub fn has_resource_variables(&self) -> bool {
-        self.state_metadata.has_resource_variables()
-    }
-
-    /// Returns true if a dual bound is defined and false otherwise.
-    pub fn has_dual_bounds(&self) -> bool {
-        !self.dual_bounds.is_empty()
-    }
-
     /// Evaluate the dual bound given a state.
     ///
     /// # Panics
     ///
-    /// If the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a dual bound.
+    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a dual bound.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.set_minimize();
+    /// let variable = model.add_integer_variable("variable", 2).unwrap();
+    /// let state = model.target.clone();
+    /// assert_eq!(model.eval_dual_bound::<_, Integer>(&state), None);
+    ///
+    /// model.add_dual_bound(IntegerExpression::from(0)).unwrap();
+    /// model.add_dual_bound(IntegerExpression::from(variable)).unwrap();
+    /// assert_eq!(model.eval_dual_bound::<_, Integer>(&state), Some(2));
+    /// ```
     pub fn eval_dual_bound<U: StateInterface, T: variable_type::Numeric + Ord>(
         &self,
         state: &U,
@@ -195,11 +351,34 @@ impl Model {
         }
     }
 
-    /// Returns the successor state given a state and a transition.
+    /// Returns the successor state and the cost of a state, given a transition and the cost of the successor state.
+    ///
+    /// Returns `None` if the cost is greater than or equal to the bound.
     ///
     /// # Panics
     ///
-    /// If the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a precondition or an effect of the transition.
+    /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a precondition or an effect of the transition.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let mut transition = Transition::new("transition");
+    /// transition.add_effect(variable, variable + 1);
+    /// transition.set_cost(IntegerExpression::Cost + 1);
+    ///
+    /// let (successor, cost): (State, _) = model.generate_successor_state(&state, 0, &transition, None).unwrap();
+    /// assert_eq!(successor.get_integer_variable(variable.id()), 3);
+    /// assert_eq!(cost, 1);
+    ///
+    /// let result: Option<(State, _)> = model.generate_successor_state(&state, 0, &transition, Some(1));
+    /// assert_eq!(result, None);
+    /// ```
     pub fn generate_successor_state<
         S: StateInterface,
         R: StateInterface + From<State>,
@@ -236,6 +415,23 @@ impl Model {
     /// # Panics
     ///
     /// Panics if the cost of the transitioned state is used or a min/max reduce operation is performed on an empty set or vector in a precondition or an effect of a transition.
+    ///
+    /// # Examples
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 1).unwrap();
+    /// model.add_base_case(vec![Condition::comparison_i(ComparisonOperator::Eq, variable, 0)]).unwrap();
+    /// let mut transition = Transition::new("decrement");
+    /// transition.add_effect(variable, variable - 1).unwrap();
+    /// transition.set_cost(IntegerExpression::Cost + 1);
+    ///
+    /// let transitions = [transition];
+    /// let cost = 1;
+    ///
+    /// assert!(model.validate_forward(&transitions, cost, true));
+    /// ```
     pub fn validate_forward<T: variable_type::Numeric + fmt::Display>(
         &self,
         transitions: &[Transition],
@@ -245,16 +441,6 @@ impl Model {
         let mut state_vec = vec![self.target.clone()];
         for (i, transition) in transitions.iter().enumerate() {
             let state = state_vec.last().unwrap();
-            for forced_transition in &self.forward_forced_transitions {
-                if forced_transition.is_applicable(state, &self.table_registry) {
-                    if forced_transition == transition {
-                        break;
-                    } else {
-                        println!("Forced transition {} is applicable in the {} th state, but transition {} is applied", forced_transition.get_full_name(), i, transition.get_full_name());
-                        return false;
-                    }
-                }
-            }
             if !transition.is_applicable(state, &self.table_registry) {
                 if show_message {
                     println!(
@@ -291,11 +477,83 @@ impl Model {
         true
     }
 
+    /// Returns true if there is a resource variable and false otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 2).unwrap();
+    /// assert!(!model.has_resource_variables());
+    ///
+    /// let variable = model.add_integer_resource_variable("variable", true, 2).unwrap();
+    /// assert!(model.has_resource_variables());
+    /// ```
+    pub fn has_resource_variables(&self) -> bool {
+        self.state_metadata.has_resource_variables()
+    }
+
+    /// Returns true if a dual bound is defined and false otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// assert!(!model.has_dual_bounds());
+    ///
+    /// model.add_dual_bound(IntegerExpression::from(0)).unwrap();
+    /// assert!(model.has_dual_bounds());
+    /// ```
+    pub fn has_dual_bounds(&self) -> bool {
+        !self.dual_bounds.is_empty()
+    }
+
+    /// Creates a model whose cost is integer.
+    pub fn integer_cost_model() -> Model {
+        Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        }
+    }
+
+    /// Creates a model whose cost is continuous.
+    pub fn continuous_cost_model() -> Model {
+        Model {
+            cost_type: CostType::Continuous,
+            ..Default::default()
+        }
+    }
+
+    /// Set the objective to minimization.
+    pub fn set_minimize(&mut self) {
+        self.reduce_function = ReduceFunction::Min;
+    }
+
+    /// Set the objective to maximization.
+    pub fn set_maximize(&mut self) {
+        self.reduce_function = ReduceFunction::Max;
+    }
+
     /// Returns object type given a name.
     ///
     /// # Errors
     ///
     /// If no object type with the name.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_object_type("object", 1).unwrap();
+    ///
+    /// assert!(model.get_object_type("object").is_ok());
+    /// ```
     #[inline]
     pub fn get_object_type(&self, name: &str) -> Result<ObjectType, ModelErr> {
         self.state_metadata.get_object_type(name)
@@ -306,6 +564,15 @@ impl Model {
     /// # Errors
     ///
     /// If the name is already used.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// assert!(model.add_object_type("object", 4).is_ok());
+    /// ```
     #[inline]
     pub fn add_object_type<T>(&mut self, name: T, number: usize) -> Result<ObjectType, ModelErr>
     where
@@ -319,26 +586,49 @@ impl Model {
     /// # Errors
     ///
     /// If the object type is not in the model.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    ///
+    /// assert_eq!(model.get_number_of_objects(object_type).unwrap(), 4);
+    /// ```
     #[inline]
     pub fn get_number_of_objects(&self, ob: ObjectType) -> Result<usize, ModelErr> {
         self.state_metadata.get_number_of_objects(ob)
     }
 
-    /// Change the number of objects.
-    ///
-    /// # Errors
-    ///
-    /// If the object type is not in the model.
-    #[inline]
-    pub fn set_number_of_object(&mut self, ob: ObjectType, number: usize) -> Result<(), ModelErr> {
-        self.state_metadata.set_number_of_object(ob, number)
-    }
+    // Disabled because it is inconsistent withe the other modeling interfaces.
+    // /// Change the number of objects.
+    // ///
+    // /// # Errors
+    // ///
+    // /// If the object type is not in the model.
+    // #[inline]
+    // pub fn set_number_of_object(&mut self, ob: ObjectType, number: usize) -> Result<(), ModelErr> {
+    //     self.state_metadata.set_number_of_object(ob, number)
+    // }
 
     /// Create a set of objects associated with the type.
     ///
     /// # Errors
     ///
     /// If the object type is not in the model or an input value is greater than or equal to the number of the objects.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    ///
+    /// assert!(model.create_set(object_type, &[0, 1, 2, 3]).is_ok());
+    /// ```
     #[inline]
     pub fn create_set(&self, ob: ObjectType, array: &[Element]) -> Result<Set, ModelErr> {
         self.state_metadata.create_set(ob, array)
@@ -349,6 +639,18 @@ impl Model {
     /// # Errors
     ///
     /// If no such variable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// model.add_element_variable("variable", object_type, 0).unwrap();
+    ///
+    /// assert!(model.get_element_variable("variable").is_ok());
+    /// ```
     #[inline]
     pub fn get_element_variable(&self, name: &str) -> Result<ElementVariable, ModelErr> {
         self.state_metadata.get_element_variable(name)
@@ -361,6 +663,17 @@ impl Model {
     /// # Errors
     ///
     /// If the name is already used, the object type is not in the model, or the target value is greater than or equal to the number of the objects.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    ///
+    /// assert!(model.add_element_variable("variable", object_type, 0).is_ok());
+    /// ```
     pub fn add_element_variable<T>(
         &mut self,
         name: T,
@@ -387,11 +700,23 @@ impl Model {
         }
     }
 
-    /// Returns an element resouce variable given a name.
+    /// Returns an element resource variable given a name.
     ///
     /// # Errors
     ///
     /// If no such variable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// model.add_element_resource_variable("variable", object_type, false, 0).unwrap();
+    ///
+    /// assert!(model.get_element_resource_variable("variable").is_ok());
+    /// ```
     #[inline]
     pub fn get_element_resource_variable(
         &self,
@@ -407,6 +732,17 @@ impl Model {
     /// # Errors
     ///
     /// If the name is already used, the object type is not in the model, or the target value is greater than or equal to the number of the objects.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    ///
+    /// assert!(model.add_element_resource_variable("variable", object_type, false, 0).is_ok());
+    /// ```
     pub fn add_element_resource_variable<T>(
         &mut self,
         name: T,
@@ -441,6 +777,19 @@ impl Model {
     /// # Errors
     ///
     /// If no such variable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// model.add_set_variable("variable", object_type, set).unwrap();
+    ///
+    /// assert!(model.get_set_variable("variable").is_ok());
+    /// ```
     #[inline]
     pub fn get_set_variable(&self, name: &str) -> Result<SetVariable, ModelErr> {
         self.state_metadata.get_set_variable(name)
@@ -453,6 +802,18 @@ impl Model {
     /// # Errors
     ///
     /// If the name is already used, the object type is not in the model, or the target contains a value greater than or equal to the number of the objects.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    ///
+    /// assert!(model.add_set_variable("variable", object_type, set).is_ok());
+    /// ```
     pub fn add_set_variable<T>(
         &mut self,
         name: T,
@@ -482,6 +843,18 @@ impl Model {
     /// # Errors
     ///
     /// If no such variable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).unwrap();
+    ///
+    /// assert!(model.get_vector_variable("variable").is_ok());
+    /// ```
     #[inline]
     pub fn get_vector_variable(&self, name: &str) -> Result<VectorVariable, ModelErr> {
         self.state_metadata.get_vector_variable(name)
@@ -494,6 +867,17 @@ impl Model {
     /// # Errors
     ///
     /// If the name is already used, the object type is not in the model, or the target contains a value greater than or equal to the number of the objects.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    ///
+    /// assert!(model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).is_ok());
+    /// ```
     pub fn add_vector_variable<T>(
         &mut self,
         name: T,
@@ -526,6 +910,17 @@ impl Model {
     /// # Errors
     ///
     /// If no such variable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_integer_variable("variable", 0).unwrap();
+    ///
+    /// assert!(model.get_integer_variable("variable").is_ok());
+    /// ```
     #[inline]
     pub fn get_integer_variable(&self, name: &str) -> Result<IntegerVariable, ModelErr> {
         self.state_metadata.get_integer_variable(name)
@@ -538,6 +933,14 @@ impl Model {
     /// # Errors
     ///
     /// If the name is already used.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    ///
+    /// assert!(model.add_integer_variable("variable", 0).is_ok());
+    /// ```
     pub fn add_integer_variable<T>(
         &mut self,
         name: T,
@@ -559,6 +962,17 @@ impl Model {
     /// # Errors
     ///
     /// If no such variable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_integer_resource_variable("variable", false, 0).unwrap();
+    ///
+    /// assert!(model.get_integer_resource_variable("variable").is_ok());
+    /// ```
     #[inline]
     pub fn get_integer_resource_variable(
         &self,
@@ -574,6 +988,16 @@ impl Model {
     /// # Errors
     ///
     /// If the name is already used.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    ///
+    /// assert!(model.add_integer_resource_variable("variable", false, 0).is_ok());
+    /// ```
     pub fn add_integer_resource_variable<T>(
         &mut self,
         name: T,
@@ -598,6 +1022,17 @@ impl Model {
     /// # Errors
     ///
     /// If no such variable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_continuous_variable("variable", 0.5).unwrap();
+    ///
+    /// assert!(model.get_continuous_variable("variable").is_ok());
+    /// ```
     #[inline]
     pub fn get_continuous_variable(&self, name: &str) -> Result<ContinuousVariable, ModelErr> {
         self.state_metadata.get_continuous_variable(name)
@@ -610,6 +1045,16 @@ impl Model {
     /// # Errors
     ///
     /// If the name is already used.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    ///
+    /// assert!(model.add_continuous_variable("variable", 0.5).is_ok());
+    /// ```
     pub fn add_continuous_variable<T>(
         &mut self,
         name: T,
@@ -631,6 +1076,17 @@ impl Model {
     /// # Errors
     ///
     /// If no such variable.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// model.add_continuous_resource_variable("variable", false, 0.5).unwrap();
+    ///
+    /// assert!(model.get_continuous_resource_variable("variable").is_ok());
+    /// ```
     #[inline]
     pub fn get_continuous_resource_variable(
         &self,
@@ -646,6 +1102,16 @@ impl Model {
     /// # Errors
     ///
     /// If the name is already used.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    ///
+    /// assert!(model.add_continuous_resource_variable("variable", false, 0.5).is_ok());
+    /// ```
     pub fn add_continuous_resource_variable<T>(
         &mut self,
         name: T,
@@ -670,6 +1136,18 @@ impl Model {
     /// # Errors
     ///
     /// If the condition is invalid, e.., it uses not existing variables or the state of the transitioned state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 2).unwrap();
+    ///
+    /// let constraint = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
+    /// assert!(model.add_state_constraint(constraint).is_ok());
+    /// ```
     #[inline]
     pub fn add_state_constraint(
         &mut self,
@@ -686,10 +1164,8 @@ impl Model {
             }
             _ => {}
         }
-        self.state_constraints.push(GroundedCondition {
-            condition: simplified,
-            ..Default::default()
-        });
+        self.state_constraints
+            .push(GroundedCondition::from(simplified));
         Ok(())
     }
 
@@ -698,6 +1174,19 @@ impl Model {
     /// # Errors
     ///
     /// If a condition is invalid, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 2).unwrap();
+    ///
+    /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
+    /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 1);
+    /// assert!(model.add_base_case(vec![a, b]).is_ok());
+    /// ```
     #[inline]
     pub fn add_base_case(
         &mut self,
@@ -721,10 +1210,7 @@ impl Model {
         self.base_cases.push(BaseCase::new(
             simplified_conditions
                 .into_iter()
-                .map(|condition| GroundedCondition {
-                    condition,
-                    ..Default::default()
-                })
+                .map(GroundedCondition::from)
                 .collect(),
         ));
         Ok(())
@@ -771,6 +1257,17 @@ impl Model {
     /// # Errors
     ///
     /// If it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let transition = Transition::new("transition");
+    ///
+    /// assert!(model.add_forward_transition(transition).is_ok());
+    /// ```
     #[inline]
     pub fn add_forward_transition(&mut self, transition: Transition) -> Result<(), ModelErr> {
         let transition = self.check_and_simplify_transition(&transition)?;
@@ -783,6 +1280,17 @@ impl Model {
     /// # Errors
     ///
     /// If it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let transition = Transition::new("transition");
+    ///
+    /// assert!(model.add_forward_forced_transition(transition).is_ok());
+    /// ```
     #[inline]
     pub fn add_forward_forced_transition(
         &mut self,
@@ -798,6 +1306,17 @@ impl Model {
     /// # Errors
     ///
     /// If it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let transition = Transition::new("transition");
+    ///
+    /// assert!(model.add_backward_transition(transition).is_ok());
+    /// ```
     #[inline]
     pub fn add_backward_transition(&mut self, transition: Transition) -> Result<(), ModelErr> {
         let transition = self.check_and_simplify_transition(&transition)?;
@@ -810,6 +1329,17 @@ impl Model {
     /// # Errors
     ///
     /// If it uses an invalid expression, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let transition = Transition::new("transition");
+    ///
+    /// assert!(model.add_backward_forced_transition(transition).is_ok());
+    /// ```
     #[inline]
     pub fn add_backward_forced_transition(
         &mut self,
@@ -829,6 +1359,19 @@ impl Model {
     /// # Panics
     ///
     /// Panics if the table is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// let table = model.add_table_1d("table", vec![set]).unwrap();
+    ///
+    /// assert_eq!(model.get_capacity_of_set_in_1d_table(table).unwrap(), 4);
+    /// ```
     #[inline]
     pub fn get_capacity_of_set_in_1d_table(
         &self,
@@ -847,6 +1390,19 @@ impl Model {
     /// # Panics
     ///
     /// Panics if the table is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// let table = model.add_table_2d("table", vec![vec![set]]).unwrap();
+    ///
+    /// assert_eq!(model.get_capacity_of_set_in_2d_table(table).unwrap(), 4);
+    /// ```
     #[inline]
     pub fn get_capacity_of_set_in_2d_table(
         &self,
@@ -865,6 +1421,19 @@ impl Model {
     /// # Panics
     ///
     /// Panics if the table is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// let table = model.add_table_3d("table", vec![vec![vec![set]]]).unwrap();
+    ///
+    /// assert_eq!(model.get_capacity_of_set_in_3d_table(table).unwrap(), 4);
+    /// ```
     #[inline]
     pub fn get_capacity_of_set_in_3d_table(
         &self,
@@ -883,6 +1452,21 @@ impl Model {
     /// # Panics
     ///
     /// Panics if the table is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], set.clone())]);
+    /// let table = model.add_table("table", map, set.clone()).unwrap();
+    ///
+    /// assert_eq!(model.get_capacity_of_set_in_table(table).unwrap(), 4);
+    /// ```
     #[inline]
     pub fn get_capacity_of_set_in_table(&self, table: TableHandle<Set>) -> Result<usize, ModelErr> {
         self.table_registry.set_tables.check_table(table.id())?;
@@ -1180,6 +1764,19 @@ impl Model {
 }
 
 /// Trait for accessing the values in the target state.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+///
+/// assert_eq!(model.get_target(variable).unwrap(), 0);
+/// assert!(model.set_target(variable, 3).is_ok());
+/// assert_eq!(model.get_target(variable).unwrap(), 3);
+/// ```
 pub trait AccessTarget<T, U> {
     /// Returns the value in the target state.
     ///
@@ -1196,11 +1793,21 @@ pub trait AccessTarget<T, U> {
 }
 
 impl AccessTarget<ElementVariable, Element> for Model {
+    /// Returns the value in the target state.
+    ///
+    /// # Errors
+    ///
+    /// If the variable is not in the model.
     fn get_target(&self, variable: ElementVariable) -> Result<Element, ModelErr> {
         self.state_metadata.check_variable(variable)?;
         Ok(self.target.get_element_variable(variable.id()))
     }
 
+    /// Set the value in the target state
+    ///
+    /// # Errors
+    ///
+    /// If the variable is not in the model.
     fn set_target(&mut self, variable: ElementVariable, target: Element) -> Result<(), ModelErr> {
         let ob = self.get_object_type_of(variable)?;
         let n = self.get_number_of_objects(ob)?;
@@ -1525,6 +2132,21 @@ pub trait AddDualBound<T> {
 }
 
 impl AddDualBound<expression::IntegerExpression> for Model {
+    /// Adds a dual bound.
+    ///
+    /// # Errors
+    ///
+    /// If the expression is invalid, e.g., it uses not existing variables or the state of the transitioned state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    ///
+    /// assert!(model.add_dual_bound(IntegerExpression::from(0)).is_ok());
+    /// ```
     fn add_dual_bound(&mut self, bound: expression::IntegerExpression) -> Result<(), ModelErr> {
         self.check_expression(&bound, false)?;
         self.dual_bounds.push(CostExpression::Integer(
@@ -1535,6 +2157,22 @@ impl AddDualBound<expression::IntegerExpression> for Model {
 }
 
 impl AddDualBound<expression::ContinuousExpression> for Model {
+    /// Adds a dual bound.
+    ///
+    /// # Errors
+    ///
+    /// If the expression is invalid, e.g., it uses not existing variables or the state of the transitioned state.
+    /// If the cost type is integer.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::continuous_cost_model();
+    ///
+    /// assert!(model.add_dual_bound(ContinuousExpression::from(0.0)).is_ok());
+    /// ```
     fn add_dual_bound(&mut self, bound: expression::ContinuousExpression) -> Result<(), ModelErr> {
         if self.cost_type == CostType::Integer {
             Err(ModelErr::new(String::from(
@@ -2949,107 +3587,6 @@ mod tests {
     }
 
     #[test]
-    fn validate_forward_forced_false() {
-        let name_to_integer_variable = FxHashMap::default();
-        let model = Model {
-            state_metadata: StateMetadata {
-                integer_variable_names: vec![String::from("v1")],
-                name_to_integer_variable,
-                ..Default::default()
-            },
-            target: State {
-                signature_variables: SignatureVariables {
-                    integer_variables: vec![0],
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-            state_constraints: vec![GroundedCondition {
-                condition: Condition::ComparisonI(
-                    ComparisonOperator::Ge,
-                    Box::new(IntegerExpression::Variable(0)),
-                    Box::new(IntegerExpression::Constant(0)),
-                ),
-                ..Default::default()
-            }],
-            base_cases: vec![BaseCase::new(vec![GroundedCondition {
-                condition: Condition::ComparisonI(
-                    ComparisonOperator::Ge,
-                    Box::new(IntegerExpression::Variable(0)),
-                    Box::new(IntegerExpression::Constant(2)),
-                ),
-                ..Default::default()
-            }])],
-            forward_transitions: vec![
-                Transition {
-                    name: String::from("increase"),
-                    effect: Effect {
-                        integer_effects: vec![(
-                            0,
-                            IntegerExpression::BinaryOperation(
-                                BinaryOperator::Add,
-                                Box::new(IntegerExpression::Variable(0)),
-                                Box::new(IntegerExpression::Constant(1)),
-                            ),
-                        )],
-                        ..Default::default()
-                    },
-                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
-                        BinaryOperator::Add,
-                        Box::new(IntegerExpression::Cost),
-                        Box::new(IntegerExpression::Constant(1)),
-                    )),
-                    ..Default::default()
-                },
-                Transition {
-                    name: String::from("decrease"),
-                    effect: Effect {
-                        integer_effects: vec![(
-                            0,
-                            IntegerExpression::BinaryOperation(
-                                BinaryOperator::Sub,
-                                Box::new(IntegerExpression::Variable(0)),
-                                Box::new(IntegerExpression::Constant(1)),
-                            ),
-                        )],
-                        ..Default::default()
-                    },
-                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
-                        BinaryOperator::Add,
-                        Box::new(IntegerExpression::Cost),
-                        Box::new(IntegerExpression::Constant(1)),
-                    )),
-                    ..Default::default()
-                },
-            ],
-            forward_forced_transitions: vec![Transition {
-                name: String::from("forced increase"),
-                preconditions: vec![GroundedCondition {
-                    condition: Condition::ComparisonI(
-                        ComparisonOperator::Eq,
-                        Box::new(IntegerExpression::Variable(0)),
-                        Box::new(IntegerExpression::Constant(0)),
-                    ),
-                    ..Default::default()
-                }],
-                effect: Effect {
-                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
-                    ..Default::default()
-                },
-                cost: CostExpression::Integer(IntegerExpression::Cost),
-                ..Default::default()
-            }],
-            ..Default::default()
-        };
-
-        let transitions = vec![
-            model.forward_transitions[0].clone(),
-            model.forward_transitions[0].clone(),
-        ];
-        assert!(!model.validate_forward(&transitions, 2, true));
-    }
-
-    #[test]
     fn validate_forward_state_constraint_false() {
         let name_to_integer_variable = FxHashMap::default();
         let model = Model {
@@ -3123,28 +3660,10 @@ mod tests {
                     ..Default::default()
                 },
             ],
-            forward_forced_transitions: vec![Transition {
-                name: String::from("forced increase"),
-                preconditions: vec![GroundedCondition {
-                    condition: Condition::ComparisonI(
-                        ComparisonOperator::Eq,
-                        Box::new(IntegerExpression::Variable(0)),
-                        Box::new(IntegerExpression::Constant(0)),
-                    ),
-                    ..Default::default()
-                }],
-                effect: Effect {
-                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
-                    ..Default::default()
-                },
-                cost: CostExpression::Integer(IntegerExpression::Cost),
-                ..Default::default()
-            }],
             ..Default::default()
         };
 
         let transitions = vec![
-            model.forward_forced_transitions[0].clone(),
             model.forward_transitions[1].clone(),
             model.forward_transitions[0].clone(),
             model.forward_transitions[0].clone(),
@@ -3472,10 +3991,10 @@ mod tests {
         expected.insert(2);
         expected.insert(4);
         assert_eq!(set.unwrap(), expected);
-        assert!(model.set_number_of_object(ob, 11).is_ok());
-        let n = model.get_number_of_objects(ob);
-        assert!(n.is_ok());
-        assert_eq!(n.unwrap(), 11);
+        // assert!(model.set_number_of_object(ob, 11).is_ok());
+        // let n = model.get_number_of_objects(ob);
+        // assert!(n.is_ok());
+        // assert_eq!(n.unwrap(), 11);
     }
 
     #[test]
@@ -3489,15 +4008,15 @@ mod tests {
         let ob2 = model.add_object_type(String::from("something"), 10);
         assert!(ob2.is_err());
 
-        let mut model = Model::default();
+        let model = Model::default();
         let n = model.get_number_of_objects(ob);
         assert!(n.is_err());
         let set = model.create_set(ob, &[1, 2, 4]);
         assert!(set.is_err());
-        let result = model.set_number_of_object(ob, 11);
-        assert!(result.is_err());
-        let ob = model.get_object_type("something");
-        assert!(ob.is_err());
+        // let result = model.set_number_of_object(ob, 11);
+        // assert!(result.is_err());
+        // let ob = model.get_object_type("something");
+        // assert!(ob.is_err());
     }
 
     #[test]

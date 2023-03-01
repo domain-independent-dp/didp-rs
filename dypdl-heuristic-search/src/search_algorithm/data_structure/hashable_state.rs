@@ -4,13 +4,18 @@ use ordered_float::OrderedFloat;
 
 /// Signature variables that can be hashed.
 ///
-/// However, using continuous variables is not recommended.
+/// However, using continuous variables is not recommended as it may cause a numerical issue.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
 pub struct HashableSignatureVariables {
+    /// Set variables.
     pub set_variables: Vec<Set>,
+    /// Vector variables.
     pub vector_variables: Vec<Vector>,
+    /// Element variables.
     pub element_variables: Vec<Element>,
+    /// Integer numeric variables.
     pub integer_variables: Vec<Integer>,
+    /// Continuous numeric variables.
     pub continuous_variables: Vec<OrderedContinuous>,
 }
 
@@ -32,11 +37,14 @@ impl From<dypdl::SignatureVariables> for HashableSignatureVariables {
 
 /// Signature variables that can be hashed.
 ///
-/// However, using continuous variables is not recommended.
+/// However, using continuous variables is not recommended as it may cause a numerical issue.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
 pub struct HashableResourceVariables {
+    /// Element variables.
     pub element_variables: Vec<Element>,
+    /// Integer numeric variables.
     pub integer_variables: Vec<Integer>,
+    /// Continuous variables.
     pub continuous_variables: Vec<OrderedContinuous>,
 }
 
@@ -56,7 +64,7 @@ impl From<dypdl::ResourceVariables> for HashableResourceVariables {
 
 /// State that can be hashed.
 ///
-/// However, using continuous variables is not recommended.
+/// However, using continuous variables is not recommended as it may cause a numerical issue.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Default)]
 pub struct HashableState {
     signature_variables: HashableSignatureVariables,
@@ -156,10 +164,13 @@ impl dypdl::StateInterface for HashableState {
 
 /// State that can be hashed by signature variables.
 ///
-/// However, using continuous variables is not recommended.
+/// However, using continuous variables in signature variables is not recommended
+/// because it may cause a numerical issue.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct StateWithHashableSignatureVariables {
+    /// Signature variables.
     pub signature_variables: HashableSignatureVariables,
+    /// Resource variables.
     pub resource_variables: ResourceVariables,
 }
 

@@ -21,6 +21,46 @@ where
 }
 
 /// Returns the result of a rollout.
+///
+/// Returns `None` if the rollout fails,
+/// e.g., if a transition is not applicable or a state constraint is violated.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::rollout;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 1).unwrap();
+/// model.add_state_constraint(
+///     Condition::comparison_i(ComparisonOperator::Ne, variable, 3)
+/// ).unwrap();
+/// model.add_base_case(
+///     vec![Condition::comparison_i(ComparisonOperator::Ge, variable, 4)]
+/// ).unwrap();
+/// let state = model.target.clone();
+///
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 2);
+/// increment.add_effect(variable, variable + 1).unwrap();
+///
+/// let mut double = Transition::new("increment");
+/// double.set_cost(IntegerExpression::Cost + 3);
+/// double.add_effect(variable, variable * 2).unwrap();
+///
+/// let transitions = [increment.clone(), double.clone(), increment.clone()];
+/// let expected_state: State = increment.apply(&state, &model.table_registry);
+/// let expected_state: State = double.apply(&expected_state, &model.table_registry);
+/// let result = rollout(&state, 0, &transitions, &model).unwrap();
+/// assert_eq!(result.state, Some(expected_state));
+/// assert_eq!(result.cost, 5);
+/// assert_eq!(result.transitions, &transitions[..2]);
+/// assert!(result.is_base);
+///
+/// let transitions = [double.clone(), increment.clone()];
+/// assert_eq!(rollout(&state, 0, &transitions, &model), None);
+/// ```
 pub fn rollout<'a, S, U, T>(
     state: &S,
     cost: U,
@@ -128,6 +168,36 @@ where
 }
 
 /// Returns the states and costs of a rollout without checking state constraints and base cases.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::get_trace;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 1).unwrap();
+/// let state = model.target.clone();
+///
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 2);
+/// increment.add_effect(variable, variable + 1).unwrap();
+///
+/// let mut double = Transition::new("double");
+/// double.set_cost(IntegerExpression::Cost + 3);
+/// double.add_effect(variable, variable * 2).unwrap();
+///
+/// let transitions = [increment.clone(), double.clone()];
+/// let mut iter = get_trace(&state, 0, &transitions, &model);
+///
+/// let expected_state: State = increment.apply(&state, &model.table_registry);
+/// assert_eq!(iter.next(), Some((expected_state.clone(), 2)));
+///
+/// let expected_state: State = double.apply(&expected_state, &model.table_registry);
+/// assert_eq!(iter.next(), Some((expected_state, 5)));
+///
+/// assert_eq!(iter.next(), None);
+/// ```
 pub fn get_trace<'a, S, U, T>(
     state: &S,
     cost: U,

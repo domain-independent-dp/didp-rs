@@ -14,6 +14,7 @@ use std::rc::Rc;
 /// Search node for beam search.
 ///
 /// Nodes totally ordered by their f-values.
+/// If the f-values are the same, the nodes are reversely ordered by their g-values.
 #[derive(Debug, Default)]
 pub struct BeamSearchNode<T, U>
 where
@@ -77,6 +78,8 @@ where
     T: Numeric,
     U: Numeric,
 {
+    /// Nodes are compared by their f- and g-values.
+    /// This does not mean that the nodes are the same.
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f && self.g == other.g

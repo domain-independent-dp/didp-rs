@@ -17,8 +17,8 @@ use std::rc::Rc;
 ///
 /// This performs beam search using user-defined cost expressions as cost and heuristic functions.
 ///
-/// To apply this solver, the user-defined cost must be computed in the form of `x + state_cost`, `x * state_cost`, `dp.max(x, state_cost)`,
-/// or `dp.min(x, state_cost)` where, `state_cost` is either of `dp.IntExpr.state_cost()` and `dp.FloatExpr.state_cost()`,
+/// To apply this solver, the user-defined cost must be computed in the form of `x + state_cost`, `x * state_cost`, `didppy.max(x, state_cost)`,
+/// or `didppy.min(x, state_cost)` where, `state_cost` is either of :func:`didppy.IntExpr.state_cost()` and :func:`didppy.FloatExpr.state_cost()`,
 /// and `x` is a value independent of `state_cost`.
 /// Otherwise, it cannot compute the cost correctly.
 ///
@@ -26,10 +26,10 @@ use std::rc::Rc;
 ///
 /// Parameters
 /// ----------
-/// beam_size: int
-///     Beam size.
 /// model: Model
 ///     DyPDL model to solve.
+/// beam_size: int
+///     Beam size.
 /// h_expression: IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, float, or None, default: None
 ///     Expression to compute an h-value.
 /// custom_cost_dict: dict[str, Union[IntExpr|IntVar|IntResourceVar|FloatExpr|FloatVar|FloatResourceVar|int|float] or None, default: None
@@ -41,10 +41,10 @@ use std::rc::Rc;
 ///     If `None`, the cost expressions in the DyPDL model are used for all transitions.
 /// f_operator: FOperator, default: FOperator.Plus
 ///     Operator to combine a g-value and the dual bound to compute the f-value.
-///     If the cost is computed by `+`, this should be `FOperator.Plus`.
-///     If the cost is computed by `*`, this should be `FOperator.Product`.
-///     If the cost is computed by `max`, this should be `FOperator.Max`.
-///     If the cost is computed by `min`, this should be `FOperator.Min`.
+///     If the cost is computed by `+`, this should be :attr:`~FOperator.Plus`.
+///     If the cost is computed by `*`, this should be :attr:`~FOperator.Product`.
+///     If the cost is computed by `max`, this should be :attr:`~FOperator.Max`.
+///     If the cost is computed by `min`, this should be :attr:`~FOperator.Min`.
 ///     This solver keeps top `b` best nodes with regard to f-values at each depth.
 /// maximize: bool, default: False
 ///     Maximize f-values or not.
@@ -54,7 +54,7 @@ use std::rc::Rc;
 /// float_custom_cost: bool or None, default: None
 ///     Use continuous values for g-, h-, and f-values.
 ///     The cost type of the model is used if `None`.
-/// time_limit: int or None, default: None
+/// time_limit: int, float, or None, default: None
 ///     Time limit.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
@@ -64,17 +64,21 @@ use std::rc::Rc;
 /// TypeError
 ///     If the custom cost type is int and `h_evaluator` or a value in `custom_cost_dict` is `FloatExpr`, `FloatVar`, `FloatResourceVar`, or `float`.
 /// OverflowError
-///     If a value in `beam_size` or `time_limit` is negative.
+///     If `beam_size` is negative.
 ///
 /// Examples
-/// -------
+/// --------
 /// Example with `+` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> x = model.add_int_var(target=1)
 /// >>> model.add_base_case([x == 0])
-/// >>> t = dp.Transition(name="decrement", cost=1 + dp.IntExpr.state_cost(), effects=[(x, x - 1)])
+/// >>> t = dp.Transition(
+/// ...     name="decrement",
+/// ...     cost=1 + dp.IntExpr.state_cost(),
+/// ...     effects=[(x, x - 1)]
+/// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
 /// >>> solver = dp.ExpressionBeamSearch(model, quiet=True)
@@ -88,7 +92,11 @@ use std::rc::Rc;
 /// >>> model = dp.Model()
 /// >>> x = model.add_int_var(target=2)
 /// >>> model.add_base_case([x == 0])
-/// >>> t = dp.Transition(name="decrement", cost=dp.max(x, dp.IntExpr.state_cost()), effects=[(x, x - 1)])
+/// >>> t = dp.Transition(
+/// ...     name="decrement",
+/// ...     cost=dp.max(x, dp.IntExpr.state_cost()),
+/// ...     effects=[(x, x - 1)]
+/// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
 /// >>> solver = dp.ExpressionBeamSearch(model, f_operator=dp.FOperator.Max, quiet=True)
@@ -297,6 +305,29 @@ impl ExpressionBeamSearchPy {
     /// -------
     /// Solution
     ///     Solution.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If the model is invalid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> x = model.add_int_var(target=1)
+    /// >>> model.add_base_case([x == 0])
+    /// >>> t = dp.Transition(
+    /// ...     name="decrement",
+    /// ...     cost=1 + dp.IntExpr.state_cost(),
+    /// ...     effects=[(x, x - 1)]
+    /// ... )
+    /// >>> model.add_transition(t)
+    /// >>> model.add_dual_bound(x)
+    /// >>> solver = dp.ExpressionBeamSearch(model, quiet=True)
+    /// >>> solution = solver.search()
+    /// >>> print(solution.cost)
+    /// 1
     #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()

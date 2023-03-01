@@ -75,23 +75,57 @@ pub enum Condition {
     Table(Box<TableExpression<bool>>),
 }
 
-/// A trait to produce if-then-else expression.
+/// A trait to produce an if-then-else expression.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 1).unwrap();
+/// let state = model.target.clone();
+///
+/// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 1);
+/// let expression: IntegerExpression = condition.if_then_else(variable, 0);
+/// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+///
+/// let condition = Condition::comparison_i(ComparisonOperator::Gt, variable, 1);
+/// let expression: IntegerExpression = condition.if_then_else(variable, IntegerExpression::from(0));
+/// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+/// ```
 pub trait IfThenElse<T> {
-    /// Returns an if-then-else expression, which returns a if this condition holds and b otherwise.
+    /// Returns an if-then-else expression, which returns `a` if this condition holds and `b` otherwise.
     fn if_then_else<U, V>(self, a: U, b: V) -> T
     where
         T: From<U> + From<V>;
 }
 
 impl Default for Condition {
+    /// Returns `Condition::Constant(false)`.
     fn default() -> Condition {
         Self::Constant(false)
     }
 }
+
 impl ops::Not for Condition {
     type Output = Condition;
 
     /// Returns the negation of this condition.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 1).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let condition = Condition::comparison_i(ComparisonOperator::Gt, variable, 1);
+    /// let condition = !condition;
+    /// assert!(condition.eval(&state, &model.table_registry));
+    /// ```
     #[inline]
     fn not(self) -> Self::Output {
         Self::Not(Box::new(self))
@@ -102,6 +136,21 @@ impl ops::BitAnd for Condition {
     type Output = Condition;
 
     /// Returns the conjunction of this condition and rhs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 1).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
+    /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 2);
+    /// let condition = a & b;
+    /// assert!(condition.eval(&state, &model.table_registry));
+    /// ```
     #[inline]
     fn bitand(self, rhs: Self) -> Self::Output {
         Self::And(Box::new(self), Box::new(rhs))
@@ -112,6 +161,21 @@ impl ops::BitOr for Condition {
     type Output = Condition;
 
     /// Returns the disjunction of this condition and rhs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 1).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
+    /// let b = Condition::comparison_i(ComparisonOperator::Lt, variable, 1);
+    /// let condition = a | b;
+    /// assert!(condition.eval(&state, &model.table_registry));
+    /// ```
     #[inline]
     fn bitor(self, rhs: Self) -> Self::Output {
         Self::Or(Box::new(self), Box::new(rhs))
@@ -120,6 +184,20 @@ impl ops::BitOr for Condition {
 
 impl Condition {
     /// Returns a condition comparing two element expressions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let condition = Condition::comparison_e(ComparisonOperator::Gt, variable, 0);
+    /// assert!(condition.eval(&state, &model.table_registry));
+    /// ```
     #[inline]
     pub fn comparison_e<T, U>(op: ComparisonOperator, lhs: T, rhs: U) -> Self
     where
@@ -135,6 +213,19 @@ impl Condition {
 
     #[inline]
     /// Returns a condition comparing two integer expressions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let condition = Condition::comparison_i(ComparisonOperator::Gt, variable, 0);
+    /// assert!(condition.eval(&state, &model.table_registry));
+    /// ```
     pub fn comparison_i<T, U>(op: ComparisonOperator, lhs: T, rhs: U) -> Self
     where
         IntegerExpression: From<T>,
@@ -149,6 +240,19 @@ impl Condition {
 
     #[inline]
     /// Returns a condition comparing two continuous expressions.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_continuous_resource_variable("variable", true, 0.5).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let condition = Condition::comparison_c(ComparisonOperator::Gt, variable, 0);
+    /// assert!(condition.eval(&state, &model.table_registry));
+    /// ```
     pub fn comparison_c<T, U>(op: ComparisonOperator, lhs: T, rhs: U) -> Self
     where
         ContinuousExpression: From<T>,
@@ -164,6 +268,20 @@ impl Condition {
 
 impl SetExpression {
     /// Returns a condition checking if an element is included in this set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let expression = SetExpression::from(set);
+    /// let condition = expression.contains(0);
+    /// assert!(condition.eval(&state, &model.table_registry));
     #[inline]
     pub fn contains<T>(self, element: T) -> Condition
     where
@@ -176,6 +294,21 @@ impl SetExpression {
     }
 
     /// Returns a condition checking if this set is equal to the other.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = SetExpression::from(a);
+    /// let b = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let condition = a.is_equal(b);
+    /// assert!(condition.eval(&state, &model.table_registry));
     #[inline]
     pub fn is_equal<T>(self, set: T) -> Condition
     where
@@ -188,6 +321,21 @@ impl SetExpression {
     }
 
     /// Returns a condition checking if this set is not equal to the other.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = SetExpression::from(a);
+    /// let b = model.create_set(object_type, &[1, 2]).unwrap();
+    /// let condition = a.is_not_equal(b);
+    /// assert!(condition.eval(&state, &model.table_registry));
     #[inline]
     pub fn is_not_equal<T>(self, set: T) -> Condition
     where
@@ -200,6 +348,21 @@ impl SetExpression {
     }
 
     /// Returns a condition checking if this set is a subset of the other.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = SetExpression::from(a);
+    /// let b = model.create_set(object_type, &[0, 1, 2]).unwrap();
+    /// let condition = a.is_subset(b);
+    /// assert!(condition.eval(&state, &model.table_registry));
     #[inline]
     pub fn is_subset<T>(self, set: T) -> Condition
     where
@@ -212,6 +375,20 @@ impl SetExpression {
     }
 
     /// Returns a condition checking if this set is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let set = model.create_set(object_type, &[]).unwrap();
+    /// let expression = SetExpression::from(set);
+    /// let condition = expression.is_empty();
+    /// assert!(condition.eval(&state, &model.table_registry));
     #[inline]
     pub fn is_empty(self) -> Condition {
         Condition::Set(Box::new(SetCondition::IsEmpty(self)))
@@ -220,6 +397,20 @@ impl SetExpression {
 
 impl SetVariable {
     /// Returns a condition checking if an element is included in this set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let condition = variable.contains(0);
+    /// assert!(condition.eval(&state, &model.table_registry));
     #[inline]
     pub fn contains<T>(self, element: T) -> Condition
     where
@@ -232,6 +423,21 @@ impl SetVariable {
     }
 
     /// Returns a condition checking if this set is equal to the other.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = model.add_set_variable("a", object_type, a).unwrap();
+    /// let b = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let condition = a.is_equal(b);
+    /// assert!(condition.eval(&state, &model.table_registry));
     #[inline]
     pub fn is_equal<T>(self, set: T) -> Condition
     where
@@ -244,6 +450,21 @@ impl SetVariable {
     }
 
     /// Returns a condition checking if this set is not equal to the other.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = model.add_set_variable("a", object_type, a).unwrap();
+    /// let b = model.create_set(object_type, &[1, 2]).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let condition = a.is_not_equal(b);
+    /// assert!(condition.eval(&state, &model.table_registry));
     #[inline]
     pub fn is_not_equal<T>(self, set: T) -> Condition
     where
@@ -256,6 +477,21 @@ impl SetVariable {
     }
 
     /// Returns a condition checking if this set is a subset of the other.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = model.add_set_variable("a", object_type, a).unwrap();
+    /// let b = model.create_set(object_type, &[0, 1, 2]).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let condition = a.is_not_equal(b);
+    /// assert!(condition.eval(&state, &model.table_registry));
     #[inline]
     pub fn is_subset<T>(self, set: T) -> Condition
     where
@@ -268,6 +504,20 @@ impl SetVariable {
     }
 
     /// Returns a condition checking if this set is empty.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 4).unwrap();
+    /// let set = model.create_set(object_type, &[]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let condition = variable.is_empty();
+    /// assert!(condition.eval(&state, &model.table_registry));
     #[inline]
     pub fn is_empty(self) -> Condition {
         Condition::Set(Box::new(SetCondition::IsEmpty(SetExpression::from(self))))
@@ -276,6 +526,21 @@ impl SetVariable {
 
 impl Table1DHandle<bool> {
     /// Returns a condition referring to a value in a 1D boolean table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![true, false]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.element(variable);
+    /// assert!(expression.eval(&state, &model.table_registry));
+    /// ```
     #[inline]
     pub fn element<T>(&self, x: T) -> Condition
     where
@@ -290,6 +555,23 @@ impl Table1DHandle<bool> {
 
 impl Table2DHandle<bool> {
     /// Returns a condition referring to a value in a 2D boolean table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d(
+    ///     "table",
+    ///     vec![vec![false, true], vec![true, false]]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.element(variable, 1);
+    /// assert!(expression.eval(&state, &model.table_registry));
     #[inline]
     pub fn element<T, U>(&self, x: T, y: U) -> Condition
     where
@@ -306,6 +588,27 @@ impl Table2DHandle<bool> {
 
 impl Table3DHandle<bool> {
     /// Returns a condition referring to a value in a 3D boolean table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![
+    ///         vec![vec![true, false], vec![false, true]],
+    ///         vec![vec![false, true], vec![true, false]]
+    ///     ]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.element(variable, variable + 1, 1);
+    /// assert!(expression.eval(&state, &model.table_registry));
+    /// ```
     #[inline]
     pub fn element<T, U, V>(&self, x: T, y: U, z: V) -> Condition
     where
@@ -324,6 +627,29 @@ impl Table3DHandle<bool> {
 
 impl TableHandle<bool> {
     /// Returns a condition referring to a value in a boolean table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], true), (vec![1, 1, 1, 1], true)]);
+    /// let table = model.add_table("table", map, false).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ElementExpression::from(variable),
+    ///     ElementExpression::from(0),
+    ///     ElementExpression::from(0),
+    ///     ElementExpression::from(0),
+    /// ];
+    /// let expression = table.element(indices);
+    /// assert!(expression.eval(&state, &model.table_registry));
+    /// ```
     #[inline]
     pub fn element<T>(&self, indices: Vec<T>) -> Condition
     where
@@ -340,6 +666,19 @@ impl Condition {
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 1).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
+    /// assert!(condition.eval(&state, &model.table_registry));
+    /// ```
     pub fn eval<T: StateInterface>(&self, state: &T, registry: &TableRegistry) -> bool {
         match self {
             Self::Constant(value) => *value,

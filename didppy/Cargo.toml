@@ -1,9 +1,9 @@
 [package]
 name = "didppy"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "Python interface for Dynamic Programming Description Language (DyPDL) and DyPDL solvers."
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
@@ -11,8 +11,8 @@ name = "didppy"
 crate-type = ["cdylib"]
 
 [dependencies]
-dypdl = { path = "../dypdl", version = "0.1.0" }
-dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.1.0" }
+dypdl = { path = "../dypdl", version = "0.2.0" }
+dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.2.0" }
 rustc-hash = "1.1"
 
 [dependencies.pyo3]
@@ -20,4 +20,8 @@ version = "0.18"
 
 [features]
 extension-module = ["pyo3/extension-module"]
-default = ["extension-module"]
+abi3 = ["pyo3/abi3-py37"]
+default = ["extension-module", "abi3"]
+
+[build-dependencies]
+pyo3-build-config = "0.18"

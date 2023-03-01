@@ -1,51 +1,36 @@
 # Domain-Independent Dynamic Programming (DIDP)
 
+This repository is a Rust implementation of Dynamic Programming Description Language (DyPDL) and its solvers for Domain-Independent Dynamic Programming (DIDP).
+
 ## Packages
 
 - [`dypdl`](./dypdl): a library for DyPDL.
-- [`dypdl-heuristic-search`](./dypdl-heuristic-search): a heuristic algorithm library for DyPDL.
+- [`dypdl-heuristic-search`](./dypdl-heuristic-search): a heuristic search algorithm library for DyPDL.
 - [`didp-yaml`](./didp-yaml): a YAML interface for DyPDL.
-- [`didppy`](./didppy): a Python interface for DyPDL.
+- [`DIDPPy`](./didppy): a Python interface for DyPDL.
 
-## Build
+## Quick Start
+
+If you want to use DIDP, we recommend using the Python interface, DIDPPy.
+
+## Development
+
+If you want to develop the DyPDL library, solvers, and interfaces, install Rust and clone this repository.
+
+```bash
+git clone https://github.com/domain-independent-dp/didp-rs
+cd didp-rs
+```
 
 ### Install Rust
 
 Follow the instruction on the official webpage: <https://www.rust-lang.org/tools/install>
 
-For Linux or Mac OS, you will just run the following command.
+### Run Tests
 
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
-
-### Build
-
-Clone this repository and run `cargo build`.
-
-```bash
-git clone https://github.com/Kurorororo/didp-rs
-cd didp-rs
-cargo build --release
-```
-
-For debug build,
-
-```bash
-cargo build
-```
-
-To run tests,
-
-```bash
 cargo test --no-default-features
 ```
-
-## Run a Solver from the YAML interface
-
-Run a solver using the YAML interface following [this document](./didp-yaml/README.md).
-
-## Develop DIDP
 
 ### Development Environment
 

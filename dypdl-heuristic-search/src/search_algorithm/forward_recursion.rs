@@ -12,6 +12,33 @@ use std::str;
 ///
 /// It performs a naive recursion while memoizing all encountered states.
 /// It works only if the state space is acyclic.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::{ForwardRecursion, Search};
+/// use dypdl_heuristic_search::search_algorithm::util::Parameters;
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+/// model.add_base_case(
+///     vec![Condition::comparison_i(ComparisonOperator::Ge, variable, 1)]
+/// ).unwrap();
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 1);
+/// increment.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(increment.clone()).unwrap();
+///
+/// let model = Rc::new(model);
+/// let parameters = Parameters::default();
+/// let mut solver = ForwardRecursion::new(model, parameters, None);
+/// let solution = solver.search().unwrap();
+/// assert_eq!(solution.cost, Some(1));
+/// assert_eq!(solution.transitions, vec![increment]);
+/// assert!(!solution.is_infeasible);
+/// ```
 pub struct ForwardRecursion<T>
 where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,

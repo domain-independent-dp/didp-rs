@@ -14,6 +14,42 @@ use std::rc::Rc;
 use std::str;
 
 /// Dijkstra's algorithm Solver.
+///
+/// This solver uses forward search based on the shortest path problem.
+/// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, or `min(cost, w)
+/// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
+/// In addition `w` must be non-negative, and the model must be minimization.
+///
+/// `lazy` indicates whether the solver uses lazy evaluation.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::{Dijkstra, Search};
+/// use dypdl_heuristic_search::search_algorithm::util::{
+///     ForwardSearchParameters, Parameters,
+/// };
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+/// model.add_base_case(
+///     vec![Condition::comparison_i(ComparisonOperator::Ge, variable, 1)]
+/// ).unwrap();
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 1);
+/// increment.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(increment.clone()).unwrap();
+///
+/// let model = Rc::new(model);
+/// let parameters = Parameters::default();
+/// let mut solver = Dijkstra::new(model, parameters, false, None);
+/// let solution = solver.search().unwrap();
+/// assert_eq!(solution.cost, Some(1));
+/// assert_eq!(solution.transitions, vec![increment]);
+/// assert!(!solution.is_infeasible);
+/// ```
 pub struct Dijkstra<T>
 where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,
@@ -83,6 +119,40 @@ where
 }
 
 /// Performs Dijkstra's algorithm.
+///
+/// `registry_capacity` is the initial capacity of the state registry.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::{dijkstra, Search};
+/// use dypdl_heuristic_search::search_algorithm::data_structure::successor_generator::{
+///     SuccessorGenerator
+/// };
+/// use dypdl_heuristic_search::search_algorithm::util::{
+///     ForwardSearchParameters, Parameters,
+/// };
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+/// model.add_base_case(
+///     vec![Condition::comparison_i(ComparisonOperator::Ge, variable, 1)]
+/// ).unwrap();
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 1);
+/// increment.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(increment.clone()).unwrap();
+///
+/// let model = Rc::new(model);
+/// let generator = SuccessorGenerator::from_model(model.clone(), false);
+/// let parameters = Parameters::default();
+/// let solution = dijkstra(&model, generator, parameters, None);
+/// assert_eq!(solution.cost, Some(1));
+/// assert_eq!(solution.transitions, vec![increment]);
+/// assert!(!solution.is_infeasible);
+/// ```
 pub fn dijkstra<T>(
     model: &Rc<dypdl::Model>,
     generator: SuccessorGenerator,
@@ -214,6 +284,38 @@ impl<T: variable_type::Numeric + Ord> PartialOrd for DijkstraEdge<T> {
 /// Performs lazy Dijkstra's algorithm.
 ///
 /// Pointers to parent nodes and transitions are stored in the open list, and a state is generated when it is expanded.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::{lazy_dijkstra, Search};
+/// use dypdl_heuristic_search::search_algorithm::data_structure::successor_generator::{
+///     SuccessorGenerator
+/// };
+/// use dypdl_heuristic_search::search_algorithm::util::{
+///     ForwardSearchParameters, Parameters,
+/// };
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+/// model.add_base_case(
+///     vec![Condition::comparison_i(ComparisonOperator::Ge, variable, 1)]
+/// ).unwrap();
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 1);
+/// increment.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(increment.clone()).unwrap();
+///
+/// let model = Rc::new(model);
+/// let generator = SuccessorGenerator::from_model(model.clone(), false);
+/// let parameters = Parameters::default();
+/// let solution = lazy_dijkstra(&model, generator, parameters, None);
+/// assert_eq!(solution.cost, Some(1));
+/// assert_eq!(solution.transitions, vec![increment]);
+/// assert!(!solution.is_infeasible);
+/// ```
 pub fn lazy_dijkstra<T>(
     model: &Rc<dypdl::Model>,
     generator: SuccessorGenerator,

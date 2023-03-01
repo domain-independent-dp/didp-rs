@@ -2,7 +2,29 @@ use core::ops::Deref;
 use dypdl::{Transition, TransitionInterface};
 use std::rc::Rc;
 
-/// A trait representing a chain of transitions.
+/// Chain of transitions.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::{
+///     TransitionChainInterface, TransitionChain
+/// };
+/// use std::rc::Rc;
+///
+/// let t1 = Transition::new("t1");
+/// let chain = Rc::new(TransitionChain::new(None, Rc::new(t1.clone())));
+/// assert_eq!(chain.last(), &t1);
+/// assert_eq!(chain.parent(), None);
+/// assert_eq!(chain.transitions(), vec![t1.clone()]);
+///
+/// let t2 = Transition::new("t2");
+/// let new_chain = Rc::new(TransitionChain::new(Some(chain.clone()), Rc::new(t2.clone())));
+/// assert_eq!(new_chain.last(), &t2);
+/// assert_eq!(new_chain.parent(), Some(&chain));
+/// assert_eq!(new_chain.transitions(), vec![t1, t2]);
+/// ```
 pub trait TransitionChainInterface<T = Transition, R = Rc<T>, P = Rc<Self>>
 where
     T: TransitionInterface + Clone,
@@ -34,7 +56,7 @@ where
     }
 }
 
-/// A chain of transitions.
+/// Chain of transitions implemented by a linked list of `Rc`.
 #[derive(PartialEq, Debug)]
 pub struct TransitionChain {
     parent: Option<Rc<Self>>,

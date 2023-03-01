@@ -1,13 +1,13 @@
 domain: TSPTW
 objects:
-  - city
+  - customer
 state_variables:
   - name: unvisited
     type: set
-    object: city
+    object: customer
   - name: location
     type: element
-    object: city
+    object: customer
   - name: time
     type: integer
     preference: less
@@ -15,25 +15,25 @@ tables:
   - name: ready_time
     type: integer
     args:
-      - city
+      - customer
   - name: due_date
     type: integer
     args:
-      - city
+      - customer
   - name: distance
     type: integer
     args:
-      - city
-      - city
+      - customer
+      - customer
     default: 0
   - name: min_distance_to
     type: integer
     args:
-      - city
+      - customer
   - name: min_distance_from
     type: integer
     args:
-      - city
+      - customer
 constraints:
   - condition: (<= (+ time (distance location to)) (due_date to))
     forall:

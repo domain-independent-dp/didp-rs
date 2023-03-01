@@ -6,9 +6,47 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::rc::Rc;
+
 /// Search node.
 ///
 /// Nodes are totally ordered by their costs.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::{
+///     TransitionChainInterface, SearchNode,
+/// };
+/// use dypdl_heuristic_search::search_algorithm::data_structure::state_registry::{
+///     StateInformation, StateInRegistry, StateRegistry,
+/// };
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+///
+/// let model = Rc::new(model);
+/// let mut registry = StateRegistry::<Integer, SearchNode<_>>::new(model.clone());
+///
+/// let node = SearchNode::generate_initial_node(&mut registry).unwrap();
+/// assert_eq!(node.state(), &StateInRegistry::from(model.target.clone()));
+/// assert_eq!(node.cost(), 0);
+/// assert!(!*node.closed.borrow_mut());
+/// assert_eq!(node.transitions, None);
+///
+/// let mut transition = Transition::new("transition");
+/// transition.set_cost(IntegerExpression::Cost + 1);
+/// transition.add_effect(variable, variable + 1).unwrap();
+/// let expected_state: StateInRegistry = transition.apply(&model.target, &model.table_registry);
+///
+/// let (successor, generated) = node.generate_successor(Rc::new(transition.clone()), &mut registry, None).unwrap();
+/// assert!(generated);
+/// assert_eq!(successor.state(), &expected_state);
+/// assert_eq!(successor.cost(), 1);
+/// assert!(!*successor.closed.borrow_mut());
+/// assert_eq!(successor.transitions.as_ref().unwrap().transitions(), vec![transition]);
+/// ```
 #[derive(Debug, Default)]
 pub struct SearchNode<T: Numeric> {
     /// State.
@@ -22,6 +60,8 @@ pub struct SearchNode<T: Numeric> {
 }
 
 impl<T: Numeric + PartialOrd> PartialEq for SearchNode<T> {
+    /// Nodes are compared by their costs.
+    /// This does not mean that the nodes are the same.
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.cost == other.cost
@@ -72,7 +112,7 @@ impl<T: Numeric + Ord> SearchNode<T> {
         Some(initial_node)
     }
 
-    /// Returns a successor node if it it is not dominated and its cost does not exceed the given primal bound.
+    /// Returns a successor node if it it is not dominated by an existing node and its cost does not exceed the given primal bound.
     /// The last value returned indicates if a new search node is generated without dominating another open node.
     ///
     /// # Panics

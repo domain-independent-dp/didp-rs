@@ -13,8 +13,68 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::str;
 
-/// Complete Anytime Beam Search.
+/// Complete Anytime Beam Search (CABS).
+///
 /// It iterates beam search with exponentially increasing beam width.
+///
+/// This solver uses forward search based on the shortest path problem.
+/// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
+/// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
+///
+/// It uses `h_evaluator` and `f_evaluator` for pruning.
+/// If `h_evaluator` returns `None`, the state is pruned.
+/// If `parameters.f_pruning` and `f_evaluator` returns a value that exceeds the f bound, the state is pruned.
+///
+/// Beam search searches layer by layer, where the i th layer contains states that can be reached with i transitions.
+/// By default, this solver only keeps states in the current layer to check for duplicates.
+/// If `parameters.keep_all_layers` is `true`, this solver keeps states in all layers to check for duplicates.
+///
+/// # References
+///
+/// Ryo Kuroiwa and J. Christopher Beck. "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,""
+/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+///
+/// Weixiong Zhang. "Complete Anytime Beam Search,"
+/// Proceedings of the 15th National Conference on Artificial Intelligence/Innovative Applications of Artificial Intelligence (AAAI/IAAI), pp. 425-430, 1998.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::beam::Beam;
+/// use dypdl_heuristic_search::search_algorithm::{BeamSearchParameters, Cabs, Search};
+/// use dypdl_heuristic_search::search_algorithm::data_structure::BeamSearchNode;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::successor_generator::{
+///     SuccessorGenerator
+/// };
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+/// model.add_base_case(
+///     vec![Condition::comparison_i(ComparisonOperator::Ge, variable, 1)]
+/// ).unwrap();
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 1);
+/// increment.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(increment.clone()).unwrap();
+///
+/// let h_evaluator = |_: &_, _: &_| Some(0);
+/// let f_evaluator = |g, h, _: &_, _: &_| g + h;
+///
+/// let model = Rc::new(model);
+/// let generator = SuccessorGenerator::from_model_without_custom_cost(model.clone(), false);
+/// let beam_constructor = |beam_size| Beam::<_, _, BeamSearchNode<_, _>>::new(beam_size);
+/// let parameters = BeamSearchParameters { beam_size: 1, ..Default::default() };
+///
+/// let mut solver = Cabs::new(
+///     generator, h_evaluator, f_evaluator, beam_constructor, parameters
+/// );
+/// let solution = solver.search().unwrap();
+/// assert_eq!(solution.cost, Some(1));
+/// assert_eq!(solution.transitions, vec![increment]);
+/// assert!(!solution.is_infeasible);
+/// ```
 pub struct Cabs<'a, T, I, B, C, H, F>
 where
     T: variable_type::Numeric + fmt::Display + Ord,
@@ -87,6 +147,7 @@ where
         }
     }
 
+    //// Search for the next solution, returning the solution using `TransitionWithCustomCost`.
     pub fn search_inner(&mut self) -> (Solution<T, TransitionWithCustomCost>, bool) {
         while !self.solution.is_terminated() {
             if !self.quiet {

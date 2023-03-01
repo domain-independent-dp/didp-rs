@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 
 /// 1-dimensional table of element constants.
 ///
-/// `t[x]` returns an element expression referring to an item where `t` is `ElementTable1D` and `x` is `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[x]` returns an element expression referring to an item where `t` is :class:`ElementTable1D` and `x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
@@ -14,7 +14,8 @@ use pyo3::prelude::*;
 /// >>> obj = model.add_object_type(number=2)
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> table = model.add_element_table([2, 3])
-/// >>> model.add_base_case([table[var] == 2])
+/// >>> table[var].eval(model.target_state, model)
+/// 3
 #[pyclass(name = "ElementTable1D")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ElementTable1DPy(Table1DHandle<Element>);
@@ -25,22 +26,22 @@ impl From<ElementTable1DPy> for Table1DHandle<Element> {
     }
 }
 
-impl ElementTable1DPy {
-    pub fn new(table: Table1DHandle<Element>) -> ElementTable1DPy {
-        ElementTable1DPy(table)
+impl From<Table1DHandle<Element>> for ElementTable1DPy {
+    fn from(table: Table1DHandle<Element>) -> ElementTable1DPy {
+        Self(table)
     }
 }
 
 #[pymethods]
 impl ElementTable1DPy {
     fn __getitem__(&self, i: ElementUnion) -> ElementExprPy {
-        ElementExprPy::new(self.0.element(i))
+        ElementExprPy::from(self.0.element(i))
     }
 }
 
 /// 2-dimensional table of element constants.
 ///
-/// `t[x, y]` returns an element expression referring to an item where `t` is `ElementTable2D` and `x` and `y` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[x, y]` returns an element expression referring to an item where `t` is :class:`ElementTable2D` and `x` and `y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
@@ -49,7 +50,8 @@ impl ElementTable1DPy {
 /// >>> obj = model.add_object_type(number=2)
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> table = model.add_element_table([[2, 3], [0, 1]])
-/// >>> model.add_base_case([table[0, var] == 2])
+/// >>> table[0, var].eval(model.target_state, model)
+/// 3
 #[pyclass(name = "ElementTable2D")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ElementTable2DPy(Table2DHandle<Element>);
@@ -60,9 +62,9 @@ impl From<ElementTable2DPy> for Table2DHandle<Element> {
     }
 }
 
-impl ElementTable2DPy {
-    pub fn new(table: Table2DHandle<Element>) -> ElementTable2DPy {
-        ElementTable2DPy(table)
+impl From<Table2DHandle<Element>> for ElementTable2DPy {
+    fn from(table: Table2DHandle<Element>) -> ElementTable2DPy {
+        Self(table)
     }
 }
 
@@ -70,13 +72,13 @@ impl ElementTable2DPy {
 impl ElementTable2DPy {
     fn __getitem__(&self, index: (ElementUnion, ElementUnion)) -> ElementExprPy {
         let (x, y) = index;
-        ElementExprPy::new(self.0.element(x, y))
+        ElementExprPy::from(self.0.element(x, y))
     }
 }
 
 /// 3-dimensional table of element constants.
 ///
-/// `t[x, y, z]` returns an element expression referring to an item where `t` is `ElementTable3D` and `x`, `y`, and `z` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[x, y, z]` returns an element expression referring to an item where `t` is :class:`ElementTable3D` and `x`, `y`, and `z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
@@ -84,8 +86,9 @@ impl ElementTable2DPy {
 /// >>> model = dp.Model()
 /// >>> obj = model.add_object_type(number=2)
 /// >>> var = model.add_element_var(object_type=obj, target=1)
-/// >>> table = model.add_element_table([[[2, 3], [0, 1]], [[0, 1], [2, 2]]]])
-/// >>> model.add_base_case([table[0, var, 1] == 2])
+/// >>> table = model.add_element_table([[[2, 3], [0, 1]], [[0, 1], [2, 2]]])
+/// >>> table[0, 0, var].eval(model.target_state, model)
+/// 3
 #[pyclass(name = "ElementTable3D")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ElementTable3DPy(Table3DHandle<Element>);
@@ -96,9 +99,9 @@ impl From<ElementTable3DPy> for Table3DHandle<Element> {
     }
 }
 
-impl ElementTable3DPy {
-    pub fn new(table: Table3DHandle<Element>) -> ElementTable3DPy {
-        ElementTable3DPy(table)
+impl From<Table3DHandle<Element>> for ElementTable3DPy {
+    fn from(table: Table3DHandle<Element>) -> ElementTable3DPy {
+        Self(table)
     }
 }
 
@@ -106,13 +109,13 @@ impl ElementTable3DPy {
 impl ElementTable3DPy {
     fn __getitem__(&self, index: (ElementUnion, ElementUnion, ElementUnion)) -> ElementExprPy {
         let (x, y, z) = index;
-        ElementExprPy::new(self.0.element(x, y, z))
+        ElementExprPy::from(self.0.element(x, y, z))
     }
 }
 
 /// Table of element constants.
 ///
-/// `t[index]` returns an element expression referring to an item where `t` is `ElementTable` and `index` is a sequence of `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[index]` returns an element expression referring to an item where `t` is :class:`ElementTable` and `index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
@@ -121,7 +124,8 @@ impl ElementTable3DPy {
 /// >>> obj = model.add_object_type(number=2)
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> table = model.add_element_table({(0, 0, 0, 0): 1, (1, 1, 1, 1): 3}, default=2)
-/// >>> model.add_base_case([table[0, var, 1, 0] == 2])
+/// >>> table[0, var, 1, 0].eval(model.target_state, model)
+/// 2
 #[pyclass(name = "ElementTable")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ElementTablePy(TableHandle<Element>);
@@ -132,9 +136,9 @@ impl From<ElementTablePy> for TableHandle<Element> {
     }
 }
 
-impl ElementTablePy {
-    pub fn new(table: TableHandle<Element>) -> ElementTablePy {
-        ElementTablePy(table)
+impl From<TableHandle<Element>> for ElementTablePy {
+    fn from(table: TableHandle<Element>) -> ElementTablePy {
+        Self(table)
     }
 }
 
@@ -142,23 +146,24 @@ impl ElementTablePy {
 impl ElementTablePy {
     fn __getitem__(&self, index: Vec<ElementUnion>) -> ElementExprPy {
         let index = index.into_iter().map(ElementExpression::from).collect();
-        ElementExprPy::new(self.0.element(index))
+        ElementExprPy::from(self.0.element(index))
     }
 }
 
 /// 1-dimensional table of set constants.
 ///
-/// `t[x]` returns a set expression referring to an item where `t` is `SetTable1D` and `x` is `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[x]` returns a set expression referring to an item where `t` is :class:`SetTable1D` and `x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
-/// >>> object1 = model.add_object_type(number=2)
-/// >>> object2 = model.add_object_type(number=4)
+/// >>> obj1 = model.add_object_type(number=2)
+/// >>> obj2 = model.add_object_type(number=4)
 /// >>> var = model.add_element_var(object_type=obj1, target=0)
 /// >>> table = model.add_set_table([[2, 3], [1, 2]], object_type=obj2)
-/// >>> model.add_base_case([table[var].contains(1)])
+/// >>> table[var].eval(model.target_state, model)
+/// {2, 3}
 #[pyclass(name = "SetTable1D")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetTable1DPy(Table1DHandle<Set>, usize);
@@ -182,7 +187,7 @@ impl SetTable1DPy {
 #[pymethods]
 impl SetTable1DPy {
     fn __getitem__(&self, i: ElementUnion) -> SetExprPy {
-        SetExprPy::new(self.0.element(i))
+        SetExprPy::from(self.0.element(i))
     }
 
     /// union(x)
@@ -208,14 +213,15 @@ impl SetTable1DPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> object1 = model.add_object_type(number=2)
-    /// >>> object2 = model.add_object_type(number=6)
+    /// >>> obj1 = model.add_object_type(number=2)
+    /// >>> obj2 = model.add_object_type(number=6)
     /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
     /// >>> table = model.add_set_table([[2, 3], [1, 2]], object_type=obj2)
-    /// >>> model.add_base_case([table.union(var).contains(2)])
+    /// >>> table.union(var).eval(model.target_state, model)
+    /// {1, 2, 3}
     #[pyo3(signature = (x))]
     fn union(&self, x: ArgumentUnion) -> SetExprPy {
-        SetExprPy::new(self.0.union(self.1, x))
+        SetExprPy::from(self.0.union(self.1, x))
     }
 
     /// intersection(x)
@@ -241,14 +247,15 @@ impl SetTable1DPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> object1 = model.add_object_type(number=2)
-    /// >>> object2 = model.add_object_type(number=6)
+    /// >>> obj1 = model.add_object_type(number=2)
+    /// >>> obj2 = model.add_object_type(number=6)
     /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
     /// >>> table = model.add_set_table([[2, 3], [1, 2]], object_type=obj2)
-    /// >>> model.add_base_case([table.intersection(var).contains(2)])
+    /// >>> table.intersection(var).eval(model.target_state, model)
+    /// {2}
     #[pyo3(signature = (x))]
     fn intersection(&self, x: ArgumentUnion) -> SetExprPy {
-        SetExprPy::new(self.0.intersection(self.1, x))
+        SetExprPy::from(self.0.intersection(self.1, x))
     }
 
     /// symmetric_difference(x)
@@ -274,33 +281,44 @@ impl SetTable1DPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> object1 = model.add_object_type(number=2)
-    /// >>> object2 = model.add_object_type(number=6)
+    /// >>> obj1 = model.add_object_type(number=2)
+    /// >>> obj2 = model.add_object_type(number=6)
     /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
     /// >>> table = model.add_set_table([[2, 3], [1, 2]], object_type=obj2)
-    /// >>> model.add_base_case([table.symmetric_difference(var).contains(2)])
+    /// >>> table.symmetric_difference(var).eval(model.target_state, model)
+    /// {1, 3}
     #[pyo3(signature = (x))]
     fn symmetric_difference(&self, x: ArgumentUnion) -> SetExprPy {
-        SetExprPy::new(self.0.symmetric_difference(self.1, x))
+        SetExprPy::from(self.0.symmetric_difference(self.1, x))
     }
 }
 
 /// 2-dimensional table of set constants.
 ///
-/// `t[x, y]` returns a set expression referring to an item where `t` is `SetTable2D` and `x` and `y` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[x, y]` returns a set expression referring to an item where `t` is :class:`SetTable2D` and `x` and `y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
-/// >>> object1 = model.add_object_type(number=2)
-/// >>> object2 = model.add_object_type(number=4)
+/// >>> obj1 = model.add_object_type(number=2)
+/// >>> obj2 = model.add_object_type(number=4)
 /// >>> var = model.add_element_var(object_type=obj1, target=0)
-/// >>> table = model.add_set_table([[[2, 3], [1, 2]], [[1, 1], [0, 1]]], object_type=obj2)
-/// >>> model.add_base_case([table[0, var].contains(1)])
+/// >>> table = model.add_set_table(
+/// ...     [[[2, 3], [1, 2]], [[1, 1], [0, 1]]],
+/// ...     object_type=obj2
+/// ... )
+/// >>> table[0, var].eval(model.target_state, model)
+/// {2, 3}
 #[pyclass(name = "SetTable2D")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetTable2DPy(Table2DHandle<Set>, usize);
+
+impl From<SetTable2DPy> for Table2DHandle<Set> {
+    fn from(table: SetTable2DPy) -> Self {
+        table.0
+    }
+}
 
 impl SetTable2DPy {
     pub fn new(table: Table2DHandle<Set>, capacity: usize) -> SetTable2DPy {
@@ -312,17 +330,11 @@ impl SetTable2DPy {
     }
 }
 
-impl From<SetTable2DPy> for Table2DHandle<Set> {
-    fn from(table: SetTable2DPy) -> Self {
-        table.0
-    }
-}
-
 #[pymethods]
 impl SetTable2DPy {
     fn __getitem__(&self, index: (ElementUnion, ElementUnion)) -> SetExprPy {
         let (x, y) = index;
-        SetExprPy::new(self.0.element(x, y))
+        SetExprPy::from(self.0.element(x, y))
     }
 
     /// union(x, y)
@@ -350,14 +362,18 @@ impl SetTable2DPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> object1 = model.add_object_type(number=2)
-    /// >>> object2 = model.add_object_type(number=4)
+    /// >>> obj1 = model.add_object_type(number=2)
+    /// >>> obj2 = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
-    /// >>> table = model.add_set_table([[[2, 3], [1, 2]], [[1, 1], [0, 1]]], object_type=obj2)
-    /// >>> model.add_base_case([table.union(0, var).contains(1)])
+    /// >>> table = model.add_set_table(
+    /// ...     [[[2, 3], [1, 2]], [[1, 1], [0, 1]]],
+    /// ...     object_type=obj2
+    /// ... )
+    /// >>> table.union(0, var).eval(model.target_state, model)
+    /// {1, 2, 3}
     #[pyo3(signature = (x, y))]
     fn union(&self, x: ArgumentUnion, y: ArgumentUnion) -> SetExprPy {
-        SetExprPy::new(self.0.union(self.1, x, y))
+        SetExprPy::from(self.0.union(self.1, x, y))
     }
 
     /// intersection(x, y)
@@ -385,14 +401,18 @@ impl SetTable2DPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> object1 = model.add_object_type(number=2)
-    /// >>> object2 = model.add_object_type(number=4)
-    /// >>> var = model.add_set_var(object_type=x, target=[0, 1])
-    /// >>> table = model.add_set_table([[[2, 3], [1, 2]], [[1, 1], [0, 1]]], object_type=obj2)
-    /// >>> model.add_base_case([table.intersection(0, var).contains(1)])
+    /// >>> obj1 = model.add_object_type(number=2)
+    /// >>> obj2 = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
+    /// >>> table = model.add_set_table(
+    /// ...     [[[2, 3], [1, 2]], [[1, 1], [0, 1]]],
+    /// ...     object_type=obj2
+    /// ... )
+    /// >>> table.intersection(0, var).eval(model.target_state, model)
+    /// {2}
     #[pyo3(signature = (x, y))]
     fn intersection(&self, x: ArgumentUnion, y: ArgumentUnion) -> SetExprPy {
-        SetExprPy::new(self.0.intersection(self.1, x, y))
+        SetExprPy::from(self.0.intersection(self.1, x, y))
     }
 
     /// symmetric_difference(x, y)
@@ -420,30 +440,38 @@ impl SetTable2DPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> object1 = model.add_object_type(number=2)
-    /// >>> object2 = model.add_object_type(number=4)
+    /// >>> obj1 = model.add_object_type(number=2)
+    /// >>> obj2 = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
-    /// >>> table = model.add_set_table([[[2, 3], [1, 2]], [[1, 1], [0, 1]]], object_type=obj2)
-    /// >>> model.add_base_case([table.symmetric_difference(0, var).contains(1)])
+    /// >>> table = model.add_set_table(
+    /// ...     [[[2, 3], [1, 2]], [[1, 1], [0, 1]]],
+    /// ...     object_type=obj2
+    /// ... )
+    /// >>> table.symmetric_difference(0, var).eval(model.target_state, model)
+    /// {1, 3}
     #[pyo3(signature = (x, y))]
     fn symmetric_difference(&self, x: ArgumentUnion, y: ArgumentUnion) -> SetExprPy {
-        SetExprPy::new(self.0.symmetric_difference(self.1, x, y))
+        SetExprPy::from(self.0.symmetric_difference(self.1, x, y))
     }
 }
 
 /// 3-dimensional table of set constants.
 ///
-/// `t[x, y, z]` returns a set expression referring to an item where `t` is `SetTable3D` and `x`, `y`, and `z` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[x, y, z]` returns a set expression referring to an item where `t` is :class:`SetTable3D` and `x`, `y`, and `z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
-/// >>> object1 = model.add_object_type(number=2)
-/// >>> object2 = model.add_object_type(number=4)
+/// >>> obj1 = model.add_object_type(number=2)
+/// >>> obj2 = model.add_object_type(number=4)
 /// >>> var = model.add_element_var(object_type=obj1, target=0)
-/// >>> table = model.add_set_table([[[[2, 3], [1, 2]], [[], [2]]], [[[1, 1], [2, 3]], [[], [2]]]], object_type=obj2)
-/// >>> model.add_base_case([table[0, var, 1].contains(1)])
+/// >>> table = model.add_set_table(
+/// ...     [[[[2, 3], [1, 2]], [[], [2]]], [[[1, 1], [2, 3]], [[], [2]]]],
+/// ...     object_type=obj2
+/// ... )
+/// >>> table[0, var, 1].eval(model.target_state, model)
+/// {1, 2}
 #[pyclass(name = "SetTable3D")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetTable3DPy(Table3DHandle<Set>, usize);
@@ -468,7 +496,7 @@ impl SetTable3DPy {
 impl SetTable3DPy {
     fn __getitem__(&self, index: (ElementUnion, ElementUnion, ElementUnion)) -> SetExprPy {
         let (x, y, z) = index;
-        SetExprPy::new(self.0.element(x, y, z))
+        SetExprPy::from(self.0.element(x, y, z))
     }
 
     /// union(x, y, z)
@@ -498,14 +526,18 @@ impl SetTable3DPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> object1 = model.add_object_type(number=2)
-    /// >>> object2 = model.add_object_type(number=4)
+    /// >>> obj1 = model.add_object_type(number=2)
+    /// >>> obj2 = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
-    /// >>> table = model.add_set_table([[[[2, 3], [1, 2]], [[], [2]]], [[[1, 1], [2, 3]], [[], [2]]]], object_type=obj2)
-    /// >>> model.add_base_case([table.union(0, var, 1).contains(1)])
+    /// >>> table = model.add_set_table(
+    /// ...     [[[[2, 3], [1, 2]], [[], [2]]], [[[1, 1], [2, 3]], [[], [2]]]],
+    /// ...     object_type=obj2
+    /// ... )
+    /// >>> table.union(0, var, 1).eval(model.target_state, model)
+    /// {1, 2}
     #[pyo3(signature = (x, y, z))]
     fn union(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> SetExprPy {
-        SetExprPy::new(self.0.union(self.1, x, y, z))
+        SetExprPy::from(self.0.union(self.1, x, y, z))
     }
 
     /// intersection(x, y, z)
@@ -535,14 +567,18 @@ impl SetTable3DPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> object1 = model.add_object_type(number=2)
-    /// >>> object2 = model.add_object_type(number=4)
+    /// >>> obj1 = model.add_object_type(number=2)
+    /// >>> obj2 = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
-    /// >>> table = model.add_set_table([[[[2, 3], [1, 2]], [[], [2]]], [[[1, 1], [2, 3]], [[], [2]]]], object_type=obj2)
-    /// >>> model.add_base_case([table.intersection(0, var, 1).contains(1)])
+    /// >>> table = model.add_set_table(
+    /// ...     [[[[2, 3], [1, 2]], [[], [2]]], [[[1, 1], [2, 3]], [[], [2]]]],
+    /// ...     object_type=obj2
+    /// ... )
+    /// >>> table.intersection(0, var, 1).eval(model.target_state, model)
+    /// {2}
     #[pyo3(signature = (x, y, z))]
     fn intersection(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> SetExprPy {
-        SetExprPy::new(self.0.intersection(self.1, x, y, z))
+        SetExprPy::from(self.0.intersection(self.1, x, y, z))
     }
 
     /// symmetric_difference(x, y, z)
@@ -575,8 +611,12 @@ impl SetTable3DPy {
     /// >>> object1 = model.add_object_type(number=2)
     /// >>> object2 = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
-    /// >>> table = model.add_set_table([[[[2, 3], [1, 2]], [[], [2]]], [[[1, 1], [2, 3]], [[], [2]]]], object_type=obj2)
-    /// >>> model.add_base_case([table.symmetric_difference(0, var, 1).contains(1)])
+    /// >>> table = model.add_set_table(
+    /// ...     [[[[2, 3], [1, 2]], [[], [2]]], [[[1, 1], [2, 3]], [[], [2]]]],
+    /// ...     object_type=obj2
+    /// ... )
+    /// >>> table.symmetric_difference(0, var, 1).eval(model.target_state, model)
+    /// {1}
     #[pyo3(signature = (x, y, z))]
     fn symmetric_difference(
         &self,
@@ -584,23 +624,28 @@ impl SetTable3DPy {
         y: ArgumentUnion,
         z: ArgumentUnion,
     ) -> SetExprPy {
-        SetExprPy::new(self.0.symmetric_difference(self.1, x, y, z))
+        SetExprPy::from(self.0.symmetric_difference(self.1, x, y, z))
     }
 }
 
 /// Table of set constants.
 ///
-/// `t[index]` returns a set expression referring to an item where `t` is `SetTable` and `index` is a sequence of `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[index]` returns a set expression referring to an item where `t` is :class:`SetTable` and `index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
-/// >>> object1 = model.add_object_type(number=2)
-/// >>> object2 = model.add_object_type(number=4)
+/// >>> obj1 = model.add_object_type(number=2)
+/// >>> obj2 = model.add_object_type(number=4)
 /// >>> var = model.add_element_var(object_type=obj1, target=0)
-/// >>> table = model.add_set_table({(0, 0, 0, 0): [1, 2], (1, 1, 1, 1): [2, 1]}, default=[], object_type=obj2)
-/// >>> model.add_base_case([table[0, var, 0, 1].contains(1)])
+/// >>> table = model.add_set_table(
+/// ...     {(0, 0, 0, 0): [1, 2], (1, 1, 1, 1): [2, 1]},
+/// ...     default=[],
+/// ...     object_type=obj2
+/// ... )
+/// >>> table[0, var, 0, 1].eval(model.target_state, model)
+/// set()
 #[pyclass(name = "SetTable")]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetTablePy(TableHandle<Set>, usize);
@@ -625,7 +670,7 @@ impl SetTablePy {
 impl SetTablePy {
     fn __getitem__(&self, index: Vec<ElementUnion>) -> SetExprPy {
         let index = index.into_iter().map(ElementExpression::from).collect();
-        SetExprPy::new(self.0.element(index))
+        SetExprPy::from(self.0.element(index))
     }
 
     /// union(indices)
@@ -651,14 +696,19 @@ impl SetTablePy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> object1 = model.add_object_type(number=2)
-    /// >>> object2 = model.add_object_type(number=4)
+    /// >>> obj1 = model.add_object_type(number=2)
+    /// >>> obj2 = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
-    /// >>> table = model.add_set_table({(0, 0, 0, 0): [1, 2], (1, 1, 1, 1): [2, 1]}, default=[], object_type=obj2)
-    /// >>> model.add_base_case([table.union((0, var, 0, 1)).contains(1)])
+    /// >>> table = model.add_set_table(
+    /// ...     {(0, 0, 0, 0): [1, 2], (1, 1, 1, 1): [2, 1]},
+    /// ...     default=[],
+    /// ...     object_type=obj2
+    /// ... )
+    /// >>> table.union((0, var, 0, 0)).eval(model.target_state, model)
+    /// {1, 2}
     #[pyo3(signature = (indices))]
     fn union(&self, indices: Vec<ArgumentUnion>) -> SetExprPy {
-        SetExprPy::new(self.0.union(
+        SetExprPy::from(self.0.union(
             self.1,
             indices.into_iter().map(ArgumentExpression::from).collect(),
         ))
@@ -687,14 +737,19 @@ impl SetTablePy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> object1 = model.add_object_type(number=2)
-    /// >>> object2 = model.add_object_type(number=4)
+    /// >>> obj1 = model.add_object_type(number=2)
+    /// >>> obj2 = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
-    /// >>> table = model.add_set_table({(0, 0, 0, 0): [1, 2], (1, 1, 1, 1): [2, 1]}, default=[], object_type=obj2)
-    /// >>> model.add_base_case([table.intersection((0, var, 0, 1)).contains(1)])
+    /// >>> table = model.add_set_table(
+    /// ...     {(0, 0, 0, 0): [1, 2], (1, 1, 1, 1): [2, 1]},
+    /// ...     default=[],
+    /// ...     object_type=obj2
+    /// ... )
+    /// >>> table.intersection((0, var, 0, 0)).eval(model.target_state, model)
+    /// set()
     #[pyo3(signature = (indices))]
     fn intersection(&self, indices: Vec<ArgumentUnion>) -> SetExprPy {
-        SetExprPy::new(self.0.intersection(
+        SetExprPy::from(self.0.intersection(
             self.1,
             indices.into_iter().map(ArgumentExpression::from).collect(),
         ))
@@ -723,14 +778,19 @@ impl SetTablePy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> object1 = model.add_object_type(number=2)
-    /// >>> object2 = model.add_object_type(number=4)
+    /// >>> obj1 = model.add_object_type(number=2)
+    /// >>> obj2 = model.add_object_type(number=4)
     /// >>> var = model.add_set_var(object_type=obj1, target=[0, 1])
-    /// >>> table = model.add_set_table({(0, 0, 0, 0): [1, 2], (1, 1, 1, 1): [2, 1]}, default=[], object_type=obj2)
-    /// >>> model.add_base_case([table.symmetric_difference((0, var, 0, 1)).contains(1)])
+    /// >>> table = model.add_set_table(
+    /// ...     {(0, 0, 0, 0): [1, 2], (1, 1, 1, 1): [2, 1]},
+    /// ...     default=[],
+    /// ...     object_type=obj2
+    /// ... )
+    /// >>> table.symmetric_difference((0, var, 0, 0)).eval(model.target_state, model)
+    /// {1, 2}
     #[pyo3(signature = (indices))]
     fn symmetric_difference(&self, indices: Vec<ArgumentUnion>) -> SetExprPy {
-        SetExprPy::new(self.0.symmetric_difference(
+        SetExprPy::from(self.0.symmetric_difference(
             self.1,
             indices.into_iter().map(ArgumentExpression::from).collect(),
         ))
@@ -739,7 +799,7 @@ impl SetTablePy {
 
 /// 1-dimensional table of bool constants.
 ///
-/// `t[x]` returns a condition referring to an item where `t` is `BoolTable1D` and `x` is `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[x]` returns a condition referring to an item where `t` is :class:`BoolTable1D` and `x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
@@ -748,7 +808,8 @@ impl SetTablePy {
 /// >>> obj = model.add_object_type(number=2)
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> table = model.add_bool_table([True, False])
-/// >>> model.add_base_case([table[var]])
+/// >>> table[var].eval(model.target_state, model)
+/// False
 #[pyclass(name = "BoolTable1D")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoolTable1DPy(Table1DHandle<bool>);
@@ -759,22 +820,22 @@ impl From<BoolTable1DPy> for Table1DHandle<bool> {
     }
 }
 
-impl BoolTable1DPy {
-    pub fn new(table: Table1DHandle<bool>) -> BoolTable1DPy {
-        BoolTable1DPy(table)
+impl From<Table1DHandle<bool>> for BoolTable1DPy {
+    fn from(table: Table1DHandle<bool>) -> BoolTable1DPy {
+        Self(table)
     }
 }
 
 #[pymethods]
 impl BoolTable1DPy {
     fn __getitem__(&self, i: ElementUnion) -> ConditionPy {
-        ConditionPy::new(self.0.element(i))
+        ConditionPy::from(self.0.element(i))
     }
 }
 
 /// 2-dimensional table of bool constants.
 ///
-/// `t[x, y]` returns a condition referring to an item where `t` is `BoolTable2D` and `x` and `y` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[x, y]` returns a condition referring to an item where `t` is :class:`BoolTable2D` and `x` and `y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
@@ -783,7 +844,8 @@ impl BoolTable1DPy {
 /// >>> obj = model.add_object_type(number=2)
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> table = model.add_bool_table([[True, False], [False, True]])
-/// >>> model.add_base_case([table[0, var]])
+/// >>> table[0, var].eval(model.target_state, model)
+/// False
 #[pyclass(name = "BoolTable2D")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoolTable2DPy(Table2DHandle<bool>);
@@ -794,9 +856,9 @@ impl From<BoolTable2DPy> for Table2DHandle<bool> {
     }
 }
 
-impl BoolTable2DPy {
-    pub fn new(table: Table2DHandle<bool>) -> BoolTable2DPy {
-        BoolTable2DPy(table)
+impl From<Table2DHandle<bool>> for BoolTable2DPy {
+    fn from(table: Table2DHandle<bool>) -> BoolTable2DPy {
+        Self(table)
     }
 }
 
@@ -804,13 +866,13 @@ impl BoolTable2DPy {
 impl BoolTable2DPy {
     fn __getitem__(&self, index: (ElementUnion, ElementUnion)) -> ConditionPy {
         let (x, y) = index;
-        ConditionPy::new(self.0.element(x, y))
+        ConditionPy::from(self.0.element(x, y))
     }
 }
 
 /// 3-dimensional table of bool constants.
 ///
-/// `t[x, y, z]` returns a condition referring to an item where `t` is `BoolTable3D` and `x`, `y`, and `z` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[x, y, z]` returns a condition referring to an item where `t` is :class:`BoolTable3D` and `x`, `y`, and `z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
@@ -818,8 +880,11 @@ impl BoolTable2DPy {
 /// >>> model = dp.Model()
 /// >>> obj = model.add_object_type(number=2)
 /// >>> var = model.add_element_var(object_type=obj, target=1)
-/// >>> table = model.add_bool_table([[[True, False], [False, True]], [[False, False], [True, True]]])
-/// >>> model.add_base_case([table[0, var, 1]])
+/// >>> table = model.add_bool_table(
+/// ...     [[[True, False], [False, True]], [[False, False], [True, True]]]
+/// ... )
+/// >>> table[0, var, 1].eval(model.target_state, model)
+/// True
 #[pyclass(name = "BoolTable3D")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoolTable3DPy(Table3DHandle<bool>);
@@ -830,9 +895,9 @@ impl From<BoolTable3DPy> for Table3DHandle<bool> {
     }
 }
 
-impl BoolTable3DPy {
-    pub fn new(table: Table3DHandle<bool>) -> BoolTable3DPy {
-        BoolTable3DPy(table)
+impl From<Table3DHandle<bool>> for BoolTable3DPy {
+    fn from(table: Table3DHandle<bool>) -> BoolTable3DPy {
+        Self(table)
     }
 }
 
@@ -840,13 +905,13 @@ impl BoolTable3DPy {
 impl BoolTable3DPy {
     fn __getitem__(&self, index: (ElementUnion, ElementUnion, ElementUnion)) -> ConditionPy {
         let (x, y, z) = index;
-        ConditionPy::new(self.0.element(x, y, z))
+        ConditionPy::from(self.0.element(x, y, z))
     }
 }
 
 /// Table of bool constants.
 ///
-/// `t[index]` returns a condition referring to an item where `t` is `BoolTable` and `index` is a sequence of `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
+/// `t[index]` returns a condition referring to an item where `t` is :class:`BoolTable` and `index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
 ///
 /// Examples
 /// --------
@@ -855,7 +920,8 @@ impl BoolTable3DPy {
 /// >>> obj = model.add_object_type(number=2)
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> table = model.add_bool_table({(0, 0, 0, 0): False, (1, 1, 1, 1): True}, default=False)
-/// >>> model.add_base_case([table[1, var, 1, 1]])
+/// >>> table[1, var, 1, 1].eval(model.target_state, model)
+/// True
 #[pyclass(name = "BoolTable")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BoolTablePy(TableHandle<bool>);
@@ -866,9 +932,9 @@ impl From<BoolTablePy> for TableHandle<bool> {
     }
 }
 
-impl BoolTablePy {
-    pub fn new(table: TableHandle<bool>) -> BoolTablePy {
-        BoolTablePy(table)
+impl From<TableHandle<bool>> for BoolTablePy {
+    fn from(table: TableHandle<bool>) -> BoolTablePy {
+        Self(table)
     }
 }
 
@@ -876,7 +942,7 @@ impl BoolTablePy {
 impl BoolTablePy {
     fn __getitem__(&self, index: Vec<ElementUnion>) -> ConditionPy {
         let index = index.into_iter().map(ElementExpression::from).collect();
-        ConditionPy::new(self.0.element(index))
+        ConditionPy::from(self.0.element(index))
     }
 }
 
@@ -899,19 +965,21 @@ impl From<ArgumentUnion> for ArgumentExpression {
 
 /// 1-dimensional table of integer constants.
 ///
-/// `t[x]` returns an integer expression referring to an item where `t` is `IntTable1D` and `x` is `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
-/// If `x` is `SetExpr`, `SetVar`, or `SetConst`, `t[x]` returns the sum of constants over `x`.
+/// `t[x]` returns an integer expression referring to an item where `t` is :class:`IntTable1D` and `x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// If `x` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x]` returns the sum of constants over `x`.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> obj = model.add_object_type(number=2)
-/// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> table = model.add_int_table([2, 3])
-/// >>> model.add_base_case([table[var] == 2])
+/// >>> var = model.add_element_var(object_type=obj, target=1)
+/// >>> table[var].eval(model.target_state, model)
+/// 3
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-/// >>> model.add_base_case([table[set_var] == 5])
+/// >>> table[set_var].eval(model.target_state, model)
+/// 5
 #[pyclass(name = "IntTable1D")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IntTable1DPy(Table1DHandle<Integer>);
@@ -922,16 +990,16 @@ impl From<IntTable1DPy> for Table1DHandle<Integer> {
     }
 }
 
-impl IntTable1DPy {
-    pub fn new(table: Table1DHandle<Integer>) -> IntTable1DPy {
-        IntTable1DPy(table)
+impl From<Table1DHandle<Integer>> for IntTable1DPy {
+    fn from(table: Table1DHandle<Integer>) -> IntTable1DPy {
+        Self(table)
     }
 }
 
 #[pymethods]
 impl IntTable1DPy {
     fn __getitem__(&self, i: ArgumentUnion) -> IntExprPy {
-        IntExprPy::new(match i {
+        IntExprPy::from(match i {
             ArgumentUnion::Element(i) => self.0.element(i),
             ArgumentUnion::Set(i) => self.0.sum(i),
         })
@@ -956,12 +1024,13 @@ impl IntTable1DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
-    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table = model.add_int_table([2, 3])
-    /// >>> model.add_base_case([table.product(var) == 2])
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> table.product(var).eval(model.target_state, model)
+    /// 6
     #[pyo3(signature = (i))]
     fn product(&self, i: SetUnion) -> IntExprPy {
-        IntExprPy::new(self.0.product(i))
+        IntExprPy::from(self.0.product(i))
     }
 
     /// max(set)
@@ -983,12 +1052,13 @@ impl IntTable1DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
-    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table = model.add_int_table([2, 3])
-    /// >>> model.add_base_case([table.max(var) == 2])
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> table.max(var).eval(model.target_state, model)
+    /// 3
     #[pyo3(signature = (i))]
     fn max(&self, i: SetUnion) -> IntExprPy {
-        IntExprPy::new(self.0.max(i))
+        IntExprPy::from(self.0.max(i))
     }
 
     /// min(set)
@@ -1010,29 +1080,31 @@ impl IntTable1DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
-    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table = model.add_int_table([2, 3])
-    /// >>> model.add_base_case([table.min(var) == 2])
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> table.min(var).eval(model.target_state, model)
+    /// 2
     #[pyo3(signature = (i))]
     fn min(&self, i: SetUnion) -> IntExprPy {
-        IntExprPy::new(self.0.min(i))
+        IntExprPy::from(self.0.min(i))
     }
 }
 
 /// 2-dimensional table of integer constants.
 ///
-/// `t[x, y]` returns an integer expression referring to an item where `t` is `IntTable2D` and `x` and `y` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
-/// If `x` and/or `y` are/is `SetExpr`, `SetVar`, or `SetConst`, `t[x, y]` returns the sum of constants over `x` and `y`.
+/// `t[x, y]` returns an integer expression referring to an item where `t` is :class:`IntTable2D` and `x` and `y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// If `x` and/or `y` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x, y]` returns the sum of constants over `x` and `y`.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> obj = model.add_object_type(number=2)
+/// >>> table = model.add_int_table([[2, 3], [-1, 2]])
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-/// >>> table = model.add_int_table([[2, 3], [-1, 2]])
-/// >>> model.add_base_case([table[var, set_var] == 2])
+/// >>> table[var, set_var].eval(model.target_state, model)
+/// 1
 #[pyclass(name = "IntTable2D")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IntTable2DPy(Table2DHandle<Integer>);
@@ -1043,9 +1115,9 @@ impl From<IntTable2DPy> for Table2DHandle<Integer> {
     }
 }
 
-impl IntTable2DPy {
-    pub fn new(table: Table2DHandle<Integer>) -> IntTable2DPy {
-        IntTable2DPy(table)
+impl From<Table2DHandle<Integer>> for IntTable2DPy {
+    fn from(table: Table2DHandle<Integer>) -> IntTable2DPy {
+        Self(table)
     }
 }
 
@@ -1053,7 +1125,7 @@ impl IntTable2DPy {
 impl IntTable2DPy {
     fn __getitem__(&self, index: (ArgumentUnion, ArgumentUnion)) -> IntExprPy {
         let (x, y) = index;
-        IntExprPy::new(match (x, y) {
+        IntExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
             (ArgumentUnion::Set(x), ArgumentUnion::Element(y)) => self.0.sum_x(x, y),
             (ArgumentUnion::Element(x), ArgumentUnion::Set(y)) => self.0.sum_y(x, y),
@@ -1087,13 +1159,14 @@ impl IntTable2DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table([[2, 3], [-1, 2]])
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table([[2, 3], [-1, 2]])
-    /// >>> model.add_base_case([table.product(var, set_var) == 2])
+    /// >>> table.product(var, set_var).eval(model.target_state, model)
+    /// -2
     #[pyo3(signature = (x, y))]
     fn product(&self, x: ArgumentUnion, y: ArgumentUnion) -> IntExprPy {
-        IntExprPy::new(match (x, y) {
+        IntExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
             (ArgumentUnion::Set(x), ArgumentUnion::Element(y)) => self.0.product_x(x, y),
             (ArgumentUnion::Element(x), ArgumentUnion::Set(y)) => self.0.product_y(x, y),
@@ -1127,13 +1200,14 @@ impl IntTable2DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table([[2, 3], [-1, 2]])
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table([[2, 3], [-1, 2]])
-    /// >>> model.add_base_case([table.max(var, set_var) == 2])
+    /// >>> table.max(var, set_var).eval(model.target_state, model)
+    /// 2
     #[pyo3(signature = (x, y))]
     fn max(&self, x: ArgumentUnion, y: ArgumentUnion) -> IntExprPy {
-        IntExprPy::new(match (x, y) {
+        IntExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
             (ArgumentUnion::Set(x), ArgumentUnion::Element(y)) => self.0.max_x(x, y),
             (ArgumentUnion::Element(x), ArgumentUnion::Set(y)) => self.0.max_y(x, y),
@@ -1167,13 +1241,14 @@ impl IntTable2DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table([[2, 3], [-1, 2]])
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table([[2, 3], [-1, 2]])
-    /// >>> model.add_base_case([table.min(var, set_var) == 2])
+    /// >>> table.min(var, set_var).eval(model.target_state, model)
+    /// -1
     #[pyo3(signature = (x, y))]
     fn min(&self, x: ArgumentUnion, y: ArgumentUnion) -> IntExprPy {
-        IntExprPy::new(match (x, y) {
+        IntExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
             (ArgumentUnion::Set(x), ArgumentUnion::Element(y)) => self.0.min_x(x, y),
             (ArgumentUnion::Element(x), ArgumentUnion::Set(y)) => self.0.min_y(x, y),
@@ -1184,18 +1259,19 @@ impl IntTable2DPy {
 
 /// 3-dimensional table of integer constants.
 ///
-/// `t[x, y, z]` returns an integer expression referring to an item where `t` is `IntTable3D` and `x`, `y`, and `z` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
-/// If `x`, `y`, and/or `z` are/is `SetExpr`, `SetVar`, or `SetConst`, `t[x, y, z]` returns the sum of constants over `x`, `y`, and `z`.
+/// `t[x, y, z]` returns an integer expression referring to an item where `t` is :class:`IntTable3D` and `x`, `y`, and `z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// If `x`, `y`, and/or `z` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x, y, z]` returns the sum of constants over `x`, `y`, and `z`.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> obj = model.add_object_type(number=2)
+/// >>> table = model.add_int_table([[[2, 3], [0, 1]], [[0, -1], [2, 2]]])
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-/// >>> table = model.add_int_table([[[2, 3], [0, 1]], [[0, -1], [2, 2]]]])
-/// >>> model.add_base_case([table[var, set_var, 1] == 2])
+/// >>> table[var, set_var, 1].eval(model.target_state, model)
+/// 1
 #[pyclass(name = "IntTable3D")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IntTable3DPy(Table3DHandle<Integer>);
@@ -1206,9 +1282,9 @@ impl From<IntTable3DPy> for Table3DHandle<Integer> {
     }
 }
 
-impl IntTable3DPy {
-    pub fn new(table: Table3DHandle<Integer>) -> IntTable3DPy {
-        IntTable3DPy(table)
+impl From<Table3DHandle<Integer>> for IntTable3DPy {
+    fn from(table: Table3DHandle<Integer>) -> IntTable3DPy {
+        Self(table)
     }
 }
 
@@ -1216,7 +1292,7 @@ impl IntTable3DPy {
 impl IntTable3DPy {
     fn __getitem__(&self, index: (ArgumentUnion, ArgumentUnion, ArgumentUnion)) -> IntExprPy {
         let (x, y, z) = index;
-        IntExprPy::new(match (x, y, z) {
+        IntExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
                 self.0.element(x, y, z)
             }
@@ -1252,13 +1328,14 @@ impl IntTable3DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table([[[2, 3], [0, 1]], [[0, -1], [2, 2]]])
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table([[[2, 3], [0, 1]], [[0, -1], [2, 2]]]])
-    /// >>> model.add_base_case([table.product(var, set_var, 1) == 2])
+    /// >>> table.product(var, set_var, 1).eval(model.target_state, model)
+    /// -2
     #[pyo3(signature = (x, y, z))]
     fn product(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> IntExprPy {
-        IntExprPy::new(match (x, y, z) {
+        IntExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
                 self.0.element(x, y, z)
             }
@@ -1294,13 +1371,14 @@ impl IntTable3DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table([[[2, 3], [0, 1]], [[0, -1], [2, 2]]])
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table([[[2, 3], [0, 1]], [[0, -1], [2, 2]]]])
-    /// >>> model.add_base_case([table.max(var, set_var, 1) == 2])
+    /// >>> table.max(var, set_var, 1).eval(model.target_state, model)
+    /// 2
     #[pyo3(signature = (x, y, z))]
     fn max(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> IntExprPy {
-        IntExprPy::new(match (x, y, z) {
+        IntExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
                 self.0.element(x, y, z)
             }
@@ -1336,13 +1414,14 @@ impl IntTable3DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table([[[2, 3], [0, 1]], [[0, -1], [2, 2]]])
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table([[[2, 3], [0, 1]], [[0, -1], [2, 2]]]])
-    /// >>> model.add_base_case([table.min(var, set_var, 1) == 2])
+    /// >>> table.min(var, set_var, 1).eval(model.target_state, model)
+    /// -1
     #[pyo3(signature = (x, y, z))]
     fn min(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> IntExprPy {
-        IntExprPy::new(match (x, y, z) {
+        IntExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
                 self.0.element(x, y, z)
             }
@@ -1353,18 +1432,19 @@ impl IntTable3DPy {
 
 /// Table of integer constants.
 ///
-/// `t[index]` returns an integer expression referring to an item where `t` is `IntTable` and `index` is a sequence of `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
-/// If one of `index` is `SetExpr`, `SetVar`, or `SetConst`, `t[index]` returns the sum of constants.
+/// `t[index]` returns an integer expression referring to an item where `t` is :class:`IntTable` and `index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// If one of `index` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[index]` returns the sum of constants.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> obj = model.add_object_type(number=2)
+/// >>> table = model.add_int_table({(0, 0, 0, 0): -1, (1, 1, 1, 1): 3}, default=2)
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-/// >>> table = model.add_int_table({(0, 0, 0, 0): -1, (1, 1, 1, 1): 3}, default=2)
-/// >>> model.add_base_case([table[0, var, set_var, 0] == 2])
+/// >>> table[0, var, set_var, 0].eval(model.target_state, model)
+/// 4
 #[pyclass(name = "IntTable")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IntTablePy(TableHandle<Integer>);
@@ -1375,9 +1455,9 @@ impl From<IntTablePy> for TableHandle<Integer> {
     }
 }
 
-impl IntTablePy {
-    pub fn new(table: TableHandle<Integer>) -> IntTablePy {
-        IntTablePy(table)
+impl From<TableHandle<Integer>> for IntTablePy {
+    fn from(table: TableHandle<Integer>) -> IntTablePy {
+        Self(table)
     }
 }
 
@@ -1388,10 +1468,10 @@ impl IntTablePy {
         for i in &index {
             match i {
                 ArgumentUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
-                _ => return IntExprPy::new(self.0.sum(index)),
+                _ => return IntExprPy::from(self.0.sum(index)),
             }
         }
-        IntExprPy::new(self.0.element(elements))
+        IntExprPy::from(self.0.element(elements))
     }
 
     /// product(indices)
@@ -1418,20 +1498,21 @@ impl IntTablePy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table({(0, 0, 0, 0): -1, (1, 1, 1, 1): 3}, default=2)
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table({(0, 0, 0, 0): -1, (1, 1, 1, 1): 3}, default=2)
-    /// >>> model.add_base_case([table.product(0, var, set_var, 0) == 2])
+    /// >>> table.product((0, var, set_var, 0)).eval(model.target_state, model)
+    /// 4
     #[pyo3(signature = (indices))]
     fn product(&self, indices: Vec<ArgumentUnion>) -> IntExprPy {
         let mut elements = Vec::with_capacity(indices.len());
         for i in &indices {
             match i {
                 ArgumentUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
-                _ => return IntExprPy::new(self.0.product(indices)),
+                _ => return IntExprPy::from(self.0.product(indices)),
             }
         }
-        IntExprPy::new(self.0.element(elements))
+        IntExprPy::from(self.0.element(elements))
     }
 
     /// max(indices)
@@ -1458,20 +1539,21 @@ impl IntTablePy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table({(0, 0, 0, 0): -1, (1, 1, 1, 1): 3}, default=2)
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table({(0, 0, 0, 0): -1, (1, 1, 1, 1): 3}, default=2)
-    /// >>> model.add_base_case([table.max(0, var, set_var, 0) == 2])
+    /// >>> table.max((0, var, set_var, 0)).eval(model.target_state, model)
+    /// 2
     #[pyo3(signature = (indices))]
     fn max(&self, indices: Vec<ArgumentUnion>) -> IntExprPy {
         let mut elements = Vec::with_capacity(indices.len());
         for i in &indices {
             match i {
                 ArgumentUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
-                _ => return IntExprPy::new(self.0.max(indices)),
+                _ => return IntExprPy::from(self.0.max(indices)),
             }
         }
-        IntExprPy::new(self.0.element(elements))
+        IntExprPy::from(self.0.element(elements))
     }
 
     /// min(indices)
@@ -1498,38 +1580,41 @@ impl IntTablePy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table({(0, 0, 0, 0): -1, (1, 1, 1, 1): 3}, default=2)
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table({(0, 0, 0, 0): -1, (1, 1, 1, 1): 3}, default=2)
-    /// >>> model.add_base_case([table.min(0, var, set_var, 0) == 2])
+    /// >>> table.min((0, var, set_var, 0)).eval(model.target_state, model)
+    /// 2
     #[pyo3(signature = (indices))]
     fn min(&self, indices: Vec<ArgumentUnion>) -> IntExprPy {
         let mut elements = Vec::with_capacity(indices.len());
         for i in &indices {
             match i {
                 ArgumentUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
-                _ => return IntExprPy::new(self.0.min(indices)),
+                _ => return IntExprPy::from(self.0.min(indices)),
             }
         }
-        IntExprPy::new(self.0.element(elements))
+        IntExprPy::from(self.0.element(elements))
     }
 }
 
 /// 1-dimensional table of continuous constants.
 ///
-/// `t[x]` returns an continuous expression referring to an item where `t` is `FloatTable1D` and `x` is `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
-/// If `x` is `SetExpr`, `SetVar`, or `SetConst`, `t[x]` returns the sum of constants over `x`.
+/// `t[x]` returns an continuous expression referring to an item where `t` is :class:`FloatTable1D` and `x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// If `x` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x]` returns the sum of constants over `x`.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> obj = model.add_object_type(number=2)
-/// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> table = model.add_float_table([2.5, 3.5])
-/// >>> model.add_base_case([table[var] == 2.5])
+/// >>> var = model.add_element_var(object_type=obj, target=1)
+/// >>> table[var].eval(model.target_state, model)
+/// 3.5
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-/// >>> model.add_base_case([table[set_var] == 2.5])
+/// >>> table[set_var].eval(model.target_state, model)
+/// 6.0
 #[pyclass(name = "FloatTable1D")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FloatTable1DPy(Table1DHandle<Continuous>);
@@ -1540,16 +1625,16 @@ impl From<FloatTable1DPy> for Table1DHandle<Continuous> {
     }
 }
 
-impl FloatTable1DPy {
-    pub fn new(table: Table1DHandle<Continuous>) -> FloatTable1DPy {
-        FloatTable1DPy(table)
+impl From<Table1DHandle<Continuous>> for FloatTable1DPy {
+    fn from(table: Table1DHandle<Continuous>) -> FloatTable1DPy {
+        Self(table)
     }
 }
 
 #[pymethods]
 impl FloatTable1DPy {
     fn __getitem__(&self, i: ArgumentUnion) -> FloatExprPy {
-        FloatExprPy::new(match i {
+        FloatExprPy::from(match i {
             ArgumentUnion::Element(i) => self.0.element(i),
             ArgumentUnion::Set(i) => self.0.sum(i),
         })
@@ -1573,13 +1658,14 @@ impl FloatTable1DPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
+    /// >>> table = model.add_float_table([2.5, 3.5])
     /// >>> obj = model.add_object_type(number=2)
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_float_table([2.5, 3.5])
-    /// >>> model.add_base_case([table.product(var) == 2.5])
+    /// >>> table.product(var).eval(model.target_state, model)
+    /// 8.75
     #[pyo3(signature = (i))]
     fn product(&self, i: SetUnion) -> FloatExprPy {
-        FloatExprPy::new(self.0.product(i))
+        FloatExprPy::from(self.0.product(i))
     }
 
     /// max(set)
@@ -1601,12 +1687,13 @@ impl FloatTable1DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
-    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table = model.add_float_table([2.5, 3.5])
-    /// >>> model.add_base_case([table.max(var) == 2.5])
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> table.max(var).eval(model.target_state, model)
+    /// 3.5
     #[pyo3(signature = (i))]
     fn max(&self, i: SetUnion) -> FloatExprPy {
-        FloatExprPy::new(self.0.max(i))
+        FloatExprPy::from(self.0.max(i))
     }
 
     /// min(set)
@@ -1627,30 +1714,32 @@ impl FloatTable1DPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
+    /// >>> table = model.add_float_table([2.5, 3.5])
     /// >>> obj = model.add_object_type(number=2)
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_float_table([2.5, 3.5])
-    /// >>> model.add_base_case([table.min(var) == 2.5])
+    /// >>> table.min(var).eval(model.target_state, model)
+    /// 2.5
     #[pyo3(signature = (i))]
     fn min(&self, i: SetUnion) -> FloatExprPy {
-        FloatExprPy::new(self.0.min(i))
+        FloatExprPy::from(self.0.min(i))
     }
 }
 
 /// 2-dimensional table of continuous constants.
 ///
-/// `t[x, y]` returns a continuous expression referring to an item where `t` is `FloatTable2D` and `x` and `y` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
-/// If `x` and/or `y` are/is `SetExpr`, `SetVar`, or `SetConst`, `t[x, y]` returns the sum of constants over `x` and `y`.
+/// `t[x, y]` returns a continuous expression referring to an item where `t` is :class:`FloatTable2D` and `x` and `y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// If `x` and/or `y` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x, y]` returns the sum of constants over `x` and `y`.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> obj = model.add_object_type(number=2)
+/// >>> table = model.add_float_table([[2.5, 3.5], [-1.5, 2.5]])
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-/// >>> table = model.add_float_table([[2.5, 3.5], [-1.5, 2.5]])
-/// >>> model.add_base_case([table[var, set_var] == 2.5])
+/// >>> table[var, set_var].eval(model.target_state, model)
+/// 1.0
 #[pyclass(name = "FloatTable2D")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FloatTable2DPy(Table2DHandle<Continuous>);
@@ -1661,9 +1750,9 @@ impl From<FloatTable2DPy> for Table2DHandle<Continuous> {
     }
 }
 
-impl FloatTable2DPy {
-    pub fn new(table: Table2DHandle<Continuous>) -> FloatTable2DPy {
-        FloatTable2DPy(table)
+impl From<Table2DHandle<Continuous>> for FloatTable2DPy {
+    fn from(table: Table2DHandle<Continuous>) -> FloatTable2DPy {
+        Self(table)
     }
 }
 
@@ -1671,7 +1760,7 @@ impl FloatTable2DPy {
 impl FloatTable2DPy {
     fn __getitem__(&self, index: (ArgumentUnion, ArgumentUnion)) -> FloatExprPy {
         let (x, y) = index;
-        FloatExprPy::new(match (x, y) {
+        FloatExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
             (ArgumentUnion::Set(x), ArgumentUnion::Element(y)) => self.0.sum_x(x, y),
             (ArgumentUnion::Element(x), ArgumentUnion::Set(y)) => self.0.sum_y(x, y),
@@ -1705,13 +1794,14 @@ impl FloatTable2DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table([[2.5, 3.5], [-1.5, 2.5]])
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table([[2.5, 3.5], [-1.5, 2.5]])
-    /// >>> model.add_base_case([table.product(var, set_var) == 2.5])
+    /// >>> table.product(var, set_var).eval(model.target_state, model)
+    /// -3.75
     #[pyo3(signature = (x, y))]
     fn product(&self, x: ArgumentUnion, y: ArgumentUnion) -> FloatExprPy {
-        FloatExprPy::new(match (x, y) {
+        FloatExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
             (ArgumentUnion::Set(x), ArgumentUnion::Element(y)) => self.0.product_x(x, y),
             (ArgumentUnion::Element(x), ArgumentUnion::Set(y)) => self.0.product_y(x, y),
@@ -1745,13 +1835,14 @@ impl FloatTable2DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table([[2.5, 3.5], [-1.5, 2.5]])
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table([[2.5, 3.5], [-1.5, 2.5]])
-    /// >>> model.add_base_case([table.max(var, set_var) == 2.5])
+    /// >>> table.max(var, set_var).eval(model.target_state, model)
+    /// 2.5
     #[pyo3(signature = (x, y))]
     fn max(&self, x: ArgumentUnion, y: ArgumentUnion) -> FloatExprPy {
-        FloatExprPy::new(match (x, y) {
+        FloatExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
             (ArgumentUnion::Set(x), ArgumentUnion::Element(y)) => self.0.max_x(x, y),
             (ArgumentUnion::Element(x), ArgumentUnion::Set(y)) => self.0.max_y(x, y),
@@ -1785,13 +1876,14 @@ impl FloatTable2DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_int_table([[2.5, 3.5], [-1.5, 2.5]])
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_int_table([[2.5, 3.5], [-1.5, 2.5]])
-    /// >>> model.add_base_case([table.min(var, set_var) == 2.5])
+    /// >>> table.min(var, set_var).eval(model.target_state, model)
+    /// -1.5
     #[pyo3(signature = (x, y))]
     fn min(&self, x: ArgumentUnion, y: ArgumentUnion) -> FloatExprPy {
-        FloatExprPy::new(match (x, y) {
+        FloatExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
             (ArgumentUnion::Set(x), ArgumentUnion::Element(y)) => self.0.min_x(x, y),
             (ArgumentUnion::Element(x), ArgumentUnion::Set(y)) => self.0.min_y(x, y),
@@ -1802,18 +1894,19 @@ impl FloatTable2DPy {
 
 /// Table of continuous constants.
 ///
-/// `t[x, y, z]` returns a continuous expression referring to an item where `t` is `FloatTable3D` and `x`, `y`, and `z` are `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
-/// If `x`, `y`, and/or `z` are/is `SetExpr`, `SetVar`, or `SetConst`, `t[x, y, z]` returns the sum of constants over `x`, `y`, and `z`.
+/// `t[x, y, z]` returns a continuous expression referring to an item where `t` is :class:`FloatTable3D` and `x`, `y`, and `z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// If `x`, `y`, and/or `z` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x, y, z]` returns the sum of constants over `x`, `y`, and `z`.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> obj = model.add_object_type(number=2)
+/// >>> table = model.add_float_table([[[2.5, 3.5], [0.5, 1.5]], [[0.5, -1.5], [2.5, 2.5]]])
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-/// >>> table = model.add_float_table([[[2.5, 3.5], [0.5, 1.5]], [[0.5, -1.5], [2.5, 2.5]]]])
-/// >>> model.add_base_case([table[var, set_var, 1] == 2.5])
+/// >>> table[var, set_var, 1].eval(model.target_state, model)
+/// 1.0
 #[pyclass(name = "FloatTable3D")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FloatTable3DPy(Table3DHandle<Continuous>);
@@ -1824,9 +1917,9 @@ impl From<FloatTable3DPy> for Table3DHandle<Continuous> {
     }
 }
 
-impl FloatTable3DPy {
-    pub fn new(table: Table3DHandle<Continuous>) -> FloatTable3DPy {
-        FloatTable3DPy(table)
+impl From<Table3DHandle<Continuous>> for FloatTable3DPy {
+    fn from(table: Table3DHandle<Continuous>) -> FloatTable3DPy {
+        Self(table)
     }
 }
 
@@ -1834,7 +1927,7 @@ impl FloatTable3DPy {
 impl FloatTable3DPy {
     fn __getitem__(&self, index: (ArgumentUnion, ArgumentUnion, ArgumentUnion)) -> FloatExprPy {
         let (x, y, z) = index;
-        FloatExprPy::new(match (x, y, z) {
+        FloatExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
                 self.0.element(x, y, z)
             }
@@ -1869,14 +1962,15 @@ impl FloatTable3DPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
+    /// >>> table = model.add_float_table([[[2.5, 3.5], [0.5, 1.5]], [[0.5, -1.5], [2.5, 2.5]]])
     /// >>> obj = model.add_object_type(number=2)
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_float_table([[[2.5, 3.5], [0.5, 1.5]], [[0.5, -1.5], [2.5, 2.5]]]])
-    /// >>> model.add_base_case([table.product(var, set_var, 1) == 2.5])
+    /// >>> table.product(var, set_var, 1).eval(model.target_state, model)
+    /// -3.75
     #[pyo3(signature = (x, y, z))]
     fn product(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> FloatExprPy {
-        FloatExprPy::new(match (x, y, z) {
+        FloatExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
                 self.0.element(x, y, z)
             }
@@ -1912,13 +2006,14 @@ impl FloatTable3DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_float_table([[[2.5, 3.5], [0.5, 1.5]], [[0.5, -1.5], [2.5, 2.5]]])
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_float_table([[[2.5, 3.5], [0.5, 1.5]], [[0.5, -1.5], [2.5, 2.5]]]])
-    /// >>> model.add_base_case([table.max(var, set_var, 1) == 2.5])
+    /// >>> table.max(var, set_var, 1).eval(model.target_state, model)
+    /// 2.5
     #[pyo3(signature = (x, y, z))]
     fn max(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> FloatExprPy {
-        FloatExprPy::new(match (x, y, z) {
+        FloatExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
                 self.0.element(x, y, z)
             }
@@ -1954,13 +2049,14 @@ impl FloatTable3DPy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_float_table([[[2.5, 3.5], [0.5, 1.5]], [[0.5, -1.5], [2.5, 2.5]]])
     /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_float_table([[[2.5, 3.5], [0.5, 1.5]], [[0.5, -1.5], [2.5, 2.5]]]])
-    /// >>> model.add_base_case([table.min(var, set_var, 1) == 2.5])
+    /// >>> table.min(var, set_var, 1).eval(model.target_state, model)
+    /// -1.5
     #[pyo3(signature = (x, y, z))]
     fn min(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> FloatExprPy {
-        FloatExprPy::new(match (x, y, z) {
+        FloatExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
                 self.0.element(x, y, z)
             }
@@ -1971,18 +2067,19 @@ impl FloatTable3DPy {
 
 /// Table of continuous constants.
 ///
-/// `t[index]` returns a continuous expression referring to an item where `t` is `FloatTable` and `index` is a sequence of `ElementExpr`, `ElementVar`, `ElementResourceVar`, or `int`.
-/// If one of `index` is `SetExpr`, `SetVar`, or `SetConst`, `t[index]` returns the sum of constants.
+/// `t[index]` returns a continuous expression referring to an item where `t` is :class:`FloatTable` and `index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// If one of `index` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[index]` returns the sum of constants.
 ///
 /// Examples
 /// --------
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
 /// >>> obj = model.add_object_type(number=2)
+/// >>> table = model.add_float_table({(0, 0, 0, 0): -1.5, (1, 1, 1, 1): 3.5}, default=2.5)
 /// >>> var = model.add_element_var(object_type=obj, target=1)
 /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-/// >>> table = model.add_float_table({(0, 0, 0, 0): -1.5, (1, 1, 1, 1): 3.5}, default=2.5)
-/// >>> model.add_base_case([table[0, var, set_var, 0] == 2.5])
+/// >>> table[0, var, set_var, 0].eval(model.target_state, model)
+/// 5.0
 #[pyclass(name = "FloatTable")]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FloatTablePy(TableHandle<Continuous>);
@@ -1993,9 +2090,9 @@ impl From<FloatTablePy> for TableHandle<Continuous> {
     }
 }
 
-impl FloatTablePy {
-    pub fn new(table: TableHandle<Continuous>) -> FloatTablePy {
-        FloatTablePy(table)
+impl From<TableHandle<Continuous>> for FloatTablePy {
+    fn from(table: TableHandle<Continuous>) -> FloatTablePy {
+        Self(table)
     }
 }
 
@@ -2006,10 +2103,10 @@ impl FloatTablePy {
         for i in &index {
             match i {
                 ArgumentUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
-                _ => return FloatExprPy::new(self.0.sum(index)),
+                _ => return FloatExprPy::from(self.0.sum(index)),
             }
         }
-        FloatExprPy::new(self.0.element(elements))
+        FloatExprPy::from(self.0.element(elements))
     }
 
     /// product(index)
@@ -2036,20 +2133,21 @@ impl FloatTablePy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_float_table({(0, 0, 0, 0): -1.5, (1, 1, 1, 1): 3.5}, default=2.5)
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_float_table({(0, 0, 0, 0): -1.5, (1, 1, 1, 1): 3.5}, default=2.5)
-    /// >>> model.add_base_case([table.product(0, var, set_var, 0) == 2.5])
+    /// >>> table.product((0, var, set_var, 0)).eval(model.target_state, model)
+    /// 6.25
     #[pyo3(signature = (index))]
     fn product(&self, index: Vec<ArgumentUnion>) -> FloatExprPy {
         let mut elements = Vec::with_capacity(index.len());
         for i in &index {
             match i {
                 ArgumentUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
-                _ => return FloatExprPy::new(self.0.product(index)),
+                _ => return FloatExprPy::from(self.0.product(index)),
             }
         }
-        FloatExprPy::new(self.0.element(elements))
+        FloatExprPy::from(self.0.element(elements))
     }
 
     /// max(index)
@@ -2076,20 +2174,21 @@ impl FloatTablePy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_float_table({(0, 0, 0, 0): -1.5, (1, 1, 1, 1): 3.5}, default=2.5)
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_float_table({(0, 0, 0, 0): -1.5, (1, 1, 1, 1): 3.5}, default=2.5)
-    /// >>> model.add_base_case([table.max(0, var, set_var, 0) == 2.5])
+    /// >>> table.max((0, var, set_var, 0)).eval(model.target_state, model)
+    /// 2.5
     #[pyo3(signature = (index))]
     fn max(&self, index: Vec<ArgumentUnion>) -> FloatExprPy {
         let mut elements = Vec::with_capacity(index.len());
         for i in &index {
             match i {
                 ArgumentUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
-                _ => return FloatExprPy::new(self.0.max(index)),
+                _ => return FloatExprPy::from(self.0.max(index)),
             }
         }
-        FloatExprPy::new(self.0.element(elements))
+        FloatExprPy::from(self.0.element(elements))
     }
 
     /// min(index)
@@ -2116,20 +2215,21 @@ impl FloatTablePy {
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
     /// >>> obj = model.add_object_type(number=2)
+    /// >>> table = model.add_float_table({(0, 0, 0, 0): -1.5, (1, 1, 1, 1): 3.5}, default=2.5)
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
-    /// >>> table = model.add_float_table({(0, 0, 0, 0): -1.5, (1, 1, 1, 1): 3.5}, default=2.5)
-    /// >>> model.add_base_case([table.min(0, var, set_var, 0) == 2.5])
+    /// >>> table.min((0, var, set_var, 0)).eval(model.target_state, model)
+    /// 2.5
     #[pyo3(signature = (index))]
     fn min(&self, index: Vec<ArgumentUnion>) -> FloatExprPy {
         let mut elements = Vec::with_capacity(index.len());
         for i in &index {
             match i {
                 ArgumentUnion::Element(i) => elements.push(ElementExpression::from(i.clone())),
-                _ => return FloatExprPy::new(self.0.min(index)),
+                _ => return FloatExprPy::from(self.0.min(index)),
             }
         }
-        FloatExprPy::new(self.0.element(elements))
+        FloatExprPy::from(self.0.element(elements))
     }
 }
 
@@ -2145,7 +2245,7 @@ mod tests {
         let t = model.add_table_1d("t", vec![1]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(ElementTable1DPy::new(t), ElementTable1DPy(t));
+        assert_eq!(ElementTable1DPy::from(t), ElementTable1DPy(t));
     }
 
     #[test]
@@ -2158,7 +2258,7 @@ mod tests {
         let i = ElementUnion::Const(0);
         assert_eq!(
             t_py.__getitem__(i),
-            ElementExprPy::new(ElementExpression::Table(Box::new(
+            ElementExprPy::from(ElementExpression::Table(Box::new(
                 TableExpression::Table1D(t.id(), ElementExpression::Constant(0))
             )))
         );
@@ -2170,7 +2270,7 @@ mod tests {
         let t = model.add_table_2d("t", vec![vec![1]]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(ElementTable2DPy::new(t), ElementTable2DPy(t));
+        assert_eq!(ElementTable2DPy::from(t), ElementTable2DPy(t));
     }
 
     #[test]
@@ -2184,7 +2284,7 @@ mod tests {
         let y = ElementUnion::Const(0);
         assert_eq!(
             t_py.__getitem__((x, y)),
-            ElementExprPy::new(ElementExpression::Table(Box::new(
+            ElementExprPy::from(ElementExpression::Table(Box::new(
                 TableExpression::Table2D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -2200,7 +2300,7 @@ mod tests {
         let t = model.add_table_3d("t", vec![vec![vec![1]]]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(ElementTable3DPy::new(t), ElementTable3DPy(t));
+        assert_eq!(ElementTable3DPy::from(t), ElementTable3DPy(t));
     }
 
     #[test]
@@ -2215,7 +2315,7 @@ mod tests {
         let z = ElementUnion::Const(0);
         assert_eq!(
             t_py.__getitem__((x, y, z)),
-            ElementExprPy::new(ElementExpression::Table(Box::new(
+            ElementExprPy::from(ElementExpression::Table(Box::new(
                 TableExpression::Table3D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -2232,7 +2332,7 @@ mod tests {
         let t = model.add_table("t", FxHashMap::default(), 0usize);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(ElementTablePy::new(t), ElementTablePy(t));
+        assert_eq!(ElementTablePy::from(t), ElementTablePy(t));
     }
 
     #[test]
@@ -2250,7 +2350,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.__getitem__(index),
-            ElementExprPy::new(ElementExpression::Table(Box::new(TableExpression::Table(
+            ElementExprPy::from(ElementExpression::Table(Box::new(TableExpression::Table(
                 t.id(),
                 vec![
                     ElementExpression::Constant(0),
@@ -2290,7 +2390,7 @@ mod tests {
         let i = ElementUnion::Const(0);
         assert_eq!(
             t_py.__getitem__(i),
-            SetExprPy::new(SetExpression::Reference(ReferenceExpression::Table(
+            SetExprPy::from(SetExpression::Reference(ReferenceExpression::Table(
                 TableExpression::Table1D(t.id(), ElementExpression::Constant(0))
             )))
         );
@@ -2306,7 +2406,7 @@ mod tests {
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.union(x),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table1D(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table1D(
                 SetReduceOperator::Union,
                 10,
                 t.id(),
@@ -2325,7 +2425,7 @@ mod tests {
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.intersection(x),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table1D(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table1D(
                 SetReduceOperator::Intersection,
                 10,
                 t.id(),
@@ -2344,7 +2444,7 @@ mod tests {
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.symmetric_difference(x),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table1D(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table1D(
                 SetReduceOperator::SymmetricDifference,
                 10,
                 t.id(),
@@ -2382,7 +2482,7 @@ mod tests {
         let y = ElementUnion::Const(0);
         assert_eq!(
             t_py.__getitem__((x, y)),
-            SetExprPy::new(SetExpression::Reference(ReferenceExpression::Table(
+            SetExprPy::from(SetExpression::Reference(ReferenceExpression::Table(
                 TableExpression::Table2D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -2403,7 +2503,7 @@ mod tests {
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.union(x, y),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table2D(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table2D(
                 SetReduceOperator::Union,
                 10,
                 t.id(),
@@ -2424,7 +2524,7 @@ mod tests {
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.intersection(x, y),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table2D(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table2D(
                 SetReduceOperator::Intersection,
                 10,
                 t.id(),
@@ -2445,7 +2545,7 @@ mod tests {
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.symmetric_difference(x, y),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table2D(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table2D(
                 SetReduceOperator::SymmetricDifference,
                 10,
                 t.id(),
@@ -2486,7 +2586,7 @@ mod tests {
         let z = ElementUnion::Const(0);
         assert_eq!(
             t_py.__getitem__((x, y, z)),
-            SetExprPy::new(SetExpression::Reference(ReferenceExpression::Table(
+            SetExprPy::from(SetExpression::Reference(ReferenceExpression::Table(
                 TableExpression::Table3D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -2509,7 +2609,7 @@ mod tests {
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.union(x, y, z),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table3D(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table3D(
                 SetReduceOperator::Union,
                 10,
                 t.id(),
@@ -2532,7 +2632,7 @@ mod tests {
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.intersection(x, y, z),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table3D(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table3D(
                 SetReduceOperator::Intersection,
                 10,
                 t.id(),
@@ -2555,7 +2655,7 @@ mod tests {
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.symmetric_difference(x, y, z),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table3D(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table3D(
                 SetReduceOperator::SymmetricDifference,
                 10,
                 t.id(),
@@ -2600,7 +2700,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.__getitem__(index),
-            SetExprPy::new(SetExpression::Reference(ReferenceExpression::Table(
+            SetExprPy::from(SetExpression::Reference(ReferenceExpression::Table(
                 TableExpression::Table(
                     t.id(),
                     vec![
@@ -2629,7 +2729,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.union(indices),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table(
                 SetReduceOperator::Union,
                 10,
                 t.id(),
@@ -2658,7 +2758,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.intersection(indices),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table(
                 SetReduceOperator::Intersection,
                 10,
                 t.id(),
@@ -2687,7 +2787,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.symmetric_difference(indices),
-            SetExprPy::new(SetExpression::Reduce(SetReduceExpression::Table(
+            SetExprPy::from(SetExpression::Reduce(SetReduceExpression::Table(
                 SetReduceOperator::SymmetricDifference,
                 10,
                 t.id(),
@@ -2707,7 +2807,7 @@ mod tests {
         let t = model.add_table_1d("t", vec![true]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(BoolTable1DPy::new(t), BoolTable1DPy(t));
+        assert_eq!(BoolTable1DPy::from(t), BoolTable1DPy(t));
     }
 
     #[test]
@@ -2720,7 +2820,7 @@ mod tests {
         let i = ElementUnion::Const(0);
         assert_eq!(
             t_py.__getitem__(i),
-            ConditionPy::new(Condition::Table(Box::new(TableExpression::Table1D(
+            ConditionPy::from(Condition::Table(Box::new(TableExpression::Table1D(
                 t.id(),
                 ElementExpression::Constant(0)
             ))))
@@ -2733,7 +2833,7 @@ mod tests {
         let t = model.add_table_2d("t", vec![vec![true]]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(BoolTable2DPy::new(t), BoolTable2DPy(t));
+        assert_eq!(BoolTable2DPy::from(t), BoolTable2DPy(t));
     }
 
     #[test]
@@ -2747,7 +2847,7 @@ mod tests {
         let y = ElementUnion::Const(0);
         assert_eq!(
             t_py.__getitem__((x, y)),
-            ConditionPy::new(Condition::Table(Box::new(TableExpression::Table2D(
+            ConditionPy::from(Condition::Table(Box::new(TableExpression::Table2D(
                 t.id(),
                 ElementExpression::Constant(0),
                 ElementExpression::Constant(0)
@@ -2761,7 +2861,7 @@ mod tests {
         let t = model.add_table_3d("t", vec![vec![vec![true]]]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(BoolTable3DPy::new(t), BoolTable3DPy(t));
+        assert_eq!(BoolTable3DPy::from(t), BoolTable3DPy(t));
     }
 
     #[test]
@@ -2776,7 +2876,7 @@ mod tests {
         let z = ElementUnion::Const(0);
         assert_eq!(
             t_py.__getitem__((x, y, z)),
-            ConditionPy::new(Condition::Table(Box::new(TableExpression::Table3D(
+            ConditionPy::from(Condition::Table(Box::new(TableExpression::Table3D(
                 t.id(),
                 ElementExpression::Constant(0),
                 ElementExpression::Constant(0),
@@ -2791,7 +2891,7 @@ mod tests {
         let t = model.add_table("t", FxHashMap::default(), false);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(BoolTablePy::new(t), BoolTablePy(t));
+        assert_eq!(BoolTablePy::from(t), BoolTablePy(t));
     }
 
     #[test]
@@ -2809,7 +2909,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.__getitem__(index),
-            ConditionPy::new(Condition::Table(Box::new(TableExpression::Table(
+            ConditionPy::from(Condition::Table(Box::new(TableExpression::Table(
                 t.id(),
                 vec![
                     ElementExpression::Constant(0),
@@ -2832,7 +2932,7 @@ mod tests {
 
     #[test]
     fn argument_expression_from_table_index_set() {
-        let i = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let i = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             ArgumentExpression::from(i),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
@@ -2847,7 +2947,7 @@ mod tests {
         let t = model.add_table_1d("t", vec![1]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(IntTable1DPy::new(t), IntTable1DPy(t));
+        assert_eq!(IntTable1DPy::from(t), IntTable1DPy(t));
     }
 
     #[test]
@@ -2860,7 +2960,7 @@ mod tests {
         let i = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.__getitem__(i),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table1D(t.id(), ElementExpression::Constant(0))
             )))
         );
@@ -2873,10 +2973,10 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable1DPy(t);
-        let i = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let i = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.__getitem__(i),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table1DReduce(
                     ReduceOperator::Sum,
                     t.id(),
@@ -2893,10 +2993,10 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable1DPy(t);
-        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        let i = SetUnion::Const(SetConstPy::from(Set::with_capacity(10)));
         assert_eq!(
             t_py.product(i),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table1DReduce(
                     ReduceOperator::Product,
                     t.id(),
@@ -2913,10 +3013,10 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable1DPy(t);
-        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        let i = SetUnion::Const(SetConstPy::from(Set::with_capacity(10)));
         assert_eq!(
             t_py.max(i),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table1DReduce(
                     ReduceOperator::Max,
                     t.id(),
@@ -2933,10 +3033,10 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable1DPy(t);
-        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        let i = SetUnion::Const(SetConstPy::from(Set::with_capacity(10)));
         assert_eq!(
             t_py.min(i),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table1DReduce(
                     ReduceOperator::Min,
                     t.id(),
@@ -2952,7 +3052,7 @@ mod tests {
         let t = model.add_table_2d("t", vec![vec![1]]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(IntTable2DPy::new(t), IntTable2DPy(t));
+        assert_eq!(IntTable2DPy::from(t), IntTable2DPy(t));
     }
 
     #[test]
@@ -2966,7 +3066,7 @@ mod tests {
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.__getitem__((x, y)),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -2983,11 +3083,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.__getitem__((x, y)),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceX(
                     ReduceOperator::Sum,
                     t.id(),
@@ -3006,10 +3106,10 @@ mod tests {
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.__getitem__((x, y)),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceY(
                     ReduceOperator::Sum,
                     t.id(),
@@ -3027,11 +3127,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.__getitem__((x, y)),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduce(
                     ReduceOperator::Sum,
                     t.id(),
@@ -3053,7 +3153,7 @@ mod tests {
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.product(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -3070,11 +3170,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.product(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceX(
                     ReduceOperator::Product,
                     t.id(),
@@ -3093,10 +3193,10 @@ mod tests {
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.product(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceY(
                     ReduceOperator::Product,
                     t.id(),
@@ -3114,11 +3214,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.product(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduce(
                     ReduceOperator::Product,
                     t.id(),
@@ -3140,7 +3240,7 @@ mod tests {
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.max(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -3157,11 +3257,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.max(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceX(
                     ReduceOperator::Max,
                     t.id(),
@@ -3180,10 +3280,10 @@ mod tests {
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.max(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceY(
                     ReduceOperator::Max,
                     t.id(),
@@ -3201,11 +3301,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.max(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduce(
                     ReduceOperator::Max,
                     t.id(),
@@ -3227,7 +3327,7 @@ mod tests {
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.min(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -3244,11 +3344,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.min(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceX(
                     ReduceOperator::Min,
                     t.id(),
@@ -3267,10 +3367,10 @@ mod tests {
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.min(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceY(
                     ReduceOperator::Min,
                     t.id(),
@@ -3288,11 +3388,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = IntTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.min(x, y),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduce(
                     ReduceOperator::Min,
                     t.id(),
@@ -3309,7 +3409,7 @@ mod tests {
         let t = model.add_table_3d("t", vec![vec![vec![1]]]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(IntTable3DPy::new(t), IntTable3DPy(t));
+        assert_eq!(IntTable3DPy::from(t), IntTable3DPy(t));
     }
 
     #[test]
@@ -3324,7 +3424,7 @@ mod tests {
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.__getitem__((x, y, z)),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table3D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -3343,11 +3443,11 @@ mod tests {
         let t = t.unwrap();
         let t_py = IntTable3DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.__getitem__((x, y, z)),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table3DReduce(
                     ReduceOperator::Sum,
                     t.id(),
@@ -3373,7 +3473,7 @@ mod tests {
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.product(x, y, z),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table3D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -3392,11 +3492,11 @@ mod tests {
         let t = t.unwrap();
         let t_py = IntTable3DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.product(x, y, z),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table3DReduce(
                     ReduceOperator::Product,
                     t.id(),
@@ -3422,7 +3522,7 @@ mod tests {
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.max(x, y, z),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table3D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -3441,11 +3541,11 @@ mod tests {
         let t = t.unwrap();
         let t_py = IntTable3DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.max(x, y, z),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table3DReduce(
                     ReduceOperator::Max,
                     t.id(),
@@ -3471,7 +3571,7 @@ mod tests {
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.min(x, y, z),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table3D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -3490,11 +3590,11 @@ mod tests {
         let t = t.unwrap();
         let t_py = IntTable3DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.min(x, y, z),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table3DReduce(
                     ReduceOperator::Min,
                     t.id(),
@@ -3514,7 +3614,7 @@ mod tests {
         let t = model.add_table("t", FxHashMap::default(), 0);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(IntTablePy::new(t), IntTablePy(t));
+        assert_eq!(IntTablePy::from(t), IntTablePy(t));
     }
 
     #[test]
@@ -3532,7 +3632,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.__getitem__(index),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table(
                     t.id(),
                     vec![
@@ -3555,13 +3655,13 @@ mod tests {
         let t_py = IntTablePy(t);
         let index = vec![
             ArgumentUnion::Element(ElementUnion::Const(0)),
-            ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10)))),
             ArgumentUnion::Element(ElementUnion::Const(0)),
             ArgumentUnion::Element(ElementUnion::Const(0)),
         ];
         assert_eq!(
             t_py.__getitem__(index),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::TableReduce(
                     ReduceOperator::Sum,
                     t.id(),
@@ -3593,7 +3693,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.product(index),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table(
                     t.id(),
                     vec![
@@ -3616,13 +3716,13 @@ mod tests {
         let t_py = IntTablePy(t);
         let index = vec![
             ArgumentUnion::Element(ElementUnion::Const(0)),
-            ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10)))),
             ArgumentUnion::Element(ElementUnion::Const(0)),
             ArgumentUnion::Element(ElementUnion::Const(0)),
         ];
         assert_eq!(
             t_py.product(index),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::TableReduce(
                     ReduceOperator::Product,
                     t.id(),
@@ -3654,7 +3754,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.max(index),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table(
                     t.id(),
                     vec![
@@ -3677,13 +3777,13 @@ mod tests {
         let t_py = IntTablePy(t);
         let index = vec![
             ArgumentUnion::Element(ElementUnion::Const(0)),
-            ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10)))),
             ArgumentUnion::Element(ElementUnion::Const(0)),
             ArgumentUnion::Element(ElementUnion::Const(0)),
         ];
         assert_eq!(
             t_py.max(index),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::TableReduce(
                     ReduceOperator::Max,
                     t.id(),
@@ -3715,7 +3815,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.min(index),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::Table(
                     t.id(),
                     vec![
@@ -3738,13 +3838,13 @@ mod tests {
         let t_py = IntTablePy(t);
         let index = vec![
             ArgumentUnion::Element(ElementUnion::Const(0)),
-            ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10)))),
             ArgumentUnion::Element(ElementUnion::Const(0)),
             ArgumentUnion::Element(ElementUnion::Const(0)),
         ];
         assert_eq!(
             t_py.min(index),
-            IntExprPy::new(IntegerExpression::Table(Box::new(
+            IntExprPy::from(IntegerExpression::Table(Box::new(
                 NumericTableExpression::TableReduce(
                     ReduceOperator::Min,
                     t.id(),
@@ -3767,7 +3867,7 @@ mod tests {
         let t = model.add_table_1d("t", vec![1.5]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(FloatTable1DPy::new(t), FloatTable1DPy(t));
+        assert_eq!(FloatTable1DPy::from(t), FloatTable1DPy(t));
     }
 
     #[test]
@@ -3780,7 +3880,7 @@ mod tests {
         let i = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.__getitem__(i),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table1D(t.id(), ElementExpression::Constant(0))
             )))
         );
@@ -3793,10 +3893,10 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable1DPy(t);
-        let i = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let i = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.__getitem__(i),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table1DReduce(
                     ReduceOperator::Sum,
                     t.id(),
@@ -3813,10 +3913,10 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable1DPy(t);
-        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        let i = SetUnion::Const(SetConstPy::from(Set::with_capacity(10)));
         assert_eq!(
             t_py.product(i),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table1DReduce(
                     ReduceOperator::Product,
                     t.id(),
@@ -3833,10 +3933,10 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable1DPy(t);
-        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        let i = SetUnion::Const(SetConstPy::from(Set::with_capacity(10)));
         assert_eq!(
             t_py.max(i),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table1DReduce(
                     ReduceOperator::Max,
                     t.id(),
@@ -3853,10 +3953,10 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable1DPy(t);
-        let i = SetUnion::Const(SetConstPy::new(Set::with_capacity(10)));
+        let i = SetUnion::Const(SetConstPy::from(Set::with_capacity(10)));
         assert_eq!(
             t_py.min(i),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table1DReduce(
                     ReduceOperator::Min,
                     t.id(),
@@ -3872,7 +3972,7 @@ mod tests {
         let t = model.add_table_2d("t", vec![vec![1.5]]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(FloatTable2DPy::new(t), FloatTable2DPy(t));
+        assert_eq!(FloatTable2DPy::from(t), FloatTable2DPy(t));
     }
 
     #[test]
@@ -3886,7 +3986,7 @@ mod tests {
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.__getitem__((x, y)),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -3903,11 +4003,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.__getitem__((x, y)),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceX(
                     ReduceOperator::Sum,
                     t.id(),
@@ -3926,10 +4026,10 @@ mod tests {
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.__getitem__((x, y)),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceY(
                     ReduceOperator::Sum,
                     t.id(),
@@ -3947,11 +4047,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.__getitem__((x, y)),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduce(
                     ReduceOperator::Sum,
                     t.id(),
@@ -3973,7 +4073,7 @@ mod tests {
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.product(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -3990,11 +4090,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.product(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceX(
                     ReduceOperator::Product,
                     t.id(),
@@ -4013,10 +4113,10 @@ mod tests {
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.product(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceY(
                     ReduceOperator::Product,
                     t.id(),
@@ -4034,11 +4134,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.product(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduce(
                     ReduceOperator::Product,
                     t.id(),
@@ -4060,7 +4160,7 @@ mod tests {
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.max(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -4077,11 +4177,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.max(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceX(
                     ReduceOperator::Max,
                     t.id(),
@@ -4100,10 +4200,10 @@ mod tests {
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.max(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceY(
                     ReduceOperator::Max,
                     t.id(),
@@ -4121,11 +4221,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.max(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduce(
                     ReduceOperator::Max,
                     t.id(),
@@ -4147,7 +4247,7 @@ mod tests {
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.min(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -4164,11 +4264,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let y = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.min(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceX(
                     ReduceOperator::Min,
                     t.id(),
@@ -4187,10 +4287,10 @@ mod tests {
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.min(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduceY(
                     ReduceOperator::Min,
                     t.id(),
@@ -4208,11 +4308,11 @@ mod tests {
         assert!(t.is_ok());
         let t = t.unwrap();
         let t_py = FloatTable2DPy(t);
-        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let x = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         assert_eq!(
             t_py.min(x, y),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table2DReduce(
                     ReduceOperator::Min,
                     t.id(),
@@ -4229,7 +4329,7 @@ mod tests {
         let t = model.add_table_3d("t", vec![vec![vec![1.5]]]);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(FloatTable3DPy::new(t), FloatTable3DPy(t));
+        assert_eq!(FloatTable3DPy::from(t), FloatTable3DPy(t));
     }
 
     #[test]
@@ -4244,7 +4344,7 @@ mod tests {
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.__getitem__((x, y, z)),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table3D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -4263,11 +4363,11 @@ mod tests {
         let t = t.unwrap();
         let t_py = FloatTable3DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.__getitem__((x, y, z)),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table3DReduce(
                     ReduceOperator::Sum,
                     t.id(),
@@ -4293,7 +4393,7 @@ mod tests {
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.product(x, y, z),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table3D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -4312,11 +4412,11 @@ mod tests {
         let t = t.unwrap();
         let t_py = FloatTable3DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.product(x, y, z),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table3DReduce(
                     ReduceOperator::Product,
                     t.id(),
@@ -4342,7 +4442,7 @@ mod tests {
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.max(x, y, z),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table3D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -4361,11 +4461,11 @@ mod tests {
         let t = t.unwrap();
         let t_py = FloatTable3DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.max(x, y, z),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table3DReduce(
                     ReduceOperator::Max,
                     t.id(),
@@ -4391,7 +4491,7 @@ mod tests {
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.min(x, y, z),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table3D(
                     t.id(),
                     ElementExpression::Constant(0),
@@ -4410,11 +4510,11 @@ mod tests {
         let t = t.unwrap();
         let t_py = FloatTable3DPy(t);
         let x = ArgumentUnion::Element(ElementUnion::Const(0));
-        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10))));
+        let y = ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10))));
         let z = ArgumentUnion::Element(ElementUnion::Const(0));
         assert_eq!(
             t_py.min(x, y, z),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table3DReduce(
                     ReduceOperator::Min,
                     t.id(),
@@ -4434,7 +4534,7 @@ mod tests {
         let t = model.add_table("t", FxHashMap::default(), 0.0);
         assert!(t.is_ok());
         let t = t.unwrap();
-        assert_eq!(FloatTablePy::new(t), FloatTablePy(t));
+        assert_eq!(FloatTablePy::from(t), FloatTablePy(t));
     }
 
     #[test]
@@ -4452,7 +4552,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.__getitem__(index),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table(
                     t.id(),
                     vec![
@@ -4475,13 +4575,13 @@ mod tests {
         let t_py = FloatTablePy(t);
         let index = vec![
             ArgumentUnion::Element(ElementUnion::Const(0)),
-            ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10)))),
             ArgumentUnion::Element(ElementUnion::Const(0)),
             ArgumentUnion::Element(ElementUnion::Const(0)),
         ];
         assert_eq!(
             t_py.__getitem__(index),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::TableReduce(
                     ReduceOperator::Sum,
                     t.id(),
@@ -4513,7 +4613,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.product(index),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table(
                     t.id(),
                     vec![
@@ -4536,13 +4636,13 @@ mod tests {
         let t_py = FloatTablePy(t);
         let index = vec![
             ArgumentUnion::Element(ElementUnion::Const(0)),
-            ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10)))),
             ArgumentUnion::Element(ElementUnion::Const(0)),
             ArgumentUnion::Element(ElementUnion::Const(0)),
         ];
         assert_eq!(
             t_py.product(index),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::TableReduce(
                     ReduceOperator::Product,
                     t.id(),
@@ -4574,7 +4674,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.max(index),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table(
                     t.id(),
                     vec![
@@ -4597,13 +4697,13 @@ mod tests {
         let t_py = FloatTablePy(t);
         let index = vec![
             ArgumentUnion::Element(ElementUnion::Const(0)),
-            ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10)))),
             ArgumentUnion::Element(ElementUnion::Const(0)),
             ArgumentUnion::Element(ElementUnion::Const(0)),
         ];
         assert_eq!(
             t_py.max(index),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::TableReduce(
                     ReduceOperator::Max,
                     t.id(),
@@ -4635,7 +4735,7 @@ mod tests {
         ];
         assert_eq!(
             t_py.min(index),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::Table(
                     t.id(),
                     vec![
@@ -4658,13 +4758,13 @@ mod tests {
         let t_py = FloatTablePy(t);
         let index = vec![
             ArgumentUnion::Element(ElementUnion::Const(0)),
-            ArgumentUnion::Set(SetUnion::Const(SetConstPy::new(Set::with_capacity(10)))),
+            ArgumentUnion::Set(SetUnion::Const(SetConstPy::from(Set::with_capacity(10)))),
             ArgumentUnion::Element(ElementUnion::Const(0)),
             ArgumentUnion::Element(ElementUnion::Const(0)),
         ];
         assert_eq!(
             t_py.min(index),
-            FloatExprPy::new(ContinuousExpression::Table(Box::new(
+            FloatExprPy::from(ContinuousExpression::Table(Box::new(
                 NumericTableExpression::TableReduce(
                     ReduceOperator::Min,
                     t.id(),

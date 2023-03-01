@@ -8,11 +8,17 @@ use rustc_hash::{FxHashMap, FxHashSet};
 /// Tables of constants.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct TableRegistry {
+    /// Integer tables.
     pub integer_tables: TableData<Integer>,
+    /// Continuous tables.
     pub continuous_tables: TableData<Continuous>,
+    /// Set tables.
     pub set_tables: TableData<Set>,
+    /// Vector tables.
     pub vector_tables: TableData<Vector>,
+    /// Element tables.
     pub element_tables: TableData<Element>,
+    /// Bool tables.
     pub bool_tables: TableData<bool>,
 }
 

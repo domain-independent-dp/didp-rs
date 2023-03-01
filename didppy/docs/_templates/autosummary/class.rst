@@ -4,7 +4,6 @@
 
 .. autoclass:: {{ objname }}
    :members:
-   :special-members:
    :exclude-members: __init__, __new__, __hash__
 
    {% block methods %}

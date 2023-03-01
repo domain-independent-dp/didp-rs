@@ -22,7 +22,11 @@ pub struct BeamSearchParameters<T, U> {
     pub f_pruning: bool,
     /// Bound for the f-value.
     pub f_bound: Option<U>,
-    /// Keep nodes in all layers.
+    /// Keep nodes in all layers for duplicate detection.
+    ///
+    /// Beam search searches layer by layer, where the i th layer contains states that can be reached with i transitions.
+    /// By default, this solver only keeps states in the current layer to check for duplicates.
+    /// If `keep_all_layers` is `true`, this solver keeps states in all layers to check for duplicates.
     pub keep_all_layers: bool,
     /// Common parameters.
     pub parameters: util::Parameters<T>,
@@ -30,9 +34,58 @@ pub struct BeamSearchParameters<T, U> {
 
 /// Performs beam search.
 ///
+/// This function uses forward search based on the shortest path problem.
+/// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
+/// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
+///
 /// The f-value, the priority of a node, is computed by f_evaluator, which is a function of the g-value, the h-value, and the state.
 /// The h-value is computed by h_evaluator.
-/// At each depth, the top beam_size nodes minimizing (maximizing) the f-values are kept if maximize = false (true).
+/// At each depth, the top beam_size nodes minimizing (maximizing) the f-values are kept if `maximize == false` (`true`).
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::{beam_search, BeamSearchParameters, Search};
+/// use dypdl_heuristic_search::search_algorithm::data_structure::beam::Beam;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::{
+///     BeamSearchNode, BeamSearchProblemInstance, TransitionWithCustomCost,
+/// };
+/// use dypdl_heuristic_search::search_algorithm::data_structure::successor_generator::{
+///     SuccessorGenerator
+/// };
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+/// model.add_base_case(
+///     vec![Condition::comparison_i(ComparisonOperator::Ge, variable, 1)]
+/// ).unwrap();
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 1);
+/// increment.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(increment.clone()).unwrap();
+///
+/// let h_evaluator = |_: &_, _: &_| Some(0);
+/// let f_evaluator = |g, h, _: &_, _: &_| g + h;
+///
+/// let model = Rc::new(model);
+/// let generator = SuccessorGenerator::from_model_without_custom_cost(model.clone(), false);
+/// let problem = BeamSearchProblemInstance {
+///     target: model.target.clone().into(),
+///     generator,
+///     cost: 0,
+///     g: 0,
+///     solution_suffix: &[],
+/// };
+/// let parameters = BeamSearchParameters { beam_size: 1, ..Default::default() };
+/// let beam_constructor = |beam_size| Beam::<_, _, BeamSearchNode<_, _>>::new(beam_size);
+/// let solution = beam_search(&problem, &beam_constructor, h_evaluator, f_evaluator, parameters);
+/// assert_eq!(solution.cost, Some(1));
+/// assert_eq!(solution.transitions.len(), 1);
+/// assert_eq!(Transition::from(solution.transitions[0].clone()), increment);
+/// assert!(!solution.is_infeasible);
+/// ```
 pub fn beam_search<T, U, I, B, C, H, F>(
     problem: &BeamSearchProblemInstance<T, U>,
     beam_constructor: &C,

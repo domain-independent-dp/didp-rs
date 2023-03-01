@@ -11,12 +11,13 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::rc::Rc;
 
-/// A trait representing state information in beam.
-pub trait InformationInBeam<
+/// State information in beam.
+pub trait InformationInBeam<T, U, K = Rc<HashableSignatureVariables>>:
+    Ord + StateInformation<T, K> + PrioritizedNode<U> + InBeam
+where
     T: Numeric,
     U: Numeric,
-    K: Hash + Eq + Clone + Debug = Rc<HashableSignatureVariables>,
->: Ord + StateInformation<T, K> + PrioritizedNode<U> + InBeam
+    K: Hash + Eq + Clone + Debug,
 {
 }
 
@@ -29,7 +30,7 @@ pub trait InBeam {
     fn remove_from_beam(&self);
 }
 
-/// An draining iterator for `BeamBeam`
+/// An draining iterator for `Beam`
 pub struct BeamDrain<'a, I: InBeam, V: Ord + Deref<Target = I>> {
     queue_iter: collections::binary_heap::Drain<'a, V>,
 }
@@ -46,14 +47,22 @@ impl<'a, I: InBeam, V: Ord + Deref<Target = I>> Iterator for BeamDrain<'a, I, V>
 }
 
 /// Trait representing beam.
+///
+/// It keeps the best `capacity` nodes according to some criteria based on the f- and g-values.
 pub trait BeamInterface<
+    T,
+    U,
+    I,
+    V = Rc<I>,
+    K = Rc<HashableSignatureVariables>,
+    R = Rc<dypdl::Model>,
+> where
     T: Numeric,
     U: Numeric,
     I: InformationInBeam<T, U, K>,
-    V: Deref<Target = I> + From<I> + Clone + Ord = Rc<I>,
-    K: Hash + Eq + Clone + Debug = Rc<HashableSignatureVariables>,
-    R: Deref<Target = dypdl::Model> = Rc<dypdl::Model>,
->
+    V: Deref<Target = I> + From<I> + Clone + Ord,
+    K: Hash + Eq + Clone + Debug,
+    R: Deref<Target = dypdl::Model>,
 {
     /// Returns true if no state in beam and false otherwise.
     fn is_empty(&self) -> bool;
@@ -65,6 +74,7 @@ pub trait BeamInterface<
     fn drain(&mut self) -> BeamDrain<'_, I, V>;
 
     /// Insert a node if it is not dominated  and its f-value is sufficient.
+    ///
     /// The first returned value represents if a new search node (not an update version of an existing node) is generated.
     /// The second returned value represents if the pruning due to the beam size happened.
     fn insert<F>(
@@ -98,14 +108,85 @@ impl<I: InBeam, V: Ord + Deref<Target = I>> BeamBase<I, V> {
 }
 
 /// Beam for beam search.
+///
+/// It only keeps the best `capacity` nodes that minimizes the f-value.
+/// If the f-values are the same, it prefers a node with a larger g-value.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::BeamSearchNode;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::state_registry::*;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::beam::*;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::CustomCostNodeInterface;
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let signature = model.add_integer_variable("signature", 1).unwrap();
+/// let resource = model.add_integer_resource_variable("resource", false, 1).unwrap();
+/// let parent = StateInRegistry::<Rc<_>>::from(model.target.clone());
+/// let parent_cost = 0;
+///
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 2);
+/// increment.add_effect(signature, signature + 1).unwrap();
+///
+/// let mut decrement = Transition::new("decrement");
+/// decrement.set_cost(IntegerExpression::Cost + 3);
+/// decrement.add_effect(signature, signature - 1).unwrap();
+///
+/// let mut produce = Transition::new("produce");
+/// produce.set_cost(IntegerExpression::Cost + 1);
+/// produce.add_effect(signature, signature + 1).unwrap();
+/// produce.add_effect(resource, resource + 1).unwrap();
+///
+/// let model = Rc::new(model);
+/// let mut registry = StateRegistry::<_, BeamSearchNode<_, _>>::new(model.clone());
+/// let constructor = |state, cost, _: Option<&_>| {
+///     Some(BeamSearchNode::new(cost, cost, state, cost, None, None))
+/// };
+///
+/// let mut beam = Beam::new(1);
+/// assert!(BeamInterface::<_, _, _>::is_empty(&beam));
+/// assert_eq!(BeamInterface::<_, _, _>::capacity(&beam), 1);
+///
+/// let state: StateInRegistry = increment.apply(&parent, &model.table_registry);
+/// let cost = increment.eval_cost(parent_cost, &parent, &model.table_registry);
+/// let (generated, pruned) = beam.insert(&mut registry, state, cost, cost, cost, constructor);
+/// assert!(generated);
+/// assert!(!pruned);
+///
+/// let state: StateInRegistry = decrement.apply(&parent, &model.table_registry);
+/// let cost = increment.eval_cost(parent_cost, &parent, &model.table_registry);
+/// let (generated, pruned) = beam.insert(&mut registry, state, cost, cost, cost, constructor);
+/// assert!(!generated);
+/// assert!(pruned);
+///
+/// let state: StateInRegistry = produce.apply(&parent, &model.table_registry);
+/// let cost = produce.eval_cost(parent_cost, &parent, &model.table_registry);
+/// let (generated, pruned) = beam.insert(&mut registry, state.clone(), cost, cost, cost, constructor);
+/// assert!(!generated);
+/// assert!(!pruned);
+///
+/// let expected = Rc::new(BeamSearchNode { g: cost, f: cost, state, cost, ..Default::default() });
+/// let mut iter = BeamInterface::<_, _, _>::drain(&mut beam);
+/// let node = iter.next().unwrap();
+/// assert_eq!(node.g, expected.g);
+/// assert_eq!(node.f, expected.f);
+/// assert_eq!(node.state, expected.state);
+/// assert_eq!(node.cost, expected.cost);
+/// assert_eq!(iter.next(), None);
+/// ```
 #[derive(Debug, Clone)]
-pub struct Beam<
+pub struct Beam<T, U, I, V = Rc<I>, K = Rc<HashableSignatureVariables>>
+where
     T: Numeric,
     U: Numeric + Ord,
     I: InformationInBeam<T, U, K>,
-    V: Deref<Target = I> + From<I> + Clone + Ord = Rc<I>,
-    K: Hash + Eq + Clone + Debug = Rc<HashableSignatureVariables>,
-> {
+    V: Deref<Target = I> + From<I> + Clone + Ord,
+    K: Hash + Eq + Clone + Debug,
+{
     /// Capacity of the beam, or the beam size.
     pub capacity: usize,
     size: usize,
@@ -121,6 +202,7 @@ where
     V: Deref<Target = I> + From<I> + Clone + Ord,
     K: Hash + Eq + Clone + Debug,
 {
+    /// Creates a new beam with a given capacity.
     #[inline]
     pub fn new(capacity: usize) -> Beam<T, U, I, V, K> {
         Beam {
@@ -133,6 +215,7 @@ where
         }
     }
 
+    /// Removes a node having the lowest priority from the beam.
     pub fn pop(&mut self) -> Option<V> {
         self.beam.queue.pop().map(|node| {
             node.remove_from_beam();

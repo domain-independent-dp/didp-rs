@@ -1,13 +1,14 @@
 use std::error::Error;
 use std::fmt;
 
-/// A struct representing an error in modeling.
+/// Error in modeling.
 #[derive(Debug)]
 pub struct ModelErr(String);
 
 impl ModelErr {
+    /// Creates a new error.
     pub fn new(message: String) -> ModelErr {
-        ModelErr(format!("Error in problem definiton: {}", message))
+        ModelErr(format!("Error in problem definition: {}", message))
     }
 }
 

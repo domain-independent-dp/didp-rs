@@ -21,7 +21,7 @@ use crate::variable_type::{Continuous, Integer};
 use std::boxed::Box;
 use std::ops;
 
-/// Numeric expression with the continuous value type.
+/// Continuous numeric expression.
 #[derive(Debug, PartialEq, Clone)]
 pub enum ContinuousExpression {
     /// Constant.
@@ -73,6 +73,7 @@ pub enum ContinuousExpression {
 }
 
 impl Default for ContinuousExpression {
+    /// Returns an expression representing a constant zero.
     #[inline]
     fn default() -> Self {
         Self::Constant(0.0)
@@ -129,37 +130,121 @@ impl From<IntegerResourceVariable> for ContinuousExpression {
 }
 
 impl ContinuousExpression {
-    /// Retruns the absolute value.
+    /// Returns an expression representing the abstract value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let expression = ContinuousExpression::from(-1.5);
+    /// let expression = expression.abs();
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 1.5);
+    /// ```
     #[inline]
     pub fn abs(self) -> ContinuousExpression {
         Self::UnaryOperation(UnaryOperator::Abs, Box::new(self))
     }
 
-    /// Retruns the square root.
+    /// Returns an expression representing the square root.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let expression = ContinuousExpression::from(4.0);
+    /// let expression = expression.sqrt();
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// ```
     #[inline]
     pub fn sqrt(self) -> ContinuousExpression {
         Self::ContinuousUnaryOperation(ContinuousUnaryOperator::Sqrt, Box::new(self))
     }
 
-    /// Retruns the floor.
+    /// Returns an expression representing the floor.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let expression = ContinuousExpression::from(1.5);
+    /// let expression = expression.floor();
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 1.0);
+    /// ```
     #[inline]
     pub fn floor(self) -> ContinuousExpression {
         Self::Round(CastOperator::Floor, Box::new(self))
     }
 
-    /// Retruns the ceiling.
+    /// Returns an expression representing the ceiling.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let expression = ContinuousExpression::from(1.5);
+    /// let expression = expression.ceil();
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// ```
     #[inline]
     pub fn ceil(self) -> ContinuousExpression {
         Self::Round(CastOperator::Ceil, Box::new(self))
     }
 
-    /// Retruns the rounded value.
+    /// Returns an expression representing the rounded value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let expression = ContinuousExpression::from(1.5);
+    /// let expression = expression.round();
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// ```
     #[inline]
     pub fn round(self) -> ContinuousExpression {
         Self::Round(CastOperator::Round, Box::new(self))
     }
 
-    /// Retruns the truncated value.
+    /// Returns an expression representing the truncated value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let expression = ContinuousExpression::from(1.5);
+    /// let expression = expression.trunc();
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 1.0);
+    /// ```
     #[inline]
     pub fn trunc(self) -> ContinuousExpression {
         Self::Round(CastOperator::Trunc, Box::new(self))
@@ -169,6 +254,21 @@ impl ContinuousExpression {
 impl ops::Neg for ContinuousExpression {
     type Output = ContinuousExpression;
 
+    /// Returns an expression representing the negative value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let expression = ContinuousExpression::from(1.5);
+    /// let expression = -expression;
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), -1.5);
+    /// ```
     #[inline]
     fn neg(self) -> Self::Output {
         Self::UnaryOperation(UnaryOperator::Neg, Box::new(self))
@@ -178,6 +278,22 @@ impl ops::Neg for ContinuousExpression {
 impl ops::Add for ContinuousExpression {
     type Output = ContinuousExpression;
 
+    /// Returns an expression representing the addition.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ContinuousExpression::from(0.2);
+    /// let b = ContinuousExpression::from(0.3);
+    /// let expression = a + b;
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// ```
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
         ContinuousExpression::BinaryOperation(BinaryOperator::Add, Box::new(self), Box::new(rhs))
@@ -187,6 +303,22 @@ impl ops::Add for ContinuousExpression {
 impl ops::Sub for ContinuousExpression {
     type Output = ContinuousExpression;
 
+    /// Returns an expression representing the subtraction.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ContinuousExpression::from(0.2);
+    /// let b = ContinuousExpression::from(0.3);
+    /// let expression = a - b;
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), -0.1);
+    /// ```
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
         ContinuousExpression::BinaryOperation(BinaryOperator::Sub, Box::new(self), Box::new(rhs))
@@ -196,6 +328,22 @@ impl ops::Sub for ContinuousExpression {
 impl ops::Mul for ContinuousExpression {
     type Output = ContinuousExpression;
 
+    /// Returns an expression representing the multiplication.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ContinuousExpression::from(0.2);
+    /// let b = ContinuousExpression::from(0.3);
+    /// let expression = a * b;
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.06);
+    /// ```
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         ContinuousExpression::BinaryOperation(BinaryOperator::Mul, Box::new(self), Box::new(rhs))
@@ -205,6 +353,22 @@ impl ops::Mul for ContinuousExpression {
 impl ops::Div for ContinuousExpression {
     type Output = ContinuousExpression;
 
+    /// Returns an expression representing the division.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ContinuousExpression::from(0.2);
+    /// let b = ContinuousExpression::from(0.3);
+    /// let expression = a / b;
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0 / 3.0);
+    /// ```
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
         ContinuousExpression::BinaryOperation(BinaryOperator::Div, Box::new(self), Box::new(rhs))
@@ -214,6 +378,22 @@ impl ops::Div for ContinuousExpression {
 impl ops::Rem for ContinuousExpression {
     type Output = ContinuousExpression;
 
+    /// Returns an expression representing the remainder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ContinuousExpression::from(0.2);
+    /// let b = ContinuousExpression::from(0.3);
+    /// let expression = a % b;
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// ```
     #[inline]
     fn rem(self, rhs: Self) -> Self::Output {
         ContinuousExpression::BinaryOperation(BinaryOperator::Rem, Box::new(self), Box::new(rhs))
@@ -223,11 +403,43 @@ impl ops::Rem for ContinuousExpression {
 impl MaxMin for ContinuousExpression {
     type Output = ContinuousExpression;
 
+    /// Returns an expression representing the maximum.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ContinuousExpression::from(0.2);
+    /// let b = ContinuousExpression::from(0.3);
+    /// let expression = a.max(b);
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.3);
+    /// ```
     #[inline]
     fn max(self, rhs: Self) -> Self::Output {
         ContinuousExpression::BinaryOperation(BinaryOperator::Max, Box::new(self), Box::new(rhs))
     }
 
+    /// Returns an expression representing the minimum.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ContinuousExpression::from(0.2);
+    /// let b = ContinuousExpression::from(0.3);
+    /// let expression = a.min(b);
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// ```
     #[inline]
     fn min(self, rhs: Self) -> Self::Output {
         ContinuousExpression::BinaryOperation(BinaryOperator::Min, Box::new(self), Box::new(rhs))
@@ -237,6 +449,22 @@ impl MaxMin for ContinuousExpression {
 impl ContinuousBinaryOperation for ContinuousExpression {
     type Output = ContinuousExpression;
 
+    /// Returns an expression representing the power.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ContinuousExpression::from(2.0);
+    /// let b = ContinuousExpression::from(-1.0);
+    /// let expression = a.pow(b);
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// ```
     #[inline]
     fn pow(self, rhs: Self) -> Self::Output {
         ContinuousExpression::ContinuousBinaryOperation(
@@ -246,6 +474,22 @@ impl ContinuousBinaryOperation for ContinuousExpression {
         )
     }
 
+    /// Returns an expression representing the logarithm.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ContinuousExpression::from(4.0);
+    /// let b = ContinuousExpression::from(2.0);
+    /// let expression = a.log(b);
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// ```
     #[inline]
     fn log(self, rhs: Self) -> Self::Output {
         ContinuousExpression::ContinuousBinaryOperation(
@@ -257,7 +501,24 @@ impl ContinuousBinaryOperation for ContinuousExpression {
 }
 
 impl SetExpression {
-    /// Returns the cardinalty.
+    /// Returns an expression representing the cardinality of a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = SetExpression::from(set);
+    /// let expression = expression.len_continuous();
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// ```
     #[inline]
     pub fn len_continuous(self) -> ContinuousExpression {
         ContinuousExpression::Cardinality(self)
@@ -265,7 +526,24 @@ impl SetExpression {
 }
 
 impl SetVariable {
-    /// Returns the cardinalty.
+    /// Returns an expression representing the cardinality of a set.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = variable.len_continuous();
+    ///
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// ```
     #[inline]
     pub fn len_continuous(self) -> ContinuousExpression {
         ContinuousExpression::Cardinality(SetExpression::from(self))
@@ -274,6 +552,22 @@ impl SetVariable {
 
 impl Table1DHandle<Continuous> {
     /// Returns a constant in a 1D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![0.2, 0.3]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.element(variable);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// ```
     #[inline]
     pub fn element<T>(&self, x: T) -> ContinuousExpression
     where
@@ -286,6 +580,21 @@ impl Table1DHandle<Continuous> {
     }
 
     /// Returns the sum of constants over a set expression in a 1D continuous table.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![0.2, 0.3]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.sum(variable);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// ```
     #[inline]
     pub fn sum<T>(&self, x: T) -> ContinuousExpression
     where
@@ -299,6 +608,23 @@ impl Table1DHandle<Continuous> {
     }
 
     /// Returns the product of constants over a set expression in a 1D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![0.2, 0.3]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.product(variable);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.06);
+    /// ```
     #[inline]
     pub fn product<T>(&self, x: T) -> ContinuousExpression
     where
@@ -312,6 +638,23 @@ impl Table1DHandle<Continuous> {
     }
 
     /// Returns the maximum of constants over a set expression in a 1D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![0.2, 0.3]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.max(variable);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.3);
+    /// ```
     #[inline]
     pub fn max<T>(&self, x: T) -> ContinuousExpression
     where
@@ -325,6 +668,23 @@ impl Table1DHandle<Continuous> {
     }
 
     /// Returns the minimum of constants over a set expression in a 1D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![0.2, 0.3]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.min(variable);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// ```
     #[inline]
     pub fn min<T>(&self, x: T) -> ContinuousExpression
     where
@@ -340,6 +700,22 @@ impl Table1DHandle<Continuous> {
 
 impl Table2DHandle<Continuous> {
     /// Returns a constant in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.element(variable, 1);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.3);
+    /// ```
     #[inline]
     pub fn element<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -354,6 +730,24 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the sum of constants over a set expression in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_set_variable("x", object_type, set).unwrap();
+    /// let y = model.add_element_variable("y", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.sum_x(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.6);
+    /// ```
     #[inline]
     pub fn sum_x<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -369,6 +763,24 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the sum of constants over a set expression in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.add_element_variable("x", object_type, 0).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.sum_y(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// ```
     #[inline]
     pub fn sum_y<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -384,6 +796,23 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the sum of constants over two set expressions in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.sum(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 1.4);
+    /// ```
     #[inline]
     pub fn sum<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -399,6 +828,24 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the product of constants over a set expression in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_set_variable("x", object_type, set).unwrap();
+    /// let y = model.add_element_variable("y", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.product_x(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.08);
+    /// ```
     #[inline]
     pub fn product_x<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -414,6 +861,24 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the product of constants over a set expression in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.add_element_variable("x", object_type, 0).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.product_y(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.06);
+    /// ```
     #[inline]
     pub fn product_y<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -429,6 +894,23 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the product of constants over two set expressions in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.product(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.012);
+    /// ```
     #[inline]
     pub fn product<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -444,6 +926,24 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the maximum of constants over a set expression in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_set_variable("x", object_type, set).unwrap();
+    /// let y = model.add_element_variable("y", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.max_x(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.4);
+    /// ```
     #[inline]
     pub fn max_x<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -459,6 +959,24 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the maximum of constants over a set expression in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.add_element_variable("x", object_type, 0).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.max_y(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.3);
+    /// ```
     #[inline]
     pub fn max_y<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -474,6 +992,23 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the maximum of constants over two set expressions in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.max(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// ```
     #[inline]
     pub fn max<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -489,6 +1024,24 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the minimum of constants over a set expression in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let x = model.add_set_variable("x", object_type, set).unwrap();
+    /// let y = model.add_element_variable("y", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.min_x(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// ```
     #[inline]
     pub fn min_x<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -504,6 +1057,24 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the minimum of constants over a set expression in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.add_element_variable("x", object_type, 0).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.min_y(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// ```
     #[inline]
     pub fn min_y<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -519,6 +1090,23 @@ impl Table2DHandle<Continuous> {
     }
 
     /// Returns the minimum of constants over two set expressions in a 2D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![0.2, 0.3], vec![0.4, 0.5]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let x = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.min(x, y);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// ```
     #[inline]
     pub fn min<T, U>(&self, x: T, y: U) -> ContinuousExpression
     where
@@ -536,6 +1124,28 @@ impl Table2DHandle<Continuous> {
 
 impl Table3DHandle<Continuous> {
     /// Returns a constant in a 3D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![
+    ///         vec![vec![0.2, 0.3], vec![0.4, 0.5]],
+    ///         vec![vec![0.6, 0.7], vec![0.8, 0.9]]
+    ///     ]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.element(variable, variable + 1, 1);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// ```
     #[inline]
     pub fn element<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
     where
@@ -552,6 +1162,33 @@ impl Table3DHandle<Continuous> {
     }
 
     /// Returns the sum of constants over set expressions in a 3D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![
+    ///         vec![vec![0.2, 0.3], vec![0.4, 0.5]],
+    ///         vec![vec![0.6, 0.7], vec![0.8, 0.9]]
+    ///     ]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.sum(set_variable, element_variable, 1);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 1.0);
+    ///
+    /// let expression = table.sum(set, set_variable, set_variable);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 4.4);
+    /// ```
     #[inline]
     pub fn sum<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
     where
@@ -569,6 +1206,33 @@ impl Table3DHandle<Continuous> {
     }
 
     /// Returns the product of constants over set expressions in a 3D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![
+    ///         vec![vec![0.2, 0.3], vec![0.4, 0.5]],
+    ///         vec![vec![0.6, 0.7], vec![0.8, 0.9]]
+    ///     ]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.product(set_variable, element_variable, 1);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.21);
+    ///
+    /// let expression = table.product(set, set_variable, set_variable);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.0036288);
+    /// ```
     #[inline]
     pub fn product<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
     where
@@ -586,6 +1250,33 @@ impl Table3DHandle<Continuous> {
     }
 
     /// Returns the maximum of constants over set expressions in a 3D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![
+    ///         vec![vec![0.2, 0.3], vec![0.4, 0.5]],
+    ///         vec![vec![0.6, 0.7], vec![0.8, 0.9]]
+    ///     ]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.max(set_variable, element_variable, 1);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.7);
+    ///
+    /// let expression = table.max(set, set_variable, set_variable);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.9);
+    /// ```
     #[inline]
     pub fn max<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
     where
@@ -603,6 +1294,33 @@ impl Table3DHandle<Continuous> {
     }
 
     /// Returns the minimum of constants over set expressions in a 3D continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![
+    ///         vec![vec![0.2, 0.3], vec![0.4, 0.5]],
+    ///         vec![vec![0.6, 0.7], vec![0.8, 0.9]]
+    ///     ]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.min(set_variable, element_variable, 1);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.3);
+    ///
+    /// let expression = table.min(set, set_variable, set_variable);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// ```
     #[inline]
     pub fn min<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
     where
@@ -622,6 +1340,29 @@ impl Table3DHandle<Continuous> {
 
 impl TableHandle<Continuous> {
     /// Returns a constant in a continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 0.1), (vec![1, 1, 1, 1], 0.2)]);
+    /// let table = model.add_table("table", map, 0.0).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ElementExpression::from(variable),
+    ///     ElementExpression::from(0),
+    ///     ElementExpression::from(0),
+    ///     ElementExpression::from(0),
+    /// ];
+    /// let expression = table.element(indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 0.1);
+    /// ```
     #[inline]
     pub fn element<T>(&self, index: Vec<T>) -> ContinuousExpression
     where
@@ -632,6 +1373,32 @@ impl TableHandle<Continuous> {
     }
 
     /// Returns the sum of constants over set expressions in a continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 0.1), (vec![1, 1, 1, 1], 0.2)]);
+    /// let table = model.add_table("table", map, 0.0).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(set),
+    ///     ArgumentExpression::from(set_variable),
+    ///     ArgumentExpression::from(element_variable),
+    ///     ArgumentExpression::from(0),
+    /// ];
+    /// let expression = table.sum(indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 0.1);
+    /// ```
     #[inline]
     pub fn sum<T>(&self, index: Vec<T>) -> ContinuousExpression
     where
@@ -646,6 +1413,32 @@ impl TableHandle<Continuous> {
     }
 
     /// Returns the product of constants over set expressions in a continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 0.1), (vec![1, 1, 1, 1], 0.2)]);
+    /// let table = model.add_table("table", map, 0.0).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(set),
+    ///     ArgumentExpression::from(set_variable),
+    ///     ArgumentExpression::from(element_variable),
+    ///     ArgumentExpression::from(0),
+    /// ];
+    /// let expression = table.product(indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 0.0);
+    /// ```
     #[inline]
     pub fn product<T>(&self, index: Vec<T>) -> ContinuousExpression
     where
@@ -660,6 +1453,32 @@ impl TableHandle<Continuous> {
     }
 
     /// Returns the maximum of constants over set expressions in a continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 0.1), (vec![1, 1, 1, 1], 0.2)]);
+    /// let table = model.add_table("table", map, 0.0).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(set),
+    ///     ArgumentExpression::from(set_variable),
+    ///     ArgumentExpression::from(element_variable),
+    ///     ArgumentExpression::from(0),
+    /// ];
+    /// let expression = table.max(indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 0.1);
+    /// ```
     #[inline]
     pub fn max<T>(&self, index: Vec<T>) -> ContinuousExpression
     where
@@ -674,6 +1493,32 @@ impl TableHandle<Continuous> {
     }
 
     /// Returns the minimum of constants over set expressions in a continuous table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 0.1), (vec![1, 1, 1, 1], 0.2)]);
+    /// let table = model.add_table("table", map, 0.0).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
+    /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(set),
+    ///     ArgumentExpression::from(set_variable),
+    ///     ArgumentExpression::from(element_variable),
+    ///     ArgumentExpression::from(0),
+    /// ];
+    /// let expression = table.min(indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 0.0);
+    /// ```
     #[inline]
     pub fn min<T>(&self, index: Vec<T>) -> ContinuousExpression
     where
@@ -705,37 +1550,37 @@ impl IfThenElse<ContinuousExpression> for Condition {
 macro_rules! impl_unary_ops {
     ($T:ty) => {
         impl $T {
-            /// Returns the absolute value.
+            /// Returns an expression representing the absolute value
             #[inline]
             pub fn abs(self) -> ContinuousExpression {
                 ContinuousExpression::from(self).abs()
             }
 
-            /// Returns the square root.
+            /// Returns an expression representing the square root.
             #[inline]
             pub fn sqrt(self) -> ContinuousExpression {
                 ContinuousExpression::from(self).sqrt()
             }
 
-            /// Returns the floor.
+            /// Returns an expression representing the floor.
             #[inline]
             pub fn floor(self) -> ContinuousExpression {
                 ContinuousExpression::from(self).floor()
             }
 
-            /// Returns the ceiling.
+            /// Returns an expression representing the ceiling.
             #[inline]
             pub fn ceil(self) -> ContinuousExpression {
                 ContinuousExpression::from(self).ceil()
             }
 
-            /// Returns the rounded value.
+            /// Returns an expression representing the rounded value.
             #[inline]
             pub fn round(self) -> ContinuousExpression {
                 ContinuousExpression::from(self).round()
             }
 
-            /// Returns the truncated value.
+            /// Returns an expression representing the truncated value.
             #[inline]
             pub fn trunc(self) -> ContinuousExpression {
                 ContinuousExpression::from(self).trunc()
@@ -745,6 +1590,7 @@ macro_rules! impl_unary_ops {
         impl ops::Neg for $T {
             type Output = ContinuousExpression;
 
+            /// Returns an expression representing the negative value.
             #[inline]
             fn neg(self) -> Self::Output {
                 -ContinuousExpression::from(self)
@@ -758,6 +1604,7 @@ macro_rules! impl_binary_ops {
         impl ops::Add<$U> for $T {
             type Output = ContinuousExpression;
 
+            /// Returns an expression representing the addition.
             #[inline]
             fn add(self, rhs: $U) -> ContinuousExpression {
                 ContinuousExpression::from(self) + ContinuousExpression::from(rhs)
@@ -767,6 +1614,7 @@ macro_rules! impl_binary_ops {
         impl ops::Sub<$U> for $T {
             type Output = ContinuousExpression;
 
+            /// Returns an expression representing the subtraction.
             #[inline]
             fn sub(self, rhs: $U) -> ContinuousExpression {
                 ContinuousExpression::from(self) - ContinuousExpression::from(rhs)
@@ -776,6 +1624,7 @@ macro_rules! impl_binary_ops {
         impl ops::Mul<$U> for $T {
             type Output = ContinuousExpression;
 
+            /// Returns an expression representing the multiplication.
             #[inline]
             fn mul(self, rhs: $U) -> ContinuousExpression {
                 ContinuousExpression::from(self) * ContinuousExpression::from(rhs)
@@ -785,6 +1634,7 @@ macro_rules! impl_binary_ops {
         impl ops::Div<$U> for $T {
             type Output = ContinuousExpression;
 
+            /// Returns an expression representing the division.
             #[inline]
             fn div(self, rhs: $U) -> ContinuousExpression {
                 ContinuousExpression::from(self) / ContinuousExpression::from(rhs)
@@ -794,6 +1644,7 @@ macro_rules! impl_binary_ops {
         impl ops::Rem<$U> for $T {
             type Output = ContinuousExpression;
 
+            /// Returns an expression representing the remainder.
             #[inline]
             fn rem(self, rhs: $U) -> ContinuousExpression {
                 ContinuousExpression::from(self) % ContinuousExpression::from(rhs)
@@ -883,6 +1734,20 @@ impl ContinuousExpression {
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_continuous_variable("variable", 0.1).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = ContinuousExpression::from(variable);
+    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.1);
+    /// ```
     #[inline]
     pub fn eval<U: StateInterface>(&self, state: &U, registry: &TableRegistry) -> Continuous {
         self.eval_inner(None, state, registry)
@@ -893,6 +1758,19 @@ impl ContinuousExpression {
     /// # Panics
     ///
     /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use approx::assert_relative_eq;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = ContinuousExpression::Cost + 0.1;
+    /// assert_relative_eq!(expression.eval_cost(0.1, &state, &model.table_registry), 0.2);
+    /// ```
     #[inline]
     pub fn eval_cost<U: StateInterface>(
         &self,

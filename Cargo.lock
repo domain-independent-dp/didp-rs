@@ -37,7 +37,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "didp-yaml"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "approx",
  "dypdl",
@@ -54,17 +54,18 @@ dependencies = [
 
 [[package]]
 name = "didppy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dypdl",
  "dypdl-heuristic-search",
  "pyo3",
+ "pyo3-build-config",
  "rustc-hash",
 ]
 
 [[package]]
 name = "dypdl"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "approx",
  "fixedbitset",
@@ -75,7 +76,7 @@ dependencies = [
 
 [[package]]
 name = "dypdl-heuristic-search"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dypdl",
  "ordered-float",

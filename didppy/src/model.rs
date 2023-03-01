@@ -1,19 +1,22 @@
 //! A module for modeling.
-
 mod expression;
+mod state;
 mod table;
 mod transition;
 
 use dypdl::prelude::*;
+use dypdl::variable_type::{OrderedContinuous, ToNumeric};
 pub use expression::*;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
 use rustc_hash::FxHashMap;
+pub use state::StatePy;
 use std::collections::HashSet;
 pub use table::*;
-pub use transition::{CostUnion, TransitionPy};
+pub use transition::{CostUnion, IntOrFloat, TransitionPy};
 
-/// A class representing an object type.
+/// Object type.
+/// This class is used to define :class:`ElementVar`, :class:`ElementResourceVar`, :class:`SetVar`, and :class:`SetConst`.
 #[pyclass(name = "ObjectType")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ObjectTypePy(ObjectType);
@@ -24,9 +27,9 @@ impl From<ObjectTypePy> for ObjectType {
     }
 }
 
-impl ObjectTypePy {
-    pub fn new(object: ObjectType) -> ObjectTypePy {
-        ObjectTypePy(object)
+impl From<ObjectType> for ObjectTypePy {
+    fn from(ob: ObjectType) -> Self {
+        Self(ob)
     }
 }
 
@@ -56,25 +59,6 @@ pub enum TargetArgUnion {
     Float(Continuous),
     #[pyo3(transparent)]
     Set(TargetSetArgUnion),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum TargetReturnUnion {
-    Element(Element),
-    Int(Integer),
-    Float(Continuous),
-    Set(SetConstPy),
-}
-
-impl IntoPy<Py<PyAny>> for TargetReturnUnion {
-    fn into_py(self, py: Python<'_>) -> Py<PyAny> {
-        match self {
-            Self::Element(value) => value.into_py(py),
-            Self::Int(value) => value.into_py(py),
-            Self::Float(value) => value.into_py(py),
-            Self::Set(value) => value.into_py(py),
-        }
-    }
 }
 
 #[derive(FromPyObject, Debug, Clone, PartialEq, Eq)]
@@ -316,6 +300,7 @@ impl IntoPy<Py<PyAny>> for FloatTableUnion {
     }
 }
 
+#[allow(rustdoc::broken_intra_doc_links)]
 /// DyPDL model.
 ///
 /// Parameters
@@ -324,6 +309,30 @@ impl IntoPy<Py<PyAny>> for FloatTableUnion {
 ///     Maximize the cost or not.
 /// float_cost: bool, default: false
 ///     Use a continuous value to represent the cost or not.
+///
+/// Examples
+/// --------
+/// Create a model.
+///
+/// >>> import didppy as dp
+/// >>> model = dp.Model(maximize=False, float_cost=False)
+/// >>> model.maximize
+/// False
+/// >>> model.float_cost
+/// False
+///
+/// Get and set the target state.
+///
+/// >>> import didppy as dp
+/// >>> model = dp.Model()
+/// >>> var = model.add_int_var(target=4)
+/// >>> state = model.target_state
+/// >>> state[var]
+/// 4
+/// >>> state[var] = 5
+/// >>> model.target_state = state
+/// >>> model.target_state[var]
+/// 5
 #[pyclass(name = "Model")]
 #[pyo3(text_signature = "(maximize=False, float_cost=False)")]
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -358,16 +367,42 @@ impl ModelPy {
         } else {
             Model::integer_cost_model()
         });
-        if maximize {
-            model.set_maximize();
-        }
+        model.set_maximize(maximize);
+
         model
+    }
+
+    /// bool : Maximize the cost or not.
+    #[getter]
+    fn maximize(&self) -> bool {
+        self.0.reduce_function == ReduceFunction::Max
+    }
+
+    // bool : Maximize the cost or not.
+    #[setter]
+    fn set_maximize(&mut self, maximize: bool) {
+        if maximize {
+            self.0.set_maximize();
+        } else {
+            self.0.set_minimize();
+        }
     }
 
     /// bool : If the cost is represented by a continuous value or not.
     #[getter]
     pub fn float_cost(&self) -> bool {
         self.0.cost_type == CostType::Continuous
+    }
+
+    /// State : Target state.
+    #[getter]
+    fn target_state(&self) -> state::StatePy {
+        self.0.target.clone().into()
+    }
+
+    #[setter]
+    fn set_target_state(&mut self, state: state::StatePy) {
+        self.0.target = state.into();
     }
 
     /// get_object_type(name)
@@ -392,14 +427,14 @@ impl ModelPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> model.add_object_type(number=4, name="x")
-    /// >>> x = model.get_object_type("x")
-    /// >>> model.get_number_of_object(x)
+    /// >>> model.add_object_type(number=4, name="obj")
+    /// >>> obj = model.get_object_type("obj")
+    /// >>> model.get_number_of_object(obj)
     /// 4
     #[pyo3(signature = (name))]
     fn get_object_type(&self, name: &str) -> PyResult<ObjectTypePy> {
         match self.0.get_object_type(name) {
-            Ok(ob) => Ok(ObjectTypePy::new(ob)),
+            Ok(ob) => Ok(ObjectTypePy::from(ob)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -427,8 +462,8 @@ impl ModelPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> x = model.add_object_type(number=4)
-    /// >>> model.get_number_of_object(x)
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> model.get_number_of_object(obj)
     /// 4
     #[pyo3(signature = (object_type))]
     fn get_number_of_object(&self, object_type: ObjectTypePy) -> PyResult<usize> {
@@ -465,8 +500,8 @@ impl ModelPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> x = model.add_object_type(number=4)
-    /// >>> model.get_number_of_object(x)
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> model.get_number_of_object(obj)
     /// 4
     #[pyo3(signature = (number, name = None))]
     #[pyo3(text_signature = "(number, name = None)")]
@@ -479,7 +514,7 @@ impl ModelPy {
             String::from,
         );
         match self.0.add_object_type(name, number) {
-            Ok(ob) => Ok(ObjectTypePy::new(ob)),
+            Ok(ob) => Ok(ObjectTypePy::from(ob)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -507,9 +542,9 @@ impl ModelPy {
     // /// --------
     // /// >>> import didppy as dp
     // /// >>> model = dp.Model()
-    // /// >>> x = model.add_object_type(number=4)
-    // /// >>> model.set_number_of_object(x, 7)
-    // /// >>> model.get_number_of_object(x)
+    // /// >>> obj = model.add_object_type(number=4)
+    // /// >>> model.set_number_of_object(obj, 7)
+    // /// >>> model.get_number_of_object(obj)
     // /// 7
     // #[pyo3(signature = (object_type, number))]
     // fn set_number_of_object(&mut self, object_type: ObjectTypePy, number: usize) -> PyResult<()> {
@@ -540,15 +575,18 @@ impl ModelPy {
     /// RuntimeError
     ///     If the object type is not included in the model.
     ///     If an element in `value` is greater than or equal to the number of objects.
-    /// OverflowError
+    /// TypeError
     ///     If an element in `value` is negative.
     ///
     /// Examples
     /// --------
-    /// >> import didppy as dp
-    /// >> model = dp.Model()
-    /// >> x = model.add_object_type(number=4)
-    /// >> s = model.create_set_const(x, [0, 1, 2])
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> s = model.create_set_const(obj, [0, 1, 2])
+    /// >>> var = model.add_element_var(object_type=obj, target=0)
+    /// >>> s.contains(var).eval(model.target_state, model)
+    /// True
     #[pyo3(signature = (object_type, value))]
     fn create_set_const(
         &self,
@@ -560,7 +598,7 @@ impl ModelPy {
             CreateSetArgUnion::Set(value) => value.into_iter().collect(),
         };
         match self.0.create_set(object_type.into(), &array) {
-            Ok(set) => Ok(SetConstPy::new(set)),
+            Ok(set) => Ok(SetConstPy::from(set)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -588,15 +626,15 @@ impl ModelPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> x = model.add_object_type(number=4)
-    /// >>> model.add_element_var(object_type=x, target=1, name="var")
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> model.add_element_var(object_type=obj, target=1, name="var")
     /// >>> var = model.get_element_var("var")
     /// >>> model.get_target(var)
     /// 1
     #[pyo3(signature = (name))]
     fn get_element_var(&self, name: &str) -> PyResult<ElementVarPy> {
         match self.0.get_element_variable(name) {
-            Ok(var) => Ok(ElementVarPy::new(var)),
+            Ok(var) => Ok(ElementVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -633,8 +671,8 @@ impl ModelPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> x = model.add_object_type(number=4)
-    /// >>> var = model.add_element_var(object_type=x, target=1)
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_element_var(object_type=obj, target=1)
     /// >>> model.get_target(var)
     /// 1
     #[pyo3(signature = (object_type, target, name = None))]
@@ -656,7 +694,7 @@ impl ModelPy {
             .0
             .add_element_variable(name, object_type.into(), target)
         {
-            Ok(var) => Ok(ElementVarPy::new(var)),
+            Ok(var) => Ok(ElementVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -684,15 +722,15 @@ impl ModelPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> x = model.add_object_type(number=4)
-    /// >>> model.add_element_resource_var(object_type=x, target=1, less_is_better=True, name="var")
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> model.add_element_resource_var(object_type=obj, target=1, less_is_better=True, name="var")
     /// >>> var = model.get_element_resource_var("var")
     /// >>> model.get_target(var)
     /// 1
     #[pyo3(signature = (name))]
     fn get_element_resource_var(&self, name: &str) -> PyResult<ElementResourceVarPy> {
         match self.0.get_element_resource_variable(name) {
-            Ok(var) => Ok(ElementResourceVarPy::new(var)),
+            Ok(var) => Ok(ElementResourceVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -711,7 +749,7 @@ impl ModelPy {
     ///     Prefer a smaller value or not.
     /// name: str or None, default: None
     ///     Name of the variable.
-    ///     If None, `_)element_resource_var_{id}` is used where `{id}` is the id of the variable.
+    ///     If None, `__element_resource_var_{id}` is used where `{id}` is the id of the variable.
     ///
     /// Returns
     /// -------
@@ -731,8 +769,8 @@ impl ModelPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> x = model.add_object_type(number=4)
-    /// >>> var = model.add_element_resource_var(object_type=x, target=1, less_is_better=True)
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_element_resource_var(object_type=obj, target=1, less_is_better=True)
     /// >>> model.get_target(var)
     /// 1
     #[pyo3(signature = (object_type, target, less_is_better = false, name = None))]
@@ -755,7 +793,7 @@ impl ModelPy {
             .0
             .add_element_resource_variable(name, object_type.into(), less_is_better, target)
         {
-            Ok(var) => Ok(ElementResourceVarPy::new(var)),
+            Ok(var) => Ok(ElementResourceVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -783,13 +821,15 @@ impl ModelPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> x = model.add_object_type(number=4)
-    /// >>> model.add_set_var(object_type=x, target=[1, 2, 3], name="var")
-    /// >>> var = model.get_element_resource_var("var")
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> model.add_set_var(object_type=obj, target=[1, 2, 3], name="var")
+    /// >>> var = model.get_set_var("var")
+    /// >>> var.contains(1).eval(model.target_state, model)
+    /// True
     #[pyo3(signature = (name))]
     fn get_set_var(&self, name: &str) -> PyResult<SetVarPy> {
         match self.0.get_set_variable(name) {
-            Ok(var) => Ok(SetVarPy::new(var)),
+            Ok(var) => Ok(SetVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -819,15 +859,17 @@ impl ModelPy {
     ///     If `object_type` is not included in the model.
     ///     If a value in `target` is greater than or equal to the number of the objects.
     ///     If `name` is already used.
-    /// OverflowError
+    /// TypeError
     ///     If a value in `target` is negative.
     ///
     /// Examples
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> x = model.add_object_type(number=4)
-    /// >>> var = model.add_set_var(object_type=x, target=[1, 2, 3])
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[1, 2, 3])
+    /// >>> var.contains(1).eval(model.target_state, model)
+    /// True
     #[pyo3(signature = (object_type, target, name = None))]
     #[pyo3(text_signature = "(object_type, target, name=None)")]
     fn add_set_var(
@@ -845,7 +887,7 @@ impl ModelPy {
             String::from,
         );
         match self.0.add_set_variable(name, object_type.into(), target) {
-            Ok(var) => Ok(SetVarPy::new(var)),
+            Ok(var) => Ok(SetVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -880,7 +922,7 @@ impl ModelPy {
     #[pyo3(signature = (name))]
     fn get_int_var(&self, name: &str) -> PyResult<IntVarPy> {
         match self.0.get_integer_variable(name) {
-            Ok(var) => Ok(IntVarPy::new(var)),
+            Ok(var) => Ok(IntVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -924,7 +966,7 @@ impl ModelPy {
             String::from,
         );
         match self.0.add_integer_variable(name, target) {
-            Ok(var) => Ok(IntVarPy::new(var)),
+            Ok(var) => Ok(IntVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -959,7 +1001,7 @@ impl ModelPy {
     #[pyo3(signature = (name))]
     fn get_int_resource_var(&self, name: &str) -> PyResult<IntResourceVarPy> {
         match self.0.get_integer_resource_variable(name) {
-            Ok(var) => Ok(IntResourceVarPy::new(var)),
+            Ok(var) => Ok(IntResourceVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -1014,7 +1056,7 @@ impl ModelPy {
             .0
             .add_integer_resource_variable(name, less_is_better, target)
         {
-            Ok(var) => Ok(IntResourceVarPy::new(var)),
+            Ok(var) => Ok(IntResourceVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -1049,7 +1091,7 @@ impl ModelPy {
     #[pyo3(signature = (name))]
     fn get_float_var(&self, name: &str) -> PyResult<FloatVarPy> {
         match self.0.get_continuous_variable(name) {
-            Ok(var) => Ok(FloatVarPy::new(var)),
+            Ok(var) => Ok(FloatVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -1094,7 +1136,7 @@ impl ModelPy {
             String::from,
         );
         match self.0.add_continuous_variable(name, target) {
-            Ok(var) => Ok(FloatVarPy::new(var)),
+            Ok(var) => Ok(FloatVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -1129,7 +1171,7 @@ impl ModelPy {
     #[pyo3(signature = (name))]
     fn get_float_resource_var(&self, name: &str) -> PyResult<FloatResourceVarPy> {
         match self.0.get_continuous_resource_variable(name) {
-            Ok(var) => Ok(FloatResourceVarPy::new(var)),
+            Ok(var) => Ok(FloatResourceVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -1187,7 +1229,7 @@ impl ModelPy {
             .0
             .add_continuous_resource_variable(name, less_is_better, target)
         {
-            Ok(var) => Ok(FloatResourceVarPy::new(var)),
+            Ok(var) => Ok(FloatResourceVarPy::from(var)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
     }
@@ -1215,10 +1257,10 @@ impl ModelPy {
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> x = model.add_object_type(number=4)
-    /// >>> var = model.add_element_var(object_type=x, target=1)
-    /// >>> y = model.get_object_type_of(var)
-    /// >>> model.get_number_of_objects(y)
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_element_var(object_type=obj, target=1)
+    /// >>> obj = model.get_object_type_of(var)
+    /// >>> model.get_number_of_objects(obj)
     /// 4
     #[pyo3(signature = (var))]
     fn get_object_type_of(&self, var: ObjectVarUnion) -> PyResult<ObjectTypePy> {
@@ -1246,11 +1288,11 @@ impl ModelPy {
     ///
     /// Returns
     /// -------
-    /// int, SetConst, or float
+    /// int, set, or float
     ///     The value in the target state.
-    ///     For `ElementVar`, `ElementResourceVar`, `IntVar`, and `IntResourceVar`, `int` is returned.
-    ///     For `SetVar`, `SetConst` is returned.
-    ///     For `FloatVar` and `FloatResourceVar`, `float` is returned.
+    ///     For :class:`ElementVar`, :class:`ElementResourceVar`, :class:`IntVar`, and :class:`IntResourceVar`, `int` is returned.
+    ///     For :class:`SetVar`, `set` is returned.
+    ///     For :class:`FloatVar` and :class:`FloatResourceVar`, `float` is returned.
     ///
     /// Raises
     /// ------
@@ -1265,39 +1307,41 @@ impl ModelPy {
     /// >>> model.get_target(var)
     /// 1
     #[pyo3(signature = (var))]
-    fn get_target(&self, var: VarUnion) -> PyResult<TargetReturnUnion> {
+    fn get_target(&self, var: VarUnion) -> PyResult<state::VariableValueUnion> {
         match var {
             VarUnion::Element(var) => match self.0.get_target(ElementVariable::from(var)) {
-                Ok(value) => Ok(TargetReturnUnion::Element(value)),
+                Ok(value) => Ok(state::VariableValueUnion::Element(value)),
                 Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
             },
             VarUnion::ElementResource(var) => {
                 match self.0.get_target(ElementResourceVariable::from(var)) {
-                    Ok(value) => Ok(TargetReturnUnion::Element(value)),
+                    Ok(value) => Ok(state::VariableValueUnion::Element(value)),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
             VarUnion::Set(var) => match self.0.get_target(SetVariable::from(var)) {
-                Ok(value) => Ok(TargetReturnUnion::Set(SetConstPy::new(value))),
+                Ok(value) => Ok(state::VariableValueUnion::Set(HashSet::from_iter(
+                    value.ones(),
+                ))),
                 Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
             },
             VarUnion::Int(var) => match self.0.get_target(IntegerVariable::from(var)) {
-                Ok(value) => Ok(TargetReturnUnion::Int(value)),
+                Ok(value) => Ok(state::VariableValueUnion::Int(value)),
                 Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
             },
             VarUnion::IntResource(var) => {
                 match self.0.get_target(IntegerResourceVariable::from(var)) {
-                    Ok(value) => Ok(TargetReturnUnion::Int(value)),
+                    Ok(value) => Ok(state::VariableValueUnion::Int(value)),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
             VarUnion::Float(var) => match self.0.get_target(ContinuousVariable::from(var)) {
-                Ok(value) => Ok(TargetReturnUnion::Float(value)),
+                Ok(value) => Ok(state::VariableValueUnion::Float(value)),
                 Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
             },
             VarUnion::FloatResource(var) => {
                 match self.0.get_target(ContinuousResourceVariable::from(var)) {
-                    Ok(value) => Ok(TargetReturnUnion::Float(value)),
+                    Ok(value) => Ok(state::VariableValueUnion::Float(value)),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -1314,9 +1358,9 @@ impl ModelPy {
     ///     Variable.
     /// target: int, SetConst, list of int, set of int, or float
     ///     Value in the target state.
-    ///     For `ElementVar`, `ElementResourceVar`, `IntVar`, and `IntResourceVar`, it should be `int`.
-    ///     For `SetVar`, it should be `SetConst`, `list` of `int`, or `set` of `int`.
-    ///     For `FloatVar` and `FloatResourceVar`, it should be `float`.
+    ///     For :class:`ElementVar`, :class:`ElementResourceVar`, :class:`IntVar`, and :class:`IntResourceVar`, it should be `int`.
+    ///     For :class:`SetVar`, it should be :class:`SetConst`, `list` of `int`, or `set` of `int`.
+    ///     For :class:`FloatVar` and :class:`FloatResourceVar`, it should be `float`.
     ///
     /// Raises
     /// ------
@@ -1324,11 +1368,11 @@ impl ModelPy {
     ///     If the types of `var` and `target` mismatch.
     /// RuntimeError
     ///     If the variable is not included in the model.
-    ///     If `var` is `ElementVar` or `ElementResourceVar` and `target` is greater than or equal to the number of the associated objects.
-    ///     If `var` is `SetVar` and a value in `target` is greater than or equal to the number of the associated objects.
+    ///     If `var` is :class:`ElementVar` or :class:`ElementResourceVar` and `target` is greater than or equal to the number of the associated objects.
+    ///     If `var` is :class:`SetVar` and a value in `target` is greater than or equal to the number of the associated objects.
     /// OverflowError
-    ///     If `var` is `ElementVar` or `ElementResourceVar` and `target` is negative.
-    ///     If `var` is `SetVar` and a value in `target` is negative.
+    ///     If `var` is :class:`ElementVar` or :class:`ElementResourceVar` and `target` is negative.
+    ///     If `var` is :class:`SetVar` and a value in `target` is negative.
     ///
     /// Examples
     /// --------
@@ -1472,6 +1516,16 @@ impl ModelPy {
         }
     }
 
+    /// list of Condition : State constraints.   
+    #[getter]
+    fn state_constrs(&self) -> Vec<ConditionPy> {
+        self.0
+            .state_constraints
+            .iter()
+            .map(|constraint| ConditionPy::from(constraint.condition.clone()))
+            .collect()
+    }
+
     /// add_state_constr(condition)
     ///
     /// Adds a state constraint to the model.
@@ -1486,19 +1540,70 @@ impl ModelPy {
     /// RuntimeError
     ///     If the condition is invalid.
     ///     E.g., it uses a variable not included in the model or the cost of the transitioned state.
+    /// PanicException
+    ///     If an index of a table is out of range.
     ///
     /// Examples
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> var = model.add_int_var(target=2)
+    /// >>> var = model.add_int_var(target=4)
     /// >>> model.add_state_constr(var >= 0)
+    /// >>> model.check_state_constr(model.target_state)
+    /// True
     #[pyo3(signature = (condition))]
     fn add_state_constr(&mut self, condition: ConditionPy) -> PyResult<()> {
         match self.0.add_state_constraint(condition.into()) {
             Ok(_) => Ok(()),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
+    }
+
+    /// check_state_constr(state)
+    ///
+    /// Checks if the state satisfies all the state constraints.
+    ///
+    /// Parameters
+    /// ----------
+    /// state: State
+    ///     State to be checked.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     True if the state satisfies all the state constraints.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If state constraints are invalid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> model.add_state_constr(var >= 0)
+    /// >>> model.check_state_constr(model.target_state)
+    /// True
+    #[pyo3(signature = (state))]
+    fn check_state_constr(&self, state: &state::StatePy) -> bool {
+        self.0.check_constraints(state.inner_as_ref())
+    }
+
+    /// list of list of Conditions : Base cases.
+    #[getter]
+    fn base_cases(&self) -> Vec<Vec<ConditionPy>> {
+        self.0
+            .base_cases
+            .iter()
+            .map(|base_case| {
+                Vec::from(base_case.clone())
+                    .into_iter()
+                    .map(|condition| ConditionPy::from(condition.condition))
+                    .collect()
+            })
+            .collect()
     }
 
     /// add_base_case(conditions)
@@ -1515,14 +1620,17 @@ impl ModelPy {
     /// RuntimeError
     ///     If one of `conditions` is invalid.
     ///     E.g., it uses a variable not included in the model or the cost of the transitioned state.
+    /// PanicException
+    ///     If an index of a table is out of range.
     ///
     /// Examples
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> x = model.add_int_var(target=2)
-    /// >>> y = model.add_int_var(target=2)
-    /// >>> model.add_base_case([x == 0, y == 0])
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> model.add_base_case([var >= 2, var <= 5])
+    /// >>> model.is_base(model.target_state)
+    /// True
     #[pyo3(signature = (conditions))]
     fn add_base_case(&mut self, conditions: Vec<ConditionPy>) -> PyResult<()> {
         let conditions = conditions.into_iter().map(|x| x.into()).collect();
@@ -1532,32 +1640,81 @@ impl ModelPy {
         }
     }
 
-    /// set_minimize()
+    /// is_base(state)
     ///
-    /// Sets the objective to minimization.
+    /// Checks if the state is a base state.
     ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model(maximize=True)
-    /// >>> model.set_minimize()
-    #[pyo3(signature = ())]
-    fn set_minimize(&mut self) {
-        self.0.set_reduce_function(ReduceFunction::Min)
-    }
-
-    /// set_maximize()
+    /// Parameters
+    /// ----------
+    /// state: State
+    ///     State to be checked.
     ///
-    /// Sets the objective to maximization.
+    /// Returns
+    /// -------
+    /// bool
+    ///     True if the state is a base state.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If base cases are invalid.
     ///
     /// Examples
     /// --------
     /// >>> import didppy as dp
     /// >>> model = dp.Model()
-    /// >>> model.set_maximize()
-    #[pyo3(signature = ())]
-    fn set_maximize(&mut self) {
-        self.0.set_reduce_function(ReduceFunction::Max)
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> model.add_base_case([var == 4])
+    /// >>> model.is_base(model.target_state)
+    /// True
+    #[pyo3(signature = (state))]
+    fn is_base(&self, state: &state::StatePy) -> bool {
+        self.0.is_base(state.inner_as_ref())
+    }
+
+    /// get_transitions(forced, backward)
+    ///
+    /// Returns the transitions of the model.
+    ///
+    /// Parameters
+    /// ----------
+    /// forced: bool, default: False
+    ///     Get forced transitions or not.
+    /// backward: bool, default: False
+    ///     Get backward transitions or not.
+    ///
+    /// Returns
+    /// -------
+    /// list of Transition
+    ///     Transitions.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> model.add_transition(dp.Transition(name="t1"))
+    /// >>> model.add_transition(dp.Transition(name="t2"))
+    /// >>> model.add_transition(dp.Transition(name="ft1"), forced=True)
+    /// >>> model.add_transition(dp.Transition(name="ft2"), forced=True)
+    /// >>> [t.name for t in model.get_transitions()]
+    /// ['t1', 't2']
+    /// >>> [t.name for t in model.get_transitions(forced=True)]
+    /// ['ft1', 'ft2']
+    #[pyo3(signature = (forced = false, backward = false))]
+    fn get_transitions(&self, forced: bool, backward: bool) -> Vec<TransitionPy> {
+        let transitions = if forced && backward {
+            &self.0.backward_forced_transitions
+        } else if forced {
+            &self.0.forward_forced_transitions
+        } else if backward {
+            &self.0.backward_transitions
+        } else {
+            &self.0.forward_transitions
+        };
+        transitions
+            .iter()
+            .map(|x| TransitionPy::from(x.clone()))
+            .collect()
     }
 
     /// add_transition(transition, forced, backward)
@@ -1579,6 +1736,18 @@ impl ModelPy {
     ///     If an expression used in the transition is invalid.
     ///     E.g., it uses a variable not included in the model.
     ///     If the cost type of the model is integer and a transition with a continuous cost expression is added.
+    /// PanicException
+    ///     If an index of a table is out of range.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> t = dp.Transition(name="t", cost=1 + dp.IntExpr.state_cost())
+    /// >>> model.add_transition(t)
+    /// >>> [t.name for t in model.get_transitions()]
+    /// ['t']
     #[pyo3(signature = (transition, forced = false, backward = false))]
     #[pyo3(text_signature = "(transition, forced=False, backward=False)")]
     fn add_transition(
@@ -1602,6 +1771,19 @@ impl ModelPy {
         }
     }
 
+    /// list of IntExpr or FloatExpr : Dual bounds.
+    #[getter]
+    fn dual_bounds(&self) -> Vec<IntOrFloatExpr> {
+        self.0
+            .dual_bounds
+            .iter()
+            .map(|x| match x.clone() {
+                CostExpression::Integer(x) => IntOrFloatExpr::Int(IntExprPy::from(x)),
+                CostExpression::Continuous(x) => IntOrFloatExpr::Float(FloatExprPy::from(x)),
+            })
+            .collect()
+    }
+
     /// add_dual_bound(bound)
     ///
     /// Adds a dual bound to the model.
@@ -1616,7 +1798,19 @@ impl ModelPy {
     /// RuntimeError
     ///     If `bound` is invalid.
     ///     E.g., it uses a variable not included in the model or the cost of the transitioned state.
-    ///     If the cost type of model is integer, and `bound` is `FloatExpr`, `FloatVar`, `FloatResourceVar`, or `float`.
+    ///     If the cost type of model is integer, and `bound` is :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or `float`.
+    /// PanicException
+    ///     If an index of a table is out of range.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> model.eval_dual_bound(model.target_state)
+    /// >>> model.add_dual_bound(var)
+    /// >>> model.eval_dual_bound(model.target_state)
+    /// 4
     fn add_dual_bound(&mut self, bound: CostUnion) -> PyResult<()> {
         let result = match bound {
             CostUnion::Int(bound) => self.0.add_dual_bound(IntegerExpression::from(bound)),
@@ -1628,9 +1822,114 @@ impl ModelPy {
         }
     }
 
+    /// eval_dual_bound(state)
+    ///
+    /// Evaluates the dual bound on the cost of the state.
+    ///
+    /// Parameters
+    /// ----------
+    /// state: State
+    ///     State to be evaluated.
+    ///
+    /// Returns
+    /// -------
+    /// int, float, or None
+    ///     The dual bound on the cost of the state.
+    ///     None if no dual bound is defined.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If dual bounds are invalid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> model.eval_dual_bound(model.target_state)
+    /// >>> model.add_dual_bound(var)
+    /// >>> model.eval_dual_bound(model.target_state)
+    /// 4
+    #[pyo3(signature = (state))]
+    fn eval_dual_bound(&self, state: &state::StatePy) -> Option<IntOrFloat> {
+        match self.0.cost_type {
+            CostType::Integer => self
+                .0
+                .eval_dual_bound(state.inner_as_ref())
+                .map(IntOrFloat::Int),
+            CostType::Continuous => self
+                .0
+                .eval_dual_bound::<_, OrderedContinuous>(state.inner_as_ref())
+                .map(|x| IntOrFloat::Float(x.to_continuous())),
+        }
+    }
+
+    /// validate_forward(transitions, cost, quiet)
+    ///
+    /// Validates a solution consists of forward transitions.
+    ///
+    /// Parameters
+    /// ----------
+    /// transitions: list of Transition
+    ///     Transitions in the solution.
+    /// cost: int or float
+    ///     Cost of the solution.
+    /// quiet: bool, default: False
+    ///     Suppress output messages.
+    ///
+    /// Returns
+    /// -------
+    /// bool
+    ///     True if the solution is valid.
+    ///
+    /// Raises
+    /// ------
+    /// TypeError
+    ///     If the type of `cost` and the cost type mismatches.
+    /// PanicException
+    ///     If expressions in the transitions are not valid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=1)
+    /// >>> model.add_base_case([var == 0])
+    /// >>> t = dp.Transition(
+    /// ...     name="t",
+    /// ...     effects=[(var, var - 1)],
+    /// ...     cost=dp.IntExpr.state_cost() + 1,
+    /// ... )
+    /// >>> model.add_transition(t)
+    /// >>> model.validate_forward([t], 1)
+    /// True
+    #[pyo3(signature = (transitions, cost, quiet = false))]
+    fn validate_forward(
+        &self,
+        transitions: Vec<TransitionPy>,
+        cost: &PyAny,
+        quiet: bool,
+    ) -> PyResult<bool> {
+        let transitions = transitions
+            .iter()
+            .map(|t| Transition::from(t.clone()))
+            .collect::<Vec<_>>();
+        if self.float_cost() {
+            let cost: Continuous = cost.extract()?;
+            Ok(self.0.validate_forward(&transitions, cost, !quiet))
+        } else {
+            let cost: Integer = cost.extract()?;
+            Ok(self.0.validate_forward(&transitions, cost, !quiet))
+        }
+    }
+
     /// add_element_table(table, default, name)
     ///
     /// Adds a table of element constants.
+    /// Up to 3-dimensional tables can be added by passing a nested list.
+    /// For more than 4-dimensional tables, use `dict`.
+    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and `int` as indices.
     ///
     /// Parameters
     /// ----------
@@ -1647,10 +1946,10 @@ impl ModelPy {
     /// Returns
     /// -------
     /// ElementTable1D, ElementTable2D, ElementTable3D, or ElementTable
-    ///     `ElementTable1D` is returned if `table` is `list` of `int`.
-    ///     `ElementTable2D` is returned if `table` is `list` of `list` of `int`.
-    ///     `ElementTable3D` is returned if `table` is `list` of `list` of `list` of `int`.
-    ///     `ElementTable` is returned if `dict` is given.
+    ///     :class:`ElementTable1D` is returned if `table` is `list` of `int`.
+    ///     :class:`ElementTable2D` is returned if `table` is `list` of `list` of `int`.
+    ///     :class:`ElementTable3D` is returned if `table` is `list` of `list` of `list` of `int`.
+    ///     :class:`ElementTable` is returned if `dict` is given.
     ///
     /// Raises
     /// ------
@@ -1658,9 +1957,18 @@ impl ModelPy {
     ///     If `name` is already used.
     /// TypeError
     ///     If `table` is `dict` and `default` is `None`.
+    ///     If `table` is `dict` and one of its keys contains a negative value.
     /// OverflowError
     ///     If a value in `table` or `default` is negative.
-    ///     If `table` is `dict` and one of its keys contains a negative value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> table = model.add_element_table([[1, 2], [3, 4]])
+    /// >>> table[0, 0].eval(state, model)
+    /// 1
     #[pyo3(signature = (table, default = None, name = None))]
     #[pyo3(text_signature = "(table, default=None, name=None)")]
     fn add_element_table(
@@ -1679,7 +1987,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_1d(name, table) {
-                    Ok(table) => Ok(ElementTableUnion::Table1D(ElementTable1DPy::new(table))),
+                    Ok(table) => Ok(ElementTableUnion::Table1D(ElementTable1DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -1692,7 +2000,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_2d(name, table) {
-                    Ok(table) => Ok(ElementTableUnion::Table2D(ElementTable2DPy::new(table))),
+                    Ok(table) => Ok(ElementTableUnion::Table2D(ElementTable2DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -1705,7 +2013,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_3d(name, table) {
-                    Ok(table) => Ok(ElementTableUnion::Table3D(ElementTable3DPy::new(table))),
+                    Ok(table) => Ok(ElementTableUnion::Table3D(ElementTable3DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -1719,7 +2027,7 @@ impl ModelPy {
                 };
                 if let Some(default) = default {
                     match self.0.add_table(name, table, default) {
-                        Ok(table) => Ok(ElementTableUnion::Table(ElementTablePy::new(table))),
+                        Ok(table) => Ok(ElementTableUnion::Table(ElementTablePy::from(table))),
                         Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                     }
                 } else {
@@ -1734,6 +2042,10 @@ impl ModelPy {
     /// add_set_table(table, default, name, object_type)
     ///
     /// Adds a table of set constants.
+    /// Up to 3-dimensional tables can be added by passing a nested list.
+    /// For more than 4-dimensional tables, use `dict`.
+    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and `int` as indices.
+    /// The union, intersection, and symmetric difference of sets in a table can be taken by using :class:`SetExpr`, :class:`SetVar`, and :class:`SetConst` in indices.
     ///
     /// Parameters
     /// ----------
@@ -1755,10 +2067,10 @@ impl ModelPy {
     /// Returns
     /// -------
     /// SetTable1D, SetTable2D, SetTable3D, or SetTable
-    ///     `SetTable1D` is returned if `table` is `list`.
-    ///     `SetTable2D` is returned if `table` is `list` of `list``.
-    ///     `SetTable3D` is returned if `table` is `list` of `list` of `list`.
-    ///     `SetTable` is returned if `dict` is given.
+    ///     :class:`SetTable1D` is returned if `table` is `list`.
+    ///     :class:`SetTable2D` is returned if `table` is `list` of `list``.
+    ///     :class:`SetTable3D` is returned if `table` is `list` of `list` of `list`.
+    ///     :class:`SetTable` is returned if `dict` is given.
     ///
     /// Raises
     /// ------
@@ -1770,6 +2082,24 @@ impl ModelPy {
     /// OverflowError
     ///     If a value in `table` or `default` is negative.
     ///     If `table` is `dict` and one of its keys contains a negative value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> table = model.add_set_table([[[0, 1], [1, 2]], [[0, 2], [1, 3]]], object_type=obj)
+    /// >>> table[0, 0].eval(state, model)
+    /// {0, 1}
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> table.union(0, var).eval(state, model)
+    /// {0, 1, 2}
+    /// >>> table.intersection(0, var).eval(state, model)
+    /// {1}
+    /// >>> table.symmetric_difference(0, var).eval(state, model)
+    /// {0, 2}
     #[pyo3(signature = (table, default = None, name = None, object_type = None))]
     #[pyo3(text_signature = "(table, default=None, name=None, object_type=None)")]
     fn add_set_table(
@@ -1895,6 +2225,9 @@ impl ModelPy {
     /// add_bool_table(table, default, name)
     ///
     /// Adds a table of bool constants.
+    /// Up to 3-dimensional tables can be added by passing a nested list.
+    /// For more than 4-dimensional tables, use `dict`.
+    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and `int` as indices.
     ///
     /// Parameters
     /// ----------
@@ -1911,10 +2244,10 @@ impl ModelPy {
     /// Returns
     /// -------
     /// BoolTable1D, BoolTable2D, BoolTable3D, or BoolTable
-    ///     `BoolTable1D` is returned if `table` is `list` of `bool`.
-    ///     `BoolTable2D` is returned if `table` is `list` of `list` of `bool`.
-    ///     `BoolTable3D` is returned if `table` is `list` of `list` of `list` of `bool`.
-    ///     `BoolTable` is returned if `dict` is given.
+    ///     :class:`BoolTable1D` is returned if `table` is `list` of `bool`.
+    ///     :class:`BoolTable2D` is returned if `table` is `list` of `list` of `bool`.
+    ///     :class:`BoolTable3D` is returned if `table` is `list` of `list` of `list` of `bool`.
+    ///     :class:`BoolTable` is returned if `dict` is given.
     ///
     /// Raises
     /// ------
@@ -1924,6 +2257,15 @@ impl ModelPy {
     ///     If `table` is `dict` and `default` is `None`.
     /// OverflowError
     ///     If `table` is `dict` and one of its keys contains a negative value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> table = model.add_bool_table([[True, False], [False, True]])
+    /// >>> table[0, 0].eval(state, model)
+    /// True
     #[pyo3(signature = (table, default = None, name = None))]
     #[pyo3(text_signature = "(table, default=None, name=None)")]
     fn add_bool_table(
@@ -1942,7 +2284,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_1d(name, table) {
-                    Ok(table) => Ok(BoolTableUnion::Table1D(BoolTable1DPy::new(table))),
+                    Ok(table) => Ok(BoolTableUnion::Table1D(BoolTable1DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -1955,7 +2297,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_2d(name, table) {
-                    Ok(table) => Ok(BoolTableUnion::Table2D(BoolTable2DPy::new(table))),
+                    Ok(table) => Ok(BoolTableUnion::Table2D(BoolTable2DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -1968,7 +2310,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_3d(name, table) {
-                    Ok(table) => Ok(BoolTableUnion::Table3D(BoolTable3DPy::new(table))),
+                    Ok(table) => Ok(BoolTableUnion::Table3D(BoolTable3DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -1982,7 +2324,7 @@ impl ModelPy {
                 };
                 if let Some(default) = default {
                     match self.0.add_table(name, table, default) {
-                        Ok(table) => Ok(BoolTableUnion::Table(BoolTablePy::new(table))),
+                        Ok(table) => Ok(BoolTableUnion::Table(BoolTablePy::from(table))),
                         Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                     }
                 } else {
@@ -1997,6 +2339,10 @@ impl ModelPy {
     /// add_int_table(table, default, name)
     ///
     /// Adds a table of integer constants.
+    /// Up to 3-dimensional tables can be added by passing a nested list.
+    /// For more than 4-dimensional tables, use `dict`.
+    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and `int` as indices.
+    /// The sum, product, maximum, and minimum of values in a table can be taken by using :class:`SetExpr`, :class:`SetVar`, and :class:`SetConst` in indices.
     ///
     /// Parameters
     /// ----------
@@ -2013,10 +2359,10 @@ impl ModelPy {
     /// Returns
     /// -------
     /// IntTable1D, IntTable2D, IntTable3D, or IntTable
-    ///     `IntTable1D` is returned if `table` is `list` of `int`.
-    ///     `IntTable2D` is returned if `table` is `list` of `list` of `int`.
-    ///     `IntTable3D` is returned if `table` is `list` of `list` of `list` of `int`.
-    ///     `IntTable` is returned if `dict` is given.
+    ///     :class:`IntTable1D` is returned if `table` is `list` of `int`.
+    ///     :class:`IntTable2D` is returned if `table` is `list` of `list` of `int`.
+    ///     :class:`IntTable3D` is returned if `table` is `list` of `list` of `list` of `int`.
+    ///     :class:`IntTable` is returned if `dict` is given.
     ///
     /// Raises
     /// ------
@@ -2026,6 +2372,26 @@ impl ModelPy {
     ///     If `table` is `dict` and `default` is `None`.
     /// OverflowError
     ///     If `table` is `dict` and one of its keys contains a negative value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> table = model.add_int_table([[1, 2], [3, 4]])
+    /// >>> table[0, 0].eval(state, model)
+    /// 1
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> table[0, var].eval(state, model)
+    /// 3
+    /// >>> table.product(0, var).eval(state, model)
+    /// 2
+    /// >>> table.max(0, var).eval(state, model)
+    /// 2
+    /// >>> table.min(0, var).eval(state, model)
+    /// 1
     #[pyo3(signature = (table, default = None, name = None))]
     #[pyo3(text_signature = "(table, default=None, name=None)")]
     fn add_int_table(
@@ -2044,7 +2410,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_1d(name, table) {
-                    Ok(table) => Ok(IntTableUnion::Table1D(IntTable1DPy::new(table))),
+                    Ok(table) => Ok(IntTableUnion::Table1D(IntTable1DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -2057,7 +2423,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_2d(name, table) {
-                    Ok(table) => Ok(IntTableUnion::Table2D(IntTable2DPy::new(table))),
+                    Ok(table) => Ok(IntTableUnion::Table2D(IntTable2DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -2070,7 +2436,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_3d(name, table) {
-                    Ok(table) => Ok(IntTableUnion::Table3D(IntTable3DPy::new(table))),
+                    Ok(table) => Ok(IntTableUnion::Table3D(IntTable3DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -2084,7 +2450,7 @@ impl ModelPy {
                 };
                 if let Some(default) = default {
                     match self.0.add_table(name, table, default) {
-                        Ok(table) => Ok(IntTableUnion::Table(IntTablePy::new(table))),
+                        Ok(table) => Ok(IntTableUnion::Table(IntTablePy::from(table))),
                         Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                     }
                 } else {
@@ -2099,6 +2465,10 @@ impl ModelPy {
     /// add_float_table(table, default, name)
     ///
     /// Adds a table of continuous constants.
+    /// Up to 3-dimensional tables can be added by passing a nested list.
+    /// For more than 4-dimensional tables, use `dict`.
+    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and `int` as indices.
+    /// The sum, product, maximum, and minimum of values in a table can be taken by using :class:`SetExpr`, :class:`SetVar`, and :class:`SetConst` in indices.
     ///
     /// Parameters
     /// ----------
@@ -2114,11 +2484,11 @@ impl ModelPy {
     ///
     /// Returns
     /// -------
-    /// IntTable1D, IntTable2D, IntTable3D, or IntTable
-    ///     `IntTable1D` is returned if `table` is `list` of `int`.
-    ///     `IntTable2D` is returned if `table` is `list` of `list` of `int`.
-    ///     `IntTable3D` is returned if `table` is `list` of `list` of `list` of `int`.
-    ///     `IntTable` is returned if `dict` is given.
+    /// FloatTable1D, FloatTable2D, FloatTable3D, or FloatTable
+    ///     :class:`FloatTable1D` is returned if `table` is `list` of `int`.
+    ///     :class:`FloatTable2D` is returned if `table` is `list` of `list` of `int`.
+    ///     :class:`FloatTable3D` is returned if `table` is `list` of `list` of `list` of `int`.
+    ///     :class:`FloatTable` is returned if `dict` is given.
     ///
     /// Raises
     /// ------
@@ -2128,6 +2498,26 @@ impl ModelPy {
     ///     If `table` is `dict` and `default` is `None`.
     /// OverflowError
     ///     If `table` is `dict` and one of its keys contains a negative value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> state = model.target_state
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> table = model.add_float_table([[1.5, 2.5], [3.5, 4.5]])
+    /// >>> table[0, 0].eval(state, model)
+    /// 1.5
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> state = model.target_state
+    /// >>> table[0, var].eval(state, model)
+    /// 4.0
+    /// >>> table.product(0, var).eval(state, model)
+    /// 3.75
+    /// >>> table.max(0, var).eval(state, model)
+    /// 2.5
+    /// >>> table.min(0, var).eval(state, model)
+    /// 1.5
     #[pyo3(signature = (table, default = None, name = None))]
     #[pyo3(text_signature = "(table, default=None, name=None)")]
     fn add_float_table(
@@ -2146,7 +2536,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_1d(name, table) {
-                    Ok(table) => Ok(FloatTableUnion::Table1D(FloatTable1DPy::new(table))),
+                    Ok(table) => Ok(FloatTableUnion::Table1D(FloatTable1DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -2159,7 +2549,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_2d(name, table) {
-                    Ok(table) => Ok(FloatTableUnion::Table2D(FloatTable2DPy::new(table))),
+                    Ok(table) => Ok(FloatTableUnion::Table2D(FloatTable2DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -2172,7 +2562,7 @@ impl ModelPy {
                     }
                 };
                 match self.0.add_table_3d(name, table) {
-                    Ok(table) => Ok(FloatTableUnion::Table3D(FloatTable3DPy::new(table))),
+                    Ok(table) => Ok(FloatTableUnion::Table3D(FloatTable3DPy::from(table))),
                     Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                 }
             }
@@ -2186,7 +2576,7 @@ impl ModelPy {
                 };
                 if let Some(default) = default {
                     match self.0.add_table(name, table, default) {
-                        Ok(table) => Ok(FloatTableUnion::Table(FloatTablePy::new(table))),
+                        Ok(table) => Ok(FloatTableUnion::Table(FloatTablePy::from(table))),
                         Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
                     }
                 } else {
@@ -2996,7 +3386,7 @@ mod tests {
         let ob = model.add_object_type("something", 10);
         assert!(ob.is_ok());
         let ob = ob.unwrap();
-        assert_eq!(ObjectTypePy::new(ob), ObjectTypePy(ob));
+        assert_eq!(ObjectTypePy::from(ob), ObjectTypePy(ob));
     }
 
     #[test]
@@ -3198,7 +3588,7 @@ mod tests {
         assert!(set.is_ok());
         assert_eq!(
             set.unwrap(),
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -3234,7 +3624,7 @@ mod tests {
         assert!(set.is_ok());
         assert_eq!(
             set.unwrap(),
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -3272,7 +3662,7 @@ mod tests {
         let v1 = v1.unwrap();
         let n = model.get_target(VarUnion::Element(v1));
         assert!(n.is_ok());
-        assert_eq!(n.unwrap(), TargetReturnUnion::Element(0));
+        assert_eq!(n.unwrap(), state::VariableValueUnion::Element(0));
         let result = model.get_object_type_of(ObjectVarUnion::Element(v1));
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), ob);
@@ -3282,7 +3672,7 @@ mod tests {
         let v2 = v2.unwrap();
         let n = model.get_target(VarUnion::Element(v2));
         assert!(n.is_ok());
-        assert_eq!(n.unwrap(), TargetReturnUnion::Element(1));
+        assert_eq!(n.unwrap(), state::VariableValueUnion::Element(1));
         let result = model.get_object_type_of(ObjectVarUnion::Element(v2));
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), ob);
@@ -3302,7 +3692,7 @@ mod tests {
         let v1 = v1.unwrap();
         let n = model.get_target(VarUnion::Element(v1));
         assert!(n.is_ok());
-        assert_eq!(n.unwrap(), TargetReturnUnion::Element(0));
+        assert_eq!(n.unwrap(), state::VariableValueUnion::Element(0));
         let v = model.get_element_var("v1");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v1);
@@ -3315,7 +3705,7 @@ mod tests {
         let v2 = v2.unwrap();
         let n = model.get_target(VarUnion::Element(v2));
         assert!(n.is_ok());
-        assert_eq!(n.unwrap(), TargetReturnUnion::Element(1));
+        assert_eq!(n.unwrap(), state::VariableValueUnion::Element(1));
         let v = model.get_element_var("v2");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v2);
@@ -3380,7 +3770,7 @@ mod tests {
         assert!(result.is_ok());
         let n = model.get_target(VarUnion::Element(v));
         assert!(n.is_ok());
-        assert_eq!(n.unwrap(), TargetReturnUnion::Element(1));
+        assert_eq!(n.unwrap(), state::VariableValueUnion::Element(1));
     }
 
     #[test]
@@ -3453,7 +3843,7 @@ mod tests {
         let v1 = v1.unwrap();
         let n = model.get_target(VarUnion::ElementResource(v1));
         assert!(n.is_ok());
-        assert_eq!(n.unwrap(), TargetReturnUnion::Element(0));
+        assert_eq!(n.unwrap(), state::VariableValueUnion::Element(0));
         let less_is_better = model.get_preference(ResourceVarUnion::Element(v1));
         assert!(less_is_better.is_ok());
         assert!(!less_is_better.unwrap());
@@ -3466,7 +3856,7 @@ mod tests {
         let v2 = v2.unwrap();
         let n = model.get_target(VarUnion::ElementResource(v2));
         assert!(n.is_ok());
-        assert_eq!(n.unwrap(), TargetReturnUnion::Element(1));
+        assert_eq!(n.unwrap(), state::VariableValueUnion::Element(1));
         let less_is_better = model.get_preference(ResourceVarUnion::Element(v2));
         assert!(less_is_better.is_ok());
         assert!(less_is_better.unwrap());
@@ -3489,7 +3879,7 @@ mod tests {
         let v1 = v1.unwrap();
         let n = model.get_target(VarUnion::ElementResource(v1));
         assert!(n.is_ok());
-        assert_eq!(n.unwrap(), TargetReturnUnion::Element(0));
+        assert_eq!(n.unwrap(), state::VariableValueUnion::Element(0));
         let v = model.get_element_resource_var("v1");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v1);
@@ -3505,7 +3895,7 @@ mod tests {
         let v2 = v2.unwrap();
         let n = model.get_target(VarUnion::ElementResource(v2));
         assert!(n.is_ok());
-        assert_eq!(n.unwrap(), TargetReturnUnion::Element(1));
+        assert_eq!(n.unwrap(), state::VariableValueUnion::Element(1));
         let v = model.get_element_resource_var("v2");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v2);
@@ -3573,7 +3963,7 @@ mod tests {
         assert!(result.is_ok());
         let n = model.get_target(VarUnion::ElementResource(v));
         assert!(n.is_ok());
-        assert_eq!(n.unwrap(), TargetReturnUnion::Element(1));
+        assert_eq!(n.unwrap(), state::VariableValueUnion::Element(1));
     }
 
     #[test]
@@ -3697,13 +4087,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![0, 1, 2])),
         );
         let result = model.get_object_type_of(ObjectVarUnion::Set(v1));
         assert!(result.is_ok());
@@ -3717,13 +4101,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(3);
-                set.insert(4);
-                set.insert(5);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![3, 4, 5])),
         );
         let result = model.get_object_type_of(ObjectVarUnion::Set(v2));
         assert!(result.is_ok());
@@ -3747,13 +4125,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![0, 1, 2])),
         );
         let v = model.get_set_var("v1");
         assert!(v.is_ok());
@@ -3770,13 +4142,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(3);
-                set.insert(4);
-                set.insert(5);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![3, 4, 5])),
         );
         let v = model.get_set_var("v2");
         assert!(v.is_ok());
@@ -3822,13 +4188,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![0, 1, 2])),
         );
         let result = model.get_object_type_of(ObjectVarUnion::Set(v1));
         assert!(result.is_ok());
@@ -3848,13 +4208,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(3);
-                set.insert(4);
-                set.insert(5);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![3, 4, 5])),
         );
         let result = model.get_object_type_of(ObjectVarUnion::Set(v2));
         assert!(result.is_ok());
@@ -3884,13 +4238,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![0, 1, 2])),
         );
         let v = model.get_set_var("v1");
         assert!(v.is_ok());
@@ -3913,13 +4261,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(3);
-                set.insert(4);
-                set.insert(5);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![3, 4, 5])),
         );
         let v = model.get_set_var("v2");
         assert!(v.is_ok());
@@ -3958,7 +4300,7 @@ mod tests {
         assert!(ob.is_ok());
         let ob = ob.unwrap();
 
-        let target = TargetSetArgUnion::SetConst(SetConstPy::new({
+        let target = TargetSetArgUnion::SetConst(SetConstPy::from({
             let mut set = Set::with_capacity(10);
             set.insert(0);
             set.insert(1);
@@ -3972,19 +4314,13 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![0, 1, 2])),
         );
         let result = model.get_object_type_of(ObjectVarUnion::Set(v1));
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), ob);
 
-        let target = TargetSetArgUnion::SetConst(SetConstPy::new({
+        let target = TargetSetArgUnion::SetConst(SetConstPy::from({
             let mut set = Set::with_capacity(10);
             set.insert(3);
             set.insert(4);
@@ -3998,13 +4334,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(3);
-                set.insert(4);
-                set.insert(5);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![3, 4, 5])),
         );
         let result = model.get_object_type_of(ObjectVarUnion::Set(v2));
         assert!(result.is_ok());
@@ -4020,7 +4350,7 @@ mod tests {
         assert!(ob.is_ok());
         let ob = ob.unwrap();
 
-        let target = TargetSetArgUnion::SetConst(SetConstPy::new({
+        let target = TargetSetArgUnion::SetConst(SetConstPy::from({
             let mut set = Set::with_capacity(10);
             set.insert(0);
             set.insert(1);
@@ -4034,13 +4364,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![0, 1, 2])),
         );
         let v = model.get_set_var("v1");
         assert!(v.is_ok());
@@ -4049,7 +4373,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), ob);
 
-        let target = TargetSetArgUnion::SetConst(SetConstPy::new({
+        let target = TargetSetArgUnion::SetConst(SetConstPy::from({
             let mut set = Set::with_capacity(10);
             set.insert(3);
             set.insert(4);
@@ -4063,13 +4387,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(3);
-                set.insert(4);
-                set.insert(5);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![3, 4, 5])),
         );
         let v = model.get_set_var("v2");
         assert!(v.is_ok());
@@ -4145,13 +4463,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(3);
-                set.insert(4);
-                set.insert(5);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![3, 4, 5])),
         );
     }
 
@@ -4206,13 +4518,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(3);
-                set.insert(4);
-                set.insert(5);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![3, 4, 5])),
         );
     }
 
@@ -4260,7 +4566,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let result = Python::with_gil(|py| {
-            let target = SetConstPy::new({
+            let target = SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -4275,13 +4581,7 @@ mod tests {
         assert!(target.is_ok());
         assert_eq!(
             target.unwrap(),
-            TargetReturnUnion::Set(SetConstPy::new({
-                let mut set = Set::with_capacity(10);
-                set.insert(3);
-                set.insert(4);
-                set.insert(5);
-                set
-            }))
+            state::VariableValueUnion::Set(HashSet::from_iter(vec![3, 4, 5])),
         );
     }
 
@@ -4355,14 +4655,14 @@ mod tests {
         let v1 = v1.unwrap();
         let target = model.get_target(VarUnion::Int(v1));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Int(0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Int(0));
 
         let v2 = model.add_int_var(1, None);
         assert!(v2.is_ok());
         let v2 = v2.unwrap();
         let target = model.get_target(VarUnion::Int(v2));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Int(1));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Int(1));
 
         assert_ne!(v1, v2);
     }
@@ -4376,7 +4676,7 @@ mod tests {
         let v1 = v1.unwrap();
         let target = model.get_target(VarUnion::Int(v1));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Int(0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Int(0));
         let v = model.get_int_var("v1");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v1);
@@ -4386,7 +4686,7 @@ mod tests {
         let v2 = v2.unwrap();
         let target = model.get_target(VarUnion::Int(v2));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Int(1));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Int(1));
         let v = model.get_int_var("v2");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v2);
@@ -4438,7 +4738,7 @@ mod tests {
         assert!(result.is_ok());
         let target = model.get_target(VarUnion::Int(v));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Int(1));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Int(1));
     }
 
     #[test]
@@ -4485,7 +4785,7 @@ mod tests {
         let v1 = v1.unwrap();
         let target = model.get_target(VarUnion::IntResource(v1));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Int(0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Int(0));
         let less_is_better = model.get_preference(ResourceVarUnion::Int(v1));
         assert!(less_is_better.is_ok());
         assert!(!less_is_better.unwrap());
@@ -4495,7 +4795,7 @@ mod tests {
         let v2 = v2.unwrap();
         let target = model.get_target(VarUnion::IntResource(v2));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Int(1));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Int(1));
         let less_is_better = model.get_preference(ResourceVarUnion::Int(v2));
         assert!(less_is_better.is_ok());
         assert!(less_is_better.unwrap());
@@ -4512,7 +4812,7 @@ mod tests {
         let v1 = v1.unwrap();
         let target = model.get_target(VarUnion::IntResource(v1));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Int(0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Int(0));
         let v = model.get_int_resource_var("v1");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v1);
@@ -4525,7 +4825,7 @@ mod tests {
         let v2 = v2.unwrap();
         let target = model.get_target(VarUnion::IntResource(v2));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Int(1));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Int(1));
         let v = model.get_int_resource_var("v2");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v2);
@@ -4580,7 +4880,7 @@ mod tests {
         assert!(result.is_ok());
         let target = model.get_target(VarUnion::IntResource(v));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Int(1));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Int(1));
     }
 
     #[test]
@@ -4666,14 +4966,14 @@ mod tests {
         let v1 = v1.unwrap();
         let target = model.get_target(VarUnion::Float(v1));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Float(0.0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Float(0.0));
 
         let v2 = model.add_float_var(1.0, None);
         assert!(v2.is_ok());
         let v2 = v2.unwrap();
         let target = model.get_target(VarUnion::Float(v2));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Float(1.0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Float(1.0));
 
         assert_ne!(v1, v2);
     }
@@ -4687,7 +4987,7 @@ mod tests {
         let v1 = v1.unwrap();
         let target = model.get_target(VarUnion::Float(v1));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Float(0.0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Float(0.0));
         let v = model.get_float_var("v1");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v1);
@@ -4697,7 +4997,7 @@ mod tests {
         let v2 = v2.unwrap();
         let target = model.get_target(VarUnion::Float(v2));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Float(1.0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Float(1.0));
         let v = model.get_float_var("v2");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v2);
@@ -4749,7 +5049,7 @@ mod tests {
         assert!(result.is_ok());
         let target = model.get_target(VarUnion::Float(v));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Float(1.0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Float(1.0));
     }
 
     #[test]
@@ -4796,7 +5096,7 @@ mod tests {
         let v1 = v1.unwrap();
         let target = model.get_target(VarUnion::FloatResource(v1));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Float(0.0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Float(0.0));
         let less_is_better = model.get_preference(ResourceVarUnion::Float(v1));
         assert!(less_is_better.is_ok());
         assert!(!less_is_better.unwrap());
@@ -4806,7 +5106,7 @@ mod tests {
         let v2 = v2.unwrap();
         let target = model.get_target(VarUnion::FloatResource(v2));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Float(1.0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Float(1.0));
         let less_is_better = model.get_preference(ResourceVarUnion::Float(v2));
         assert!(less_is_better.is_ok());
         assert!(less_is_better.unwrap());
@@ -4823,7 +5123,7 @@ mod tests {
         let v1 = v1.unwrap();
         let target = model.get_target(VarUnion::FloatResource(v1));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Float(0.0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Float(0.0));
         let v = model.get_float_resource_var("v1");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v1);
@@ -4836,7 +5136,7 @@ mod tests {
         let v2 = v2.unwrap();
         let target = model.get_target(VarUnion::FloatResource(v2));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Float(1.0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Float(1.0));
         let v = model.get_float_resource_var("v2");
         assert!(v.is_ok());
         assert_eq!(v.unwrap(), v2);
@@ -4891,7 +5191,7 @@ mod tests {
         assert!(result.is_ok());
         let target = model.get_target(VarUnion::FloatResource(v));
         assert!(target.is_ok());
-        assert_eq!(target.unwrap(), TargetReturnUnion::Float(1.0));
+        assert_eq!(target.unwrap(), state::VariableValueUnion::Float(1.0));
     }
 
     #[test]
@@ -4975,7 +5275,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let v_id = IntegerVariable::from(v).id();
-        let result = model.add_state_constr(ConditionPy::new(Condition::ComparisonI(
+        let result = model.add_state_constr(ConditionPy::from(Condition::ComparisonI(
             ComparisonOperator::Gt,
             Box::new(IntegerExpression::Variable(v_id)),
             Box::new(IntegerExpression::Variable(0)),
@@ -5003,7 +5303,7 @@ mod tests {
         let v_id = IntegerVariable::from(v).id();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = model.add_state_constr(ConditionPy::new(Condition::ComparisonI(
+        let result = model.add_state_constr(ConditionPy::from(Condition::ComparisonI(
             ComparisonOperator::Gt,
             Box::new(IntegerExpression::Variable(v_id)),
             Box::new(IntegerExpression::Variable(0)),
@@ -5019,7 +5319,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let v_id = IntegerVariable::from(v).id();
-        let result = model.add_base_case(vec![ConditionPy::new(Condition::ComparisonI(
+        let result = model.add_base_case(vec![ConditionPy::from(Condition::ComparisonI(
             ComparisonOperator::Gt,
             Box::new(IntegerExpression::Variable(v_id)),
             Box::new(IntegerExpression::Variable(0)),
@@ -5047,7 +5347,7 @@ mod tests {
         let v_id = IntegerVariable::from(v).id();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = model.add_base_case(vec![ConditionPy::new(Condition::ComparisonI(
+        let result = model.add_base_case(vec![ConditionPy::from(Condition::ComparisonI(
             ComparisonOperator::Gt,
             Box::new(IntegerExpression::Variable(v_id)),
             Box::new(IntegerExpression::Variable(0)),
@@ -5062,7 +5362,7 @@ mod tests {
             reduce_function: ReduceFunction::Max,
             ..Default::default()
         });
-        model.set_minimize();
+        model.set_maximize(false);
         assert_eq!(
             model.0,
             Model {
@@ -5078,7 +5378,7 @@ mod tests {
             reduce_function: ReduceFunction::Min,
             ..Default::default()
         });
-        model.set_maximize();
+        model.set_maximize(true);
         assert_eq!(
             model.0,
             Model {
@@ -5108,7 +5408,7 @@ mod tests {
         let mut model = ModelPy::new_py(false, false);
         let t = TransitionPy::new_py(
             "t",
-            Some(CostUnion::Float(FloatUnion::Expr(FloatExprPy::new(
+            Some(CostUnion::Float(FloatUnion::Expr(FloatExprPy::from(
                 ContinuousExpression::Cost,
             )))),
             None,
@@ -5142,7 +5442,7 @@ mod tests {
         let mut model = ModelPy::new_py(false, false);
         let t = TransitionPy::new_py(
             "t",
-            Some(CostUnion::Float(FloatUnion::Expr(FloatExprPy::new(
+            Some(CostUnion::Float(FloatUnion::Expr(FloatExprPy::from(
                 ContinuousExpression::Cost,
             )))),
             None,
@@ -5176,7 +5476,7 @@ mod tests {
         let mut model = ModelPy::new_py(false, false);
         let t = TransitionPy::new_py(
             "t",
-            Some(CostUnion::Float(FloatUnion::Expr(FloatExprPy::new(
+            Some(CostUnion::Float(FloatUnion::Expr(FloatExprPy::from(
                 ContinuousExpression::Cost,
             )))),
             None,
@@ -5210,7 +5510,7 @@ mod tests {
         let mut model = ModelPy::new_py(false, false);
         let t = TransitionPy::new_py(
             "t",
-            Some(CostUnion::Float(FloatUnion::Expr(FloatExprPy::new(
+            Some(CostUnion::Float(FloatUnion::Expr(FloatExprPy::from(
                 ContinuousExpression::Cost,
             )))),
             None,
@@ -5263,7 +5563,7 @@ mod tests {
     fn add_float_dual_bound_err() {
         let mut model = ModelPy::new_py(false, false);
         assert!(model
-            .add_dual_bound(CostUnion::Float(FloatUnion::Expr(FloatExprPy::new(
+            .add_dual_bound(CostUnion::Float(FloatUnion::Expr(FloatExprPy::from(
                 ContinuousExpression::Cost
             ))))
             .is_err());
@@ -6249,8 +6549,8 @@ mod tests {
         let mut model = ModelPy::default();
 
         let table = SetTableArgUnion::Table1D(vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -6279,8 +6579,8 @@ mod tests {
         );
 
         let table = SetTableArgUnion::Table1D(vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -6314,8 +6614,8 @@ mod tests {
         let mut model = ModelPy::default();
 
         let table = SetTableArgUnion::Table1D(vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -6348,8 +6648,8 @@ mod tests {
         );
 
         let table = SetTableArgUnion::Table1D(vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -6386,8 +6686,8 @@ mod tests {
     fn add_set_table_1d_from_set_const_duplicate_err() {
         let mut model = ModelPy::default();
         let table = SetTableArgUnion::Table1D(vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -6398,8 +6698,8 @@ mod tests {
         let t = model.add_set_table(table, None, Some("t1"), None);
         assert!(t.is_ok());
         let table = SetTableArgUnion::Table1D(vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -6420,7 +6720,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table =
-            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -6437,7 +6737,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
-            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -6496,7 +6796,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table =
-            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -6513,7 +6813,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
-            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -6618,7 +6918,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table =
-            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -6635,7 +6935,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
-            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -6659,7 +6959,7 @@ mod tests {
         let ob = ob.unwrap();
 
         let table =
-            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -6676,7 +6976,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
-            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -6704,7 +7004,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table =
-            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -6721,7 +7021,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
-            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -6855,7 +7155,7 @@ mod tests {
     //     pyo3::prepare_freethreaded_python();
 
     //     let mut model = ModelPy::default();
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t = model.add_set_table(table, None, None, None);
@@ -6863,7 +7163,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table1D(0);
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new({
+    //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
     //             set
@@ -6879,7 +7179,7 @@ mod tests {
     //     pyo3::prepare_freethreaded_python();
 
     //     let mut model = ModelPy::default();
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t = model.add_set_table(table, None, None, None);
@@ -6901,7 +7201,7 @@ mod tests {
     //     pyo3::prepare_freethreaded_python();
 
     //     let mut model = ModelPy::default();
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t = model.add_set_table(table, None, None, None);
@@ -6911,7 +7211,7 @@ mod tests {
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new({
+    //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
     //             set
@@ -6930,7 +7230,7 @@ mod tests {
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t = model.add_set_table(table, None, None, None);
@@ -6951,7 +7251,7 @@ mod tests {
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t = model.add_set_table(table, None, None, None);
@@ -6974,7 +7274,7 @@ mod tests {
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t = model.add_set_table(table, None, None, None);
@@ -7000,7 +7300,7 @@ mod tests {
     //     let mut model = ModelPy::default();
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t = model.add_set_table(table, None, None, None);
@@ -7027,7 +7327,7 @@ mod tests {
 
     //     let mut model = ModelPy::default();
 
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t1 = model.add_set_table(table, None, None, None);
@@ -7038,8 +7338,8 @@ mod tests {
     //         _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
     //     };
     //     let table = vec![
-    //         SetConstPy::new(Set::with_capacity(10)),
-    //         SetConstPy::new({
+    //         SetConstPy::from(Set::with_capacity(10)),
+    //         SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(0);
     //             set.insert(1);
@@ -7075,7 +7375,7 @@ mod tests {
 
     //     let mut model = ModelPy::default();
 
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t1 = model.add_set_table(table, None, None, None);
@@ -7104,7 +7404,7 @@ mod tests {
 
     //     let mut model = ModelPy::default();
 
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t1 = model.add_set_table(table, None, None, None);
@@ -7116,8 +7416,8 @@ mod tests {
     //     };
     //     let snapshot = model.clone();
     //     let table = vec![vec![
-    //         SetConstPy::new(Set::with_capacity(10)),
-    //         SetConstPy::new({
+    //         SetConstPy::from(Set::with_capacity(10)),
+    //         SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(0);
     //             set.insert(1);
@@ -7143,7 +7443,7 @@ mod tests {
 
     //     let mut model = ModelPy::default();
 
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t1 = model.add_set_table(table, None, None, None);
@@ -7154,8 +7454,8 @@ mod tests {
     //         _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
     //     };
     //     let table = vec![
-    //         SetConstPy::new(Set::with_capacity(10)),
-    //         SetConstPy::new({
+    //         SetConstPy::from(Set::with_capacity(10)),
+    //         SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(0);
     //             set.insert(1);
@@ -7185,7 +7485,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
 
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t1 = model.add_set_table(table, None, None, None);
@@ -7225,7 +7525,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
 
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t1 = model.add_set_table(table, None, None, None);
@@ -7254,7 +7554,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
 
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t1 = model.add_set_table(table, None, None, None);
@@ -7301,7 +7601,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
 
-    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::new(
+    //     let table = SetTableArgUnion::Table1D(vec![TargetSetArgUnion::SetConst(SetConstPy::from(
     //         Set::with_capacity(10),
     //     ))]);
     //     let t1 = model.add_set_table(table, None, None, None);
@@ -7335,8 +7635,8 @@ mod tests {
         let mut model = ModelPy::default();
 
         let table = SetTableArgUnion::Table2D(vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -7365,8 +7665,8 @@ mod tests {
         );
 
         let table = SetTableArgUnion::Table2D(vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -7400,8 +7700,8 @@ mod tests {
         let mut model = ModelPy::default();
 
         let table = SetTableArgUnion::Table2D(vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -7434,8 +7734,8 @@ mod tests {
         );
 
         let table = SetTableArgUnion::Table2D(vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -7472,8 +7772,8 @@ mod tests {
     fn add_set_table_2d_from_set_const_duplicate_err() {
         let mut model = ModelPy::default();
         let table = SetTableArgUnion::Table2D(vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -7484,8 +7784,8 @@ mod tests {
         let t = model.add_set_table(table, None, Some("t1"), None);
         assert!(t.is_ok());
         let table = SetTableArgUnion::Table2D(vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -7506,7 +7806,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table =
-            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -7523,7 +7823,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
-            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -7582,7 +7882,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table =
-            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -7599,7 +7899,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
-            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -7704,7 +8004,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table =
-            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -7721,7 +8021,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
-            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -7745,7 +8045,7 @@ mod tests {
         let ob = ob.unwrap();
 
         let table =
-            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -7762,7 +8062,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
-            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -7790,7 +8090,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table =
-            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -7807,7 +8107,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table =
-            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::new({
+            SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -7942,14 +8242,14 @@ mod tests {
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table2D((0, 0));
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new({
+    //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
     //             set
@@ -7966,7 +8266,7 @@ mod tests {
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -7988,7 +8288,7 @@ mod tests {
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -7997,7 +8297,7 @@ mod tests {
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new({
+    //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
     //             set
@@ -8017,7 +8317,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -8038,7 +8338,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -8061,7 +8361,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -8087,7 +8387,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -8114,7 +8414,7 @@ mod tests {
     //     let mut model = ModelPy::default();
 
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -8124,8 +8424,8 @@ mod tests {
     //         _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
     //     };
     //     let table = vec![vec![
-    //         SetConstPy::new(Set::with_capacity(10)),
-    //         SetConstPy::new({
+    //         SetConstPy::from(Set::with_capacity(10)),
+    //         SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(0);
     //             set.insert(1);
@@ -8162,7 +8462,7 @@ mod tests {
     //     let mut model = ModelPy::default();
 
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -8191,7 +8491,7 @@ mod tests {
     //     let mut model = ModelPy::default();
 
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -8202,8 +8502,8 @@ mod tests {
     //     };
     //     let snapshot = model.clone();
     //     let table = vec![vec![vec![
-    //         SetConstPy::new(Set::with_capacity(10)),
-    //         SetConstPy::new({
+    //         SetConstPy::from(Set::with_capacity(10)),
+    //         SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(0);
     //             set.insert(1);
@@ -8230,7 +8530,7 @@ mod tests {
     //     let mut model = ModelPy::default();
 
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -8240,8 +8540,8 @@ mod tests {
     //         _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
     //     };
     //     let table = vec![vec![
-    //         SetConstPy::new(Set::with_capacity(10)),
-    //         SetConstPy::new({
+    //         SetConstPy::from(Set::with_capacity(10)),
+    //         SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(0);
     //             set.insert(1);
@@ -8272,7 +8572,7 @@ mod tests {
     //     assert!(ob.is_ok());
 
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -8312,7 +8612,7 @@ mod tests {
     //     assert!(ob.is_ok());
 
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -8341,7 +8641,7 @@ mod tests {
     //     assert!(ob.is_ok());
 
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -8388,7 +8688,7 @@ mod tests {
     //     assert!(ob.is_ok());
 
     //     let table = SetTableArgUnion::Table2D(vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -8421,8 +8721,8 @@ mod tests {
         let mut model = ModelPy::default();
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -8451,8 +8751,8 @@ mod tests {
         );
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -8486,8 +8786,8 @@ mod tests {
         let mut model = ModelPy::default();
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -8520,8 +8820,8 @@ mod tests {
         );
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -8558,8 +8858,8 @@ mod tests {
     fn add_set_table_3d_from_set_const_duplicate_err() {
         let mut model = ModelPy::default();
         let table = SetTableArgUnion::Table3D(vec![vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -8570,8 +8870,8 @@ mod tests {
         let t = model.add_set_table(table, None, Some("t1"), None);
         assert!(t.is_ok());
         let table = SetTableArgUnion::Table3D(vec![vec![vec![
-            TargetSetArgUnion::SetConst(SetConstPy::new(Set::with_capacity(10))),
-            TargetSetArgUnion::SetConst(SetConstPy::new({
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity(10))),
+            TargetSetArgUnion::SetConst(SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -8592,7 +8892,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -8610,7 +8910,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -8670,7 +8970,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -8688,7 +8988,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -8794,7 +9094,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -8812,7 +9112,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -8837,7 +9137,7 @@ mod tests {
         let ob = ob.unwrap();
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -8855,7 +9155,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -8884,7 +9184,7 @@ mod tests {
         assert!(ob.is_ok());
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(0);
                 set.insert(1);
@@ -8902,7 +9202,7 @@ mod tests {
         assert_eq!(t1.get_capacity_of_set(), 10);
 
         let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-            SetConstPy::new({
+            SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
                 set.insert(4);
@@ -9038,14 +9338,14 @@ mod tests {
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
     //     let t = t.unwrap();
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new({
+    //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
     //             set
@@ -9062,7 +9362,7 @@ mod tests {
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -9084,7 +9384,7 @@ mod tests {
 
     //     let mut model = ModelPy::default();
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -9093,7 +9393,7 @@ mod tests {
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new({
+    //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
     //             set
@@ -9113,7 +9413,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -9134,7 +9434,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -9157,7 +9457,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -9183,7 +9483,7 @@ mod tests {
     //     let ob = model.add_object_type(10, None);
     //     assert!(ob.is_ok());
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t = model.add_set_table(table, None, None, None);
     //     assert!(t.is_ok());
@@ -9210,7 +9510,7 @@ mod tests {
     //     let mut model = ModelPy::default();
 
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -9220,8 +9520,8 @@ mod tests {
     //         _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
     //     };
     //     let table = vec![vec![vec![
-    //         SetConstPy::new(Set::with_capacity(10)),
-    //         SetConstPy::new({
+    //         SetConstPy::from(Set::with_capacity(10)),
+    //         SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(0);
     //             set.insert(1);
@@ -9258,7 +9558,7 @@ mod tests {
     //     let mut model = ModelPy::default();
 
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -9287,7 +9587,7 @@ mod tests {
     //     let mut model = ModelPy::default();
 
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -9298,8 +9598,8 @@ mod tests {
     //     };
     //     let snapshot = model.clone();
     //     let table = vec![vec![
-    //         SetConstPy::new(Set::with_capacity(10)),
-    //         SetConstPy::new({
+    //         SetConstPy::from(Set::with_capacity(10)),
+    //         SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(0);
     //             set.insert(1);
@@ -9326,7 +9626,7 @@ mod tests {
     //     let mut model = ModelPy::default();
 
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -9336,8 +9636,8 @@ mod tests {
     //         _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
     //     };
     //     let table = vec![vec![vec![
-    //         SetConstPy::new(Set::with_capacity(10)),
-    //         SetConstPy::new({
+    //         SetConstPy::from(Set::with_capacity(10)),
+    //         SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(0);
     //             set.insert(1);
@@ -9368,7 +9668,7 @@ mod tests {
     //     assert!(ob.is_ok());
 
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -9408,7 +9708,7 @@ mod tests {
     //     assert!(ob.is_ok());
 
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -9437,7 +9737,7 @@ mod tests {
     //     assert!(ob.is_ok());
 
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -9484,7 +9784,7 @@ mod tests {
     //     assert!(ob.is_ok());
 
     //     let table = SetTableArgUnion::Table3D(vec![vec![vec![TargetSetArgUnion::SetConst(
-    //         SetConstPy::new(Set::with_capacity(10)),
+    //         SetConstPy::from(Set::with_capacity(10)),
     //     )]]]);
     //     let t1 = model.add_set_table(table, None, None, None);
     //     assert!(t1.is_ok());
@@ -9520,7 +9820,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(0);
                     set.insert(1);
@@ -9532,7 +9832,7 @@ mod tests {
         });
         let t1 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             None,
@@ -9566,7 +9866,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(3);
                     set.insert(4);
@@ -9578,7 +9878,7 @@ mod tests {
         });
         let t2 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             None,
@@ -9617,7 +9917,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(0);
                     set.insert(1);
@@ -9629,7 +9929,7 @@ mod tests {
         });
         let t1 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t1"),
@@ -9663,7 +9963,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(3);
                     set.insert(4);
@@ -9675,7 +9975,7 @@ mod tests {
         });
         let t2 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t2"),
@@ -9712,7 +10012,7 @@ mod tests {
         let table = SetTableArgUnion::Table(FxHashMap::default());
         let t = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t1"),
@@ -9723,7 +10023,7 @@ mod tests {
         let snapshot = model.clone();
         let t = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t1"),
@@ -9753,7 +10053,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(0);
                     set.insert(1);
@@ -9765,7 +10065,7 @@ mod tests {
         });
         let t1 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             None,
@@ -9783,7 +10083,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(3);
                     set.insert(4);
@@ -9795,7 +10095,7 @@ mod tests {
         });
         let t2 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             None,
@@ -9826,7 +10126,7 @@ mod tests {
         });
         let t1 = model2.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             None,
@@ -9850,7 +10150,7 @@ mod tests {
         });
         let t2 = model2.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             None,
@@ -9879,7 +10179,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(0);
                     set.insert(1);
@@ -9891,7 +10191,7 @@ mod tests {
         });
         let t1 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t1"),
@@ -9909,7 +10209,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(3);
                     set.insert(4);
@@ -9921,7 +10221,7 @@ mod tests {
         });
         let t2 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t2"),
@@ -9952,7 +10252,7 @@ mod tests {
         });
         let t1 = model2.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t1"),
@@ -9976,7 +10276,7 @@ mod tests {
         });
         let t2 = model2.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t2"),
@@ -10079,7 +10379,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(0);
                     set.insert(1);
@@ -10091,7 +10391,7 @@ mod tests {
         });
         let t1 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             None,
@@ -10109,7 +10409,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(3);
                     set.insert(4);
@@ -10121,7 +10421,7 @@ mod tests {
         });
         let t2 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             None,
@@ -10158,7 +10458,7 @@ mod tests {
         });
         let t1 = model2.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             None,
@@ -10188,7 +10488,7 @@ mod tests {
         });
         let t2 = model2.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             None,
@@ -10217,7 +10517,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(0);
                     set.insert(1);
@@ -10229,7 +10529,7 @@ mod tests {
         });
         let t1 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t1"),
@@ -10247,7 +10547,7 @@ mod tests {
             let mut map = FxHashMap::default();
             map.insert(
                 vec![0, 0, 0, 0],
-                TargetSetArgUnion::SetConst(SetConstPy::new({
+                TargetSetArgUnion::SetConst(SetConstPy::from({
                     let mut set = Set::with_capacity(10);
                     set.insert(3);
                     set.insert(4);
@@ -10259,7 +10559,7 @@ mod tests {
         });
         let t2 = model.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t2"),
@@ -10296,7 +10596,7 @@ mod tests {
         });
         let t1 = model2.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t1"),
@@ -10326,7 +10626,7 @@ mod tests {
         });
         let t2 = model2.add_set_table(
             table,
-            Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+            Some(TargetSetArgUnion::SetConst(SetConstPy::from(
                 Set::with_capacity(10),
             ))),
             Some("t2"),
@@ -10478,7 +10778,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10492,7 +10792,7 @@ mod tests {
     //     };
     //     let index = TableIndexUnion::Table1D(0);
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new({
+    //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
     //             set
@@ -10516,7 +10816,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10530,7 +10830,7 @@ mod tests {
     //     };
     //     let index = TableIndexUnion::Table2D((0, 0));
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new({
+    //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
     //             set
@@ -10557,7 +10857,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10571,7 +10871,7 @@ mod tests {
     //     };
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new({
+    //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
     //             set
@@ -10598,7 +10898,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10612,7 +10912,7 @@ mod tests {
     //     };
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new({
+    //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
     //             set
@@ -10639,7 +10939,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10665,7 +10965,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10677,7 +10977,7 @@ mod tests {
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new({
+    //         let value = SetConstPy::from({
     //             let mut set = Set::with_capacity(10);
     //             set.insert(1);
     //             set
@@ -10699,7 +10999,7 @@ mod tests {
     //     assert!(ob.is_ok());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10734,7 +11034,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10772,7 +11072,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10810,7 +11110,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10848,7 +11148,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10876,7 +11176,7 @@ mod tests {
     //     assert!(ob.is_ok());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10916,7 +11216,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -10959,7 +11259,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11002,7 +11302,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11045,7 +11345,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11076,7 +11376,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11089,7 +11389,7 @@ mod tests {
     //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
     //     };
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new(Set::with_capacity(10)).into_py(py);
+    //         let value = SetConstPy::from(Set::with_capacity(10)).into_py(py);
     //         model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
     //     });
     //     assert!(result.is_ok());
@@ -11103,7 +11403,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11132,7 +11432,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11147,7 +11447,7 @@ mod tests {
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
-    //         let value = SetConstPy::new(Set::with_capacity(10)).into_py(py);
+    //         let value = SetConstPy::from(Set::with_capacity(10)).into_py(py);
     //         model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
     //     });
     //     assert!(result.is_err());
@@ -11164,7 +11464,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11193,7 +11493,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11224,7 +11524,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11258,7 +11558,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11293,7 +11593,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t1 = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11309,7 +11609,7 @@ mod tests {
     //         let mut map = FxHashMap::default();
     //         map.insert(
     //             (0, 0, 0, 0),
-    //             SetConstPy::new({
+    //             SetConstPy::from({
     //                 let mut set = Set::with_capacity(10);
     //                 set.insert(0);
     //                 set.insert(1);
@@ -11321,7 +11621,7 @@ mod tests {
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = table.into_py(py);
-    //         let default = SetConstPy::new(Set::with_capacity(10)).into_py(py);
+    //         let default = SetConstPy::from(Set::with_capacity(10)).into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
     //             table.as_ref(py),
@@ -11356,7 +11656,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t1 = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11368,7 +11668,7 @@ mod tests {
     //         SetTableUnion::Table(t) => t,
     //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
     //     };
-    //     let table = vec![SetConstPy::new({
+    //     let table = vec![SetConstPy::from({
     //         let mut set = Set::with_capacity(10);
     //         set.insert(0);
     //         set.insert(1);
@@ -11378,7 +11678,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let table = table.into_py(py);
-    //         let default = SetConstPy::new(Set::with_capacity(10)).into_py(py);
+    //         let default = SetConstPy::from(Set::with_capacity(10)).into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
     //             table.as_ref(py),
@@ -11398,7 +11698,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t1 = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11413,7 +11713,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let table = 1usize.into_py(py);
-    //         let default = SetConstPy::new(Set::with_capacity(10)).into_py(py);
+    //         let default = SetConstPy::from(Set::with_capacity(10)).into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
     //             table.as_ref(py),
@@ -11433,7 +11733,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t1 = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11449,7 +11749,7 @@ mod tests {
     //         let mut map = FxHashMap::default();
     //         map.insert(
     //             (0, 0, 0, 0),
-    //             SetConstPy::new({
+    //             SetConstPy::from({
     //                 let mut set = Set::with_capacity(10);
     //                 set.insert(0);
     //                 set.insert(1);
@@ -11482,7 +11782,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t1 = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11498,7 +11798,7 @@ mod tests {
     //         let mut map = FxHashMap::default();
     //         map.insert(
     //             (0, 0, 0, 0),
-    //             SetConstPy::new({
+    //             SetConstPy::from({
     //                 let mut set = Set::with_capacity(10);
     //                 set.insert(0);
     //                 set.insert(1);
@@ -11512,7 +11812,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let table = table.into_py(py);
-    //         let default = SetConstPy::new(Set::with_capacity(10)).into_py(py);
+    //         let default = SetConstPy::from(Set::with_capacity(10)).into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
     //             table.as_ref(py),
@@ -11534,7 +11834,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t1 = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11596,7 +11896,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t1 = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11645,7 +11945,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t1 = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11698,7 +11998,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t1 = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11754,7 +12054,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t1 = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,
@@ -11796,7 +12096,7 @@ mod tests {
     //     let table = SetTableArgUnion::Table(FxHashMap::default());
     //     let t1 = model.add_set_table(
     //         table,
-    //         Some(TargetSetArgUnion::SetConst(SetConstPy::new(
+    //         Some(TargetSetArgUnion::SetConst(SetConstPy::from(
     //             Set::with_capacity(10),
     //         ))),
     //         None,

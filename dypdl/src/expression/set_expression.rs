@@ -33,8 +33,11 @@ pub enum SetExpression {
 /// Operator on an two sets.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SetOperator {
+    /// Union.
     Union,
+    /// Difference.
     Difference,
+    /// Intersection.
     Intersection,
 }
 
@@ -71,6 +74,23 @@ impl From<SetVariable> for SetExpression {
 impl ops::Not for SetExpression {
     type Output = SetExpression;
 
+    /// Returns an expression representing the complement.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let state = model.target.clone();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    ///
+    /// let expression = SetExpression::from(set);
+    /// let expression = !expression;
+    /// let expected = model.create_set(object_type, &[2, 3]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     fn not(self) -> Self::Output {
         SetExpression::Complement(Box::new(self))
@@ -80,6 +100,23 @@ impl ops::Not for SetExpression {
 impl ops::Not for SetVariable {
     type Output = SetExpression;
 
+    /// Returns an expression representing the complement.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = !variable;
+    /// let expected = model.create_set(object_type, &[2, 3]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     fn not(self) -> Self::Output {
         SetExpression::Complement(Box::new(SetExpression::from(self)))
@@ -89,6 +126,25 @@ impl ops::Not for SetVariable {
 impl ops::BitOr for SetExpression {
     type Output = SetExpression;
 
+    /// Returns an expression representing the union.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = SetExpression::from(a);
+    /// let b = model.create_set(object_type, &[1, 2]).unwrap();
+    /// let b = SetExpression::from(b);
+    /// let expression = a | b;
+    /// let expected = model.create_set(object_type, &[0, 1, 2]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     fn bitor(self, rhs: Self) -> Self::Output {
         SetExpression::SetOperation(SetOperator::Union, Box::new(self), Box::new(rhs))
@@ -98,6 +154,25 @@ impl ops::BitOr for SetExpression {
 impl ops::Sub for SetExpression {
     type Output = SetExpression;
 
+    /// Returns an expression representing the difference.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = SetExpression::from(a);
+    /// let b = model.create_set(object_type, &[1, 2]).unwrap();
+    /// let b = SetExpression::from(b);
+    /// let expression = a - b;
+    /// let expected = model.create_set(object_type, &[0]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
         SetExpression::SetOperation(SetOperator::Difference, Box::new(self), Box::new(rhs))
@@ -107,6 +182,25 @@ impl ops::Sub for SetExpression {
 impl ops::BitAnd for SetExpression {
     type Output = SetExpression;
 
+    /// Returns an expression representing the intersection.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let a = SetExpression::from(a);
+    /// let b = model.create_set(object_type, &[1, 2]).unwrap();
+    /// let b = SetExpression::from(b);
+    /// let expression = a & b;
+    /// let expected = model.create_set(object_type, &[1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     fn bitand(self, rhs: Self) -> Self::Output {
         SetExpression::SetOperation(SetOperator::Intersection, Box::new(self), Box::new(rhs))
@@ -114,6 +208,26 @@ impl ops::BitAnd for SetExpression {
 }
 
 /// A trait for operations on an element and a set.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+///
+/// let mut model = Model::default();
+/// let object_type = model.add_object_type("object", 4).unwrap();
+/// let set = model.create_set(object_type, &[0, 1]).unwrap();
+/// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+/// let state = model.target.clone();
+///
+/// let expression = variable.add(2);
+/// let expected = model.create_set(object_type, &[0, 1, 2]).unwrap();
+/// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+///
+/// let expression = variable.remove(1);
+/// let expected = model.create_set(object_type, &[0]).unwrap();
+/// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+/// ```
 pub trait SetElementOperation<Rhs> {
     /// Returns a set expression, where an element is added.
     fn add(self, rhs: Rhs) -> SetExpression;
@@ -123,6 +237,23 @@ pub trait SetElementOperation<Rhs> {
 
 impl Table1DHandle<Set> {
     /// Returns a constant in a 1D set table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_1d("table", vec![a.clone(), b]).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.element(variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), a);
+    /// ```
     #[inline]
     pub fn element<T>(&self, x: T) -> SetExpression
     where
@@ -135,6 +266,26 @@ impl Table1DHandle<Set> {
     }
 
     /// Returns the union of sets in a 1D table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let capacity = 2;
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_1d("table", vec![a, b]).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.union(capacity, variable);
+    /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     pub fn union<T>(&self, capacity: usize, x: T) -> SetExpression
     where
@@ -149,6 +300,26 @@ impl Table1DHandle<Set> {
     }
 
     /// Returns the intersection of sets in a 1D table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let capacity = 2;
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_1d("table", vec![a, b]).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.intersection(capacity, variable);
+    /// let expected = model.create_set(object_type, &[0]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     pub fn intersection<T>(&self, capacity: usize, x: T) -> SetExpression
     where
@@ -163,6 +334,25 @@ impl Table1DHandle<Set> {
     }
 
     /// Returns the symmetric difference (disjunctive union) of sets in a 1D table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let capacity = 2;
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_1d("table", vec![a, b]).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.symmetric_difference(capacity, variable);
+    /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
     #[inline]
     pub fn symmetric_difference<T>(&self, capacity: usize, x: T) -> SetExpression
     where
@@ -179,6 +369,23 @@ impl Table1DHandle<Set> {
 
 impl Table2DHandle<Set> {
     /// Returns a constant in a 2D set table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_2d("table", vec![vec![a.clone(), b.clone()], vec![b, a.clone()]]).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.element(variable, 0);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), a);
+    /// ```
     #[inline]
     pub fn element<T, U>(&self, x: T, y: U) -> SetExpression
     where
@@ -193,6 +400,28 @@ impl Table2DHandle<Set> {
     }
 
     /// Returns the union of sets in a 2D table.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let capacity = 2;
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_2d("table", vec![vec![a.clone(), b.clone()], vec![a, b]]).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.union(capacity, variable, 0);
+    /// let expected = model.create_set(object_type, &[1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    ///
+    /// let expression = table.union(capacity, variable, variable);
+    /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     pub fn union<T, U>(&self, capacity: usize, x: T, y: U) -> SetExpression
     where
@@ -209,6 +438,28 @@ impl Table2DHandle<Set> {
     }
 
     /// Returns the intersection of sets in a 2D table.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let capacity = 2;
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_2d("table", vec![vec![a.clone(), b.clone()], vec![a, b]]).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.intersection(capacity, variable, 0);
+    /// let expected = model.create_set(object_type, &[1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    ///
+    /// let expression = table.intersection(capacity, variable, variable);
+    /// let expected = model.create_set(object_type, &[]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     pub fn intersection<T, U>(&self, capacity: usize, x: T, y: U) -> SetExpression
     where
@@ -225,6 +476,28 @@ impl Table2DHandle<Set> {
     }
 
     /// Returns the symmetric difference (disjunctive union) of sets in a 2D table.
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let capacity = 2;
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_2d("table", vec![vec![a.clone(), b.clone()], vec![a, b]]).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.symmetric_difference(capacity, variable, 0);
+    /// let expected = model.create_set(object_type, &[]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    ///
+    /// let expression = table.symmetric_difference(capacity, variable, variable);
+    /// let expected = model.create_set(object_type, &[]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     pub fn symmetric_difference<T, U>(&self, capacity: usize, x: T, y: U) -> SetExpression
     where
@@ -243,6 +516,29 @@ impl Table2DHandle<Set> {
 
 impl Table3DHandle<Set> {
     /// Returns a constant in a 3D set table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![
+    ///         vec![vec![a.clone(), b.clone()], vec![b.clone(), a.clone()]],
+    ///         vec![vec![a.clone(), b.clone()], vec![b, a.clone()]],
+    ///     ]
+    /// ).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.element(variable, variable + 1, 1);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), a);
+    /// ```
     #[inline]
     pub fn element<T, U, V>(&self, x: T, y: U, z: V) -> SetExpression
     where
@@ -259,6 +555,36 @@ impl Table3DHandle<Set> {
     }
 
     /// Returns the union of sets in a 3D table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let capacity = 2;
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![
+    ///         vec![vec![a.clone(), b.clone()], vec![b.clone(), a.clone()]],
+    ///         vec![vec![a.clone(), b.clone()], vec![b, a.clone()]],
+    ///     ]
+    /// ).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.union(capacity, variable, 0, 0);
+    /// let expected = model.create_set(object_type, &[1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    ///
+    /// let expression = table.union(capacity, variable, variable, variable);
+    /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     pub fn union<T, U, V>(&self, capacity: usize, x: T, y: U, z: V) -> SetExpression
     where
@@ -277,6 +603,36 @@ impl Table3DHandle<Set> {
     }
 
     /// Returns the intersection of sets in a 3D table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let capacity = 2;
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![
+    ///         vec![vec![a.clone(), b.clone()], vec![b.clone(), a.clone()]],
+    ///         vec![vec![a.clone(), b.clone()], vec![b, a.clone()]],
+    ///     ]
+    /// ).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.intersection(capacity, variable, 0, 0);
+    /// let expected = model.create_set(object_type, &[1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    ///
+    /// let expression = table.intersection(capacity, variable, variable, variable);
+    /// let expected = model.create_set(object_type, &[]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     pub fn intersection<T, U, V>(&self, capacity: usize, x: T, y: U, z: V) -> SetExpression
     where
@@ -295,6 +651,36 @@ impl Table3DHandle<Set> {
     }
 
     /// Returns the symmetric difference (disjunctive union) of sets in a 3D table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let capacity = 2;
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![
+    ///         vec![vec![a.clone(), b.clone()], vec![b.clone(), a.clone()]],
+    ///         vec![vec![a.clone(), b.clone()], vec![b, a.clone()]],
+    ///     ]
+    /// ).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = table.symmetric_difference(capacity, variable, 0, 0);
+    /// let expected = model.create_set(object_type, &[]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    ///
+    /// let expression = table.symmetric_difference(capacity, variable, variable, variable);
+    /// let expected = model.create_set(object_type, &[]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     pub fn symmetric_difference<T, U, V>(&self, capacity: usize, x: T, y: U, z: V) -> SetExpression
     where
@@ -315,6 +701,33 @@ impl Table3DHandle<Set> {
 
 impl TableHandle<Set> {
     /// Returns a constant in a set table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let map = FxHashMap::from_iter(
+    ///     vec![(vec![0, 0, 0, 0], a.clone()), (vec![1, 1, 1, 1], a.clone())]
+    /// );
+    /// let table = model.add_table("table", map, b).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ElementExpression::from(variable),
+    ///     ElementExpression::from(0),
+    ///     ElementExpression::from(0),
+    ///     ElementExpression::from(0),
+    /// ];
+    /// let expression = table.element(indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), a);
+    /// ```
     #[inline]
     pub fn element<T>(&self, indices: Vec<T>) -> SetExpression
     where
@@ -328,6 +741,47 @@ impl TableHandle<Set> {
     }
 
     /// Returns the union of sets in a table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let capacity = 2;
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let map = FxHashMap::from_iter(
+    ///     vec![(vec![0, 0, 0, 0], a.clone()), (vec![1, 1, 1, 1], a)]
+    /// );
+    /// let table = model.add_table("table", map, b).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(0),
+    ///     ArgumentExpression::from(0),
+    ///     ArgumentExpression::from(0),
+    /// ];
+    /// let expression = table.union(capacity, indices);
+    /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(variable),
+    /// ];
+    /// let expression = table.union(capacity, indices);
+    /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     pub fn union<T>(&self, capacity: usize, indices: Vec<T>) -> SetExpression
     where
@@ -343,6 +797,47 @@ impl TableHandle<Set> {
     }
 
     /// Returns the intersection of sets in a table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let capacity = 2;
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let map = FxHashMap::from_iter(
+    ///     vec![(vec![0, 0, 0, 0], a.clone()), (vec![1, 1, 1, 1], a)]
+    /// );
+    /// let table = model.add_table("table", map, b).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(0),
+    ///     ArgumentExpression::from(0),
+    ///     ArgumentExpression::from(0),
+    /// ];
+    /// let expression = table.intersection(capacity, indices);
+    /// let expected = model.create_set(object_type, &[]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(variable),
+    /// ];
+    /// let expression = table.intersection(capacity, indices);
+    /// let expected = model.create_set(object_type, &[]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     pub fn intersection<T>(&self, capacity: usize, indices: Vec<T>) -> SetExpression
     where
@@ -358,6 +853,47 @@ impl TableHandle<Set> {
     }
 
     /// Returns the symmetric difference (disjunctive union) of sets in a table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let capacity = 2;
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", capacity).unwrap();
+    /// let a = model.create_set(object_type, &[1]).unwrap();
+    /// let b = model.create_set(object_type, &[0]).unwrap();
+    /// let map = FxHashMap::from_iter(
+    ///     vec![(vec![0, 0, 0, 0], a.clone()), (vec![1, 1, 1, 1], a)]
+    /// );
+    /// let table = model.add_table("table", map, b).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(0),
+    ///     ArgumentExpression::from(0),
+    ///     ArgumentExpression::from(0),
+    /// ];
+    /// let expression = table.symmetric_difference(capacity, indices);
+    /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    ///
+    /// let indices = vec![
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(variable),
+    ///     ArgumentExpression::from(variable),
+    /// ];
+    /// let expression = table.symmetric_difference(capacity, indices);
+    /// let expected = model.create_set(object_type, &[]).unwrap();
+    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// ```
     #[inline]
     pub fn symmetric_difference<T>(&self, capacity: usize, indices: Vec<T>) -> SetExpression
     where
@@ -392,6 +928,7 @@ macro_rules! impl_set_ops {
         impl ops::BitOr<$U> for $T {
             type Output = SetExpression;
 
+            /// Returns an expression representing the union.
             #[inline]
             fn bitor(self, rhs: $U) -> SetExpression {
                 SetExpression::from(self) | SetExpression::from(rhs)
@@ -401,6 +938,7 @@ macro_rules! impl_set_ops {
         impl ops::Sub<$U> for $T {
             type Output = SetExpression;
 
+            /// Returns an expression representing the difference.
             #[inline]
             fn sub(self, rhs: $U) -> SetExpression {
                 SetExpression::from(self) - SetExpression::from(rhs)
@@ -410,6 +948,7 @@ macro_rules! impl_set_ops {
         impl ops::BitAnd<$U> for $T {
             type Output = SetExpression;
 
+            /// Returns an expression representing the intersection.
             #[inline]
             fn bitand(self, rhs: $U) -> SetExpression {
                 SetExpression::from(self) & SetExpression::from(rhs)
@@ -467,6 +1006,21 @@ impl SetExpression {
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 2).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set.clone()).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = SetExpression::from(variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), set);
+    /// ```
     pub fn eval<T: StateInterface>(&self, state: &T, registry: &TableRegistry) -> Set {
         match self {
             Self::Reference(expression) => {

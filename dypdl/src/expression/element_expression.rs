@@ -39,6 +39,7 @@ pub enum ElementExpression {
 }
 
 impl Default for ElementExpression {
+    /// Returns an expression representing a constant zero.
     #[inline]
     fn default() -> Self {
         Self::Constant(0)
@@ -69,6 +70,21 @@ impl From<ElementResourceVariable> for ElementExpression {
 impl ops::Add for ElementExpression {
     type Output = ElementExpression;
 
+    /// Returns an expression representing the addition.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ElementExpression::from(2);
+    /// let b = ElementExpression::from(3);
+    /// let expression = a + b;
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// ```
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
         ElementExpression::BinaryOperation(BinaryOperator::Add, Box::new(self), Box::new(rhs))
@@ -78,6 +94,21 @@ impl ops::Add for ElementExpression {
 impl ops::Sub for ElementExpression {
     type Output = ElementExpression;
 
+    /// Returns an expression representing the subtraction.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ElementExpression::from(3);
+    /// let b = ElementExpression::from(2);
+    /// let expression = a - b;
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
         ElementExpression::BinaryOperation(BinaryOperator::Sub, Box::new(self), Box::new(rhs))
@@ -87,6 +118,21 @@ impl ops::Sub for ElementExpression {
 impl ops::Mul for ElementExpression {
     type Output = ElementExpression;
 
+    /// Returns an expression representing the multiplication.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ElementExpression::from(2);
+    /// let b = ElementExpression::from(3);
+    /// let expression = a * b;
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 6);
+    /// ```
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
         ElementExpression::BinaryOperation(BinaryOperator::Mul, Box::new(self), Box::new(rhs))
@@ -96,6 +142,21 @@ impl ops::Mul for ElementExpression {
 impl ops::Div for ElementExpression {
     type Output = ElementExpression;
 
+    /// Returns an expression representing the division.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ElementExpression::from(2);
+    /// let b = ElementExpression::from(3);
+    /// let expression = a / b;
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+    /// ```
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
         ElementExpression::BinaryOperation(BinaryOperator::Div, Box::new(self), Box::new(rhs))
@@ -105,6 +166,21 @@ impl ops::Div for ElementExpression {
 impl ops::Rem for ElementExpression {
     type Output = ElementExpression;
 
+    /// Returns an expression representing the remainder.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ElementExpression::from(2);
+    /// let b = ElementExpression::from(3);
+    /// let expression = a % b;
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     #[inline]
     fn rem(self, rhs: Self) -> Self::Output {
         ElementExpression::BinaryOperation(BinaryOperator::Rem, Box::new(self), Box::new(rhs))
@@ -114,11 +190,41 @@ impl ops::Rem for ElementExpression {
 impl MaxMin for ElementExpression {
     type Output = ElementExpression;
 
+    /// Returns an expression representing the maximum.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ElementExpression::from(2);
+    /// let b = ElementExpression::from(3);
+    /// let expression = a.max(b);
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
+    /// ```
     #[inline]
     fn max(self, rhs: Self) -> Self::Output {
         ElementExpression::BinaryOperation(BinaryOperator::Max, Box::new(self), Box::new(rhs))
     }
 
+    /// Returns an expression representing the minimum.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let model = Model::default();
+    /// let state = model.target.clone();
+    /// let a = ElementExpression::from(2);
+    /// let b = ElementExpression::from(3);
+    /// let expression = a.min(b);
+    ///
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// ```
     #[inline]
     fn min(self, rhs: Self) -> Self::Output {
         ElementExpression::BinaryOperation(BinaryOperator::Min, Box::new(self), Box::new(rhs))
@@ -127,6 +233,21 @@ impl MaxMin for ElementExpression {
 
 impl Table1DHandle<Element> {
     /// Returns a constant in a 1D element table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_1d("table", vec![1, 0]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = Table1DHandle::<Element>::element(&table, variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     #[inline]
     pub fn element<T>(&self, x: T) -> ElementExpression
     where
@@ -141,6 +262,21 @@ impl Table1DHandle<Element> {
 
 impl Table2DHandle<Element> {
     /// Returns a constant in a 2D element table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_2d("table", vec![vec![1, 0], vec![0, 1]]).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = Table2DHandle::<Element>::element(&table, variable, 1);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+    /// ```
     #[inline]
     pub fn element<T, U>(&self, x: T, y: U) -> ElementExpression
     where
@@ -157,6 +293,24 @@ impl Table2DHandle<Element> {
 
 impl Table3DHandle<Element> {
     /// Returns a constant in a 3D element table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let table = model.add_table_3d(
+    ///     "table",
+    ///     vec![vec![vec![1, 0], vec![0, 1]], vec![vec![0, 1], vec![1, 0]]]
+    /// ).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = Table3DHandle::<Element>::element(&table, variable, variable + 1, 1);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     #[inline]
     pub fn element<T, U, V>(&self, x: T, y: U, z: V) -> ElementExpression
     where
@@ -175,6 +329,29 @@ impl Table3DHandle<Element> {
 
 impl TableHandle<Element> {
     /// Returns a constant in an element table.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use rustc_hash::FxHashMap;
+    ///
+    /// let mut model = Model::default();
+    /// let map = FxHashMap::from_iter(vec![(vec![0, 0, 0, 0], 1), (vec![1, 1, 1, 1], 1)]);
+    /// let table = model.add_table("table", map, 0).unwrap();
+    /// let object_type = model.add_object_type("object", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let indices = vec![
+    ///     ElementExpression::from(variable),
+    ///     ElementExpression::from(0),
+    ///     ElementExpression::from(0),
+    ///     ElementExpression::from(0),
+    /// ];
+    /// let expression = TableHandle::<Element>::element(&table, indices);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     #[inline]
     pub fn element<T>(&self, indices: Vec<T>) -> ElementExpression
     where
@@ -204,6 +381,7 @@ macro_rules! impl_binary_ops {
         impl ops::Add<$U> for $T {
             type Output = ElementExpression;
 
+            /// Returns an expression representing the addition.
             #[inline]
             fn add(self, rhs: $U) -> ElementExpression {
                 ElementExpression::from(self) + ElementExpression::from(rhs)
@@ -213,6 +391,7 @@ macro_rules! impl_binary_ops {
         impl ops::Sub<$U> for $T {
             type Output = ElementExpression;
 
+            /// Returns an expression representing the subtraction.
             #[inline]
             fn sub(self, rhs: $U) -> ElementExpression {
                 ElementExpression::from(self) - ElementExpression::from(rhs)
@@ -222,6 +401,7 @@ macro_rules! impl_binary_ops {
         impl ops::Mul<$U> for $T {
             type Output = ElementExpression;
 
+            /// Returns an expression representing the multiplication.
             #[inline]
             fn mul(self, rhs: $U) -> ElementExpression {
                 ElementExpression::from(self) * ElementExpression::from(rhs)
@@ -231,6 +411,7 @@ macro_rules! impl_binary_ops {
         impl ops::Div<$U> for $T {
             type Output = ElementExpression;
 
+            /// Returns an expression representing the division.
             #[inline]
             fn div(self, rhs: $U) -> ElementExpression {
                 ElementExpression::from(self) / ElementExpression::from(rhs)
@@ -240,6 +421,7 @@ macro_rules! impl_binary_ops {
         impl ops::Rem<$U> for $T {
             type Output = ElementExpression;
 
+            /// Returns an expression representing the remainder.
             #[inline]
             fn rem(self, rhs: $U) -> ElementExpression {
                 ElementExpression::from(self) % ElementExpression::from(rhs)
@@ -283,6 +465,20 @@ impl ElementExpression {
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object_type", 2).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 1).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = ElementExpression::from(variable);
+    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// ```
     pub fn eval<T: StateInterface>(&self, state: &T, registry: &TableRegistry) -> Element {
         match self {
             Self::Constant(x) => *x,

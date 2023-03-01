@@ -5,6 +5,7 @@ use std::error::Error;
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Solution<T: variable_type::Numeric, I = dypdl::Transition> {
     /// Solution cost.
+    /// `None` if the model is infeasible.
     pub cost: Option<T>,
     /// Best dual bound.
     pub best_bound: Option<T>,
@@ -33,8 +34,8 @@ impl<T: variable_type::Numeric, I> Solution<T, I> {
 
 /// Trait representing an anytime search algorithm.
 pub trait Search<T: variable_type::Numeric> {
-    /// Search for the best solution.
-    /// 
+    /// Searches for the best solution.
+    ///
     /// # Errors
     /// If an error occurs during the search.
     fn search(&mut self) -> Result<Solution<T>, Box<dyn Error>> {
@@ -47,8 +48,8 @@ pub trait Search<T: variable_type::Numeric> {
         }
     }
 
-    /// Search for the next solution.
-    /// 
+    /// Searches for the next solution.
+    ///
     /// # Errors
     /// If an error occurs during the search.
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>>;

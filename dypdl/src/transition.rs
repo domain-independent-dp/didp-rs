@@ -16,11 +16,14 @@ use std::fmt::Debug;
 /// Wrapper for an integer expression or a continuous expression.
 #[derive(Debug, PartialEq, Clone)]
 pub enum CostExpression {
+    /// Integer numeric expression.
     Integer(IntegerExpression),
+    /// Continuous numeric expression.
     Continuous(ContinuousExpression),
 }
 
 impl Default for CostExpression {
+    /// Returns `CostExpression::Integer(IntegerExpression::Cost)`.
     fn default() -> Self {
         Self::Integer(IntegerExpression::Cost)
     }
@@ -44,6 +47,19 @@ impl CostExpression {
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("x", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = CostExpression::from(IntegerExpression::from(variable));
+    /// assert_eq!(expression.eval::<Integer, _>(&state, &model.table_registry), 2);
+    /// ```
     #[inline]
     pub fn eval<T: Numeric, U: StateInterface>(
         &self,
@@ -61,6 +77,18 @@ impl CostExpression {
     /// # Panics
     ///
     /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("x", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let expression = CostExpression::from(variable + IntegerExpression::Cost);
+    /// assert_eq!(expression.eval_cost(1, &state, &model.table_registry), 3);
+    /// ```
     pub fn eval_cost<T: Numeric, U: StateInterface>(
         &self,
         cost: T,
@@ -90,7 +118,7 @@ impl CostExpression {
     }
 }
 
-/// Trait representing something that may be applicable in a state, e.g., a transition.
+/// Trait representing a transition.
 pub trait TransitionInterface {
     /// Returns true if the transition is applicable and false otherwise.
     fn is_applicable<T: StateInterface>(
@@ -144,6 +172,27 @@ impl TransitionInterface for Transition {
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("x", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let mut transition = Transition::new("transition");
+    /// assert!(transition.is_applicable(&state, &model.table_registry));
+    ///
+    /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);;
+    /// transition.add_precondition(condition);
+    /// assert!(transition.is_applicable(&state, &model.table_registry));
+    ///
+    /// let condition = Condition::comparison_i(ComparisonOperator::Le, variable, 1);;
+    /// transition.add_precondition(condition);
+    /// assert!(!transition.is_applicable(&state, &model.table_registry));
+    /// ```
     fn is_applicable<S: StateInterface>(
         &self,
         state: &S,
@@ -169,6 +218,21 @@ impl TransitionInterface for Transition {
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("x", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let mut transition = Transition::new("transition");
+    /// transition.add_effect(variable, variable + 1);
+    /// let state: State = transition.apply(&state, &model.table_registry);
+    /// assert_eq!(state.get_integer_variable(variable.id()), 3);
+    /// ```
     #[inline]
     fn apply<S: StateInterface, T: From<State>>(
         &self,
@@ -183,6 +247,20 @@ impl TransitionInterface for Transition {
     /// # Panics
     ///
     /// Panics if a min/max reduce operation is performed on an empty set or vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("x", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let mut transition = Transition::new("transition");
+    /// transition.set_cost(IntegerExpression::Cost + variable);
+    /// assert_eq!(transition.eval_cost(1, &state, &model.table_registry), 3);
+    /// ```
     #[inline]
     fn eval_cost<T: Numeric, S: StateInterface>(
         &self,
@@ -196,6 +274,15 @@ impl TransitionInterface for Transition {
 
 impl Transition {
     /// Returns the name of transition considering parameters.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let transition = Transition::new("transition");
+    /// assert_eq!(transition.get_full_name(), String::from("transition"));
+    /// ```
     pub fn get_full_name(&self) -> String {
         let mut full_name = self.name.clone();
         for (name, value) in self
@@ -220,6 +307,14 @@ impl Transition {
     }
 
     /// Sets the cost expression;
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut transition = Transition::new("transition");
+    /// transition.set_cost(IntegerExpression::Cost + 1);
+    /// ```
     pub fn set_cost<T>(&mut self, cost: T)
     where
         CostExpression: From<T>,
@@ -228,6 +323,20 @@ impl Transition {
     }
 
     /// Adds a precondition;
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("x", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let mut transition = Transition::new("transition");
+    /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);;
+    /// transition.add_precondition(condition);
+    /// ```
     pub fn add_precondition(&mut self, condition: Condition) {
         match &condition {
             Condition::Set(condition) => match condition.as_ref() {
@@ -268,6 +377,18 @@ impl Transition {
 }
 
 /// Trait for adding an effect.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+///
+/// let mut transition = Transition::new("transition");
+/// assert!(transition.add_effect(variable, variable + 1).is_ok());
+/// ```
 pub trait AddEffect<T, U> {
     /// Adds an effect.
     ///
