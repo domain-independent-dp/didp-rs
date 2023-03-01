@@ -26,9 +26,12 @@ impl From<Transition> for TransitionToDump {
     }
 }
 
+/// Cost of a solution that is serializable.
 #[derive(Debug, PartialEq)]
 pub enum CostToDump {
+    /// Integer value.
     Integer(Integer),
+    /// Continuous value.
     Continuous(Continuous),
 }
 
@@ -56,6 +59,7 @@ impl From<OrderedContinuous> for CostToDump {
     }
 }
 
+/// Solution that is serializable.
 #[derive(Debug, PartialEq, Serialize)]
 pub struct SolutionToDump {
     cost: Option<CostToDump>,
@@ -79,6 +83,7 @@ where
 }
 
 impl SolutionToDump {
+    /// Output the solution to a file.
     pub fn dump_to_file(&self, filename: &str) -> Result<(), Box<dyn Error>> {
         let solution = serde_yaml::to_string(self)?;
         fs::write(filename, solution)?;

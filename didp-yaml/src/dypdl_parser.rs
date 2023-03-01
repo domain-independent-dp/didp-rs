@@ -27,7 +27,7 @@ use yaml_rust::Yaml;
 
 /// Returns an integer expression loaded from YAML.
 ///
-/// `parameters` spcify names and values of constants.
+/// `parameters` specify names and values of constants.
 ///
 /// # Errors
 ///
@@ -47,7 +47,7 @@ pub fn load_integer_expression_from_yaml(
 
 /// Returns a continuous expression loaded from YAML.
 ///
-/// `parameters` spcify names and values of constants.
+/// `parameters` specify names and values of constants.
 ///
 /// # Errors
 ///
@@ -67,7 +67,7 @@ pub fn load_continuous_expression_from_yaml(
 
 /// Returns an element expression loaded from YAML.
 ///
-/// `parameters` spcify names and values of constants.
+/// `parameters` specify names and values of constants.
 ///
 /// # Errors
 ///
@@ -87,7 +87,7 @@ pub fn load_element_expression_from_yaml(
 
 /// Returns a set expression loaded from YAML.
 ///
-/// `parameters` spcify names and values of constants.
+/// `parameters` specify names and values of constants.
 ///
 /// # Errors
 ///
@@ -107,7 +107,7 @@ pub fn load_set_expression_from_yaml(
 
 /// Returns a vector expression loaded from YAML.
 ///
-/// `parameters` spcify names and values of constants.
+/// `parameters` specify names and values of constants.
 ///
 /// # Errors
 ///
