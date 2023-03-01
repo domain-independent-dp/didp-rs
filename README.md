@@ -1,11 +1,11 @@
 # Domain-Independent Dynamic Programming (DIDP)
 
-This repository is the Rust implementation of Dynamic Programming Description Language (DyPDL) and its solvers for Domain-Independent Dynamic Programming (DIDP).
+This repository is a Rust implementation of Dynamic Programming Description Language (DyPDL) and its solvers for Domain-Independent Dynamic Programming (DIDP).
 
 ## Packages
 
 - [`dypdl`](./dypdl): a library for DyPDL.
-- [`dypdl-heuristic-search`](./dypdl-heuristic-search): a heuristic algorithm library for DyPDL.
+- [`dypdl-heuristic-search`](./dypdl-heuristic-search): a heuristic search algorithm library for DyPDL.
 - [`didp-yaml`](./didp-yaml): a YAML interface for DyPDL.
 - [`DIDPPy`](./didppy): a Python interface for DyPDL.
 
