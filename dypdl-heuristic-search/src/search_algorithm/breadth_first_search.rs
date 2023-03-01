@@ -12,7 +12,62 @@ use std::fmt;
 use std::mem;
 use std::rc::Rc;
 
-/// BreadthFirstSearch's algorithm Solver.
+/// Breadth-first search solver.
+///
+/// This solver uses forward search based on the shortest path problem.
+/// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
+/// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
+///
+/// It uses `h_evaluator` and `f_evaluator` for pruning.
+/// If `h_evaluator` returns `None`, the state is pruned.
+/// If `f_pruning` and `f_evaluator` returns a value that exceeds the primal bound, the state is pruned.
+///
+/// Breadth-first searches layer by layer, where the i th layer contains states that can be reached with i transitions.
+/// By default, this solver only keeps states in the current layer to check for duplicates.
+/// If `keep_all_layers` is `true`, this solver keeps states in all layers to check for duplicates.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::{BreadthFirstSearch, Search};
+/// use dypdl_heuristic_search::search_algorithm::data_structure::successor_generator::{
+///     SuccessorGenerator
+/// };
+/// use dypdl_heuristic_search::search_algorithm::util::{
+///     ForwardSearchParameters, Parameters,
+/// };
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+/// model.add_base_case(
+///     vec![Condition::comparison_i(ComparisonOperator::Ge, variable, 1)]
+/// ).unwrap();
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 1);
+/// increment.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(increment.clone()).unwrap();
+///
+/// let h_evaluator = |_: &_, _: &_| Some(0);
+/// let f_evaluator = |g, h, _: &_, _: &_| g + h;
+///
+/// let model = Rc::new(model);
+/// let generator = SuccessorGenerator::from_model(model.clone(), false);
+/// let parameters = ForwardSearchParameters {
+///     generator,
+///     parameters: Parameters::default(),
+///     initial_registry_capacity: None
+/// };
+///
+/// let mut solver = BreadthFirstSearch::new(
+///     model, h_evaluator, f_evaluator, true, true, parameters
+/// );
+/// let solution = solver.search().unwrap();
+/// assert_eq!(solution.cost, Some(1));
+/// assert_eq!(solution.transitions, vec![increment]);
+/// assert!(!solution.is_infeasible);
+/// ```
 pub struct BreadthFirstSearch<T, H, F>
 where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,

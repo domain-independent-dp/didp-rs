@@ -13,12 +13,17 @@ use std::mem;
 use std::rc::Rc;
 
 /// State stored in a state registry using signature variables as the key.
+///
+/// Using continuous variables in signature variables is not recommended
+/// because it may cause a numerical issue.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct StateInRegistry<K = Rc<HashableSignatureVariables>>
 where
     K: Hash + Eq + Clone + Debug,
 {
+    /// Sharable pointer to signature variables.
     pub signature_variables: K,
+    /// Resource variables.
     pub resource_variables: dypdl::ResourceVariables,
 }
 
@@ -139,7 +144,7 @@ where
     }
 }
 
-/// A trait representing information stored in a state registry.
+/// Information stored in a state registry.
 pub trait StateInformation<T, K = Rc<HashableSignatureVariables>>
 where
     T: Numeric,
@@ -153,13 +158,86 @@ where
 }
 
 /// Registry storing generated states considering dominance relationship.
-pub struct StateRegistry<
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::SearchNode;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::state_registry::*;
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let signature = model.add_integer_variable("signature", 1).unwrap();
+/// let resource = model.add_integer_resource_variable("resource", false, 1).unwrap();
+/// let state = StateInRegistry::from(model.target.clone());
+///
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 1);
+/// increment.add_effect(signature, signature + 1).unwrap();
+///
+/// let mut increase_cost = Transition::new("increase_cost");
+/// increase_cost.set_cost(IntegerExpression::Cost + 1);
+///
+/// let mut consume = Transition::new("consume");
+/// consume.set_cost(IntegerExpression::Cost);
+/// consume.add_effect(resource, resource - 1).unwrap();
+///
+/// let mut produce = Transition::new("produce");
+/// produce.set_cost(IntegerExpression::Cost);
+/// produce.add_effect(resource, resource + 1).unwrap();
+///
+/// let model = Rc::new(model);
+/// let mut registry = StateRegistry::new(model.clone());
+/// registry.reserve(2);
+///
+/// let cost = 0;
+/// assert_eq!(registry.get(&state, cost), None);
+///
+/// let constructor = |state, cost, _: Option<&_>| {
+///     Some(SearchNode { state, cost, ..Default::default() })
+/// };
+/// let node = Rc::new(SearchNode { state: state.clone(), cost, ..Default::default() });
+/// assert_eq!(registry.insert(state.clone(), cost,&constructor), Some((node.clone(), None)));
+/// assert_eq!(registry.get(&state, cost), Some(&node));
+///
+/// let irrelevant: StateInRegistry = increment.apply(&state, &model.table_registry);
+/// let cost = increment.eval_cost(node.cost, &state, &model.table_registry);
+/// let new_node = Rc::new(SearchNode { state: irrelevant.clone(), cost, ..Default::default() });
+/// assert_eq!(registry.get(&irrelevant, cost), None);
+/// assert_eq!(registry.insert(irrelevant, cost, constructor), Some((new_node, None)));
+///
+/// let dominated: StateInRegistry = increase_cost.apply(&state, &model.table_registry);
+/// let cost = consume.eval_cost(node.cost, &state, &model.table_registry);
+/// assert_eq!(registry.get(&dominated, cost), Some(&node));
+/// assert_eq!(registry.insert(dominated, cost, constructor), None);
+///
+/// let dominated: StateInRegistry = consume.apply(&state, &model.table_registry);
+/// let cost = consume.eval_cost(node.cost, &state, &model.table_registry);
+/// assert_eq!(registry.get(&dominated, cost), Some(&node));
+/// assert_eq!(registry.insert(dominated, cost, constructor), None);
+///
+/// let dominating: StateInRegistry = produce.apply(&state, &model.table_registry);
+/// let cost = produce.eval_cost(node.cost, &state, &model.table_registry);
+/// let new_node = Rc::new(SearchNode {state: dominating.clone(), cost, ..Default::default() });
+/// assert_eq!(registry.get(&dominating, cost), None);
+/// assert_eq!(
+///     registry.insert(dominating, cost, constructor),
+///     Some((new_node.clone(), Some(node.clone())))
+/// );
+/// assert_eq!(registry.get(&state, node.cost), Some(&new_node));
+///
+/// registry.clear();
+/// assert_eq!(registry.get(&state, node.cost), None);
+/// ```
+pub struct StateRegistry<T, I, V = Rc<I>, K = Rc<HashableSignatureVariables>, R = Rc<dypdl::Model>>
+where
     T: Numeric,
     I: StateInformation<T, K>,
-    V: Deref<Target = I> + From<I> + Clone = Rc<I>,
-    K: Hash + Eq + Clone + Debug = Rc<HashableSignatureVariables>,
-    R: Deref<Target = dypdl::Model> = Rc<dypdl::Model>,
-> {
+    V: Deref<Target = I> + From<I> + Clone,
+    K: Hash + Eq + Clone + Debug,
+    R: Deref<Target = dypdl::Model>,
+{
     registry: FxHashMap<K, Vec<V>>,
     model: R,
     phantom: std::marker::PhantomData<T>,
@@ -184,7 +262,7 @@ where
         }
     }
 
-    // Get the model.
+    /// Get the model.
     #[inline]
     pub fn model(&self) -> &dypdl::Model {
         &self.model
@@ -223,7 +301,10 @@ where
         None
     }
 
-    /// Insert a state and its information in the registry if it is not dominated by existing states.
+    /// Insert a state and its information in the registry if it is not dominated by existing states
+    /// given the state and a constructor for the information.
+    ///
+    /// If the given state is not dominated, returns the created information and the information of a dominated state if it exists.
     pub fn insert<F>(
         &mut self,
         mut state: StateInRegistry<K>,

@@ -8,6 +8,10 @@ use std::rc::Rc;
 /// Search node for lazy search, where a state is generated when it is expanded.
 ///
 /// Nodes are totally ordered by their costs.
+
+/// Search node.
+///
+/// Nodes are totally ordered by their costs.
 #[derive(Debug, Default)]
 pub struct LazySearchNode<T: Numeric> {
     /// State.
@@ -19,6 +23,8 @@ pub struct LazySearchNode<T: Numeric> {
 }
 
 impl<T: Numeric + PartialOrd> PartialEq for LazySearchNode<T> {
+    /// Nodes are compared by their costs.
+    /// This does not mean that the nodes are the same.
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.cost == other.cost

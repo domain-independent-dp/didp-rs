@@ -50,13 +50,16 @@ use std::rc::Rc;
 /// References
 /// ----------
 /// Ryo Kuroiwa and J. Christopher Beck.
-/// "Domain-Independent Dynamic Programming: Generic State Space Search for Combinatorial Optimization.", 2023.
+/// "Domain-Independent Dynamic Programming: Generic State Space Search for Combinatorial Optimization,"
+/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
 ///
 /// Stephen Edelkamp, Shahid Jabbar, Alberto Lluch Lafuente.
-/// "Cost-Algebraic Heuristic Search", 2005.
+/// "Cost-Algebraic Heuristic Search,"
+/// Proceedings of the 20th National Conference on Artificial Intelligence (AAAI), pp. 1362-1367, 2005.
 ///
 /// Peter E. Hart, Nills J. Nilsson, Bertram Raphael.
-/// "A Formal Basis for the Heuristic Determination of Minimum Cost Paths", 1968.
+/// "A Formal Basis for the Heuristic Determination of Minimum Cost Paths",
+/// IEEE Transactions of Systems Science and Cybernetics, vol. SSC-4(2), pp. 100-107, 1968.
 ///
 /// Examples
 /// --------

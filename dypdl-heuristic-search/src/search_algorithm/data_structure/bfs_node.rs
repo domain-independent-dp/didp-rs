@@ -4,8 +4,15 @@ use dypdl::variable_type::Numeric;
 use std::rc::Rc;
 
 /// Trait representing a node used in best-first search.
+///
+/// `h_evaluator` returns the h-value of a state, which is a dual bound for the state.
+/// If the h-value is `None`, the state is pruned.
+///
+/// `f_evaluator` takes the g-value and h-value and returns the f-value, which should be the dual bound
+/// for a solution that passes through the state.
 pub trait BfsNodeInterface<T: Numeric>: Sized + StateInformation<T> + Ord {
-    /// Returns the initial node.
+    /// Returns the initial node and its h- and f-values.
+    /// Returns `None` if the initial state is pruned.
     fn generate_initial_node<H, F>(
         registry: &mut StateRegistry<T, Self>,
         h_evaluator: H,
@@ -15,7 +22,7 @@ pub trait BfsNodeInterface<T: Numeric>: Sized + StateInformation<T> + Ord {
         H: Fn(&StateInRegistry<Rc<HashableSignatureVariables>>, &dypdl::Model) -> Option<T>,
         F: Fn(T, T, &StateInRegistry<Rc<HashableSignatureVariables>>, &dypdl::Model) -> T;
 
-    /// Returns a successor node and its h- and f-values if it it is not dominated and its f-value does not exceed the given primal bound.
+    /// Returns a successor node and its h- and f-values if it it is not dominated by existing node and its f-value does not exceed the given primal bound.
     /// The last value returned indicates if a new search node is generated without dominating another open node.
     fn generate_successor<H, F>(
         &self,

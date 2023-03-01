@@ -102,6 +102,7 @@ impl ProgressiveSearchParameters {
 }
 
 impl Default for ProgressiveSearchParameters {
+    /// Returns parameters where the initial width is 1, the step is 1, no bound, and no reset.
     fn default() -> Self {
         Self {
             init: 1,

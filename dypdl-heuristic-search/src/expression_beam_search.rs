@@ -14,7 +14,59 @@ use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
 
-/// Beam search using user-defined cost functions.
+/// Beam search solver using user-defined cost functions.
+///
+/// This solver uses forward search based on the shortest path problem.
+/// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
+/// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
+///
+/// Beam search is guided by user-defined cost expressions.
+/// For each transition, a user needs to define a cost expression that is used to guide the search.
+/// In addition, a user can define a heuristic function.
+/// The user-defined cost and the heuristic value are combined by `f_evaluator_type` to guide the search.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl::variable_type::OrderedContinuous;
+/// use dypdl_heuristic_search::{FEvaluatorType, ExpressionBeamSearch, CustomExpressionParameters};
+/// use dypdl_heuristic_search::search_algorithm::{BeamSearchParameters, Search};
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+/// model.add_base_case(
+///     vec![Condition::comparison_i(ComparisonOperator::Ge, variable, 1)]
+/// ).unwrap();
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 1);
+/// increment.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(increment.clone()).unwrap();
+/// model.add_dual_bound(IntegerExpression::from(0)).unwrap();
+///
+/// let model = Rc::new(model);
+/// let parameters = BeamSearchParameters::<Integer, OrderedContinuous> {
+///     beam_size: 1,
+///     maximize: true,
+///     ..Default::default()
+/// };
+/// let f_evaluator_type = FEvaluatorType::Plus;
+/// let custom_expression_parameters = CustomExpressionParameters {
+///     custom_costs: vec![CostExpression::from(ContinuousExpression::Cost + 1.5)],
+///     forced_custom_costs: Vec::default(),
+///     h_expression: Some(CostExpression::from(ContinuousExpression::from(variable))),
+///     custom_cost_type: CostType::Continuous,
+/// };
+///
+/// let mut solver = ExpressionBeamSearch::new(
+///     model, parameters, custom_expression_parameters, f_evaluator_type
+/// );
+/// let solution = solver.search().unwrap();
+/// assert_eq!(solution.cost, Some(1));
+/// assert_eq!(solution.transitions, vec![increment]);
+/// assert!(!solution.is_infeasible);
+/// ```
 pub struct ExpressionBeamSearch<T, U>
 where
     T: variable_type::Numeric + fmt::Display + 'static,

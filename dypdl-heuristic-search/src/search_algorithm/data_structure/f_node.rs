@@ -12,6 +12,57 @@ use std::rc::Rc;
 /// Node ordered by the f-value.
 ///
 /// Nodes are totally ordered by their f-values, and tie is broken by the h-values.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::{
+///     FNode, BfsNodeInterface,
+/// };
+/// use dypdl_heuristic_search::search_algorithm::data_structure::state_registry::{
+///     StateInformation, StateInRegistry, StateRegistry,
+/// };
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+///
+/// let model = Rc::new(model);
+/// let mut registry = StateRegistry::new(model.clone());
+///
+/// let h_evaluator = |_: &_, _: &_| Some(0);
+/// let f_evaluator = |g, h, _: &_, _: &_| g + h;
+///
+/// let (node, h, f) = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator).unwrap();
+/// assert_eq!(h, 0);
+/// assert_eq!(f, 0);
+/// assert_eq!(node.state(), &StateInRegistry::from(model.target.clone()));
+/// assert_eq!(node.cost(), 0);
+/// assert_eq!(node.get_bound(&model), 0);
+/// assert!(!node.closed());
+/// assert_eq!(node.transitions(), vec![]);
+///
+/// node.close();
+/// assert!(node.closed());
+///
+/// let mut transition = Transition::new("transition");
+/// transition.set_cost(IntegerExpression::Cost + 1);
+/// transition.add_effect(variable, variable + 1).unwrap();
+/// let expected_state: StateInRegistry = transition.apply(&model.target, &model.table_registry);
+///
+/// let (successor, h, f, generated) = node.generate_successor(
+///     Rc::new(transition.clone()), &mut registry, h_evaluator, f_evaluator, None
+/// ).unwrap();
+/// assert_eq!(h, 0);
+/// assert_eq!(f, 1);
+/// assert!(generated);
+/// assert_eq!(successor.state(), &expected_state);
+/// assert_eq!(successor.cost(), 1);
+/// assert_eq!(successor.get_bound(&model), 1);
+/// assert!(!successor.closed());
+/// assert_eq!(successor.transitions(), vec![transition]);
+/// ```
 #[derive(Debug, Default)]
 pub struct FNode<T: Numeric> {
     g: T,
@@ -23,6 +74,8 @@ pub struct FNode<T: Numeric> {
 }
 
 impl<T: Numeric + PartialOrd> PartialEq for FNode<T> {
+    /// Nodes are compared by their f- and h-values.
+    /// This does not mean that the nodes are the same.
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.f == other.f && self.h == other.h

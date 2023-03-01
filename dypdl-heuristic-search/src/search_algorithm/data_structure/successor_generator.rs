@@ -1,10 +1,51 @@
-//! A module for state registries for successor generators.
+//! A module for successor generators.
 
 use core::ops::Deref;
 use dypdl::{Transition, TransitionInterface};
 use std::rc::Rc;
 
 /// Generator of applicable transitions.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::successor_generator::*;
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+///
+/// let mut increment = Transition::new("increment");
+/// increment.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(increment.clone()).unwrap();
+///
+/// let mut transition = Transition::new("decrement");
+/// transition.add_precondition(Condition::comparison_i(ComparisonOperator::Ge, variable, 1));
+/// transition.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(transition).unwrap();
+///
+/// let mut transition = Transition::new("double");
+/// transition.add_precondition(Condition::comparison_i(ComparisonOperator::Eq, variable, 1));
+/// transition.add_effect(variable, 2 * variable).unwrap();
+/// model.add_forward_forced_transition(transition).unwrap();
+///
+/// let model = Rc::new(model);
+/// let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+///
+/// let state = model.target.clone();
+/// let applicable_transitions = generator.applicable_transitions(&state).collect::<Vec<_>>();
+/// let mut iter = generator.applicable_transitions(&state);
+/// let transition = iter.next().unwrap();
+/// assert_eq!(transition.get_full_name(), "increment");
+/// assert_eq!(iter.next(), None);
+///
+/// let state: State = increment.apply(&state, &model.table_registry);
+/// let mut iter = generator.applicable_transitions(&state);
+/// let transition = iter.next().unwrap();
+/// assert_eq!(transition.get_full_name(), "double");
+/// assert_eq!(iter.next(), None);
+/// ```
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct SuccessorGenerator<T = dypdl::Transition, U = Rc<T>, R = Rc<dypdl::Model>>
@@ -24,14 +65,13 @@ where
 }
 
 /// An iterator representing applicable transitions.
-pub struct ApplicableTransitions<
-    'a,
-    'b,
+pub struct ApplicableTransitions<'a, 'b, T, U, R, S>
+where
     T: TransitionInterface,
     U: Deref<Target = T> + Clone,
     R: Deref<Target = dypdl::Model>,
     S: dypdl::StateInterface,
-> {
+{
     state: &'b S,
     generator: &'a SuccessorGenerator<T, U, R>,
     iter: std::slice::Iter<'a, U>,
@@ -83,6 +123,9 @@ where
     U: Deref<Target = T> + Clone,
     R: Deref<Target = dypdl::Model>,
 {
+    /// Returns a vector of applicable transitions.
+    ///
+    /// `result` is used as a buffer to avoid memory allocation.
     pub fn generate_applicable_transitions<S: dypdl::StateInterface>(
         &self,
         state: &S,

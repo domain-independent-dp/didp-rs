@@ -159,13 +159,51 @@ where
 /// Parent information to generate a successor using a transition with a custom cost.
 #[derive(Clone)]
 pub struct CustomCostParent<'a, T: Numeric, U: Numeric, S: StateInterface = StateInRegistry> {
+    /// State.
     pub state: &'a S,
+    /// Cost.
     pub cost: T,
+    /// g-value.
     pub g: U,
 }
 
 impl TransitionWithCustomCost {
     /// Returns the successor state, its cost, g-value, and f-value.
+    ///
+    /// The successor is not generated if the `h_evaluator` returns `None`.
+    /// The `f_evaluator` takes the g- and h-values as input in addition to the state and the model.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl_heuristic_search::search_algorithm::data_structure::{
+    ///     CustomCostParent, TransitionWithCustomCost
+    /// };
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 1).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let mut transition = Transition::new("transition");
+    /// transition.set_cost(IntegerExpression::Cost + 1);
+    /// transition.add_effect(variable, variable + 1);
+    /// let transition = TransitionWithCustomCost {
+    ///     transition,
+    ///     custom_cost: CostExpression::from(ContinuousExpression::Cost + 1.5),
+    ///     forced: false,
+    ///     id: 0,
+    /// };
+    ///
+    /// let parent = CustomCostParent { state: &state, cost: 0, g: 0.0 };
+    /// let h_evaluator = |_: &_, _: &_| Some(0.0);
+    /// let f_evaluator = |g, h, _: &_, _: &_| g + h;
+    /// let expected_state = transition.apply(parent.state, &model.table_registry);
+    /// let result = transition.generate_successor_state(
+    ///     &parent, &model, None, h_evaluator, f_evaluator, false
+    /// );
+    /// assert_eq!(result, Some((expected_state, 1, 1.5, 1.5)));
+    /// ```
     pub fn generate_successor_state<T, U, S, H, F>(
         &self,
         parent: &CustomCostParent<'_, T, U, S>,
@@ -206,7 +244,7 @@ impl TransitionWithCustomCost {
     }
 }
 
-/// Chain of transitions with custom costs.
+/// Chain of transitions with custom costs implemented by a linked list of `Rc`.
 #[derive(PartialEq, Debug)]
 pub struct TransitionWithCustomCostChain {
     parent: Option<Rc<Self>>,

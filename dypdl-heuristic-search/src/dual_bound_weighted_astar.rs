@@ -9,7 +9,46 @@ use std::fmt;
 use std::rc::Rc;
 use std::str;
 
-/// Create a weighted A* solver using the dual bound as a heuristic function..
+/// Creates a weighted A* solver using the dual bound as a heuristic function.
+///
+/// This solver uses forward search based on the shortest path problem.
+/// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
+/// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
+/// `f_evaluator_type` must be specified appropriately according to the cost expressions.
+///
+/// It uses the dual bound defined in the DyPDL model as a heuristic function.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::{FEvaluatorType, create_dual_bound_weighted_astar};
+/// use dypdl_heuristic_search::search_algorithm::util::Parameters;
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+/// model.add_base_case(
+///     vec![Condition::comparison_i(ComparisonOperator::Ge, variable, 1)]
+/// ).unwrap();
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 1);
+/// increment.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(increment.clone()).unwrap();
+/// model.add_dual_bound(IntegerExpression::from(0)).unwrap();
+///
+/// let model = Rc::new(model);
+/// let parameters = Parameters::default();
+/// let f_evaluator_type = FEvaluatorType::Plus;
+///
+/// let mut solver = create_dual_bound_weighted_astar(
+///     model, parameters, 1.1, f_evaluator_type, None
+/// );
+/// let solution = solver.search().unwrap();
+/// assert_eq!(solution.cost, Some(1));
+/// assert_eq!(solution.transitions, vec![increment]);
+/// assert!(!solution.is_infeasible);
+/// ```
 pub fn create_dual_bound_weighted_astar<T>(
     model: Rc<dypdl::Model>,
     parameters: Parameters<T>,

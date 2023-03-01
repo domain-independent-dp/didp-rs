@@ -10,6 +10,60 @@ use std::fmt;
 use std::rc::Rc;
 
 /// Depth-First Branch-and-Bound (DFBB).
+///
+/// This solver uses forward search based on the shortest path problem.
+/// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
+/// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
+///
+/// It uses `h_evaluator` and `f_evaluator` for pruning.
+/// If `h_evaluator` returns `None`, the state is pruned.
+/// If `f_pruning` and `f_evaluator` returns a value that exceeds the primal bound, the state is pruned.
+///
+/// # References
+///
+/// Ryo Kuroiwa and J. Christopher Beck. "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
+/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::search_algorithm::{Dfbb, Search};
+/// use dypdl_heuristic_search::search_algorithm::data_structure::successor_generator::{
+///     SuccessorGenerator
+/// };
+/// use dypdl_heuristic_search::search_algorithm::util::{
+///     ForwardSearchParameters, Parameters,
+/// };
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let variable = model.add_integer_variable("variable", 0).unwrap();
+/// model.add_base_case(
+///     vec![Condition::comparison_i(ComparisonOperator::Ge, variable, 1)]
+/// ).unwrap();
+/// let mut increment = Transition::new("increment");
+/// increment.set_cost(IntegerExpression::Cost + 1);
+/// increment.add_effect(variable, variable + 1).unwrap();
+/// model.add_forward_transition(increment.clone()).unwrap();
+///
+/// let h_evaluator = |_: &_, _: &_| Some(0);
+/// let f_evaluator = |g, h, _: &_, _: &_| g + h;
+///
+/// let model = Rc::new(model);
+/// let generator = SuccessorGenerator::from_model(model.clone(), false);
+/// let parameters = ForwardSearchParameters {
+///     generator,
+///     parameters: Parameters::default(),
+///     initial_registry_capacity: None
+/// };
+///
+/// let mut solver = Dfbb::new(model, h_evaluator, f_evaluator, true, parameters);
+/// let solution = solver.search().unwrap();
+/// assert_eq!(solution.cost, Some(1));
+/// assert_eq!(solution.transitions, vec![increment]);
+/// assert!(!solution.is_infeasible);
+/// ```
 pub struct Dfbb<T, H, F>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
