@@ -5,7 +5,7 @@ The features of solvers are summarized in the following table.
 
 Solvers except for `forward_recursion` solves a DyPDL model as a generalized version of the shortest path problem, so it requires specific form of the cost expression.
 
-We recommend using `cabs` with the default parameter if it is available for your model.
+We recommend using [`dual_bound_cabs`](#dual_bound_cabs) with the default parameter if it is available for your model.
 
 |solver|supported cost expressions|supported reduce|other restrictions|exact|anytime|
 |-|-|-|-|-|-|

@@ -27,8 +27,6 @@ To solve a problem using the DyPDL solver, you need to create three files, `doma
   - [object_numbers](#object_numbers)
   - [table_values](#table_values)
   - [target](#target)
-  - [base_states](#base_states)
-  - [transitions](#transitions)
 
 For a config file, see [the solver guide](./solver-guide.md).
 
