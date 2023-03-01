@@ -1,38 +1,36 @@
 # DIDP-YAML
 
-DIDP-YAML is a YAML interface for DyPDL models and solvers.
+DIDP-YAML is a YAML interface for DyPDL modeling and solvers.
+
+## Installation
+
+First, install Rust following the instruction on the official webpage: <https://www.rust-lang.org/tools/install>
+
+Next, install `didp-yaml`.
+
+```bash
+cargo install didp-yaml
+```
 
 ## Run the Solver
 
-Run the following command.
-
 ```bash
-cargo run --release domain.yaml problem.yaml config.yaml
+didp-yaml domain.yaml problem.yaml config.yaml
 ```
 
-Here, `domain.yaml` is the domain file for the problem, `problem.yaml` is the problem file for the problem, and `config.yaml` is the file specifying a search algorithm.
+Here, `domain.yaml` is the domain file for the problem, `problem.yaml` is the problem file for the problem, and `config.yaml` is the configuration file for a solver.
 
-Instead of `cargo run`, you can directly use the binary.
-
-```bash
-./target/release/didp-yaml domain.yaml problem.yaml config.yaml
-```
-
-There are some examples in `./examples`. For example, you can test DIDP on TSPTW, CVRP, SALBP-1, bin packing, MOSP, and graph clear.
+There are some examples in [`examples`](https://github.com/domain-independent-dp/didp-rs/didp-yaml/examples). For example, you can test the CABS solver on TSPTW, CVRP, SALBP-1, bin packing, MOSP, and graph clear.
 
 ```bash
-cargo run --release examples/tsptw/tsptw-domain.yaml examples/tsptw/tsptw-Dumas-n20w20.001.yaml examples/solvers/cabs.yaml
-cargo run --release examples/cvrp/cvrp-domain.yaml examples/cvrp/cvrp-E-n13-k4.yaml examples/solvers/cabs.yaml
-cargo run --release examples/salbp-1/salbp-1-domain.yaml examples/salbp-1/salbp-1-small-1.yaml examples/solvers/cabs.yaml
-cargo run --release examples/bin-packing/bin-packing-domain.yaml examples/bin-packing/bin-packing-Falkenauer_T_t60_00.yaml examples/solvers/cabs.yaml
-cargo run --release examples/mosp/mosp-domain.yaml examples/mosp/mosp-GP1.yaml examples/solvers/cabs.yaml
-cargo run --release examples/graph-clear/graph-clear-domain.yaml examples/graph-clear/graph-clear-planar20-1.yaml examples/solvers/cabs.yaml
+didp-yaml tsptw/tsptw-domain.yaml tsptw/tsptw-Dumas-n20w20.001.yaml solvers/cabs.yaml
+didp-yaml cvrp/cvrp-domain.yaml cvrp/cvrp-E-n13-k4.yaml solvers/cabs.yaml
+didp-yaml salbp-1/salbp-1-domain.yaml salbp-1/salbp-1-small-1.yaml solvers/cabs.yaml
+didp-yaml bin-packing/bin-packing-domain.yaml bin-packing/bin-packing-Falkenauer_T_t60_00.yaml solvers/cabs.yaml
+didp-yaml mosp/mosp-domain.yaml mosp/mosp-GP1.yaml solvers/cabs.yaml
+didp-yaml graph-clear/graph-clear-domain.yaml graph-clear/graph-clear-planar20-1.yaml solvers/cabs.yaml
 ```
 
-## Modeling
+## Documents
 
-See the [user guide](./dypdl-guide.md)
-
-## Solver
-
-See the [solver guide](./solver-guide.md)
+For the syntax of the DyPDL-YAML and the solver configuration, see the [user guide](https://github.com/domain-independent-dp/didp-rs/didp-yaml/docs)

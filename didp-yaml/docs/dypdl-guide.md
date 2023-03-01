@@ -13,25 +13,22 @@ To solve a problem using the DyPDL solver, you need to create three files, `doma
 - [Domain YAML](#domain-yaml)
   - [domain](#domain)
   - [objects](#objects)
-  - [state_variables](#statevariables)
+  - [state_variables](#state_variables)
   - [tables](#tables)
   - [constraints](#constraints)
-  - [base_cases](#basecases)
+  - [base_cases](#base_cases)
   - [reduce](#reduce)
   - [cost_type](#cost_type)
   - [transitions](#transitions)
-  - [dual_bounds](#dualbounds)
+  - [dual_bounds](#dual_bounds)
 - [Problem YAML](#problem-yaml)
   - [domain](#domain-1)
   - [problem](#problem)
-  - [object_numbers](#objectnumbers)
-  - [table_values](#tablevalues)
+  - [object_numbers](#object_numbers)
+  - [table_values](#table_values)
   - [target](#target)
-  - [constraints](#constraints-1)
-  - [base_cases](#basecases-1)
-  - [base_states](#basestates)
+  - [base_states](#base_states)
   - [transitions](#transitions)
-  - [dual_bounds](#dualbounds-1)
 
 For a config file, see [the solver guide](./solver-guide.md).
 
@@ -114,13 +111,13 @@ domain: TSPTW
 
 `objects` is optional, and the value  is a list of names of object types.
 An object type represent a particular type of entity in a problem.
-Objects are indexed from `0` to `n-1`, where `n` is defined in the problem file with the [`object_numbers`](#objectnumbers) key.
+Objects are indexed from `0` to `n-1`, where `n` is defined in the problem file with the [`object_numbers`](#object_numbers) key.
 You need to define objects if you use element or set variables.
-For example, in a traveling salesman problem (TSP), a city is an object.
+For example, in a traveling salesperson problem with time windows (TSPTW), a customer is an object.
 
 ```yaml
 objects:
-    - city
+    - customer
 ```
 
 ### state_variables
@@ -151,10 +148,10 @@ With `less`/`more`, if evrerything else is the same, a state having a smaller/gr
 state_variables:
     - name: unvisited
       type: set
-      object: city
+      object: customer
     - name: locaiton
       type: element
-      object: city
+      object: customer
     - name: time
       type: continuous
       preference: less
@@ -190,16 +187,16 @@ tables:
   - name: ready_time
     type: continuous
     args:
-      - city
+      - customer
   - name: due_date
     type: continuous
     args:
-      - city
+      - customer
   - name: distance
     type: continuous
     args:
-      - city
-      - city
+      - customer
+      - customer
     default: 0
 ```
 
@@ -236,6 +233,8 @@ constraints:
         object: unvisited
 ```
 
+It can be also defined in a problem file.
+
 ### base_cases
 
 `base_cases` is optinal, and the value is a list of lists of conditions.
@@ -263,6 +262,8 @@ The name `reduce` comes from the fact that we preform a reduce operation to aggr
 ```yaml
 reduce: min
 ```
+
+It can be also defined in a problem file.
 
 ### cost_type
 
@@ -345,6 +346,8 @@ dual_bounds:
   - 0
 ```
 
+It can be also defined in a problem file.
+
 ## Problem YAML
 
 A problem file is used to define problem features that are specific to particular problem instances.
@@ -374,7 +377,7 @@ The value is a positive integer value describing the number of objects.
 
 ```yaml
 object_numbers:
-      city: 4
+      customer: 4
 ```
 
 ### target
@@ -414,32 +417,12 @@ If the default value is not defined, an empty set is used for set tables, and `0
 ```yaml
 ready_time: { 0: 0, 1: 10, 2: 100, 3: 1000 }
 due_date: { 1: 20000, 2: 100, 3: 1000 }
-distance: { [0, 1]: 10, [0, 2]: 20, [0, 3]: 30, [1, 0]: 10, [1, 2]: 30, [1, 3]: 40, [2, 0]: 20, [2, 1]: 30, [2, 3]: 50, [3, 0]: 30, [3, 1]: 30, [3, 2]: 50 }
+distance: {
+            [0, 1]: 10, [0, 2]: 20, [0, 3]: 30,
+            [1, 0]: 10, [1, 2]: 30, [1, 3]: 40,
+            [2, 0]: 20, [2, 1]: 30, [2, 3]: 50,
+            [3, 0]: 30, [3, 1]: 30, [3, 2]: 50
+          }
 ```
 
 In this case, if you use `(due_date 0)` or `(distance 0 0)` in an expression, it returns the default value.
-
-### base_cases
-
-`base_case` is optional, and the value is defined exactly the same as in [`base_cases` in a domain file](#basecases).
-You need to do either defining `base_cases` in a domain file, defining `base_cases` in a problem file, or defining `base_states` in a problem file.
-
-### base_states
-
-`base_states` is optional, and the value is a list of maps describing base states.
-Each map is defined exactly the same as in [`target`](#target).
-You need to do either defining `base_cases` in a domain file, defining `base_cases` in a problem file, or defining `base_states` in a problem file.
-With `base_states`, you can define base cases by directly using states.
-
-#### Example
-
-```yaml
-target:
-      unvisited: []
-      location: 0
-      time: 500
-```
-
-### dual_bounds
-
-`dual_bounds` is optional, and the value is defined exactly the same as in [`dual_bounds` in a domain file](#dualbounds).

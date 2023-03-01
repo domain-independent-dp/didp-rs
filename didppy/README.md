@@ -1,14 +1,32 @@
 # DIDPPy -- Python Interface for DyPDL
 
+DIDPPy is a Python interface for DyPDL, implemented in Rust with PyO3.
+
+## Quick Start
+
+If you just want to use DIDPPy, install it from PyPI.
+
+```bash
+pip install didppy
+```
+
+There are some examples in [`examples`](https://github.com/domain-independent-dp/didp-rs/didppy/examples).
+
 ## Development
 
-### Python Environment
+If you want to develop DIDPPy, clone this repository.
+
+```bash
+git clone https://github.com/domain-independent-dp/didp-rs
+cd didp-rs/didppy
+```
+
+### Create Python Environment
 
 ```bash
 python3 -m venv .venv 
 source .venv/bin/activate
 pip install maturin
-pip install -r docs/requirements.txt
 ```
 
 ### Build Development Version
@@ -19,17 +37,14 @@ maturin develop
 
 `didppy` will be installed in `.venv`.
 
-### Build Docs
-
-Replace `{x}` with the version of Python.
+### Run Test
 
 ```bash
-sphinx-build ./docs/ ./docs/_build/
+cargo test --no-default-features
+pytest
 ```
 
-This will generate the API reference to `./docs/_build/index.html`.
-
-## Release
+## Build Release Version
 
 ```bash
 maturin build --release
