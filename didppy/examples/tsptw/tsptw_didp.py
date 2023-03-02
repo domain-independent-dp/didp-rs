@@ -66,7 +66,7 @@ def solve(n, nodes, edges, a, b, time_limit=None):
     )
     model.add_dual_bound(
         min_distance_from[unvisited]
-        + (location != 0).if_then_else(min_distance_from[0], 0)
+        + (location != 0).if_then_else(min_distance_from[location], 0)
     )
 
     solver = dp.CABS(model, time_limit=time_limit, quiet=False)
