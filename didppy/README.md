@@ -1,5 +1,7 @@
 [![PyPi version](https://img.shields.io/pypi/v/didppy.svg)](https://pypi.python.org/pypi/didppy/)
 [![](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 # DIDPPy -- Python Interface for DyPDL
 
