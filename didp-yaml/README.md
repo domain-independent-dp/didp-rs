@@ -1,6 +1,13 @@
+[![crates.io](https://img.shields.io/crates/v/didp-yaml)](https://crates.io/crates/didp-yaml)
+[![minimum rustc 1.65](https://img.shields.io/badge/rustc-1.65+-blue.svg)](https://rust-lang.github.io/rfcs/2495-min-rust-version.html)
+
 # DIDP-YAML
 
 DIDP-YAML is a YAML interface for DyPDL modeling and solvers.
+
+## Documents
+
+For the syntax of the DyPDL-YAML and the solver configuration, see the [user guide](https://github.com/domain-independent-dp/didp-rs/tree/main/didp-yaml/docs)
 
 ## Installation
 
@@ -20,7 +27,7 @@ didp-yaml domain.yaml problem.yaml config.yaml
 
 Here, `domain.yaml` is the domain file for the problem, `problem.yaml` is the problem file for the problem, and `config.yaml` is the configuration file for a solver.
 
-There are some examples in [`examples`](https://github.com/domain-independent-dp/didp-rs/didp-yaml/examples). For example, you can test the CABS solver on TSPTW, CVRP, SALBP-1, bin packing, MOSP, and graph clear.
+There are some examples in [`examples`](https://github.com/domain-independent-dp/didp-rs/tree/main/didp-yaml/examples). For example, you can test the CABS solver on TSPTW, CVRP, SALBP-1, bin packing, MOSP, and graph clear.
 
 ```bash
 didp-yaml tsptw/tsptw-domain.yaml tsptw/tsptw-Dumas-n20w20.001.yaml solvers/cabs.yaml
@@ -31,6 +38,3 @@ didp-yaml mosp/mosp-domain.yaml mosp/mosp-GP1.yaml solvers/cabs.yaml
 didp-yaml graph-clear/graph-clear-domain.yaml graph-clear/graph-clear-planar20-1.yaml solvers/cabs.yaml
 ```
 
-## Documents
-
-For the syntax of the DyPDL-YAML and the solver configuration, see the [user guide](https://github.com/domain-independent-dp/didp-rs/didp-yaml/docs)
