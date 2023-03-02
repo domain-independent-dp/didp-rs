@@ -1,6 +1,11 @@
+[![PyPi version](https://img.shields.io/pypi/v/didppy.svg)](https://pypi.python.org/pypi/didppy/)
+[![](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+
 # DIDPPy -- Python Interface for DyPDL
 
 DIDPPy is a Python interface for DyPDL, implemented in Rust with PyO3.
+
+[Docs](https://didppy.readthedocs.io/en/latest)
 
 ## Quick Start
 
@@ -10,7 +15,7 @@ If you just want to use DIDPPy, install it from PyPI.
 pip install didppy
 ```
 
-There are some examples in [`examples`](https://github.com/domain-independent-dp/didp-rs/didppy/examples).
+There are some examples in [`examples`](https://github.com/domain-independent-dp/didp-rs/tree/main/didppy/examples).
 
 ## Development
 
