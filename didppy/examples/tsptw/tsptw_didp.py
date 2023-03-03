@@ -15,7 +15,7 @@ def solve(n, nodes, edges, a, b, time_limit=None):
     ready_time = model.add_int_table([a[i] for i in nodes])
     due_date = model.add_int_table([b[i] for i in nodes])
     distance_matrix = [
-        [edges[i, j] if (i, j) in edges else 0 for i in nodes] for j in nodes
+        [edges[i, j] if (i, j) in edges else 0 for j in nodes] for i in nodes
     ]
     distance = model.add_int_table(distance_matrix)
 
