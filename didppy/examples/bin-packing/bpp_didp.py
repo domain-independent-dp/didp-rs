@@ -10,10 +10,12 @@ import read_bpp
 
 def solve(n, c, weights, time_limit=None):
     model = dp.Model()
-    item = model.add_object_type(n)
-    unpacked = model.add_set_var(item, [i for i in range(n)])
-    residual = model.add_int_var(0)
-    bin_number = model.add_element_resource_var(item, 0, less_is_better=True)
+    item = model.add_object_type(number=n)
+    unpacked = model.add_set_var(object_type=item, target=[i for i in range(n)])
+    residual = model.add_int_resource_var(target=0, less_is_better=False)
+    bin_number = model.add_element_resource_var(
+        object_type=item, target=0, less_is_better=True
+    )
     weight_table = model.add_int_table(weights)
     lb2_weight1 = model.add_int_table(
         [1 if weights[i] > c / 2 else 0 for i in range(n)]

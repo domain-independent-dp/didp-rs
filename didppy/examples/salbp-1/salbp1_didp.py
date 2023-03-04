@@ -16,9 +16,11 @@ def solve(
     time_limit=None,
 ):
     model = dp.Model()
-    task = model.add_object_type(number_of_tasks)
-    uncompleted = model.add_set_var(task, [i for i in range(number_of_tasks)])
-    idle_time = model.add_int_resource_var(0)
+    task = model.add_object_type(number=number_of_tasks)
+    uncompleted = model.add_set_var(
+        object_type=task, target=list(range(number_of_tasks))
+    )
+    idle_time = model.add_int_resource_var(target=0, less_is_better=False)
     task_time_table = model.add_int_table(
         [task_times[i + 1] for i in range(number_of_tasks)]
     )
