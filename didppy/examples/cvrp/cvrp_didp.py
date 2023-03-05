@@ -21,6 +21,17 @@ def solve(n, nodes, edges, capacity, demand, k, time_limit=None):
         [edges[i, j] if (i, j) in edges else 0 for j in nodes] for i in nodes
     ]
     distance = model.add_int_table(distance_matrix)
+    distance_via_depot = model.add_int_table(
+        [
+            [
+                edges[i, nodes[0]] + edges[nodes[0], j]
+                if (i, nodes[0]) in edges and (j, nodes[0]) in edges
+                else 0
+                for j in nodes
+            ]
+            for i in nodes
+        ]
+    )
 
     model.add_base_case([unvisited.is_empty(), location == 0])
     name_to_partial_tour = {}
@@ -44,11 +55,12 @@ def solve(n, nodes, edges, capacity, demand, k, time_limit=None):
         name_to_partial_tour[name] = (1, i + 1)
         visit_via_depot = dp.Transition(
             name=name,
-            cost=dp.IntExpr.state_cost() + distance[location, 0] + distance[0, i],
+            cost=dp.IntExpr.state_cost() + distance_via_depot[location, i],
             effects=[
                 (unvisited, unvisited.remove(i)),
                 (location, i),
                 (load, demand[i]),
+                (vehicles, vehicles + 1),
             ],
             preconditions=[unvisited.contains(i), vehicles < k],
         )
