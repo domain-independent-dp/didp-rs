@@ -25,7 +25,7 @@ def solve(n, nodes, edges, capacity, demand, k, time_limit=None):
         [
             [
                 edges[i, nodes[0]] + edges[nodes[0], j]
-                if (i, nodes[0]) in edges and (j, nodes[0]) in edges
+                if (i, nodes[0]) in edges and (nodes[0], j) in edges
                 else 0
                 for j in nodes
             ]
@@ -38,7 +38,7 @@ def solve(n, nodes, edges, capacity, demand, k, time_limit=None):
 
     for i in range(1, n):
         name = "visit {}".format(i)
-        name_to_partial_tour[name] = (i + 1,)
+        name_to_partial_tour[name] = (nodes[i],)
         visit = dp.Transition(
             name=name,
             cost=dp.IntExpr.state_cost() + distance[location, i],
@@ -52,7 +52,7 @@ def solve(n, nodes, edges, capacity, demand, k, time_limit=None):
         model.add_transition(visit)
 
         name = "visit {} via depot".format(i)
-        name_to_partial_tour[name] = (1, i + 1)
+        name_to_partial_tour[name] = (nodes[0], nodes[i])
         visit_via_depot = dp.Transition(
             name=name,
             cost=dp.IntExpr.state_cost() + distance_via_depot[location, i],
@@ -67,7 +67,7 @@ def solve(n, nodes, edges, capacity, demand, k, time_limit=None):
         model.add_transition(visit_via_depot)
 
     name = "return"
-    name_to_partial_tour[name] = (1,)
+    name_to_partial_tour[name] = (nodes[0],)
     return_to_depot = dp.Transition(
         name=name,
         cost=dp.IntExpr.state_cost() + distance[location, 0],
@@ -79,14 +79,14 @@ def solve(n, nodes, edges, capacity, demand, k, time_limit=None):
     model.add_state_constr((k - vehicles + 1) * capacity >= load + demand[unvisited])
 
     min_distance_to = model.add_int_table(
-        [min(distance_matrix[i - 1][j - 1] for i in nodes if i != j) for j in nodes]
+        [min(distance_matrix[i][j] for i in range(n) if i != j) for j in range(n)]
     )
     model.add_dual_bound(
         min_distance_to[unvisited] + (location != 0).if_then_else(min_distance_to[0], 0)
     )
 
     min_distance_from = model.add_int_table(
-        [min(distance_matrix[i - 1][j - 1] for j in nodes if i != j) for i in nodes]
+        [min(distance_matrix[i][j] for j in range(n) if i != j) for i in range(n)]
     )
     model.add_dual_bound(
         min_distance_from[unvisited]
