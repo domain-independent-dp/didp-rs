@@ -31,7 +31,7 @@ jobs:
         rust: [stable]
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@master
+      - uses: dtolnay/rust-toolchain@1.64.0
         with:
           toolchain: ${{ matrix.rust }}
       - run: cargo test
