@@ -553,13 +553,13 @@ mod tests {
     }
 
     #[test]
-    fn cost_expressoin_default() {
+    fn cost_expression_default() {
         let expression = CostExpression::default();
         assert_eq!(expression, CostExpression::Integer(IntegerExpression::Cost));
     }
 
     #[test]
-    fn cost_expressoin_from() {
+    fn cost_expression_from() {
         let expression = CostExpression::from(IntegerExpression::Cost);
         assert_eq!(expression, CostExpression::Integer(IntegerExpression::Cost));
         let expression = CostExpression::from(ContinuousExpression::Cost);
@@ -907,6 +907,70 @@ mod tests {
                 cost: CostExpression::Continuous(ContinuousExpression::Cost),
                 ..Default::default()
             }
+        );
+    }
+
+    #[test]
+    fn get_preconditions() {
+        let transition = Transition {
+            elements_in_set_variable: vec![(0, 1), (1, 2)],
+            elements_in_vector_variable: vec![(2, 3, 4), (3, 4, 5)],
+            preconditions: vec![
+                grounded_condition::GroundedCondition {
+                    condition: Condition::Set(Box::new(SetCondition::IsIn(
+                        ElementExpression::Variable(0),
+                        SetExpression::Reference(ReferenceExpression::Variable(0)),
+                    ))),
+                    ..Default::default()
+                },
+                grounded_condition::GroundedCondition {
+                    condition: Condition::Set(Box::new(SetCondition::IsIn(
+                        ElementExpression::Variable(1),
+                        SetExpression::Reference(ReferenceExpression::Variable(1)),
+                    ))),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(
+            transition.get_preconditions(),
+            vec![
+                Condition::Set(Box::new(SetCondition::IsIn(
+                    ElementExpression::Constant(1),
+                    SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ))),
+                Condition::Set(Box::new(SetCondition::IsIn(
+                    ElementExpression::Constant(2),
+                    SetExpression::Reference(ReferenceExpression::Variable(1)),
+                ))),
+                Condition::Set(Box::new(SetCondition::IsIn(
+                    ElementExpression::Constant(3),
+                    SetExpression::FromVector(
+                        4,
+                        Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                            2
+                        )))
+                    ),
+                ))),
+                Condition::Set(Box::new(SetCondition::IsIn(
+                    ElementExpression::Constant(4),
+                    SetExpression::FromVector(
+                        5,
+                        Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                            3
+                        )))
+                    ),
+                ))),
+                Condition::Set(Box::new(SetCondition::IsIn(
+                    ElementExpression::Variable(0),
+                    SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ))),
+                Condition::Set(Box::new(SetCondition::IsIn(
+                    ElementExpression::Variable(1),
+                    SetExpression::Reference(ReferenceExpression::Variable(1)),
+                ))),
+            ]
         );
     }
 

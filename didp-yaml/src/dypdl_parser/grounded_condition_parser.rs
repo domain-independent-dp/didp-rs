@@ -32,11 +32,7 @@ pub fn load_grounded_conditions_from_yaml(
                 registry,
                 parameters,
             )?;
-            Ok(vec![GroundedCondition {
-                condition: condition.simplify(registry),
-                elements_in_set_variable: vec![],
-                elements_in_vector_variable: vec![],
-            }])
+            Ok(vec![GroundedCondition::from(condition.simplify(registry))])
         }
         Yaml::Hash(map) => {
             let condition = util::get_string_by_key(map, "condition")?;
@@ -74,11 +70,7 @@ pub fn load_grounded_conditions_from_yaml(
                     let condition = expression_parser::parse_condition(
                         condition, metadata, registry, parameters,
                     )?;
-                    Ok(vec![GroundedCondition {
-                        condition: condition.simplify(registry),
-                        elements_in_set_variable: vec![],
-                        elements_in_vector_variable: vec![],
-                    }])
+                    Ok(vec![GroundedCondition::from(condition.simplify(registry))])
                 }
             }
         }

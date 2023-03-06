@@ -617,7 +617,7 @@ def test_add_state_constr():
     int_var = model.add_int_var(target=3)
     state = model.target_state
 
-    model.add_state_constr(set_var.contains(0))
+    model.add_state_constr(~set_var.contains(2) | (int_var > 3))
 
     assert len(model.state_constrs) == 1
     assert model.state_constrs[0].eval(state, model)
@@ -715,7 +715,7 @@ def test_add_base_case():
     assert model.base_cases[0][1].eval(state, model)
     assert model.base_cases[0][1].eval(state, model)
 
-    model.add_base_case([int_var < 3])
+    model.add_base_case([(int_var < 3) | ~set_var.contains(1)])
 
     assert len(model.base_cases) == 2
     assert model.base_cases[0][1].eval(state, model)
