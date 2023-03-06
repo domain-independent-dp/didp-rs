@@ -1,6 +1,6 @@
 [package]
 name = "didppy"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 description = "Python interface for Dynamic Programming Description Language (DyPDL) and DyPDL solvers."
 license = "MIT OR Apache-2.0"
@@ -11,8 +11,8 @@ name = "didppy"
 crate-type = ["cdylib"]
 
 [dependencies]
-dypdl = { path = "../dypdl", version = "0.2.0" }
-dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.2.0" }
+dypdl = { path = "../dypdl", version = "0.3" }
+dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.3" }
 rustc-hash = "1.1"
 
 [dependencies.pyo3]
