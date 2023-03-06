@@ -84,7 +84,7 @@ impl From<GroundedCondition> for Condition {
 }
 
 impl GroundedCondition {
-    /// Returns true if the condition is satisfied, false if the condition is not satisfied, and None if an parameter is not included in the corresponding set or vector variable.
+    /// Returns true if the condition is satisfied and false if the condition is not satisfied.
     ///
     /// # Panics
     ///
