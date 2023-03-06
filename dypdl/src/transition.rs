@@ -155,9 +155,9 @@ pub struct Transition {
     /// Pairs of an index of a set variable and a parameter.
     /// A parameter must be included in the corresponding variable to be applicable.
     pub elements_in_set_variable: Vec<(usize, Element)>,
-    /// Pairs of an index of a vector variable and a parameter.
+    /// Triplets of an index of a vector variable, a parameter, and the capacity.
     /// A parameter must be included in the corresponding variable to be applicable.
-    pub elements_in_vector_variable: Vec<(usize, Element)>,
+    pub elements_in_vector_variable: Vec<(usize, Element, usize)>,
     /// Preconditions.
     pub preconditions: Vec<grounded_condition::GroundedCondition>,
     /// Effect.
@@ -203,14 +203,14 @@ impl TransitionInterface for Transition {
                 return false;
             }
         }
-        for (i, v) in &self.elements_in_vector_variable {
+        for (i, v, _) in &self.elements_in_vector_variable {
             if !state.get_vector_variable(*i).contains(v) {
                 return false;
             }
         }
         self.preconditions
             .iter()
-            .all(|c| c.is_satisfied(state, registry).unwrap_or(true))
+            .all(|c| c.is_satisfied(state, registry))
     }
 
     /// Returns the transitioned state.
@@ -322,6 +322,60 @@ impl Transition {
         self.cost = CostExpression::from(cost)
     }
 
+    /// Gets preconditions.
+    ///
+    /// Note that the preconditions and their order might be changed due to internal optimizations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("x", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let mut transition = Transition::new("transition");
+    /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);;
+    /// transition.add_precondition(condition.clone());
+    ///
+    /// let preconditions = transition.get_preconditions();
+    /// assert_eq!(preconditions.len(), 1);
+    /// assert!(preconditions[0].eval(&state, &model.table_registry));
+    /// ```
+    pub fn get_preconditions(&self) -> Vec<Condition> {
+        let mut result = Vec::with_capacity(
+            self.elements_in_set_variable.len()
+                + self.elements_in_vector_variable.len()
+                + self.preconditions.len(),
+        );
+
+        for (i, e) in &self.elements_in_set_variable {
+            result.push(Condition::Set(Box::new(SetCondition::IsIn(
+                ElementExpression::Constant(*e),
+                SetExpression::Reference(ReferenceExpression::Variable(*i)),
+            ))));
+        }
+
+        for (i, e, capacity) in &self.elements_in_vector_variable {
+            result.push(Condition::Set(Box::new(SetCondition::IsIn(
+                ElementExpression::Constant(*e),
+                SetExpression::FromVector(
+                    *capacity,
+                    Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
+                        *i,
+                    ))),
+                ),
+            ))));
+        }
+
+        for condition in &self.preconditions {
+            result.push(Condition::from(condition.clone()));
+        }
+
+        result
+    }
+
     /// Adds a precondition;
     ///
     /// # Examples
@@ -349,12 +403,12 @@ impl Transition {
                 }
                 SetCondition::IsIn(
                     ElementExpression::Constant(e),
-                    SetExpression::FromVector(_, v),
+                    SetExpression::FromVector(capacity, v),
                 ) => {
                     if let VectorExpression::Reference(ReferenceExpression::Variable(i)) =
                         v.as_ref()
                     {
-                        self.elements_in_vector_variable.push((*i, *e));
+                        self.elements_in_vector_variable.push((*i, *e, *capacity));
                         return;
                     }
                 }
@@ -369,10 +423,7 @@ impl Transition {
             _ => {}
         }
         self.preconditions
-            .push(grounded_condition::GroundedCondition {
-                condition,
-                ..Default::default()
-            })
+            .push(grounded_condition::GroundedCondition::from(condition))
     }
 }
 
@@ -617,7 +668,7 @@ mod tests {
         let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 0), (1, 1)],
-            elements_in_vector_variable: vec![(0, 0), (1, 2)],
+            elements_in_vector_variable: vec![(0, 0, 3), (1, 2, 3)],
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
@@ -655,7 +706,7 @@ mod tests {
         let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 1), (1, 1)],
-            elements_in_vector_variable: vec![(0, 0), (1, 2)],
+            elements_in_vector_variable: vec![(0, 0, 3), (1, 2, 3)],
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
@@ -664,7 +715,7 @@ mod tests {
         let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 1), (1, 1)],
-            elements_in_vector_variable: vec![(0, 1), (1, 2)],
+            elements_in_vector_variable: vec![(0, 1, 3), (1, 2, 3)],
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
@@ -897,7 +948,7 @@ mod tests {
             transition,
             Transition {
                 elements_in_set_variable: vec![(0, 0), (1, 1)],
-                elements_in_vector_variable: vec![(0, 0)],
+                elements_in_vector_variable: vec![(0, 0, 10)],
                 ..Default::default()
             }
         );
@@ -914,7 +965,7 @@ mod tests {
             transition,
             Transition {
                 elements_in_set_variable: vec![(0, 0), (1, 1)],
-                elements_in_vector_variable: vec![(0, 0), (1, 1)],
+                elements_in_vector_variable: vec![(0, 0, 10), (1, 1, 10)],
                 ..Default::default()
             }
         );
@@ -927,7 +978,7 @@ mod tests {
             transition,
             Transition {
                 elements_in_set_variable: vec![(0, 0), (1, 1)],
-                elements_in_vector_variable: vec![(0, 0), (1, 1)],
+                elements_in_vector_variable: vec![(0, 0, 10), (1, 1, 10)],
                 preconditions: vec![grounded_condition::GroundedCondition {
                     condition: Condition::ComparisonE(
                         ComparisonOperator::Eq,
@@ -948,7 +999,7 @@ mod tests {
             transition,
             Transition {
                 elements_in_set_variable: vec![(0, 0), (1, 1)],
-                elements_in_vector_variable: vec![(0, 0), (1, 1)],
+                elements_in_vector_variable: vec![(0, 0, 10), (1, 1, 10)],
                 preconditions: vec![
                     grounded_condition::GroundedCondition {
                         condition: Condition::ComparisonE(

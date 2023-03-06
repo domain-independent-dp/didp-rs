@@ -221,7 +221,7 @@ forall:
         let expected = vec![
             GroundedCondition {
                 elements_in_set_variable: Vec::new(),
-                elements_in_vector_variable: vec![(0, 0)],
+                elements_in_vector_variable: vec![(0, 0, 2)],
                 condition: Condition::Set(Box::new(SetCondition::IsIn(
                     ElementExpression::Constant(0),
                     SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -229,7 +229,7 @@ forall:
             },
             GroundedCondition {
                 elements_in_set_variable: Vec::new(),
-                elements_in_vector_variable: vec![(0, 1)],
+                elements_in_vector_variable: vec![(0, 1, 2)],
                 condition: Condition::Set(Box::new(SetCondition::IsIn(
                     ElementExpression::Constant(1),
                     SetExpression::Reference(ReferenceExpression::Variable(0)),

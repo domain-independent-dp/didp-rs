@@ -193,24 +193,12 @@ impl TransitionPy {
     }
 
     /// list of Condition : Preconditions.   
-    /// Note that the order of preconditions may differ from the order in which they are added.
+    /// Note that the preconditions and their order might be changed due to internal optimizations.
     #[getter]
     fn preconditions(&self) -> Vec<ConditionPy> {
         self.0
-            .elements_in_set_variable
-            .iter()
-            .map(|(var, element)| {
-                Condition::Set(Box::new(SetCondition::IsIn(
-                    ElementExpression::Constant(*element),
-                    SetExpression::Reference(ReferenceExpression::Variable(*var)),
-                )))
-            })
-            .chain(
-                self.0
-                    .preconditions
-                    .iter()
-                    .map(|condition| condition.condition.clone()),
-            )
+            .get_preconditions()
+            .into_iter()
             .map(ConditionPy::from)
             .collect()
     }
