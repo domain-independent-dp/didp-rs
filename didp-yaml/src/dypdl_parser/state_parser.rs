@@ -101,7 +101,7 @@ pub fn load_state_from_yaml(
 type GroundedParameterTriplet = (
     Vec<FxHashMap<String, usize>>,
     Vec<Vec<(usize, usize)>>,
-    Vec<Vec<(usize, usize)>>,
+    Vec<Vec<(usize, usize, usize)>>,
 );
 
 pub fn ground_parameters_from_yaml(
@@ -114,7 +114,7 @@ pub fn ground_parameters_from_yaml(
     let mut elements_in_set_variable_array: Vec<Vec<(usize, usize)>> =
         Vec::with_capacity(array.len());
     elements_in_set_variable_array.push(vec![]);
-    let mut elements_in_vector_variable_array: Vec<Vec<(usize, usize)>> =
+    let mut elements_in_vector_variable_array: Vec<Vec<(usize, usize, usize)>> =
         Vec::with_capacity(array.len());
     elements_in_vector_variable_array.push(vec![]);
     let mut reserved_names = FxHashSet::default();
@@ -165,7 +165,8 @@ pub fn ground_parameters_from_yaml(
                 }
                 let mut elements_in_vector_variable = elements_in_vector_variable.clone();
                 if let Some(j) = vector_index {
-                    elements_in_vector_variable.push((j, i));
+                    let capacity = metadata.object_numbers[metadata.vector_variable_to_object[j]];
+                    elements_in_vector_variable.push((j, i, capacity));
                 }
                 new_parameteres_set.push(parameters);
                 new_elements_in_set_variable_array.push(elements_in_set_variable);
@@ -764,8 +765,12 @@ cr3: 3
             result.unwrap();
         let expected_elements_in_set_variable_array =
             vec![vec![(3, 0)], vec![(3, 0)], vec![(3, 1)], vec![(3, 1)]];
-        let expected_elements_in_vector_variable_array =
-            vec![vec![(3, 0)], vec![(3, 1)], vec![(3, 0)], vec![(3, 1)]];
+        let expected_elements_in_vector_variable_array = vec![
+            vec![(3, 0, 2)],
+            vec![(3, 1, 2)],
+            vec![(3, 0, 2)],
+            vec![(3, 1, 2)],
+        ];
         assert_eq!(parameters, expected_parameters);
         assert_eq!(
             elements_in_set_variable_array,

@@ -1522,7 +1522,7 @@ impl ModelPy {
         self.0
             .state_constraints
             .iter()
-            .map(|constraint| ConditionPy::from(constraint.condition.clone()))
+            .map(|constraint| ConditionPy::from(Condition::from(constraint.clone())))
             .collect()
     }
 
@@ -1600,7 +1600,7 @@ impl ModelPy {
             .map(|base_case| {
                 Vec::from(base_case.clone())
                     .into_iter()
-                    .map(|condition| ConditionPy::from(condition.condition))
+                    .map(|condition| ConditionPy::from(Condition::from(condition)))
                     .collect()
             })
             .collect()
@@ -5269,7 +5269,7 @@ mod tests {
     }
 
     #[test]
-    fn add_costr_ok() {
+    fn add_constr_ok() {
         let mut model = ModelPy::default();
         let v = model.add_int_var(0, None);
         assert!(v.is_ok());

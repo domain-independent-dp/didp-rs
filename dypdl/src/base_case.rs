@@ -38,9 +38,7 @@ impl BaseCase {
         state: &U,
         registry: &table_registry::TableRegistry,
     ) -> bool {
-        self.0
-            .iter()
-            .all(|x| x.is_satisfied(state, registry).unwrap_or(true))
+        self.0.iter().all(|x| x.is_satisfied(state, registry))
     }
 }
 

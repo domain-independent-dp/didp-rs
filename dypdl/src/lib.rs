@@ -269,11 +269,9 @@ impl Model {
     /// assert!(!model.check_constraints(&state));
     /// ```
     pub fn check_constraints<U: StateInterface>(&self, state: &U) -> bool {
-        self.state_constraints.iter().all(|constraint| {
-            constraint
-                .is_satisfied(state, &self.table_registry)
-                .unwrap_or(true)
-        })
+        self.state_constraints
+            .iter()
+            .all(|constraint| constraint.is_satisfied(state, &self.table_registry))
     }
 
     /// Returns true if a state satisfies any of base cases and false otherwise.
@@ -1509,7 +1507,7 @@ impl Model {
             }
         }
         let n = self.state_metadata.number_of_vector_variables();
-        for (i, e) in &transition.elements_in_vector_variable {
+        for (i, e, _) in &transition.elements_in_vector_variable {
             if *i >= n {
                 return Err(ModelErr::new(format!(
                     "vector variable id {} >= #set variables ({})",
@@ -1547,7 +1545,7 @@ impl Model {
                 }
             }
             let n = self.state_metadata.number_of_vector_variables();
-            for (i, e) in &condition.elements_in_vector_variable {
+            for (i, e, _) in &condition.elements_in_vector_variable {
                 if *i >= n {
                     return Err(ModelErr::new(format!(
                         "vector variable id {} >= #set variables ({})",
@@ -6672,7 +6670,7 @@ mod tests {
 
         let mut model = Model::default();
         let transition = Transition {
-            elements_in_vector_variable: vec![(0, 0)],
+            elements_in_vector_variable: vec![(0, 0, 10)],
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
@@ -6685,7 +6683,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
-            elements_in_vector_variable: vec![(v.id(), 11)],
+            elements_in_vector_variable: vec![(v.id(), 11, 10)],
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
@@ -6719,7 +6717,7 @@ mod tests {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(0, 0)],
+                elements_in_vector_variable: vec![(0, 0, 10)],
                 ..Default::default()
             }],
             ..Default::default()
@@ -6735,7 +6733,7 @@ mod tests {
         let v = v.unwrap();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(v.id(), 11)],
+                elements_in_vector_variable: vec![(v.id(), 11, 10)],
                 ..Default::default()
             }],
             ..Default::default()
@@ -7737,7 +7735,7 @@ mod tests {
 
         let mut model = Model::default();
         let transition = Transition {
-            elements_in_vector_variable: vec![(0, 0)],
+            elements_in_vector_variable: vec![(0, 0, 10)],
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
@@ -7750,7 +7748,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
-            elements_in_vector_variable: vec![(v.id(), 11)],
+            elements_in_vector_variable: vec![(v.id(), 11, 10)],
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
@@ -7784,7 +7782,7 @@ mod tests {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(0, 0)],
+                elements_in_vector_variable: vec![(0, 0, 10)],
                 ..Default::default()
             }],
             ..Default::default()
@@ -7800,7 +7798,7 @@ mod tests {
         let v = v.unwrap();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(v.id(), 11)],
+                elements_in_vector_variable: vec![(v.id(), 11, 10)],
                 ..Default::default()
             }],
             ..Default::default()
@@ -8802,7 +8800,7 @@ mod tests {
 
         let mut model = Model::default();
         let transition = Transition {
-            elements_in_vector_variable: vec![(0, 0)],
+            elements_in_vector_variable: vec![(0, 0, 10)],
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
@@ -8815,7 +8813,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
-            elements_in_vector_variable: vec![(v.id(), 11)],
+            elements_in_vector_variable: vec![(v.id(), 11, 10)],
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
@@ -8849,7 +8847,7 @@ mod tests {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(0, 0)],
+                elements_in_vector_variable: vec![(0, 0, 10)],
                 ..Default::default()
             }],
             ..Default::default()
@@ -8865,7 +8863,7 @@ mod tests {
         let v = v.unwrap();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(v.id(), 11)],
+                elements_in_vector_variable: vec![(v.id(), 11, 10)],
                 ..Default::default()
             }],
             ..Default::default()
@@ -9867,7 +9865,7 @@ mod tests {
 
         let mut model = Model::default();
         let transition = Transition {
-            elements_in_vector_variable: vec![(0, 0)],
+            elements_in_vector_variable: vec![(0, 0, 10)],
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
@@ -9880,7 +9878,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let transition = Transition {
-            elements_in_vector_variable: vec![(v.id(), 11)],
+            elements_in_vector_variable: vec![(v.id(), 11, 10)],
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
@@ -9914,7 +9912,7 @@ mod tests {
         let mut model = Model::default();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(0, 0)],
+                elements_in_vector_variable: vec![(0, 0, 10)],
                 ..Default::default()
             }],
             ..Default::default()
@@ -9930,7 +9928,7 @@ mod tests {
         let v = v.unwrap();
         let transition = Transition {
             preconditions: vec![GroundedCondition {
-                elements_in_vector_variable: vec![(v.id(), 11)],
+                elements_in_vector_variable: vec![(v.id(), 11, 10)],
                 ..Default::default()
             }],
             ..Default::default()
