@@ -26,6 +26,8 @@ def solve(n, nodes, edges, capacity, demand, k, time_limit=None):
             [
                 edges[i, nodes[0]] + edges[nodes[0], j]
                 if (i, nodes[0]) in edges and (nodes[0], j) in edges
+                else edges[i, j]
+                if (i, j) in edges
                 else 0
                 for j in nodes
             ]
@@ -51,6 +53,7 @@ def solve(n, nodes, edges, capacity, demand, k, time_limit=None):
         )
         model.add_transition(visit)
 
+    for i in range(1, n):
         name = "visit {} via depot".format(i)
         name_to_partial_tour[name] = (nodes[0], nodes[i])
         visit_via_depot = dp.Transition(
@@ -90,7 +93,7 @@ def solve(n, nodes, edges, capacity, demand, k, time_limit=None):
     )
     model.add_dual_bound(
         min_distance_from[unvisited]
-        + (location != 0).if_then_else(min_distance_from[0], 0)
+        + (location != 0).if_then_else(min_distance_from[location], 0)
     )
 
     solver = dp.CABS(model, time_limit=time_limit, quiet=False)
