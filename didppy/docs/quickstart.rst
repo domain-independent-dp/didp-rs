@@ -68,7 +68,7 @@ Suppose that :math:`n = 4`, :math:`w_0 = 10`, :math:`w_1 = 20`, :math:`w_2 = 30`
 
 We will explain the details in the :doc:`tutorial <tutorial>`, but here is a summary:
 
-* State variables `r` and `i` corresponding to :math:`r` and :math:`i` are defined with the *target* values `c` and `0`, which states that we want to compute :math:`V(c, 0)`.
+* State variables :code:`r` and :code:`i` corresponding to :math:`r` and :math:`i` are defined with the *target* values :code:`c` and :code:`0`, which states that we want to compute :math:`V(c, 0)`.
 * Recursive equations are defined by transitions, which change the state variables and the cost.
 * The cost of the subproblem in the right-hand side of the recursive equations is represented by `state_cost`.
 * The condition to terminate the recursion is defined by the base case `i == n`.

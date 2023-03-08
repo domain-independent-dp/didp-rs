@@ -40,7 +40,7 @@ Overall, we get the following DP model:
    \text{compute } & V(N \setminus \{ 0 \}, 0, 0) \\ 
    & V(U, i, t) = \begin{cases}
         \min\limits_{j \in U: t + c_{ij} \leq b_j} c_{ij} + V(U \setminus \{ j \}, j, \max \{ t + c_{ij}, a_j \})  & \text{if } U \neq \emptyset \\
-        c_{i0} + V(\emptyset, 0, t + c_{i0}) & \text{if } U = \emptyset \land i \neq 0 \\
+        c_{i0} + V(U, 0, t + c_{i0}) & \text{if } U = \emptyset \land i \neq 0 \\
         0 & \text{if } U = \emptyset \land i = 0.
    \end{cases}
 
@@ -99,8 +99,11 @@ In TSPTW, :math:`U` is a set variable , :math:`i` is an element variable, and :m
 
 .. code-block:: python
 
+   # U
    unvisited = model.add_set_variable(object_type=customer, target=list(range(1, n)))
+   # i
    location = model.add_element_variable(object_type=customer, target=0)
+   # t
    time = model.add_int_variable(target=0)
 
 While :math:`i` is integer, we define it as an element variable as it represents an element in the set :math:`N`.
@@ -149,33 +152,65 @@ Transitions
 ~~~~~~~~~~~
 
 The reucursive equation of the DP model is defined by *transitions*.
-A transition defines the followings:
+A transition transforms the state in the left-hand side into the state in the right-hand side.
 
-* Change of the cost.
-* *Effects*: changes of the state variables.
-* *Preconditions*: conditions on the state variables to apply the transition.
+In TSPTW, we have the following recursive equation:
 
-When a transition is applied, the cost and state variables are changed.
-The optimal value of a state is computed by taking the minimum (or maximum) of the costs of the applicable transitions.
+.. math::
+    V(U, i, t ) = \min\limits_{j \in U: t + c_{ij} \leq b_j} c_{ij} + V(U \setminus \{ j \}, j, \max \{ t + c_{ij}, a_j \})  \text{ if } U \neq \emptyset.
 
-In TSPTW, visiting a customer and returning to the depot are transitions.
+In DIDPPy, it is represented as follows:
 
 .. code-block:: python
-
-    state_cost = dp.IntExpr.state_cost()
 
     for j in range(1, n):
         visit = dp.Transition(
             name="visit {}".format(j),
-            cost=travel_time[location, j] + state_cost,
+            cost=travel_time[location, j] + dp.IntExpr.state_cost(),
+            preconditions=[unvisited.contains(j), time + travel_time[location, j] <= due_date[j]],
             effects=[
                 (unvisited, unvisited.remove(j)),
                 (location, j),
                 (time, dp.max(time + travel_time[location, j], ready_time[j]))
             ],
-            preconditions=[unvisited.contains(j), time + travel_time[location, j] <= due_date[j]],
         )
         model.add_transition(visit)
+
+:code:`cost` defines how the value of the left-hand side state, :math:`V(U, i, t)`,  is computed based on the value of the right-hand side state, :math:`V(U \setminus \{ j \}, j, \max\{ t + c_{ij}, a_j \})`, represented by :func:`didppy.IntExpr.state_cost`.
+In the case of the continuous cost, we can use :func:`didppy.FloatExpr.state_cost`.
+
+:code:`travel_time[location, j]` corresponds to :math:`c_{ij}`.
+Here, state variable :code:`location` is used in the index, which is why we needed to register nested list :code:`c` to the model as table :code:`travel_time`.
+Note that :code:`travel_time[location, j]` must be used instead of :code:`travel_time[location][j]`.
+
+:code:`preconditions` make sure that the transition is considered only when :math:`j \in U` (:code:`unvisited.contains(j)`) and :math:`t + c_{ij} \leq b_j` (:python:`time + travel_time[location, j] <= due_dae[j]`).
+
+We define a transition for each :math:`j \in N \setminus \{ 0 \}`, and then filter customers that do not satisfy :math:`j \in U` and :math:`t + c_{ij} \leq b_j` by using :code:`preconditions`.
+
+
+Effects are described by a list of tuples of a state variable and its updated value described by an expression.
+
+* :math:`U \setminus \{ j \}` : :code:`unvisited.remove(j)` (:class:`~didppy.SetExpr`).
+* :math:`j` : :code:`j` (automatically converted to :class:`~didppy.ElementExpr`).
+* :math:`\max\{ t + c_{ij}, a_j \}` : :code:`dp.max(time + travel_time[location, j], ready_time[j])` (:class:`~didppy.IntExpr`).
+
+We use :func:`didppy.max` instead of built-in :code:`max` to take the maximum of two :class:`~didppy.IntExpr`.
+As in this example, some built-in functions are replaced by :ref:`functions in DIDPPy <reference:Functions>` to support expressions.
+However, we can apply built-in :code:`sum`, :code:`abs`, and :code:`pow` to :class:`~didppy.IntVar`, :class:`~didppy.IntExpr`, :class:`~didppy.FloatVar`, and :class:`~didppy.FloatExpr` as well as operators such as :code:`+`, :code:`-`, :code:`*`, and :code:`/`.
+:class:`~didppy.SetVar` and :class:`~didppy.SetExpr` have a similar interface as :code:`set` in Python.
+
+Preconditions are described by list of *conditions*, expressions whose returing value is boolean.
+:code:`unvisited.contains(j)` is a condition that checks if :code:`j` is contained in the state variable :code:`unvisited`.
+The second condition using a comparison operator :code:`<=` to compare two expressions.
+
+The equation
+
+.. math::
+    V(U, i, t) = c_{i0} + V(U, 0, t + c_{i0}) \text{ if } U = \emptyset \land i \neq 0
+
+is defined by another transition in a similar way.
+
+.. code-block:: python
 
     return_to_depot = dp.Transition(
         name="return",
@@ -188,30 +223,24 @@ In TSPTW, visiting a customer and returning to the depot are transitions.
     )
     model.add_transition(return_to_depot)
 
-
-The value of the next state, which appers in the right-hand side of the recursive equation (:math:`V(U \setminus \{ j \}, j, \max\{ t + c_{ij}, a_j \})` or :math:`V(\emptyset, 0, t + c_{i0})`), is represented by :func:`didppy.IntExpr.state_cost`.
-In the case of the continuous cost, we can use :func:`didppy.FloatExpr.state_cost`.
-
-The change of the cost, effects, and preconditions are described by *expressions*, operations on state variables.
-The value of an expression is not immediately determined: it is computed given a state inside a solver.
-
-In an expression, a table can be indexed by state variables.
-For example, `travel_time[location, j]` is an expression that represents the value of the table `travel_time` at the indices `location` and `j`, where `location` is a state variable.
-In addition, taking the sum of constants in a table over elements in a set variable is possible, as explained later.
-
-Effects are described by a list of tuples of state variables and expressions.
-Each expression describes how the state variable is updated by the transition.
-`unviisted.remove(j)` states that an integer `j` is removed from the state variable `unvisited`.
-
-When updating `time` in `visit`, we use :func:`didppy.max` instead of built-in `max` to take the maximum of two expressions.
-As in this example, some built-in functions are replaced by :ref:`functions in DIDPPy <reference:Functions>` to support expressions.
-However, we can apply built-in `sum`, `abs`, and `pow` to int and float expressions.
-
-Preconditions are described by list of *conditions*, expressions whose returing value is boolean.
-`unvisited.contains(j)` is a condition that checks if an integer `j` is contained in the state variable `unvisited`.
-The second condition using a comparison operator `<= ` to compare two expressions.
-
 Once a transition is created, it is registed to a model by :func:`~didppy.Model.add_transition`.
-We can define a *forced transition*, by using `forced=True` in this function while it is not used in TSPTW.
+We can define a *forced transition*, by using :code:`forced=True` in this function while it is not used in TSPTW.
 A forced transition is useful to break symmetry in the DP model.
 See other examples such as :doc:`Talent Scheduling <examples/talent-scheduling>` for more details.
+
+Base Cases
+~~~~~~~~~~
+
+A *base cases* is a set of conditions to terminate the recursion.
+In our DP model,
+
+.. math::
+    V(U, i, t) = 0 \text{ if } U = \emptyset \land i = 0
+
+is a base case.
+It is defined as follows in DIDPPy.
+
+.. code-block:: python
+
+    model.add_base_case([unvisited.is_empty(), location == 0])
+
