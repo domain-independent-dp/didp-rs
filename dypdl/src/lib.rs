@@ -1564,17 +1564,20 @@ impl Model {
             }
             self.check_expression(&condition.condition, false)?;
             let simplified = condition.condition.simplify(&self.table_registry);
+            let elements_in_set_variable = condition.elements_in_set_variable.clone();
+            let elements_in_vector_variable = condition.elements_in_vector_variable.clone();
             match simplified {
                 expression::Condition::Constant(true) => {
                     eprintln!("precondition {:?} is always satisfied", condition);
                 }
-                expression::Condition::Constant(false) => {
+                expression::Condition::Constant(false)
+                    if elements_in_set_variable.is_empty()
+                        && elements_in_vector_variable.is_empty() =>
+                {
                     eprintln!("precondition {:?} is never satisfied", condition);
                 }
                 _ => {}
             }
-            let elements_in_set_variable = condition.elements_in_set_variable.clone();
-            let elements_in_vector_variable = condition.elements_in_vector_variable.clone();
             preconditions.push(GroundedCondition {
                 elements_in_set_variable,
                 elements_in_vector_variable,

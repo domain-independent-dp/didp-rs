@@ -161,7 +161,7 @@ where
     let mut pruned = false;
 
     while !current_beam.is_empty() {
-        let mut incumbent: Option<(Rc<I>, T)> = None;
+        let mut incumbent: Option<(Rc<I>, T, _)> = None;
 
         for node in current_beam.drain() {
             if let Some(result) = rollout(node.state(), node.cost(), problem.solution_suffix, model)
@@ -169,7 +169,7 @@ where
                 if result.is_base {
                     if !exceed_bound(model, result.cost, primal_bound) {
                         primal_bound = Some(node.cost());
-                        incumbent = Some((node, result.cost));
+                        incumbent = Some((node, result.cost, result.transitions));
                     }
 
                     continue;
@@ -189,9 +189,9 @@ where
                         time_out: true,
                         ..Default::default()
                     },
-                    |(node, cost)| {
+                    |(node, cost, suffix)| {
                         let mut transitions = node.transitions();
-                        transitions.extend_from_slice(problem.solution_suffix);
+                        transitions.extend_from_slice(suffix);
                         Solution {
                             cost: Some(cost),
                             transitions,
@@ -248,9 +248,9 @@ where
             println!("Expanded: {}", expanded);
         }
 
-        if let Some((node, cost)) = &incumbent {
+        if let Some((node, cost, suffix)) = &incumbent {
             let mut transitions = node.transitions();
-            transitions.extend_from_slice(problem.solution_suffix);
+            transitions.extend_from_slice(suffix);
 
             return Solution {
                 cost: Some(*cost),
