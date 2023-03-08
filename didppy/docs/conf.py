@@ -18,8 +18,8 @@
 # -- Project information -----------------------------------------------------
 
 project = "DIDPPy"
-copyright = "2022, Ryo Kuroiwa"
-author = "Ryo Kuroiwa <mhgeoe@gmail.com>"
+copyright = "2022, Ryo Kuroiwa and J. Christopher Beck"
+author = "Ryo Kuroiwa <ryo.kuroiwa@mail.utoronto.ca>"
 
 
 # -- General configuration ---------------------------------------------------
@@ -31,7 +31,10 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.autosummary",
+    "sphinx.ext.autosectionlabel",
 ]
+
+autosectionlabel_prefix_document = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ["_templates"]
@@ -56,3 +59,5 @@ html_static_path = ["_static"]
 
 autosummary_generate = True
 autoclass_content = "class"
+
+pygments_style = "sphinx"
