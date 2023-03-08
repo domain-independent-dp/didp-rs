@@ -40,15 +40,34 @@ impl From<Condition> for GroundedCondition {
 impl From<GroundedCondition> for Condition {
     /// Creates a condition from a grounded condition.
     fn from(grounded_condition: GroundedCondition) -> Self {
-        let mut condition = grounded_condition.condition;
+        let mut condition = match grounded_condition.condition {
+            Condition::Constant(true) => return Condition::Constant(true),
+            Condition::Constant(false) => None,
+            condition => Some(condition),
+        };
 
         for (i, e, capacity) in grounded_condition
             .elements_in_vector_variable
             .into_iter()
             .rev()
         {
-            condition = Condition::Or(
-                Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+            condition = if let Some(condition) = condition {
+                Some(Condition::Or(
+                    Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+                        SetCondition::IsIn(
+                            ElementExpression::Constant(e),
+                            SetExpression::FromVector(
+                                capacity,
+                                Box::new(VectorExpression::Reference(
+                                    ReferenceExpression::Variable(i),
+                                )),
+                            ),
+                        ),
+                    ))))),
+                    Box::new(condition),
+                ))
+            } else {
+                Some(Condition::Not(Box::new(Condition::Set(Box::new(
                     SetCondition::IsIn(
                         ElementExpression::Constant(e),
                         SetExpression::FromVector(
@@ -58,9 +77,8 @@ impl From<GroundedCondition> for Condition {
                             ))),
                         ),
                     ),
-                ))))),
-                Box::new(condition),
-            );
+                )))))
+            };
         }
 
         for (i, e) in grounded_condition
@@ -68,18 +86,27 @@ impl From<GroundedCondition> for Condition {
             .into_iter()
             .rev()
         {
-            condition = Condition::Or(
-                Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+            condition = if let Some(condition) = condition {
+                Some(Condition::Or(
+                    Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+                        SetCondition::IsIn(
+                            ElementExpression::Constant(e),
+                            SetExpression::Reference(ReferenceExpression::Variable(i)),
+                        ),
+                    ))))),
+                    Box::new(condition),
+                ))
+            } else {
+                Some(Condition::Not(Box::new(Condition::Set(Box::new(
                     SetCondition::IsIn(
                         ElementExpression::Constant(e),
                         SetExpression::Reference(ReferenceExpression::Variable(i)),
                     ),
-                ))))),
-                Box::new(condition),
-            );
+                )))))
+            }
         }
 
-        condition
+        condition.unwrap_or_else(|| Condition::Constant(false))
     }
 }
 
@@ -439,6 +466,81 @@ mod tests {
             elements_in_set_variable: vec![(1, 2)],
             elements_in_vector_variable: vec![(0, 1, 2)],
         };
+        assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn from_grounded_to_condition_true() {
+        let condition = Condition::from(GroundedCondition {
+            condition: Condition::Constant(true),
+            elements_in_set_variable: vec![(0, 1), (3, 4)],
+            elements_in_vector_variable: vec![(1, 2, 3), (4, 5, 6)],
+        });
+        let expected = Condition::Constant(true);
+        assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn from_grounded_to_condition_false_single() {
+        let condition = Condition::from(GroundedCondition {
+            condition: Condition::Constant(false),
+            elements_in_set_variable: vec![(0, 1)],
+            ..Default::default()
+        });
+        let expected = Condition::Not(Box::new(Condition::Set(Box::new(SetCondition::IsIn(
+            ElementExpression::Constant(1),
+            SetExpression::Reference(ReferenceExpression::Variable(0)),
+        )))));
+        assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn from_grounded_to_condition_false_multi() {
+        let condition = Condition::from(GroundedCondition {
+            condition: Condition::Constant(false),
+            elements_in_set_variable: vec![(0, 1), (3, 4)],
+            elements_in_vector_variable: vec![(1, 2, 3), (4, 5, 6)],
+        });
+        let expected = Condition::Or(
+            Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+                SetCondition::IsIn(
+                    ElementExpression::Constant(1),
+                    SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ),
+            ))))),
+            Box::new(Condition::Or(
+                Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+                    SetCondition::IsIn(
+                        ElementExpression::Constant(4),
+                        SetExpression::Reference(ReferenceExpression::Variable(3)),
+                    ),
+                ))))),
+                Box::new(Condition::Or(
+                    Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+                        SetCondition::IsIn(
+                            ElementExpression::Constant(2),
+                            SetExpression::FromVector(
+                                3,
+                                Box::new(VectorExpression::Reference(
+                                    ReferenceExpression::Variable(1),
+                                )),
+                            ),
+                        ),
+                    ))))),
+                    Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+                        SetCondition::IsIn(
+                            ElementExpression::Constant(5),
+                            SetExpression::FromVector(
+                                6,
+                                Box::new(VectorExpression::Reference(
+                                    ReferenceExpression::Variable(4),
+                                )),
+                            ),
+                        ),
+                    ))))),
+                )),
+            )),
+        );
         assert_eq!(condition, expected);
     }
 
