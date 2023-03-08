@@ -1,6 +1,6 @@
 [package]
 name = "dypdl-heuristic-search"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 description = "Heristic search solvers for Dynamic Programming Description Language (DyPDL)."
 license = "MIT OR Apache-2.0"
@@ -9,5 +9,5 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 ordered-float = "3.0"
-dypdl = { path = "../dypdl", version = "0.3" }
+dypdl = { path = "../dypdl", version = "0.3.1" }
 rustc-hash = "1.1"
