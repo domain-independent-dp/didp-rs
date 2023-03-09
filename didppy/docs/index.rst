@@ -1,13 +1,15 @@
 DIDPPy
 ======
 
-DIDPPy is a Python interface to use Domain-Independent Dynamic Programming (DIDP), which is a model-based framework to solve combinatorial optimization problems such as vehicle routing problems (VRPs) and scheduling problems.
-In this framework, once you define a problem as a DP model, you can use generic solvers to solve it.
+DIDPPy is a Python interface to use Domain-Independent Dynamic Programming (DIDP).
+DIDP is a model-based framework for combinatorial optimization problems such as vehicle routing problems (VRPs) and scheduling problems.
+With DIDP, we can use dynamic programming (DP) to solve combinatorial optimization problems without implementing DP algorithms.
+Just like in mixed-integer programming (MIP), once we define a problem as a model, we can use a solver provided by the framework to solve the model.
 
 Installation
 ------------
-You can install ``didppy`` from PyPI using ``pip``.
-You need to use Python 3.7 or higher.
+``didppy`` can be installed from PyPI using ``pip``.
+Python 3.7 or higher is required.
 
 .. code-block:: bash
 
@@ -19,16 +21,8 @@ You need to use Python 3.7 or higher.
 
     quickstart
     tutorial
+    advanced-tutorial
     papers
-
-.. toctree::
-    :maxdepth: 1
-    :caption: Examples
-
-    examples/cvrp
-    examples/salbp-1
-    examples/mosp
-    examples/talent-scheduling
 
 .. toctree::
     :maxdepth: 1

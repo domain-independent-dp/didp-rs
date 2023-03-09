@@ -32,6 +32,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.autosummary",
     "sphinx.ext.autosectionlabel",
+    "sphinxcontrib.bibtex",
 ]
 
 autosectionlabel_prefix_document = True
@@ -61,3 +62,5 @@ autosummary_generate = True
 autoclass_content = "class"
 
 pygments_style = "sphinx"
+
+bibtex_bibfiles = ["ref.bib"]
