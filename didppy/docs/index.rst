@@ -23,6 +23,7 @@ Python 3.7 or higher is required.
     tutorial
     advanced-tutorial
     papers
+    references
 
 .. toctree::
     :maxdepth: 1
@@ -35,7 +36,7 @@ Python 3.7 or higher is required.
     :maxdepth: 2
     :caption: API Reference
     
-    reference
+    api-reference
 
 Indices and tables
 ==================

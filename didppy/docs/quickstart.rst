@@ -32,6 +32,7 @@ Suppose that :math:`n = 4`, :math:`w_0 = 10`, :math:`w_1 = 20`, :math:`w_2 = 30`
 
     import didppy as dp
 
+
     n = 4
     weights = [10, 20, 30, 40]
     profits = [5, 25, 35, 50]
@@ -104,5 +105,5 @@ For example. you can use :class:`~didppy.CABS` for this model.
 
     print("profit: {}".format(solution.cost))
 
-The solvers are listed in the :ref:`API reference <reference:Solvers>`, and their restrictions are described in the individual pages.
+The solvers are listed in the :ref:`API reference <api-reference:Solvers>`, and their restrictions are described in the individual pages.
 Also, we provide a :doc:`guideline to select a solver </solver-selection>`.

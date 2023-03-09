@@ -59,6 +59,7 @@ First, start with importing DIDPPy and creating the model.
 
     import didppy as dp
 
+
     # Number of locations
     n = 4
     # Ready time
@@ -90,6 +91,7 @@ In TSPTW, customers are objects with the same object type.
    customer = model.add_object_type(number=n)
 
 When defining an object type, we need to specify the number of objects.
+If the number of objects is :math:`n`, the objects are indexed from :math:`0` to :math:`n-1` (**not** :math:`1` **to** :math:`n`) in DIDPPy. 
 Object types are required to define set and element variables, as explained later.
 
 State Variables
@@ -98,8 +100,8 @@ State Variables
 A state of a problem is defined by *state variables*.
 There are four types of state variables:
 
-* :class:`~didppy.SetVar` : a set of objects.
-* :class:`~didppy.ElementVar` : an object.
+* :class:`~didppy.SetVar` : a set of the indices of objects.
+* :class:`~didppy.ElementVar` : the index of an object.
 * :class:`~didppy.IntVar` : an integer.
 * :class:`~didppy.FloatVar` : a continuous value.
 
@@ -123,8 +125,13 @@ There are some practical differences between :class:`~didppy.ElementVar` and :cl
 
 While we use the integer cost and an integer variable for :math:`t`, we can use the float cost and a float variable for :code:`t` by using :func:`~didppy.Model.add_float_var` if we want to use continuous travel time.
 
+The value of :class:`~didppy.SetVar` is a set of elements in :math:`N`.
+Because the object type of :code:`unvisited` is customer, which has :code:`n` objects, :code:`unvisited` can contain :code:`0` to :code:`n - 1` (**not** :code:`1` **to** :code:`n`).
+
 State variables are defined with their *target values*, values in the target state.
 The objective of the DP model is to compute the value of the target state, i.e., :math:`U = N \setminus \{ 0 \}`, :math:`i = 0`, and :math:`t = 0`.
+The target value of an :class:`~didppy.SetVar` can be a :class:`list` or a :class:`set` in Python.
+In addition, we can initialize it using :class:`~didppy.SetConst`, which is created by :func:`~didppy.Model.create_set_const`.
 
 Tables of Constants
 ~~~~~~~~~~~~~~~~~~~
@@ -206,10 +213,11 @@ Effects are described by a :class:`list` of :class:`tuple` of a state variable a
 * :math:`j` : :code:`j` (automatically converted from :class:`int` to :class:`~didppy.ElementExpr`).
 * :math:`\max\{ t + c_{ij}, a_j \}` : :code:`dp.max(time + travel_time[location, j], ready_time[j])` (:class:`~didppy.IntExpr`).
 
+:class:`~didppy.SetVar`, :class:`~didppy.SetExpr` and :class:`~didppy.SetConst` have a similar interface as :class:`set` in Python, e.g., they have methods :func:`~didppy.SetVar.contains`, :func:`~didppy.SetVar.add`, :func:`~didppy.SetVar.remove` which take an :class:`int`, :class:`~didppy.ElementVar`, or :class:`~didppy.ElementExpr` as an argument.
+
 We use :func:`didppy.max` instead of built-in :func:`max` to take the maximum of two :class:`~didppy.IntExpr`.
-As in this example, some built-in functions are replaced by :ref:`functions in DIDPPy <reference:Functions>` to support expressions.
+As in this example, some built-in functions are replaced by :ref:`functions in DIDPPy <api-reference:Functions>` to support expressions.
 However, we can apply built-in :func:`sum`, :func:`abs`, and :func:`pow` to :class:`~didppy.IntExpr`.
-:class:`~didppy.SetVar` and :class:`~didppy.SetExpr` have a similar interface as :class:`set` in Python.
 
 The equation
 
@@ -233,7 +241,7 @@ is defined by another transition in a similar way.
 
 The effect on :code:`unvisited` is not defined because it is not changed.
 
-Once a transition is created, it is registed to a model by :func:`~didppy.Model.add_transition`.
+Once a transition is created, it is registered to a model by :func:`~didppy.Model.add_transition`.
 We can define a *forced transition*, by using :code:`forced=True` in this function while it is not used in TSPTW.
 A forced transition is useful to break symmetry in the DP model.
 See :doc:`the advanced tutorial <advanced-tutorial>` for more details.
@@ -297,7 +305,7 @@ where :code:`w` is :class:`~didppy.IntExpr` independent of :func:`~didppy.IntExp
 For float cost, we can use :class:`~didppy.FloatExpr` instead of :class:`~didppy.IntExpr`.
 
 If your problem does not fit into the above structure, you can use :class:`~didppy.ForwardRecursion`, which is the most generic but might be an inefficient solver.
-For further details, see :doc:`the guide for the solver selection <solver-selection>` as well as :ref:`the API reference <reference:Solvers>`.
+For further details, see :doc:`the guide for the solver selection <solver-selection>` as well as :ref:`the API reference <api-reference:Solvers>`.
 
 Improving the DP Formulation 
 ----------------------------
@@ -356,7 +364,7 @@ Similarly, we need to depart from each customer in :math:`U` and the current loc
 Therefore,
 
 .. math::
-    V(U, i, t) \geq \sum_{j \in (U \cup \{ i \}) \setminus \{ 0 \} } \min_{k \in N} c_{jk}.
+    V(U, i, t) \geq \sum_{j \in (U \cup \{ i \}) \setminus \{ 0 \} } \min_{k \in N \setminus \{ j \}} c_{jk}.
 
 Full Formulation
 ~~~~~~~~~~~~~~~~
@@ -577,11 +585,8 @@ Several features that did not appear in the DP model for TSPTW are covered in :d
 
 `More examples <https://github.com/domain-independent-dp/didp-rs/tree/main/didppy/examples>`_ are provided in our repository as Jupyter notebooks.
 
-:doc:`The API reference <reference>` describes each class and function in detail.
+:doc:`The API reference <api-reference>` describes each class and function in detail.
 
 If your model does not work as expected, :doc:`the debugging guide <debugging>` might help you.
 
 If you have an academic interest in DIDP, we recommend reading papers listed on :doc:`this page <papers>`.
-
-.. bibliography:: ref.bib
-    :style: unsrt
