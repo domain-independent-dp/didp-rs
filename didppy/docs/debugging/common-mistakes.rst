@@ -27,7 +27,7 @@ Using Built-in :func:`max` for Expressions
 ------------------------------------------
 
 When you want to take the maximum of two :class:`~didppy.IntExpr`, you cannot use built-in :func:`max` in Python.
-Instead, you need to use :class:`~didppy.IntExpr.max`.
+Instead, you need to use :func:`didppy.max`.
 
 .. code-block:: python
 
@@ -42,7 +42,7 @@ Instead, you need to use :class:`~didppy.IntExpr.max`.
     # This is correct.
     model.add_dual_bound(dp.max(var, 1))
 
-The same thing applies to :func:`min`.
+The same thing applies to :func:`~didppy.min`.
 
 Using If Statements with :class:`~didppy.Condition`
 ---------------------------------------------------

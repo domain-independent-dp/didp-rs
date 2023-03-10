@@ -20,7 +20,7 @@ Therefore, if we shoot a scene :math:`s \in Q` next, the set of actors on locati
     L(s, Q) = A_s \cup \left( \bigcup_{s' \in N \setminus Q} A_{s'} \cap \bigcup_{s' \in Q } A_{s'}  \right).
 
 We need to pay the cost :math:`d_s \sum_{a \in L(s, Q)} c_a` when shooting scene :math:`s`.
-Once we shot scene :math:`s`, the remaining problem is to decide the order of the remaining scenes :math:`Q \cup \{ s \}`.
+Once we shot scene :math:`s`, the remaining problem is to decide the order of the remaining scenes :math:`Q \setminus \{ s \}`.
 Therefore, a state is defined by the set of remaining scenes :math:`Q`, and the minimum cost to shoot :math:`Q` is represented by :math:`V(Q)`.
 Because :math:`A_s`, actors who play in scence :math:`s`, are always on location when :math:`s` is shot, :math:`\sum_{s \in Q} d_s \sum_{a \in A_s} c_a` is a lower bound on :math:`V(Q)`.
 We have the following DP formulation.
@@ -29,7 +29,7 @@ We have the following DP formulation.
 
     \text{compute } & V(N) \\
     & V(Q) = \begin{cases}
-        \min\limits_{s \in Q} d_s \sum\limits_{a \in L(s, Q)} c_a + V(Q \setminus \{ s \}) & \text{if } Q \neq N \\
+        \min\limits_{s \in Q} d_s \sum\limits_{a \in L(s, Q)} c_a + V(Q \setminus \{ s \}) & \text{if } Q \neq \emptyset \\
         0 & \text{if } Q = \emptyset
     \end{cases} \\
     & V(Q) \geq \sum_{s \in Q} d_s \sum_{a \in A_s} c_a.
@@ -53,7 +53,7 @@ Therefore, we have the following equation:
     V(Q) = d_s \sum\limits_{a \in A_s} c_a + V(Q \setminus \{ s \}) \text{ if } s \in Q \land A_s = \bigcup_{s' \in N \setminus Q} A_{s'} \cap \bigcup_{s' \in Q} A_{s'}.
 
 If multiple scenes satisfy the condition, we can shoot any of them.
-This equation helps a solver because it tells that other transitions are not needed to be considered.
+This equation helps a solver because it tells that other scenes are not needed to be considered.
 
 Modeling in DIDPPy
 ------------------
@@ -145,7 +145,7 @@ Because which :math:`s` satisfies the condition is unknown, we need to define a 
 
         shoot = dp.Transition(
             name="forced shoot {}".format(s),
-            cost=d[s] * actor_to_cost[scene_to_actors_table[s]] + dp.IntExpr.state_cost(),
+            cost=scene_to_min_cost[s] + dp.IntExpr.state_cost(),
             preconditions=[
                 remaining.contains(s),
                 scene_to_actors_table[s] == (came_to_location & standby),
@@ -157,7 +157,7 @@ Because which :math:`s` satisfies the condition is unknown, we need to define a 
 Now, we have an additional precondition, :code:`scene_to_actors_table[s] == (came_to_location & standby)`, which corresponds to :math:`A_s = \bigcup_{s' \in N \setminus Q} A_{s'} \cap \bigcup_{s' \in Q} A_{s'}`.
 When registering this transition to the model, we use the argument :code:`forced=True` to indicate that this transition is a forced transition.
 
-Ordinarily, DIDPPy takes the minimum (or maximum) :code:`code` over all transitions whose preconditions are satisfied. 
+Ordinarily, DIDPPy takes the minimum (or maximum) :code:`cost` over all transitions whose preconditions are satisfied. 
 However, if preconditions of a forced transition are satisfied, DIDPPy ignores other transitions and only considers the forced transition.
 If multiple forced transitions are available, DIDPPy selects the first-defined one.
 Therefore, **the order to define forced transitions does matter**.

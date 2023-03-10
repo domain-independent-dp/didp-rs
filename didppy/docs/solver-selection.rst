@@ -15,7 +15,7 @@ However, it has the following disadvantages:
 
 * It may take a :ref:`longer time to prove the optimality <solver-selection:Time to Prove Optimality>` compared to other solvers.
 * A :ref:`configuration <solver-selection:Layer-by-Layer Search>` is needed to handle certain types of DP models as it searches layer by layer.
-* :ref:`Cost expressions <solver-selection:Restriction on Cost Expressions>` must be in the form of addition, product, maximum, and minimum.
+* :ref:`Cost expressions <solver-selection:Restriction on Cost Expressions>` must be in the form of addition, product, maximum, or minimum.
 
 Time to Prove Optimality
 ------------------------

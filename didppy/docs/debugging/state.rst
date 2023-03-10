@@ -168,6 +168,7 @@ We can get the state constraints with :attr:`~didppy.Model.state_constrs`.
 
     >>> constraints = model.state_constrs
     >>> constraints[0].eval(state, model)
+    True
 
 Evaluating Dual Bound
 ---------------------

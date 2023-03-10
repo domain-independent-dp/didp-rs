@@ -44,7 +44,9 @@ Overall, we get the following DP formulation:
          0 & \text{if } U = \emptyset \land i = 0.
     \end{cases}
 
-We call the state :math:`(U, i, t)`, which corresponds to the original problem, the *target state*.
+In the first line, if there is no :math:`j \in U` with :math:`t + c_{ij} \leq b_j` while :math:`U \neq \emptyset`, we assume that :math:`V(U, i, t) = \infty` because the subproblem does not have a solution.
+
+We call the state :math:`(N \setminus \{ 0 \}, 0, 0)`, which corresponds to the original problem, the *target state*.
 
 This DP formulation is based on :cite:t:`Dumas1995`.
 
@@ -92,7 +94,7 @@ In TSPTW, customers are objects with the same object type.
 
 When defining an object type, we need to specify the number of objects.
 If the number of objects is :math:`n`, the objects are indexed from :math:`0` to :math:`n-1` (**not** :math:`1` **to** :math:`n`) in DIDPPy. 
-Object types are required to define set and element variables, as explained later.
+Object types are sometimes required to define a state, as explained later.
 
 State Variables
 ~~~~~~~~~~~~~~~
@@ -100,8 +102,8 @@ State Variables
 A state of a problem is defined by *state variables*.
 There are four types of state variables:
 
-* :class:`~didppy.SetVar` : a set of the indices of objects.
-* :class:`~didppy.ElementVar` : the index of an object.
+* :class:`~didppy.SetVar` : a set of the indices of objects associated with an object type.
+* :class:`~didppy.ElementVar` : the index of an object associated with an object type.
 * :class:`~didppy.IntVar` : an integer.
 * :class:`~didppy.FloatVar` : a continuous value.
 
@@ -120,7 +122,7 @@ While :math:`i` is an integer, we define it as an :class:`~didppy.ElementVar`  a
 There are some practical differences between :class:`~didppy.ElementVar` and :class:`~didppy.IntVar`:
 
 * :class:`~didppy.ElementVar` is nonnegative.
-* :class:`~didppy.ElementVar` can be used to describe changes and conditions on a set variable.
+* :class:`~didppy.ElementVar` can be used to describe changes and conditions on :class:`~didppy.SetVar`.
 * :class:`~didppy.ElementVar` can be used to access a value of a table (explained later).
 
 While we use the integer cost and an integer variable for :math:`t`, we can use the float cost and a float variable for :code:`t` by using :meth:`~didppy.Model.add_float_var` if we want to use continuous travel time.
@@ -146,7 +148,7 @@ In DIDPPy, such constants are defined as *tables*.
    travel_time = model.add_int_table(c)
 
 By passing a nested list of :class:`int` to :meth:`~didppy.Model.add_int_table`, we can create up to a three-dimensional int table.
-For tables more than three-dimensional, we can pass a :class:`dict` in Python with the default value.
+For tables more than three-dimensional, we can pass a :class:`dict` in Python with specifying the default value used when an index is not included in the :class:`dict`.
 See :meth:`~didppy.Model.add_int_table` for more details.
 
 We can add different types of tables using the following functions:
@@ -243,7 +245,7 @@ The effect on :code:`unvisited` is not defined because it is not changed.
 
 Once a transition is created, it is registered to a model by :meth:`~didppy.Model.add_transition`.
 We can define a *forced transition*, by using :code:`forced=True` in this function while it is not used in TSPTW.
-A forced transition is useful to break symmetry in the DP model.
+A forced transition is useful to represent dominance relations between transitions in the DP model.
 See an :doc:`advanced tutorial <advanced-tutorials/talent-scheduling>` for more details.
 
 Base Cases
@@ -308,7 +310,7 @@ where :code:`w` is an :class:`~didppy.IntExpr` independent of :meth:`~didppy.Int
 For float cost, we can use :class:`~didppy.FloatExpr` instead of :class:`~didppy.IntExpr`.
 By default, :class:`~didppy.CABS` assumes that :code:`cost` is the additive form.
 For other types of :code:`cost`, we need to tell the solver by using the argument :code:`f_operator`, which takes either of :attr:`didppy.FOperator.Plus`, :attr:`didppy.FOperator.Product`, :attr:`didppy.FOperator.Max`, or :attr:`didppy.FOperator.Min` (:attr:`~didppy.FOperator.Plus` is the default).
-An example is provided in as an :doc:`advanced tutorial <advanced-tutorials/mosp>`.
+An example is provided in an :doc:`advanced tutorial <advanced-tutorials/mosp>`.
 
 If your problem does not fit into the above structure, you can use :class:`~didppy.ForwardRecursion`, which is the most generic but might be an inefficient solver.
 For further details, see :doc:`the guide for the solver selection <solver-selection>` as well as :ref:`the API reference <api-reference:Solvers>`.
@@ -455,8 +457,8 @@ In DIDP, lower bounds for minimization and upper bounds for maximization are cal
 In our DP formulation, the following inequalities define the dual bounds:
 
 .. math::
-    & V(U, i, t) \geq \sum_{j \in (U \cup \{ 0 \}) \setminus \{ i \} } \min_{k \in N} c_{kj} \\
-    & V(U, i, t) \geq \sum_{j \in (U \cup \{ i \}) \setminus \{ 0 \} } \min_{k \in N} c_{jk}.
+    & V(U, i, t) \geq \sum_{j \in (U \cup \{ 0 \}) \setminus \{ i \} } \min_{k \in N \setminus \{ j \}} c_{kj} \\
+    & V(U, i, t) \geq \sum_{j \in (U \cup \{ i \}) \setminus \{ 0 \} } \min_{k \in N \setminus \{ j \}} c_{jk}.
 
 These bounds are modeled as follows:
 
@@ -486,7 +488,7 @@ When the current location is not the depot, i.e., :code:`location != 0`, :math:`
 
 We repeat a similar procedure for the other dual bound.
 
-**Defining a dual bound in DIDP is extremely important**: a dual bound significantly boosts the performance of solvers.
+**Defining a dual bound in DIDP is extremely important**: a dual bound may significantly boost the performance of solvers.
 We strongly recommend defining a dual bound even if it is trivial, such as :math:`V(U, i, t) \geq 0`.
 
 Full Code

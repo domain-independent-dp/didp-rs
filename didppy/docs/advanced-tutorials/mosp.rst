@@ -6,7 +6,7 @@ Each customer :math:`c \in C` orders a subset of products :math:`P_c \subseteq P
 We want to decide the order to produce the products.
 Once we produced a product :math:`p \in P_c`, we need to open a stack for customer :math:`c` to store the product.
 When we produced all products in :math:`P_c`, we can close the stack for :math:`c`.
-We want to minimize the number of open stacks at a time.
+We want to minimize the maximum number of open stacks at a time.
 
 DP Formulation
 --------------
@@ -19,7 +19,7 @@ Once the order of customers is determined, for each customer, products ordered b
 When we close the stack for customer :math:`c`, we need to produce all products in :math:`P_c`.
 If another customer :math:`c'` orders a product in :math:`P_c` and its stack is not opened yet, we need to open the stack for :math:`c'`.
 In a sense, we can say that :math:`c'` is a neighbor of :math:`c`.
-Let :math:`N_c \subseteq C` be the set of neighbors, i.e.,
+Let :math:`N_c \subseteq C` be the set of neighbors including :math:`c`, i.e.,
 
 .. math::
     N_c = \{ c' \in C \mid P_{c'} \cap P_c \neq \emptyset \}.
@@ -58,7 +58,7 @@ Assume that the data is preprocessed, and we are given :math:`N_c` for each :mat
     # Number of customers
     n = 4
     # Neighbors
-    neighbors = [[1], [0, 3], [2], [1]]
+    neighbors = [[0, 1], [0, 1, 3], [2], [1,    3]]
 
     model = dp.Model()
 
@@ -93,13 +93,12 @@ Assume that the data is preprocessed, and we are given :math:`N_c` for each :mat
 We can take the cardinality of :class:`~didppy.SetVar` and :class:`~didppy.SetExpr` as :class:`~didppy.IntExpr` using :meth:`~didppy.SetExpr.len`.
 Now, :code:`cost` is the maximum of an :class:`~didppy.IntExpr` and :meth:`~didppy.IntExpr.state_cost`.
 
-Configuring Solvers for General Cost 
-------------------------------------
+Configuring Solvers for General Costs
+-------------------------------------
 
 In the above model, the form of :code:`cost` is different from what we observed in the previous models:
-it takes the maximum instead of adding an :class:`~didppy.IntExpr` to :class:`~didppy.IntExpr.state_cost`.
-As long as the :class:`~didppy.IntExpr` is independent of :class:`~didppy.IntExpr.state_cost`, we can use path-finding based solvers such as :class:`~didppy.CABS`.
-However, we need to tell it to the solver.
+it takes the maximum of an :class:`~didppy.IntExpr` and :meth:`~didppy.IntExpr.state_cost` instead of addition.
+Still, we can use path-finding based solvers such as :class:`~didppy.CABS` as long as the :class:`~didppy.IntExpr` is independent of :meth:`~didppy.IntExpr.state_cost` if we tell the cost form to the solver.
 
 .. code-block:: python
 
@@ -109,9 +108,9 @@ However, we need to tell it to the solver.
 
 The argument :code:`f_operator` takes an instance of :class:`~didppy.FOperator` to specify the form of the cost expression.
 Because we take the maximum, we use :attr:`~didppy.FOperator.Max`.
-The default value is :attr:`~didppy.FOperator.Plus`, which means that the cost expression is in the form of addition.
+The default value is :attr:`~didppy.FOperator.Plus`, which means that the cost expression is in the form of the addition.
 
-:class:`~didppy.CABS` and other path-finding based solvers can handle the product and minimum
+:class:`~didppy.CABS` and other path-finding based solvers can handle the product and minimum as well if we use :attr:`~didppy.FOperator.Product` and :attr:`~didppy.FOperator.Min` for :code:`f_operator`, respectively.
 
 If we use the most generic (but potentially inefficient) solver, :class:`~didppy.ForwardRecursion`, we do not need such a configuration.
 
