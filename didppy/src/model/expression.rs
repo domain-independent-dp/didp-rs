@@ -9,6 +9,8 @@ use crate::ModelPy;
 
 use super::state::StatePy;
 
+pyo3::create_exception!(module, DIDPPyException, pyo3::exceptions::PyException);
+
 #[derive(FromPyObject, Debug, PartialEq, Clone)]
 pub enum ExprUnion {
     #[pyo3(transparent, annotation = "ElementExpr")]
@@ -232,6 +234,12 @@ impl ElementExprPy {
         ElementExprPy(ElementExpression::from(other) % self.clone().0)
     }
 
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "ElementExpr cannot be converted to bool",
+        ))
+    }
+
     /// eval(state, model)
     ///
     /// Evaluates the expression.
@@ -396,6 +404,12 @@ impl ElementVarPy {
     fn __rmod__(&self, other: ElementUnion) -> ElementExprPy {
         ElementExprPy(ElementExpression::from(other) % self.0)
     }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "ElementVar cannot be converted to bool",
+        ))
+    }
 }
 
 /// Element resource variable.
@@ -523,6 +537,12 @@ impl ElementResourceVarPy {
 
     fn __rmod__(&self, other: ElementUnion) -> ElementExprPy {
         ElementExprPy(ElementExpression::from(other) % self.0)
+    }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "ElementResourceVar cannot be converted to bool",
+        ))
     }
 }
 
@@ -652,6 +672,12 @@ impl SetExprPy {
 
     fn __ror__(&self, other: SetUnion) -> SetExprPy {
         self.__or__(other)
+    }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "SetExpr cannot be converted to bool",
+        ))
     }
 
     /// isdisjoint(other)
@@ -1240,6 +1266,12 @@ impl SetVarPy {
         self.__or__(other)
     }
 
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "SetVar cannot be converted to bool",
+        ))
+    }
+
     /// isdisjoint(other)
     ///
     /// Checks if two sets are disjoint.
@@ -1769,6 +1801,12 @@ impl SetConstPy {
 
     fn __ror__(&self, other: SetUnion) -> SetExprPy {
         self.__or__(other)
+    }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "SetConst cannot be converted to bool",
+        ))
     }
 
     /// isdisjoint(other)
@@ -2527,6 +2565,12 @@ impl IntExprPy {
         }
     }
 
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "IntExpr cannot be converted to bool",
+        ))
+    }
+
     /// eval(state, model)
     ///
     /// Evaluates the expression.
@@ -2840,6 +2884,12 @@ impl IntVarPy {
             FloatExprPy(result)
         }
     }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "IntVar cannot be converted to bool",
+        ))
+    }
 }
 
 /// Integer resource variable.
@@ -3076,6 +3126,12 @@ impl IntResourceVarPy {
         } else {
             FloatExprPy(result)
         }
+    }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "IntResourceVar cannot be converted to bool",
+        ))
     }
 }
 
@@ -3324,6 +3380,12 @@ impl FloatExprPy {
 
     fn __ceil__(&self) -> IntExprPy {
         IntExprPy(IntegerExpression::ceil(self.0.clone()))
+    }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "FloatExpr cannot be converted to bool",
+        ))
     }
 
     /// eval(state, model)
@@ -3590,6 +3652,12 @@ impl FloatVarPy {
     fn __ceil__(&self) -> IntExprPy {
         IntExprPy(IntegerExpression::ceil(self.0))
     }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "FloatVar cannot be converted to bool",
+        ))
+    }
 }
 
 /// Continuous resource variable.
@@ -3777,6 +3845,12 @@ impl FloatResourceVarPy {
 
     fn __ceil__(&self) -> IntExprPy {
         IntExprPy(IntegerExpression::ceil(self.0))
+    }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "FloatResourceVar cannot be converted to bool",
+        ))
     }
 }
 
@@ -4030,6 +4104,12 @@ impl ConditionPy {
 
     fn __or__(&self, other: &ConditionPy) -> ConditionPy {
         ConditionPy(self.0.clone() | other.0.clone())
+    }
+
+    fn __bool__(&self) -> PyResult<bool> {
+        Err(DIDPPyException::new_err(
+            "Condition cannot be converted to bool",
+        ))
     }
 
     /// if_then_else(x, y)
