@@ -123,7 +123,7 @@ There are some practical differences between :class:`~didppy.ElementVar` and :cl
 * :class:`~didppy.ElementVar` can be used to describe changes and conditions on a set variable.
 * :class:`~didppy.ElementVar` can be used to access a value of a table (explained later).
 
-While we use the integer cost and an integer variable for :math:`t`, we can use the float cost and a float variable for :code:`t` by using :func:`~didppy.Model.add_float_var` if we want to use continuous travel time.
+While we use the integer cost and an integer variable for :math:`t`, we can use the float cost and a float variable for :code:`t` by using :meth:`~didppy.Model.add_float_var` if we want to use continuous travel time.
 
 The value of :class:`~didppy.SetVar` is a set of elements in :math:`N`.
 Because the object type of :code:`unvisited` is customer, which has :code:`n` objects, :code:`unvisited` can contain :code:`0` to :code:`n - 1` (**not** :code:`1` **to** :code:`n`).
@@ -131,7 +131,7 @@ Because the object type of :code:`unvisited` is customer, which has :code:`n` ob
 State variables are defined with their *target values*, values in the target state.
 The objective of the DP model is to compute the value of the target state, i.e., :math:`U = N \setminus \{ 0 \}`, :math:`i = 0`, and :math:`t = 0`.
 The target value of an :class:`~didppy.SetVar` can be a :class:`list` or a :class:`set` in Python.
-In addition, we can initialize it using :class:`~didppy.SetConst`, which is created by :func:`~didppy.Model.create_set_const`.
+In addition, we can initialize it using :class:`~didppy.SetConst`, which is created by :meth:`~didppy.Model.create_set_const`.
 
 Tables of Constants
 ~~~~~~~~~~~~~~~~~~~
@@ -145,19 +145,19 @@ In DIDPPy, such constants are defined as *tables*.
    due_time = model.add_int_table(b)
    travel_time = model.add_int_table(c)
 
-By passing a nested list of :class:`int` to :func:`~didppy.Model.add_int_table`, we can create up to a three-dimensional int table.
+By passing a nested list of :class:`int` to :meth:`~didppy.Model.add_int_table`, we can create up to a three-dimensional int table.
 For tables more than three-dimensional, we can pass a :class:`dict` in Python with the default value.
-See :func:`~didppy.Model.add_int_table` for more details.
+See :meth:`~didppy.Model.add_int_table` for more details.
 
 We can add different types of tables using the following functions:
 
-* :func:`~didppy.Model.add_set_table`
-* :func:`~didppy.Model.add_element_table`
-* :func:`~didppy.Model.add_int_table`
-* :func:`~didppy.Model.add_float_table`
+* :meth:`~didppy.Model.add_set_table`
+* :meth:`~didppy.Model.add_element_table`
+* :meth:`~didppy.Model.add_int_table`
+* :meth:`~didppy.Model.add_float_table`
 
-In the case of :func:`~didppy.Model.add_set_table`, we can pass a :class:`list` (or a :class:`dict`) of :class:`list` or :class:`set` in Python with specifying the object type.
-See :func:`~didppy.Model.add_set_table` and the :doc:`advanced tutorial <advanced-tutorial>` for more details.
+In the case of :meth:`~didppy.Model.add_set_table`, we can pass a :class:`list` (or a :class:`dict`) of :class:`list` or :class:`set` in Python with specifying the object type.
+See :meth:`~didppy.Model.add_set_table` and an :doc:`advanced tutorial <advanced-tutorials/talent-scheduling>` for more details.
 
 The benefit of defining a table is that we can access its value using state variables as indices, as explained later.
 
@@ -192,28 +192,28 @@ In DIDPPy, it is represented by a set of transitions.
         )
         model.add_transition(visit)
 
-:code:`cost` defines how the value of the left-hand side state, :math:`V(U, i, t)`,  is computed based on the value of the right-hand side state, :math:`V(U \setminus \{ j \}, j, \max\{ t + c_{ij}, a_j \})`, represented by :func:`didppy.IntExpr.state_cost`.
-In the case of the continuous cost, we can use :func:`didppy.FloatExpr.state_cost`.
+The *cost expression* :code:`cost` defines how the value of the left-hand side state, :math:`V(U, i, t)`, is computed based on the value of the right-hand side state, :math:`V(U \setminus \{ j \}, j, \max\{ t + c_{ij}, a_j \})`, represented by :meth:`didppy.IntExpr.state_cost`.
+In the case of the continuous cost, we can use :meth:`didppy.FloatExpr.state_cost`.
 
 We can use the values of state variables in the **left-hand side state** in :code:`cost`, :code:`preconditions`, and :code:`effects`.
 For example, :code:`location` corresponds to :math:`i` in :math:`V(U, i, t)`, so :code:`travel_time[location, j]` corresponds to :math:`c_{ij}`.
-Because :code:`location` is a state variable, :code:`travel_time[location, j]` is not just an :class:`int` but :class:`~didppy.IntExpr`, whose value is determined given a state inside the solver.
+Because :code:`location` is a state variable, :code:`travel_time[location, j]` is not just an :class:`int` but an *expression* (:class:`~didppy.IntExpr`), whose value is determined given a state inside the solver.
 Therefore, we cannot use :code:`c[location][j]` and need to register :code:`c` to the model as :code:`travel_time`.
 Also, :code:`travel_time[location, j]` must be used instead of :code:`travel_time[location][j]`.
 For :code:`ready_time` and :code:`due_time`, we can actually use :code:`a` and :code:`b` instead because they are not indexed by state variables.
 
-:code:`preconditions` make sure that the transition is considered only when :math:`j \in U` (:code:`unvisited.contains(j)`) and :math:`t + c_{ij} \leq b_j` (:code:`time + travel_time[location, j] <= due_time[j]`).
-The value of the left-hand side state is computed by taking the minimum (maximum for maximization) of :code:`cost` over all transitions whose :code:`preconditions` are satisfied by the state.
+*Preconditions* :code:`preconditions` make sure that the transition is considered only when :math:`j \in U` (:code:`unvisited.contains(j)`) and :math:`t + c_{ij} \leq b_j` (:code:`time + travel_time[location, j] <= due_time[j]`).
+The value of the left-hand side state is computed by taking the minimum (maximum for maximization) of :code:`cost` over all transitions whose preconditions are satisfied by the state.
 :code:`preconditions` are defined by a :class:`list` of :class:`~didppy.Condition`.
 
-:code:`effects` describe how the right-hand side state is computed based on the left-hand side state.
-Effects are described by a :class:`list` of :class:`tuple` of a state variable and its updated value.
+*Effects* :code:`effects` describe how the right-hand side state is computed based on the left-hand side state.
+Effects are described by a :class:`list` of :class:`tuple` of a state variable and its updated value described by an expression.
 
 * :math:`U \setminus \{ j \}` : :code:`unvisited.remove(j)` (:class:`~didppy.SetExpr`).
 * :math:`j` : :code:`j` (automatically converted from :class:`int` to :class:`~didppy.ElementExpr`).
 * :math:`\max\{ t + c_{ij}, a_j \}` : :code:`dp.max(time + travel_time[location, j], ready_time[j])` (:class:`~didppy.IntExpr`).
 
-:class:`~didppy.SetVar`, :class:`~didppy.SetExpr` and :class:`~didppy.SetConst` have a similar interface as :class:`set` in Python, e.g., they have methods :func:`~didppy.SetVar.contains`, :func:`~didppy.SetVar.add`, :func:`~didppy.SetVar.remove` which take an :class:`int`, :class:`~didppy.ElementVar`, or :class:`~didppy.ElementExpr` as an argument.
+:class:`~didppy.SetVar`, :class:`~didppy.SetExpr` and :class:`~didppy.SetConst` have a similar interface as :class:`set` in Python, e.g., they have methods :meth:`~didppy.SetVar.contains`, :meth:`~didppy.SetVar.add`, :meth:`~didppy.SetVar.remove` which take an :class:`int`, :class:`~didppy.ElementVar`, or :class:`~didppy.ElementExpr` as an argument.
 
 We use :func:`didppy.max` instead of built-in :func:`max` to take the maximum of two :class:`~didppy.IntExpr`.
 As in this example, some built-in functions are replaced by :ref:`functions in DIDPPy <api-reference:Functions>` to support expressions.
@@ -241,10 +241,10 @@ is defined by another transition in a similar way.
 
 The effect on :code:`unvisited` is not defined because it is not changed.
 
-Once a transition is created, it is registered to a model by :func:`~didppy.Model.add_transition`.
+Once a transition is created, it is registered to a model by :meth:`~didppy.Model.add_transition`.
 We can define a *forced transition*, by using :code:`forced=True` in this function while it is not used in TSPTW.
 A forced transition is useful to break symmetry in the DP model.
-See :doc:`the advanced tutorial <advanced-tutorial>` for more details.
+See an :doc:`advanced tutorial <advanced-tutorials/talent-scheduling>` for more details.
 
 Base Cases
 ~~~~~~~~~~
@@ -263,7 +263,7 @@ In DIDPPy, a base case is defined by a :class:`list` of :class:`~didppy.Conditio
     model.add_base_case([unvisited.is_empty(), location == 0])
 
 When all conditions in a base case are satisfied, the value of the state is 0, and no further transitions are applied.
-We can define multiple base cases (not multiple conditions in the same base case) by using :func:`~didppy.Model.add_base_case` multiple times.
+We can define multiple base cases (not multiple conditions in the same base case) by using :meth:`~didppy.Model.add_base_case` multiple times.
 In that case, the value of a state is 0 if any of the base cases is satisfied.
 
 Solving the Model
@@ -285,9 +285,9 @@ Let's use the :class:`~didppy.CABS` solver to solve this model.
     print("Cost: {}".format(solution.cost))
 
 
-:func:`~didppy.CABS.search` returns a :class:`~didppy.Solution`, from which we can extract the transitions to reach a base case from the target state and the cost of the solution.
+:meth:`~didppy.CABS.search` returns a :class:`~didppy.Solution`, from which we can extract the transitions to reach a base case from the target state and the cost of the solution.
 :class:`~didppy.CABS` is an anytime solver, which returns the best solution found within the time limit.
-Instead of :func:`~didppy.CABS.solve`, we can use :func:`~didppy.CABS.search_next`, which returns the next solution found.
+Instead of :meth:`~didppy.CABS.search`, we can use :meth:`~didppy.CABS.search_next`, which returns the next solution found.
 :class:`~didppy.CABS` is complete, which means that it returns an optimal solution given enough time.
 If we use :code:`time_limit=None`, it continues to search until an optimal solution is found.
 Whether the returned solution is optimal or not can be checked by :attr:`didppy.Solution.is_optimal`.
@@ -301,8 +301,11 @@ Concretely, :code:`cost` in all transitions must have either of the following st
 * :code:`dp.max(w, dp.IntExpr.state_cost())`
 * :code:`dp.min(w, dp.IntExpr.state_cost())`
 
-where :code:`w` is :class:`~didppy.IntExpr` independent of :func:`~didppy.IntExpr.state_cost`.
+where :code:`w` is an :class:`~didppy.IntExpr` independent of :meth:`~didppy.IntExpr.state_cost`.
 For float cost, we can use :class:`~didppy.FloatExpr` instead of :class:`~didppy.IntExpr`.
+By default, :class:`~didppy.CABS` assumes that :code:`cost` is the additive form.
+For other types of :code:`cost`, we need to tell the solver by using the argument :code:`f_operator`, which takes either of :attr:`didppy.FOperator.Plus`, :attr:`didppy.FOperator.Product`, :attr:`didppy.FOperator.Max`, or :attr:`didppy.FOperator.Min` (:attr:`~didppy.FOperator.Plus` is the default).
+An example is provided in as an :doc:`advanced tutorial <advanced-tutorials/mosp>`.
 
 If your problem does not fit into the above structure, you can use :class:`~didppy.ForwardRecursion`, which is the most generic but might be an inefficient solver.
 For further details, see :doc:`the guide for the solver selection <solver-selection>` as well as :ref:`the API reference <api-reference:Solvers>`.
@@ -404,7 +407,7 @@ The dominance of states, :math:`V(U, i, t) \leq V(U, i, t') \text{ if } t \leq t
    # t (resource variable)
    time = model.add_int_resource_var(target=0, less_is_better=True)
 
-Now, :code:`time` is an :class:`~didppy.IntResourceVar` created by :func:`~didppy.Model.add_int_resource_var` instead of :func:`~didppy.Model.add_int_var`, with the preference :code:`less_is_better=True`.
+Now, :code:`time` is an :class:`~didppy.IntResourceVar` created by :meth:`~didppy.Model.add_int_resource_var` instead of :meth:`~didppy.Model.add_int_var`, with the preference :code:`less_is_better=True`.
 This means that if the other state variables have the same values, a state having a smaller value of :code:`time` is better.
 If :code:`less_is_better=False`, a state having a larger value is better.
 
@@ -439,8 +442,8 @@ For each customer :code:`j`, we define a disjunctive condition :math:`j \notin U
 We can also use :code:`&` for the conjunction.
 We cannot use :code:`not`, :code:`or`, and :code:`and` in Python because they are only applicable to :class:`bool` in Python.
 
-State constraints are different from :code:`preconditions` of transitions.
-State constraints are evaluated each time a state is generated while :code:`preconditions` are evaluated only when a transition is taken.
+State constraints are different from preconditions of transitions.
+State constraints are evaluated each time a state is generated while preconditions are evaluated only when a transition is taken.
 
 Dual Bounds
 ~~~~~~~~~~~
@@ -473,8 +476,10 @@ These bounds are modeled as follows:
 We first register :math:`\min\limits_{k \in N \setminus \{ j \}} c_{kj}` to the model as a table :code:`min_to`.
 :code:`min_to[unvisited]` represents :math:`\sum\limits_{j \in U} \min\limits_{k \in N \setminus \{ j \}} c_{kj}`,  i.e., the sum of values in :code:`min_to` for customers in :code:`unvisited`.
 Similarly, :code:`min_to.product(unvisited)` :code:`min_to.max(unvisited)`, and :code:`min_to.min(unvisited)` can be used to take the product, maximum, and minimum.
+We can do the same for tables with more than one dimension.
+For example, if :code:`table` is a two-dimensional table, :code:`table[unvisited, unvisited]` takes the sum over all pairs of customers in :code:`unvisited`, and :code:`table[unvisited, location]` takes the sum of :code:`table[i, location]` where :code:`i` iterates through customers in :code:`unvisited`.
 
-When the current location is not the depot, i.e., :code:`location != 0`, :math:`\min\limits_{k \in N \setminus \{ 0 \}} c_{k0}` (:code:`min_to[0]`) is added to the dual bound, which is done by :func:`~didppy.Condition.if_then_else`.
+When the current location is not the depot, i.e., :code:`location != 0`, :math:`\min\limits_{k \in N \setminus \{ 0 \}} c_{k0}` (:code:`min_to[0]`) is added to the dual bound, which is done by :meth:`~didppy.Condition.if_then_else`.
 
 We repeat a similar procedure for the other dual bound.
 
@@ -581,12 +586,10 @@ Next Steps
 Congratulations! You have finished the tutorial.
 
 We covered fundamental concepts of DIDP modeling and advanced techniques to improve the performance of the model.
-Several features that did not appear in the DP model for TSPTW are covered in :doc:`the advanced tutorial <advanced-tutorial>`.
 
-`More examples <https://github.com/domain-independent-dp/didp-rs/tree/main/didppy/examples>`_ are provided in our repository as Jupyter notebooks.
-
-:doc:`The API reference <api-reference>` describes each class and function in detail.
-
-If your model does not work as expected, :doc:`the debugging guide <debugging>` might help you.
-
-If you have an academic interest in DIDP, we recommend reading papers listed on :doc:`this page <papers>`.
+* Several features that did not appear in the DP model for TSPTW are covered in the :doc:`advanced tutorials <advanced-tutorials>`.
+* `More examples <https://github.com/domain-independent-dp/didp-rs/tree/main/didppy/examples>`_ are provided in our repository as Jupyter notebooks.
+* :doc:`The API reference <api-reference>` describes each class and function in detail.
+* If your model does not work as expected, :doc:`the debugging guide <debugging>` might help you.
+* If you want to know the algorithms used in the solvers, we recommend reading :cite:t:`DIDPAnytime`.
+* Our papers on which DIDPPy is based are listed on :doc:`this page <papers>`.

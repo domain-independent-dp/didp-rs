@@ -69,7 +69,7 @@ We will explain the details in the :doc:`tutorial <tutorial>`, but here is a sum
 
 * State variables :code:`r` and :code:`i`, corresponding to :math:`r` and :math:`i`, are defined with the *target* values :code:`c` and :code:`0`, which states that we want to compute :math:`V(c, 0)`.
 * Recursive equations are defined by transitions, which change the state variables and the cost.
-* The cost of the subproblem on the right-hand side of the recursive equations is represented by :func:`~didppy.IntExpr.state_cost`.
+* The cost of the subproblem on the right-hand side of the recursive equations is represented by :meth:`~didppy.IntExpr.state_cost`.
 * The condition to terminate the recursion is defined by the base case :code:`i == n`.
 
 Solving the Model

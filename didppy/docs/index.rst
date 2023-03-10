@@ -21,7 +21,7 @@ Python 3.7 or higher is required.
 
     quickstart
     tutorial
-    advanced-tutorial
+    advanced-tutorials
     papers
     references
 
@@ -29,8 +29,8 @@ Python 3.7 or higher is required.
     :maxdepth: 1
     :caption: User Guide
 
-    debugging
     solver-selection
+    debugging
 
 .. toctree::
     :maxdepth: 2
