@@ -266,6 +266,9 @@ When all conditions in a base case are satisfied, the value of the state is 0, a
 We can define multiple base cases (not multiple conditions in the same base case) by using :meth:`~didppy.Model.add_base_case` multiple times.
 In that case, the value of a state is 0 if any of the base cases is satisfied.
 
+If we want to define conditions with which a state has a non-zero constant value, we need to introduce a dummy transition to the base case, which increases the cost by the constant.
+Indeed, the transition :code:`return` can be viewed as such a dummy transition for an equation :math:`V(U, i, t) = c_{i0} \text{ if } U = \emptyset`. 
+
 Solving the Model
 -----------------
 

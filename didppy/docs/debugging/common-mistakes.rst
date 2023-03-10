@@ -42,9 +42,6 @@ Instead, you need to use :class:`~didppy.IntExpr.max`.
     # This is correct.
     model.add_dual_bound(dp.max(var, 1))
 
-Unfortunately, the wrong example does not cause an error because comparison operators such as :code:`>=` and :code:`<=` are defined for :class:`~didppy.IntVar` and :class:`int`, which are used to create :class:`~didppy.Condition`, and :class:`~didppy.Condition` is evaluated to be 'truthy' by Python.
-Thus, it will just return the first argument of :func:`max`.
-
 The same thing applies to :func:`min`.
 
 Using If Statements with :class:`~didppy.Condition`
@@ -97,8 +94,6 @@ If you want to make a transition available only when a condition is satisfied, y
     )
     model.add_transition(transition)
 
-Unfortunately, the wrong examples do not cause an error because :class:`~didppy.Condition` is evaluated to be 'truthy' by Python.
-
 Using Boolean Operators in :class:`~didppy.Condition`
 -----------------------------------------------------
 
@@ -117,8 +112,6 @@ Instead, you need to use bitwise operators (:code:`~`, :code:`|`, and :code:`&`)
 
     # This is correct.
     model.add_base_case([(var >= 0 or ~(var >= 3)) & (var <= 2)])
-
-Unfortunately, the wrong example does not cause an error because :class:`~didppy.Condition` is evaluated to be 'truthy' by Python, and boolean operators are applied to the result.
 
 Using a Table as a Nested List
 ------------------------------

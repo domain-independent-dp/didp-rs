@@ -47,3 +47,57 @@
   pages     = {242--257},
   abstract  = {We describe a new exact solver for the minimization of open stacks problem (MOSP). By combining nogood recording with a branch and bound strategy based on choosing which customer stack to close next, our solver is able to solve hard instances of MOSP some 5-6 orders of magnitude faster than the previous state of the art. We also derive several pruning schemes based on dominance relations which provide another 1-2 orders of magnitude improvement. One of these pruning schemes largely subsumes the effect of the nogood recording. This allows us to reduce the memory usage from an potentially exponential amount to a constant {\textasciitilde}2Mb for even the largest solvable instances. We also show how relaxation techniques can be used to speed up the proof of optimality by up to another 3-4 orders of magnitude on the hardest instances.}
 }
+
+@article{Gromicho2012,
+  abstract  = {Most successful solution methods for solving large vehicle routing and scheduling problems are based on local search. These approaches are designed and optimized for specific types of vehicle routing problems (VRPs). VRPs appearing in practice typically accommodate restrictions that are not accommodated in classical VRP models, such as time-dependent travel times and driving hours regulations. We present a new construction framework for solving VRPs that can handle a wide range of different types of VRPs. In addition, this framework accommodates various restrictions that are not considered in classical vehicle routing models, but that regularly appear in practice. Within this framework, restricted dynamic programming is applied to the VRP through the giant-tour representation. This algorithm is a construction heuristic which for many types of restrictions and objective functions leads to an optimal algorithm when applied in an unrestricted way. We demonstrate the flexibility of the framework for various restrictions appearing in practice. The computational experiments demonstrate that the framework competes with state of the art local search methods when more realistic constraints are considered than in classical VRPs. Therefore, this new framework for solving VRPs is a promising approach for practical applications. © 2011 Elsevier Ltd. All rights reserved.},
+  author    = {J. Gromicho and J. J. Van Hoorn and A. L. Kok and J. M.J. Schutten},
+  doi       = {10.1016/j.cor.2011.07.002},
+  number    = {5},
+  journal   = {Computers and Operations Research},
+  keywords  = {Giant-tour representation,Real-life restrictions,Restricted DP,VRP},
+  pages     = {902-909},
+  publisher = {Elsevier},
+  title     = {Restricted dynamic programming: A flexible framework for solving realistic VRPs},
+  volume    = {39},
+  url       = {http://dx.doi.org/10.1016/j.cor.2011.07.002},
+  year      = {2012}
+}
+
+
+@article{Sewell2012,
+  author  = {E. C. Sewell and S. H. Jacobson},
+  doi     = {10.1287/ijoc.1110.0462},
+  number  = {3},
+  journal = {INFORMS Journal on Computing},
+  month   = {6},
+  pages   = {433-442},
+  title   = {A branch, bound, and remember algorithm for the simple assembly line balancing problem},
+  volume  = {24},
+  year    = {2012}
+}
+
+@article{Morin2018,
+  author    = {Michael Morin and Margarita P. Castro and Kyle E.C. Booth and Tony T. Tran and Chang Liu and J. Christopher Beck},
+  doi       = {10.1007/s10601-018-9288-3},
+  number    = {3},
+  journal   = {Constraints},
+  pages     = {335-354},
+  publisher = {Constraints},
+  title     = {Intruder alert! Optimization models for solving the mobile robot graph-clear problem},
+  volume    = {23},
+  year      = {2018}
+}
+
+@article{AbdulRazaq1990,
+  title    = {A survey of algorithms for the single machine total weighted tardiness scheduling problem},
+  journal  = {Discrete Applied Mathematics},
+  volume   = {26},
+  number   = {2},
+  pages    = {235-253},
+  year     = {1990},
+  issn     = {0166-218X},
+  doi      = {https://doi.org/10.1016/0166-218X(90)90103-J},
+  url      = {https://www.sciencedirect.com/science/article/pii/0166218X9090103J},
+  author   = {T.S. Abdul-Razaq and C.N. Potts and L.N. {Van Wassenhove}},
+  abstract = {This paper surveys algorithms for the problem of scheduling jobs on a single machine to minimize total weighted tardiness. Special attention is given to two dynamic programming and four branch and bound algorithms. The dynamic programming algorithms both use the same recursion defined on sets of jobs, but they generate the sets in lexicographic order and cardinality order respectively. Two of the branch and bound algorithms use the quickly computed but possibly rather weak lower bounds obtained from linear and exponential functions of completion times problems. These algorithms rely heavily on dominance rules to restrict the search. The other two branch and bound algorithms use lower bounds obtained from the Lagrangean relaxation of machine capacity constraints and from dynamic programming state-space relaxation. They invest a substantial amount of computation time at each node of the search tree in an attempt to generate tight lower bounds and thereby generate only small search trees. A computational comparison of all these algorithms on problems with up to 50 jobs is given.}
+}

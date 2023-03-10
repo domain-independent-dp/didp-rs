@@ -22,6 +22,7 @@ Python 3.7 or higher is required.
     quickstart
     tutorial
     advanced-tutorials
+    examples
     papers
     references
 

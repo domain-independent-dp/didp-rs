@@ -20,7 +20,7 @@ Therefore, if we shoot a scene :math:`s \in Q` next, the set of actors on locati
     L(s, Q) = A_s \cup \left( \bigcup_{s' \in N \setminus Q} A_{s'} \cap \bigcup_{s' \in Q } A_{s'}  \right).
 
 We need to pay the cost :math:`d_s \sum_{a \in L(s, Q)} c_a` when shooting scene :math:`s`.
-Once we shot scene :math:`s`, the remaining problem is to decide the order of the remaining scenes :math:`Q \cup \{ s \}.`
+Once we shot scene :math:`s`, the remaining problem is to decide the order of the remaining scenes :math:`Q \cup \{ s \}`.
 Therefore, a state is defined by the set of remaining scenes :math:`Q`, and the minimum cost to shoot :math:`Q` is represented by :math:`V(Q)`.
 Because :math:`A_s`, actors who play in scence :math:`s`, are always on location when :math:`s` is shot, :math:`\sum_{s \in Q} d_s \sum_{a \in A_s} c_a` is a lower bound on :math:`V(Q)`.
 We have the following DP formulation.
