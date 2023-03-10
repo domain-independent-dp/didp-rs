@@ -33,7 +33,7 @@ Because the set of customers whose stacks have been opened and not closed is :ma
     |(O \cap R) \cup (N_c \setminus O)|
 
 When we close the stack for :math:`c`, the set of customers whose stacks are not closed becomes :math:`R \setminus \{ c \}`, and the set of customers whose stacks have been opened becomes :math:`O \cup N_c`.
-Let :math:`V(R, O)` be the minimum number of open stacks at a time to close the stacks for customers in :math:`R` when the stacks for customers in :math:`O` have been opened.
+Let :math:`V(R, O)` be the minimum of the maximum number of open stacks at a time to close the stacks for customers in :math:`R` when the stacks for customers in :math:`O` have been opened.
 Then, the DP formulation is
 
 .. math::

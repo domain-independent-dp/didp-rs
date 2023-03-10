@@ -1,7 +1,7 @@
 Examples
 ========
 
-We provide example Jupyter notebooks of DP models for combinatorial optimization problems used in this document, :cite:t:`DIDPFirst`, and :cite:t:`DIDPAnytime`.
+On our `repository <https://github.com/domain-independent-dp/didp-rs/tree/main/didppy/examples>`_, we provide example Jupyter notebooks of DP models for combinatorial optimization problems used in this document, :cite:t:`DIDPFirst`, and :cite:t:`DIDPAnytime`.
 
 * `Knapsack problem <https://github.com/domain-independent-dp/didp-rs/tree/main/didppy/examples/knapsack.ipynb>`_
 * `Traveling salesperson problem with time windows (TSPTW) <https://github.com/domain-independent-dp/didp-rs/tree/main/didppy/examples/tsptw.ipynb>`_ : the DP model is based on :cite:t:`Dumas1995`.
