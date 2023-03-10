@@ -14,6 +14,15 @@ def test_element_expr_raise():
         dp.ElementExpr(-1)
 
 
+def test_element_expr_bool_raise():
+    with pytest.raises(Exception):
+        bool(dp.ElementExpr(3))
+
+    with pytest.raises(Exception):
+        if dp.ElementExpr(1):
+            pass
+
+
 def test_element_expr_eval_raise():
     model = dp.Model()
     state = model.target_state
@@ -33,6 +42,19 @@ def test_element_var():
     assert state[var] == 3
 
 
+def test_element_var_bool_raise():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_element_var(object_type=obj, target=3)
+
+    with pytest.raises(Exception):
+        bool(var)
+
+    with pytest.raises(Exception):
+        if var:
+            pass
+
+
 def test_element_resource_var():
     model = dp.Model()
     obj = model.add_object_type(number=4)
@@ -40,6 +62,19 @@ def test_element_resource_var():
     state = model.target_state
 
     assert state[var] == 3
+
+
+def test_element_resource_var_bool_raise():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_element_resource_var(object_type=obj, target=3)
+
+    with pytest.raises(Exception):
+        bool(var)
+
+    with pytest.raises(Exception):
+        if var:
+            pass
 
 
 class TestElementBinaryOperator:
@@ -230,6 +265,20 @@ def test_set_expr(value, expected):
     assert expr.eval(state, model) == expected
 
 
+def test_set_expr_bool_raise():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    const = model.create_set_const(object_type=obj, value=[])
+    expr = dp.SetExpr(const)
+
+    with pytest.raises(Exception):
+        bool(expr)
+
+    with pytest.raises(Exception):
+        if expr:
+            pass
+
+
 def test_set_expr_eval_raise():
     model = dp.Model()
     obj = model.add_object_type(number=4)
@@ -251,6 +300,19 @@ def test_set_const(value, expected):
     assert const.eval() == expected
 
 
+def test_set_const_bool_raise():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    const = model.create_set_const(object_type=obj, value=[])
+
+    with pytest.raises(Exception):
+        bool(const)
+
+    with pytest.raises(Exception):
+        if const:
+            pass
+
+
 @pytest.mark.parametrize("value, expected", set_eval_cases)
 def test_set_var(value, expected):
     model = dp.Model()
@@ -259,6 +321,19 @@ def test_set_var(value, expected):
     state = model.target_state
 
     assert state[var] == expected
+
+
+def test_set_var_bool_raise():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_var(object_type=obj, target=[])
+
+    with pytest.raises(Exception):
+        bool(var)
+
+    with pytest.raises(Exception):
+        if var:
+            pass
 
 
 set_len_cases = [
@@ -759,6 +834,41 @@ def test_int_expr(value, expected):
     assert expr.eval(state, model) == expected
 
 
+def test_int_expr_bool_raise():
+    expr = dp.IntExpr(1)
+
+    with pytest.raises(Exception):
+        bool(expr)
+
+    with pytest.raises(Exception):
+        if expr:
+            pass
+
+
+def test_int_var_bool_raise():
+    model = dp.Model()
+    var = model.add_int_var(target=1)
+
+    with pytest.raises(Exception):
+        bool(var)
+
+    with pytest.raises(Exception):
+        if var:
+            pass
+
+
+def test_int_resource_var_bool_raise():
+    model = dp.Model()
+    var = model.add_int_resource_var(target=1)
+
+    with pytest.raises(Exception):
+        bool(var)
+
+    with pytest.raises(Exception):
+        if var:
+            pass
+
+
 def test_int_expr_eval_raise():
     model = dp.Model()
     state = model.target_state
@@ -767,7 +877,7 @@ def test_int_expr_eval_raise():
         dp.IntExpr.state_cost().eval(state, model)
 
 
-def test_int_expr_float():
+def test_int_expr_float_raise():
     with pytest.raises(TypeError):
         dp.IntExpr(3.5)
 
@@ -1057,6 +1167,41 @@ def test_float_expr_eval_raise():
 
     with pytest.raises(BaseException):
         dp.FloatExpr.state_cost().eval(state, model)
+
+
+def test_float_expr_bool_raise():
+    expr = dp.FloatExpr(1.5)
+
+    with pytest.raises(Exception):
+        bool(expr)
+
+    with pytest.raises(Exception):
+        if expr:
+            pass
+
+
+def test_float_var_bool_raise():
+    model = dp.Model()
+    var = model.add_float_var(target=1.5)
+
+    with pytest.raises(Exception):
+        bool(var)
+
+    with pytest.raises(Exception):
+        if var:
+            pass
+
+
+def test_float_resource_var_bool_raise():
+    model = dp.Model()
+    var = model.add_float_resource_var(target=1.5)
+
+    with pytest.raises(Exception):
+        bool(var)
+
+    with pytest.raises(Exception):
+        if var:
+            pass
 
 
 def test_float_expr_eval_cost():
@@ -2029,6 +2174,39 @@ class TestMaxMinError:
     def test_min(self, lhs, rhs):
         with pytest.raises(TypeError):
             dp.min(lhs, rhs)
+
+
+def test_condition_bool_error():
+    condition = dp.IntExpr(2) > dp.IntExpr(1)
+
+    with pytest.raises(Exception):
+        bool(condition)
+
+    with pytest.raises(Exception):
+        if condition:
+            pass
+
+
+comparison_cases = [
+    (dp.IntExpr(2), dp.IntExpr(1)),
+    (dp.IntExpr(2), 1),
+    (2, dp.IntExpr(1)),
+    (dp.FloatExpr(2.5), dp.IntExpr(1)),
+    (dp.IntExpr(2), dp.FloatExpr(1.5)),
+    (dp.ElementExpr(2), dp.ElementExpr(1)),
+]
+
+
+@pytest.mark.parametrize("lhs, rhs", comparison_cases)
+def test_max_bool_error(lhs, rhs):
+    with pytest.raises(Exception):
+        max(lhs, rhs)
+
+
+@pytest.mark.parametrize("lhs, rhs", comparison_cases)
+def test_min_bool_error(lhs, rhs):
+    with pytest.raises(Exception):
+        min(lhs, rhs)
 
 
 condition_eval_cases = [
