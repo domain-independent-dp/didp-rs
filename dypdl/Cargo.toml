@@ -1,6 +1,6 @@
 [package]
 name = "dypdl"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2021"
 description = "Libarary for Dynamic Programming Description Language (DyPDL)."
 license = "MIT OR Apache-2.0"
