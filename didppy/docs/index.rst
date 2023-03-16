@@ -1,141 +1,43 @@
-.. DIDPPy documentation master file, created by
-   sphinx-quickstart on Fri Jul 22 13:13:48 2022.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+DIDPPy
+======
 
-DIDPPy API Reference
-==================================
+DIDPPy is a Python interface to use Domain-Independent Dynamic Programming (DIDP).
+DIDP is a model-based framework for combinatorial optimization problems such as vehicle routing problems (VRPs) and scheduling problems.
+With DIDP, we can use dynamic programming (DP) to solve combinatorial optimization problems without implementing DP algorithms.
+Just like in mixed-integer programming (MIP), once we define a problem as a model, we can use a solver provided by the framework to solve the model.
 
-Modeling
-========
+Installation
+------------
+``didppy`` can be installed from PyPI using ``pip``.
+Python 3.7 or higher is required.
 
-Model
------
-.. autosummary::
-   :nosignatures:
-   :toctree: _autosummary
+.. code-block:: bash
 
-   didppy.Model
-   didppy.Transition
+   pip install didppy
 
-Expressions
------------
-.. autosummary::
-   :nosignatures:
-   :toctree: _autosummary
+.. toctree::
+    :maxdepth: 1
+    :caption: Introduction
 
-   didppy.ElementExpr
-   didppy.SetExpr
-   didppy.IntExpr
-   didppy.FloatExpr
-   didppy.Condition
+    quickstart
+    tutorial
+    advanced-tutorials
+    examples
+    papers
+    references
 
-Functions
----------
-.. autosummary::
-   :toctree: _autosummary
+.. toctree::
+    :maxdepth: 1
+    :caption: User Guide
 
-   didppy.max
-   didppy.min
-   didppy.sqrt
-   didppy.log
-   didppy.float
+    solver-selection
+    debugging
 
-State
------
-.. autosummary::
-   :nosignatures:
-   :toctree: _autosummary
-
-   didppy.State
-
-Variables
----------
-.. autosummary::
-   :nosignatures:
-   :toctree: _autosummary
-
-   didppy.ElementVar
-   didppy.ElementResourceVar
-   didppy.SetVar
-   didppy.IntVar
-   didppy.IntResourceVar
-   didppy.FloatVar
-   didppy.FloatResourceVar
-
-Tables of Constants
--------------------
-.. autosummary::
-   :nosignatures:
-   :toctree: _autosummary
-
-   didppy.ElementTable1D
-   didppy.ElementTable2D
-   didppy.ElementTable3D
-   didppy.ElementTable
-   didppy.SetTable1D
-   didppy.SetTable2D
-   didppy.SetTable3D
-   didppy.SetTable
-   didppy.IntTable1D
-   didppy.IntTable2D
-   didppy.IntTable3D
-   didppy.IntTable
-   didppy.FloatTable1D
-   didppy.FloatTable2D
-   didppy.FloatTable3D
-   didppy.FloatTable
-   didppy.BoolTable1D
-   didppy.BoolTable2D
-   didppy.BoolTable3D
-   didppy.BoolTable
-
-Others
-------
-.. autosummary::
-   :nosignatures:
-   :toctree: _autosummary
-
-   didppy.ObjectType
-   didppy.SetConst
-
-Solving
-=======
-
-Solvers
--------
-.. autosummary::
-   :nosignatures:
-   :toctree: _autosummary
-
-   didppy.ForwardRecursion
-   didppy.CABS
-   didppy.CAASDy
-   didppy.DFBB
-   didppy.CBFS
-   didppy.ACPS
-   didppy.APPS
-   didppy.DBDFS
-   didppy.BreadthFirstSearch
-   didppy.WeightedAstar
-   didppy.Dijkstra
-
-Solution
---------
-.. autosummary::
-   :nosignatures:
-   :toctree: _autosummary
-
-   didppy.Solution
-
-Solver Configurations
----------------------
-.. autosummary::
-   :nosignatures:
-   :toctree: _autosummary
-
-   didppy.FOperator
-
+.. toctree::
+    :maxdepth: 2
+    :caption: API Reference
+    
+    api-reference
 
 Indices and tables
 ==================
