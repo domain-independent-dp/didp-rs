@@ -63,7 +63,7 @@ where :code:`w` is an :class:`~didppy.IntExpr` independent of :meth:`~didppy.Int
 For float cost, we can use :class:`~didppy.FloatExpr` instead of :class:`~didppy.IntExpr`.
 By default, :class:`~didppy.CABS` assumes that :code:`cost` is the additive form.
 For other types of :code:`cost`, we need to tell the solver by using the argument :code:`f_operator`, which takes either of :attr:`didppy.FOperator.Plus`, :attr:`didppy.FOperator.Product`, :attr:`didppy.FOperator.Max`, or :attr:`didppy.FOperator.Min` (:attr:`~didppy.FOperator.Plus` is the default).
-An example is provided in as an :doc:`advanced tutorial <advanced-tutorials/mosp>`.
+An example is provided in as an :doc:`advanced tutorial <advanced-tutorials/general-cost>`.
 
 This restriction is shared by the following path-finding (or heuristic search) based solvers:
 
