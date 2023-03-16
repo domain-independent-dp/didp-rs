@@ -13,3 +13,4 @@ python:
   install:
     - method: pip
       path: ./didppy
+    - requirements: ./didppy/docs/requirements.txt
