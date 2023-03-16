@@ -6,5 +6,5 @@ This tutorial covers several features that are not covered in the :doc:`first tu
 .. toctree:: 
     :maxdepth: 1
 
-    advanced-tutorials/talent-scheduling
-    advanced-tutorials/mosp
+    advanced-tutorials/forced-transitions
+    advanced-tutorials/general-cost

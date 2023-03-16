@@ -146,6 +146,7 @@ We can get the base cases with :attr:`~didppy.Model.base_cases`.
     >>> base_cases[0][0].eval(state, model)
     False
 
+The order of base cases is preserved.
 
 Checking State Constraints
 --------------------------
@@ -170,6 +171,8 @@ We can get the state constraints with :attr:`~didppy.Model.state_constrs`.
     >>> constraints[0].eval(state, model)
     True
 
+The order of state constraints is preserved.
+
 Evaluating Dual Bound
 ---------------------
 
@@ -192,3 +195,5 @@ We can get the dual bounds with :attr:`~didppy.Model.dual_bounds`.
     >>> dual_bounds = model.dual_bounds
     >>> dual_bounds[0].eval(state, model)
     0
+
+The order of dual bounds is preserved.

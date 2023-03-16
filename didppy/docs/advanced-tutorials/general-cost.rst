@@ -1,8 +1,13 @@
-MOSP
-====
+Solvers for General Costs
+=========================
 
-In a minimization of open stacks problem (MOSP), we are given a set of customers :math:`C = \{ 0, ..., n-1 \}` and a set of products :math:`P = \{ 0, ..., m-1 \}`.
-Each customer :math:`c \in C` orders a subset of products :math:`P_c \subseteq P`.
+In this tutorial, we will see how to configure solvers for more general costs than :code:`w + dp.IntExpr.state_cost()` using the minimization of open stacks problem (MOSP) as an example.
+
+MOSP
+----
+
+In MOSP, we are given a set of customers :math:`C = \{ 0, ..., n-1 \}` and a set of products :math:`P = \{ 0, ..., m-1 \}`.
+Each customer :math:`c \in C` requests a subset of products :math:`P_c \subseteq P`.
 We want to decide the order to produce the products.
 Once we produced a product :math:`p \in P_c`, we need to open a stack for customer :math:`c` to store the product.
 When we produced all products in :math:`P_c`, we can close the stack for :math:`c`.
@@ -13,11 +18,11 @@ DP Formulation
 
 The DP formulation is based on :cite:t:`Chu2009`.
 The approach is to find the order of customers to close stacks instead of the order of products to produce.
-Once the order of customers is determined, for each customer, products ordered by the customer that are not produced yet are consecutively produced in an arbitrary order.
+Once the order of customers is determined, for each customer, products requested by the customer that are not produced yet are consecutively produced in an arbitrary order.
 :cite:t:`Chu2009` proved that this approach finds an optimal solution.
 
 When we close the stack for customer :math:`c`, we need to produce all products in :math:`P_c`.
-If another customer :math:`c'` orders a product in :math:`P_c` and its stack is not opened yet, we need to open the stack for :math:`c'`.
+If another customer :math:`c'` requests a product in :math:`P_c` and its stack is not opened yet, we need to open the stack for :math:`c'`.
 In a sense, we can say that :math:`c'` is a neighbor of :math:`c`.
 Let :math:`N_c \subseteq C` be the set of neighbors including :math:`c`, i.e.,
 
@@ -25,7 +30,7 @@ Let :math:`N_c \subseteq C` be the set of neighbors including :math:`c`, i.e.,
     N_c = \{ c' \in C \mid P_{c'} \cap P_c \neq \emptyset \}.
 
 Let :math:`O` be the set of customers whose stacks have been opened.
-When we are producing the products ordered by :math:`c`, we need to open new stacks for customers :math:`N_c \setminus O`.
+When we are producing the products requested by :math:`c`, we need to open new stacks for customers :math:`N_c \setminus O`.
 Let :math:`R` be the set of customers whose stacks are not closed yet.
 Because the set of customers whose stacks have been opened and not closed is :math:`O \cap R`, the number of open stacks when producing the products for :math:`c` is
 
@@ -53,7 +58,6 @@ Assume that the data is preprocessed, and we are given :math:`N_c` for each :mat
 .. code-block:: python
 
     import didppy as dp
-
 
     # Number of customers
     n = 4
@@ -92,6 +96,8 @@ Assume that the data is preprocessed, and we are given :math:`N_c` for each :mat
 
 We can take the cardinality of :class:`~didppy.SetVar` and :class:`~didppy.SetExpr` as :class:`~didppy.IntExpr` using :meth:`~didppy.SetExpr.len`.
 Now, :code:`cost` is the maximum of an :class:`~didppy.IntExpr` and :meth:`~didppy.IntExpr.state_cost`.
+Note that here, :meth:`~didppy.IntExpr.state_cost` is :meth:`didppy.IntExpr.state_cost`, so it is an :class:`~didppy.IntExpr`.
+The function :func:`didppy.max` takes the maximum of two :class:`~didppy.IntExpr` and returns an :class:`~didppy.IntExpr`.
 
 Configuring Solvers for General Costs
 -------------------------------------

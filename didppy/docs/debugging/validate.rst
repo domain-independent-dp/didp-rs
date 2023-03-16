@@ -9,7 +9,6 @@ Let's use the model for the knapsack problem from the :doc:`quickstart </quickst
 
     import didppy as dp
 
-
     n = 4
     weights = [10, 20, 30, 40]
     profits = [5, 25, 35, 50]

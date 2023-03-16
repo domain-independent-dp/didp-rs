@@ -32,7 +32,6 @@ Suppose that :math:`n = 4`, :math:`w_0 = 10`, :math:`w_1 = 20`, :math:`w_2 = 30`
 
     import didppy as dp
 
-
     n = 4
     weights = [10, 20, 30, 40]
     profits = [5, 25, 35, 50]

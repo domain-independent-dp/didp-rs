@@ -1,5 +1,10 @@
+Forced Transitions
+==================
+
+In this tutorial, we will see how to use forced transitions using the talent scheduling problem as an example.
+
 Talent Scheduling
-=================
+-----------------
 
 In a talent scheduling problem, we are given a set of scenes :math:`S = \{ 0, ..., n - 1 \}` and a set of actors :math:`A = \{ 0, ..., m - 1 \}`.
 In a scene :math:`s \in S`, a set of actors :math:`A_s \subseteq A` plays for :math:`d_s` days.
@@ -12,12 +17,12 @@ DP Formulation
 
 The DP formulation is based on :cite:t:`GarciaDeLaBanda2011`.
 Suppose that a set of scenes :math:`Q` is remaining.
-A set of actors :math:`\bigcup_{s \in N \setminus Q} A_s` already came to the location, and :math:`\bigcup_{s \in Q} A_s` is still on location because they need to play on the remaining scenes :math:`Q`.
+A set of actors :math:`\bigcup_{s \in S \setminus Q} A_s` already came to the location, and :math:`\bigcup_{s \in Q} A_s` is still on location because they need to play on the remaining scenes :math:`Q`.
 Therefore, if we shoot a scene :math:`s \in Q` next, the set of actors on location will be
 
 .. math::
 
-    L(s, Q) = A_s \cup \left( \bigcup_{s' \in N \setminus Q} A_{s'} \cap \bigcup_{s' \in Q } A_{s'}  \right).
+    L(s, Q) = A_s \cup \left( \bigcup_{s' \in S \setminus Q} A_{s'} \cap \bigcup_{s' \in Q } A_{s'}  \right).
 
 We need to pay the cost :math:`d_s \sum_{a \in L(s, Q)} c_a` when shooting scene :math:`s`.
 Once we shot scene :math:`s`, the remaining problem is to decide the order of the remaining scenes :math:`Q \setminus \{ s \}`.
@@ -27,7 +32,7 @@ We have the following DP formulation.
 
 .. math::
 
-    \text{compute } & V(N) \\
+    \text{compute } & V(S) \\
     & V(Q) = \begin{cases}
         \min\limits_{s \in Q} d_s \sum\limits_{a \in L(s, Q)} c_a + V(Q \setminus \{ s \}) & \text{if } Q \neq \emptyset \\
         0 & \text{if } Q = \emptyset
@@ -44,13 +49,13 @@ In state :math:`Q`, the set of actors on location is
 
 .. math::
 
-    \bigcup_{s \in N \setminus Q} A_{s} \cap \bigcup_{s \in Q} A_{s}.
+    \bigcup_{s \in S \setminus Q} A_{s} \cap \bigcup_{s \in Q} A_{s}.
 
-Therefore, we have the following equation:
+Therefore, we have the following optimal transition under certain conditions:
 
 .. math::
 
-    V(Q) = d_s \sum\limits_{a \in A_s} c_a + V(Q \setminus \{ s \}) \text{ if } s \in Q \land A_s = \bigcup_{s' \in N \setminus Q} A_{s'} \cap \bigcup_{s' \in Q} A_{s'}.
+    V(Q) = d_s \sum\limits_{a \in A_s} c_a + V(Q \setminus \{ s \}) \text{ if } s \in Q \land A_s = \bigcup_{s' \in S \setminus Q} A_{s'} \cap \bigcup_{s' \in Q} A_{s'}.
 
 If multiple scenes satisfy the condition, we can shoot any of them.
 This equation helps a solver because it tells that other scenes are not needed to be considered.
@@ -64,7 +69,6 @@ Before defining forced transitions, let's model the other parts of the formulati
 .. code-block:: python
 
     import didppy as dp
-
 
     # Number of scenes
     n = 4
@@ -112,7 +116,7 @@ Before defining forced transitions, let's model the other parts of the formulati
     model.add_dual_bound(scene_to_min_cost[remaining])
 
 The state variable :code:`remaining` represents the set of remaining scenes.
-With :meth:`~didppy.StateVar.complement`, we can get the complement of :code:`remaining`, which is the set of already shot scenes :math:`N \setminus Q`.
+With :meth:`~didppy.StateVar.complement`, we can get the complement of :code:`remaining`, which is the set of already shot scenes :math:`S \setminus Q`.
 
 We define a set table :code:`scene_to_actors_table` to represent the set of actors in each scene using :meth:`~didppy.Model.add_set_table`.
 When defining a set table, we can use a :class:`list` of :class:`list` or :class:`set`, but we need to specify the object type using :code:`object_type` argument.
@@ -124,14 +128,14 @@ Therefore, :code:`scene_to_actors_table.union(remaining)` corresponds to :math:`
 The union and intersection of two sets can be represented by the bitwise OR operator :code:`|` and AND operator :code:`&`.
 In addition, the operators :code:`-` and :code:`^` can be used to take the difference and symmetric difference of two sets, respectively.
 
-Forced Transition
-~~~~~~~~~~~~~~~~~
+Defining Forced Transitions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Now, let's model the following equation using forced transitions.
 
 .. math::
 
-    V(Q) = d_s \sum\limits_{a \in A_s} c_a + V(Q \setminus \{ s \}) \text{ if } s \in Q \land A_s = \bigcup_{s' \in N \setminus Q} A_{s'} \cap \bigcup_{s' \in Q} A_{s'}.
+    V(Q) = d_s \sum\limits_{a \in A_s} c_a + V(Q \setminus \{ s \}) \text{ if } s \in Q \land A_s = \bigcup_{s' \in S \setminus Q} A_{s'} \cap \bigcup_{s' \in Q} A_{s'}.
 
 Because which :math:`s` satisfies the condition is unknown, we need to define a transition for each :math:`s`.
 
@@ -141,7 +145,6 @@ Because which :math:`s` satisfies the condition is unknown, we need to define a 
         already_shot = remaining.complement()
         came_to_location = scene_to_actors_table.union(already_shot)
         standby = scene_to_actors_table.union(remaining)
-        on_location = scene_to_actors_table[s] | (came_to_location & standby)
 
         shoot = dp.Transition(
             name="forced shoot {}".format(s),
@@ -154,13 +157,13 @@ Because which :math:`s` satisfies the condition is unknown, we need to define a 
         )
         model.add_transition(shoot, forced=True)
 
-Now, we have an additional precondition, :code:`scene_to_actors_table[s] == (came_to_location & standby)`, which corresponds to :math:`A_s = \bigcup_{s' \in N \setminus Q} A_{s'} \cap \bigcup_{s' \in Q} A_{s'}`.
+Now, we have an additional precondition, :code:`scene_to_actors_table[s] == (came_to_location & standby)`, which corresponds to :math:`A_s = \bigcup_{s' \in S \setminus Q} A_{s'} \cap \bigcup_{s' \in Q} A_{s'}`.
 When registering this transition to the model, we use the argument :code:`forced=True` to indicate that this transition is a forced transition.
 
 Ordinarily, DIDPPy takes the minimum (or maximum) :code:`cost` over all transitions whose preconditions are satisfied. 
 However, if preconditions of a forced transition are satisfied, DIDPPy ignores other transitions and only considers the forced transition.
-If multiple forced transitions are available, DIDPPy selects the first-defined one.
-Therefore, **the order to define forced transitions does matter**.
+If multiple forced transitions are available, DIDPPy selects the one first added to the model.
+Therefore, **the order to add forced transitions does matter**.
 
 Further optimization
 --------------------

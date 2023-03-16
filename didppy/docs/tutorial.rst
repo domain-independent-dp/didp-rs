@@ -31,7 +31,7 @@ Therefore, we can define a subproblem using the following three variables:
 * :math:`i \in N` : the current location.
 * :math:`t` : the current time.
 
-In genral, when customer :math:`j \in U` is visited from location :math:`i` at time :math:`t`, the problem is reduced to visiting customers :math:`U \setminus \{ j \}` from location :math:`j` at time :math:`\max \{ t + c_{ij}, a_j \}`.
+In general, when customer :math:`j \in U` is visited from location :math:`i` at time :math:`t`, the problem is reduced to visiting customers :math:`U \setminus \{ j \}` from location :math:`j` at time :math:`\max \{ t + c_{ij}, a_j \}`.
 To visit customer :math:`j`, the salesperson must arrive before :math:`b_j`, i.e., :math:`t + c_{ij} \leq b_j`.
 When all customers are visited, the salesperson must return to the depot from location :math:`i`.
 Overall, we get the following DP formulation:
@@ -39,12 +39,12 @@ Overall, we get the following DP formulation:
 .. math::
     \text{compute } & V(N \setminus \{ 0 \}, 0, 0) \\ 
     & V(U, i, t) = \begin{cases}
-         \min\limits_{j \in U: t + c_{ij} \leq b_j} c_{ij} + V(U \setminus \{ j \}, j, \max \{ t + c_{ij}, a_j \})  & \text{if } U \neq \emptyset \\
+         \min\limits_{j \in U: t + c_{ij} \leq b_j} c_{ij} + V(U \setminus \{ j \}, j, \max \{ t + c_{ij}, a_j \})  & \text{if } \exists j \in U , t + c_{ij} \leq b_j \\
          c_{i0} + V(U, 0, t + c_{i0}) & \text{if } U = \emptyset \land i \neq 0 \\
          0 & \text{if } U = \emptyset \land i = 0.
     \end{cases}
 
-In the first line, if there is no :math:`j \in U` with :math:`t + c_{ij} \leq b_j` while :math:`U \neq \emptyset`, we assume that :math:`V(U, i, t) = \infty` because the subproblem does not have a solution.
+In the first line, if there is no :math:`j \in U` with :math:`t + c_{ij} \leq b_j` while :math:`U \neq \emptyset`, we assume that :math:`V(U, i, t) = \min_{j \in \emptyset} c_{ij} + V(U \setminus \{ j \},j, \max \{ t + c_{ij}, a_j \}) =  \infty` because it takes the minimum over the empty set, and the subproblem does not have a solution.
 
 We call the state :math:`(N \setminus \{ 0 \}, 0, 0)`, which corresponds to the original problem, the *target state*.
 
@@ -60,7 +60,6 @@ First, start with importing DIDPPy and creating the model.
 .. code-block:: python
 
     import didppy as dp
-
 
     # Number of locations
     n = 4
@@ -159,7 +158,7 @@ We can add different types of tables using the following functions:
 * :meth:`~didppy.Model.add_float_table`
 
 In the case of :meth:`~didppy.Model.add_set_table`, we can pass a :class:`list` (or a :class:`dict`) of :class:`list` or :class:`set` in Python with specifying the object type.
-See :meth:`~didppy.Model.add_set_table` and an :doc:`advanced tutorial <advanced-tutorials/talent-scheduling>` for more details.
+See :meth:`~didppy.Model.add_set_table` and an :doc:`advanced tutorial <advanced-tutorials/forced-transitions>` for more details.
 
 The benefit of defining a table is that we can access its value using state variables as indices, as explained later.
 
@@ -246,7 +245,7 @@ The effect on :code:`unvisited` is not defined because it is not changed.
 Once a transition is created, it is registered to a model by :meth:`~didppy.Model.add_transition`.
 We can define a *forced transition*, by using :code:`forced=True` in this function while it is not used in TSPTW.
 A forced transition is useful to represent dominance relations between transitions in the DP model.
-See an :doc:`advanced tutorial <advanced-tutorials/talent-scheduling>` for more details.
+See an :doc:`advanced tutorial <advanced-tutorials/forced-transitions>` for more details.
 
 Base Cases
 ~~~~~~~~~~
@@ -265,10 +264,10 @@ In DIDPPy, a base case is defined by a :class:`list` of :class:`~didppy.Conditio
     model.add_base_case([unvisited.is_empty(), location == 0])
 
 When all conditions in a base case are satisfied, the value of the state is 0, and no further transitions are applied.
-We can define multiple base cases (not multiple conditions in the same base case) by using :meth:`~didppy.Model.add_base_case` multiple times.
+We can define multiple independent base cases by calling :meth:`~didppy.Model.add_base_case` multiple times, with different sets of conditions.
 In that case, the value of a state is 0 if any of the base cases is satisfied.
 
-If we want to define conditions with which a state has a non-zero constant value, we need to introduce a dummy transition to the base case, which increases the cost by the constant.
+If we want to define conditions with which a state has a non-zero constant value, we need to introduce a dummy transition to the base case, which increases the value by the constant.
 Indeed, the transition :code:`return` can be viewed as such a dummy transition for an equation :math:`V(U, i, t) = c_{i0} \text{ if } U = \emptyset`. 
 
 Solving the Model
@@ -290,16 +289,16 @@ Let's use the :class:`~didppy.CABS` solver to solve this model.
     print("Cost: {}".format(solution.cost))
 
 
-:meth:`~didppy.CABS.search` returns a :class:`~didppy.Solution`, from which we can extract the transitions to reach a base case from the target state and the cost of the solution.
+:meth:`~didppy.CABS.search` returns a :class:`~didppy.Solution`, from which we can extract the transitions that walk from the target state to a base case and the cost of the solution.
 :class:`~didppy.CABS` is an anytime solver, which returns the best solution found within the time limit.
 Instead of :meth:`~didppy.CABS.search`, we can use :meth:`~didppy.CABS.search_next`, which returns the next solution found.
 :class:`~didppy.CABS` is complete, which means that it returns an optimal solution given enough time.
-If we use :code:`time_limit=None`, it continues to search until an optimal solution is found.
+If we use :code:`time_limit=None` (the default value), it continues to search until an optimal solution is found.
 Whether the returned solution is optimal or not can be checked by :attr:`didppy.Solution.is_optimal`.
 
 While :class:`~didppy.CABS` is usually the most efficient solver, it has some restrictions:
 it solves the DP model as a path-finding problem in a graph, so it is only applicable to particular types of DP models.
-Concretely, :code:`cost` in all transitions must have either of the following structure:
+Concretely, :code:`cost` in all transitions must have either of the following structures:
 
 * :code:`w + dp.IntExpr.state_cost()`
 * :code:`w * dp.IntExpr.state_cost()`
@@ -309,14 +308,14 @@ Concretely, :code:`cost` in all transitions must have either of the following st
 where :code:`w` is an :class:`~didppy.IntExpr` independent of :meth:`~didppy.IntExpr.state_cost`.
 For float cost, we can use :class:`~didppy.FloatExpr` instead of :class:`~didppy.IntExpr`.
 By default, :class:`~didppy.CABS` assumes that :code:`cost` is the additive form.
-For other types of :code:`cost`, we need to tell the solver by using the argument :code:`f_operator`, which takes either of :attr:`didppy.FOperator.Plus`, :attr:`didppy.FOperator.Product`, :attr:`didppy.FOperator.Max`, or :attr:`didppy.FOperator.Min` (:attr:`~didppy.FOperator.Plus` is the default).
-An example is provided in an :doc:`advanced tutorial <advanced-tutorials/mosp>`.
+For other types of :code:`cost`, we need to tell it to the solver by using the argument :code:`f_operator`, which takes either of :attr:`didppy.FOperator.Plus`, :attr:`didppy.FOperator.Product`, :attr:`didppy.FOperator.Max`, or :attr:`didppy.FOperator.Min` (:attr:`~didppy.FOperator.Plus` is the default).
+An example is provided in an :doc:`advanced tutorial <advanced-tutorials/general-cost>`.
 
 If your problem does not fit into the above structure, you can use :class:`~didppy.ForwardRecursion`, which is the most generic but might be an inefficient solver.
 For further details, see :doc:`the guide for the solver selection <solver-selection>` as well as :ref:`the API reference <api-reference:Solvers>`.
 
-Improving the DP Formulation 
-----------------------------
+Improving the DP Model
+----------------------
 
 So far, we defined the DP formulation for TSPTW, model it in DIDPPy, and solved the model using a solver.
 However, the formulation above is **not efficient**.
@@ -324,8 +323,8 @@ Actually, we can improve the formulation by incorporating more information.
 Such information is unnecessary to define a problem but potentially helps a solver.
 We introduce three enhancements to the DP formulation.
 
-Dominance Between States
-~~~~~~~~~~~~~~~~~~~~~~~~
+Resource Variables
+~~~~~~~~~~~~~~~~~~
 
 Consider two states :math:`(U, i, t)` and :math:`(U, i, t')` with :math:`t \leq t'`, which share the set of unvisited customers and the current location.
 In TSPTW, smaller :math:`t` is always better, so :math:`(U, i, t)` leads to a better solution than :math:`(U, i, t')`.
@@ -335,73 +334,7 @@ Therefore, we can introduce the following inequality:
     V(U, i, t) \leq V(U, i, t') \text{ if } t \leq t'.
 
 With this information, a solver may not need to consider :math:`(U, i, t')` if it has already considered :math:`(U, i, t)`.
-
-Looking Ahead the Deadlines
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-In TSPTW, all customers must be visited before their deadlines.
-In a state :math:`(U, i, t)`, if the salesperson cannot visit customer :math:`j \in U` before :math:`b_j`, the subproblem defined by this state does not have a solution.
-The earliest possible time to visit :math:`j` is :math:`t + c_{ij}` (we assume the triangle inequality, :math:`c_{ik} + c_{kj} \geq c_{ij}`).
-Therefore, if :math:`t + c_{ij} > b_j`, we can conclude that :math:`(U, i, t)` does not have a solution.
-This inference is formulated as the following equation:
-
-.. math::
-    V(U, i, t) = \infty \text{ if } \exists j \in U, t + c_{ij} > b_j.
-
-A solver can prune a state if it satisfies the above condition.
-
-Lower Bounds on the Value Function
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-In model-based approaches such as mixed-integer programming (MIP), modeling the bounds on the objective function is commonly used to improve the efficiency of a solver.
-In the case of DIDP, we consider bounding the value function :math:`V` for a state :math:`(U, i, t)`.
-
-The lowest possible travel time to visit customer :math:`j` is :math:`\min_{k \in N \setminus \{ j \}} c_{kj}`.
-Because we need to visit all customers in :math:`U`, the total travel time is at least
-
-.. math::
-    \sum_{j \in U} \min_{k \in N \setminus \{ j \}} c_{kj}.
-
-Furthermore, if the current location :math:`i` is not the depot, we need to visit the depot.
-Therefore,
-
-.. math::
-    V(U, i, t) \geq \sum_{j \in (U \cup \{ 0 \}) \setminus \{ i \} } \min_{k \in N \setminus \{ j \}} c_{kj}.
-
-Similarly, we need to depart from each customer in :math:`U` and the current location :math:`i` if :math:`i` is not the depot.
-Therefore,
-
-.. math::
-    V(U, i, t) \geq \sum_{j \in (U \cup \{ i \}) \setminus \{ 0 \} } \min_{k \in N \setminus \{ j \}} c_{jk}.
-
-Full Formulation
-~~~~~~~~~~~~~~~~
-
-Overall, our model is now as follows:
-
-.. math::
-    \text{compute } & V(N \setminus \{ 0 \}, 0, 0) \\ 
-    & V(U, i, t) = \begin{cases}
-         \infty & \text{if } \exists j \in U, t + c_{ij} > b_j \\
-         \min\limits_{j \in U} c_{ij} + V(U \setminus \{ j \}, j, \max \{ t + c_{ij}, a_j \})  & \text{else if } U \neq \emptyset \\
-         c_{i0} + V(U, 0, t + c_{i0}) & \text{else if } U = \emptyset \land i \neq 0 \\
-         0 & \text{else if } U = \emptyset \land i = 0.
-    \end{cases} \\
-    & V(U, i, t) \leq V(U, i, t') \quad \quad \quad \quad \quad \quad \quad \quad \quad \quad \quad \quad \quad \quad ~ \text{ if } t \leq t' \\
-    & V(U, i, t) \geq \sum_{j \in (U \cup \{ 0 \}) \setminus \{ i \} } \min_{k \in N \setminus \{ j \}} c_{kj} \\
-    & V(U, i, t) \geq \sum_{j \in (U \cup \{ i \}) \setminus \{ 0 \} } \min_{k \in N \setminus \{ j \}} c_{jk}.
-
-Note that in the second line, :math:`t + c_{ij} \leq b_j` for :math:`j \in U` is ensured by the first line.
-
-Improved Model in DIDPPy 
-------------------------
-
-Now, let's model the improved formulation in DIDPPy.
-
-Resource Variables
-~~~~~~~~~~~~~~~~~~
-
-The dominance of states, :math:`V(U, i, t) \leq V(U, i, t') \text{ if } t \leq t'`, can be modeled by *resource variables*.
+This dominance relation between states can be modeled by *resource variables*.
 
 .. code-block:: python
 
@@ -425,15 +358,21 @@ There are three types of resource variables in DIDPPy:
 State Constraints
 ~~~~~~~~~~~~~~~~~
 
-*State constraints* are constraints that must be satisfied by all states.
-In other words, a state that does not satisfy the state constraints can be immediately pruned.
-
-In our DP formulation, we have the following equation, which defines the condition when a state does not have a solution:
+In TSPTW, all customers must be visited before their deadlines.
+In a state :math:`(U, i, t)`, if the salesperson cannot visit a customer :math:`j \in U` before :math:`b_j`, the subproblem defined by this state does not have a solution.
+The earliest possible time to visit :math:`j` is :math:`t + c_{ij}` (we assume the triangle inequality, :math:`c_{ik} + c_{kj} \geq c_{ij}`).
+Therefore, if :math:`t + c_{ij} > b_j` for any :math:`j \in U`, we can conclude that :math:`(U, i, t)` does not have a solution.
+This inference is formulated as the following equation:
 
 .. math::
     V(U, i, t) = \infty \text{ if } \exists j \in U, t + c_{ij} > b_j.
 
-We can model this equation in the DP model by using the negation of the condition, :math:`\forall j \in U, t + c_{ij} \leq b_j`, as state constraints:
+This equation is actually implied by our original DP formulation, but we need to perform multiple iterations of recursion to notice that:
+we can conclude :math:`V(U, i, t) = \infty` only when :math:`\forall j \in U, t + c_{ij} > b_j`.
+The above equation makes it explicit, and we can immediately conclude that :math:`V(U, i, t) = \infty` if the condition is satisfied.
+
+In DyPDL, the above inference is modeled by *state constraints*, constraints that must be satisfied by all states.
+Because state constraints must be satisfied by all states, we use the negation of the condition, :math:`\forall j \in U, t + c_{ij} \leq b_j`, as state constraints:
 
 .. code-block:: python
 
@@ -441,7 +380,7 @@ We can model this equation in the DP model by using the negation of the conditio
         model.add_state_constr(
             ~unvisited.contains(j) | (time + travel_time[location, j] <= due_time[j])
         )
-
+ 
 For each customer :code:`j`, we define a disjunctive condition :math:`j \notin U \lor t + c_{ij} \leq b_j`.
 :code:`~` is the negation operator of :class:`~didppy.Condition`, and :code:`|` is the disjunction operator.
 We can also use :code:`&` for the conjunction.
@@ -453,14 +392,28 @@ State constraints are evaluated each time a state is generated while preconditio
 Dual Bounds
 ~~~~~~~~~~~
 
-In DIDP, lower bounds for minimization and upper bounds for maximization are called *dual bounds*.
-In our DP formulation, the following inequalities define the dual bounds:
+In model-based approaches such as mixed-integer programming (MIP), modeling the bounds on the objective function is commonly used to improve the efficiency of a solver.
+In the case of DIDP, we consider *dual bounds* on the value function :math:`V` for a state :math:`(U, i, t)`, which are lower bounds for minimization and upper bounds for maximization.
+
+The lowest possible travel time to visit customer :math:`j` is :math:`\min_{k \in N \setminus \{ j \}} c_{kj}`.
+Because we need to visit all customers in :math:`U`, the total travel time is at least
 
 .. math::
-    & V(U, i, t) \geq \sum_{j \in (U \cup \{ 0 \}) \setminus \{ i \} } \min_{k \in N \setminus \{ j \}} c_{kj} \\
-    & V(U, i, t) \geq \sum_{j \in (U \cup \{ i \}) \setminus \{ 0 \} } \min_{k \in N \setminus \{ j \}} c_{jk}.
+    \sum_{j \in U} \min_{k \in N \setminus \{ j \}} c_{kj}.
 
-These bounds are modeled as follows:
+Furthermore, if the current location :math:`i` is not the depot, we need to visit the depot.
+Therefore,
+
+.. math::
+    V(U, i, t) \geq \sum_{j \in (U \cup \{ 0 \}) \setminus \{ i \} } \min_{k \in N \setminus \{ j \}} c_{kj}.
+
+Similarly, we need to depart from each customer in :math:`U` and the current location :math:`i` if :math:`i` is not the depot.
+Therefore,
+
+.. math::
+    V(U, i, t) \geq \sum_{j \in (U \cup \{ i \}) \setminus \{ 0 \} } \min_{k \in N \setminus \{ j \}} c_{jk}.
+
+The above bounds are modeled as follows:
 
 .. code-block:: python
 
@@ -488,18 +441,37 @@ When the current location is not the depot, i.e., :code:`location != 0`, :math:`
 
 We repeat a similar procedure for the other dual bound.
 
+Note that dual bounds in DyPDL represent the bounds on the value of the problem defined by the given state, so they are state-dependent.
+Dual bounds are not just bounds on the optimal value of the original problem, but they are used in each subproblem.
+
 **Defining a dual bound in DIDP is extremely important**: a dual bound may significantly boost the performance of solvers.
 We strongly recommend defining a dual bound even if it is trivial, such as :math:`V(U, i, t) \geq 0`.
 
-Full Code
-~~~~~~~~~
+
+Full Formulation
+~~~~~~~~~~~~~~~~
+
+Overall, our model is now as follows:
+
+.. math::
+    \text{compute } & V(N \setminus \{ 0 \}, 0, 0) \\ 
+    & V(U, i, t) = \begin{cases}
+         \infty & \text{if } \exists j \in U, t + c_{ij} > b_j \\
+         \min\limits_{j \in U} c_{ij} + V(U \setminus \{ j \}, j, \max \{ t + c_{ij}, a_j \})  & \text{else if } U \neq \emptyset \\
+         c_{i0} + V(U, 0, t + c_{i0}) & \text{else if } U = \emptyset \land i \neq 0 \\
+         0 & \text{else if } U = \emptyset \land i = 0.
+    \end{cases} \\
+    & V(U, i, t) \leq V(U, i, t') \quad \quad \quad \quad \quad \quad \quad \quad \quad \quad \quad \quad \quad \quad ~ \text{ if } t \leq t' \\
+    & V(U, i, t) \geq \sum_{j \in (U \cup \{ 0 \}) \setminus \{ i \} } \min_{k \in N \setminus \{ j \}} c_{kj} \\
+    & V(U, i, t) \geq \sum_{j \in (U \cup \{ i \}) \setminus \{ 0 \} } \min_{k \in N \setminus \{ j \}} c_{jk}.
+
+Note that in the second line, :math:`t + c_{ij} \leq b_j` for :math:`j \in U` is ensured by the first line.
 
 Here is the full code for the DP model:
 
 .. code-block:: python
 
     import didppy as dp
-
 
     # Number of locations
     n = 4
