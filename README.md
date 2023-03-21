@@ -2,7 +2,6 @@
 [![minimum rustc 1.64](https://img.shields.io/badge/rustc-1.64+-blue.svg)](https://rust-lang.github.io/rfcs/2495-min-rust-version.html)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
- 
 
 # Domain-Independent Dynamic Programming (DIDP)
 
@@ -17,7 +16,7 @@ This repository is a Rust implementation of Dynamic Programming Description Lang
 
 ## Quick Start
 
-If you want to use DIDP, we recommend using the Python interface, DIDPPy.
+If you want to use DIDP, we recommend using the Python interface, [DIDPPy](https://didppy.rtfd.io).
 
 ## Development
 

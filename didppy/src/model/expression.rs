@@ -100,11 +100,11 @@ impl From<ElementUnion> for ElementExpression {
 
 /// Element expression.
 ///
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a new :class:`ElementExpr` is returned.
+/// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`/`, :code:`//`, :code:`%`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int` is applied, a new :class:`ElementExpr` is returned.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a :class:`Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 /// Parameters
 /// ----------
@@ -280,11 +280,11 @@ impl ElementExprPy {
 
 /// Element variable.
 ///
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a new :class:`ElementExpr` is returned.
+/// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`/`, :code:`//`, :code:`%`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int` is applied, a new :class:`ElementExpr` is returned.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a :class:`Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 /// Examples
 /// --------
@@ -414,11 +414,11 @@ impl ElementVarPy {
 
 /// Element resource variable.
 ///
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a new :class:`ElementExpr` is returned.
+/// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`/`, :code:`//`, :code:`%`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int` is applied, a new :class:`ElementExpr` is returned.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int` is applied, a :class:`Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 /// Examples
 /// --------
@@ -568,11 +568,11 @@ impl From<SetUnion> for SetExpression {
 
 /// Set expression.
 ///
-/// If an operator (`-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
+/// If an operator (:code:`-`, :code:`&`, :code:`^`, :code:`|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a `:class:Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 /// Examples
 /// --------
@@ -793,7 +793,7 @@ impl SetExprPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -830,7 +830,7 @@ impl SetExprPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -866,7 +866,7 @@ impl SetExprPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -888,7 +888,7 @@ impl SetExprPy {
     ///
     /// Returns a set where all elements in an input set are removed.
     ///
-    /// This method is the same as `-` operation.
+    /// This method is the same as :code:`-` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -898,7 +898,7 @@ impl SetExprPy {
     /// Returns
     /// -------
     /// SetExpr
-    ///     The set where all elements in `other` are removed.
+    ///     The set where all elements in :code:`other` are removed.
     ///
     /// Examples
     /// --------
@@ -920,7 +920,7 @@ impl SetExprPy {
     ///
     /// Returns the intersection with another set.
     ///
-    /// This method is the same as `&` operation.
+    /// This method is the same as :code:`&` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -953,7 +953,7 @@ impl SetExprPy {
     ///
     /// Returns a set which only contains elements included in either of two sets but not in both.
     ///
-    /// This method is the same as `^` operation.
+    /// This method is the same as :code:`^` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -986,7 +986,7 @@ impl SetExprPy {
     ///
     /// Returns the union of two sets.
     ///
-    /// This method is the same as `\|` operation.
+    /// This method is the same as :code:`\|` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -1032,7 +1032,7 @@ impl SetExprPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -1159,11 +1159,11 @@ impl SetExprPy {
 
 /// Set variable.
 ///
-/// If an operator (`-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
+/// If an operator (:code:`-`, :code:`&`, :code:`^`, :code:`|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a `:class:Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 /// Examples
 /// --------
@@ -1382,7 +1382,7 @@ impl SetVarPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -1418,7 +1418,7 @@ impl SetVarPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -1453,7 +1453,7 @@ impl SetVarPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -1474,7 +1474,7 @@ impl SetVarPy {
     ///
     /// Returns a set where all elements in an input set are removed.
     ///
-    /// This method is the same as `-` operation.
+    /// This method is the same as :code:`-` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -1485,7 +1485,7 @@ impl SetVarPy {
     /// Returns
     /// -------
     /// SetExpr
-    ///     The set where all elements in `other` are removed.
+    ///     The set where all elements in :code:`other` are removed.
     ///
     /// Examples
     /// --------
@@ -1506,7 +1506,7 @@ impl SetVarPy {
     ///
     /// Returns the intersection with another set.
     ///
-    /// This method is the same as `&` operation.
+    /// This method is the same as :code:`&` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -1537,7 +1537,7 @@ impl SetVarPy {
     ///
     /// Returns a set which only contains elements included in either of two sets but not in both.
     ///
-    /// This method is the same as `^` operation.
+    /// This method is the same as :code:`^` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -1569,7 +1569,7 @@ impl SetVarPy {
     ///
     /// Returns the union of two sets.
     ///
-    /// This method is the same as `\|` operation.
+    /// This method is the same as :code:`\|` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -1614,7 +1614,7 @@ impl SetVarPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -1720,11 +1720,11 @@ impl From<SetConstPy> for SetExpression {
 
 /// Set constant.
 ///
-/// If an operator (`-`, `&`, `^`, `|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
+/// If an operator (:code:`-`, :code:`&`, :code:`^`, :code:`|`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a new :class:`SetExpr` is returned.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a `:class:Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with a :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 /// Examples
 /// --------
@@ -1950,7 +1950,7 @@ impl SetConstPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -1985,7 +1985,7 @@ impl SetConstPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -2007,7 +2007,7 @@ impl SetConstPy {
     ///
     /// Returns a set where all elements in an input set are removed.
     ///
-    /// This method is the same as `-` operation.
+    /// This method is the same as :code:`-` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -2018,12 +2018,12 @@ impl SetConstPy {
     /// Returns
     /// -------
     /// SetExpr
-    ///     The set where all elements in `other` are removed.
+    ///     The set where all elements in :code:`other` are removed.
     ///
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -2044,7 +2044,7 @@ impl SetConstPy {
     ///
     /// Returns the intersection with another set.
     ///
-    /// This method is the same as `&` operation.
+    /// This method is the same as :code:`&` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -2076,7 +2076,7 @@ impl SetConstPy {
     ///
     /// Returns a set which only contains elements included in either of two sets but not in both.
     ///
-    /// This method is the same as `^` operation.
+    /// This method is the same as :code:`^` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -2108,7 +2108,7 @@ impl SetConstPy {
     ///
     /// Returns the union of two sets.
     ///
-    /// This method is the same as `\|` operation.
+    /// This method is the same as :code:`\|` operation.
     /// This method does not change the instance itself.
     ///
     /// Parameters
@@ -2153,7 +2153,7 @@ impl SetConstPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If `element` is `int` and negative.
+    ///     If :code:`element` is :class:`int` and negative.
     ///
     /// Examples
     /// --------
@@ -2306,14 +2306,14 @@ impl IntoPy<Py<PyAny>> for IntOrFloatExpr {
 
 /// Integer expression.
 ///
-/// If an arithmetic operator (`+`, `-`, `*`, `//`, `%`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, or `int` is applied, a new :class:`IntExpr` is returned.
+/// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`//`, :code:`%`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, or :class:`int` is applied, a new :class:`IntExpr` is returned.
 /// For division (`/`) and power (`**`), a :class:`FloatExpr` is returned.
-/// If an arithmetic operator with an :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or `float` is applied, a :class:`FloatExpr` is returned.
-/// If `abs` is applied, a new :class:`IntExpr` is returned.
+/// If an arithmetic operator with an :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or :class:`float` is applied, a :class:`FloatExpr` is returned.
+/// If :func:`abs` is applied, a new :class:`IntExpr` is returned.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, :class:`int`, or :class:`float` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 /// Parameters
 /// ----------
@@ -2651,14 +2651,14 @@ impl IntExprPy {
 
 /// Integer variable.
 ///
-/// If an arithmetic operator (`+`, `-`, `*`, `//`, `%`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, or `int` is applied, a new :class:`IntExpr` is returned.
+/// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`//`, :code:`%`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, or :class:`int` is applied, a new :class:`IntExpr` is returned.
 /// For division (`/`) and power (`**`), a :class:`FloatExpr` is returned.
-/// If an arithmetic operator with an :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or `float` is applied, a :class:`FloatExpr` is returned.
-/// If `abs` is applied, a new :class:`IntExpr` is returned.
+/// If an arithmetic operator with an :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or :class:`float` is applied, a :class:`FloatExpr` is returned.
+/// If :func:`abs` is applied, a new :class:`IntExpr` is returned.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, :class:`int`, or :class:`float` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 ///
 /// Examples
@@ -2894,14 +2894,14 @@ impl IntVarPy {
 
 /// Integer resource variable.
 ///
-/// If an arithmetic operator (`+`, `-`, `*`, `//`, `%`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, or `int` is applied, a new :class:`IntExpr` is returned.
+/// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`//`, :code:`%`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, or :class:`int` is applied, a new :class:`IntExpr` is returned.
 /// For division (`/`) and power (`**`), a :class:`FloatExpr` is returned.
-/// If an arithmetic operator with an :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or `float` is applied, a :class:`FloatExpr` is returned.
-/// If `abs` is applied, a new :class:`IntExpr` is returned.
+/// If an arithmetic operator with an :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or :class:`float` is applied, a :class:`FloatExpr` is returned.
+/// If :func:`abs` is applied, a new :class:`IntExpr` is returned.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, :class:`int`, or :class:`float` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of `max` and `min` as comparison operators are overloaded.
+/// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 ///
 /// Examples
@@ -3172,13 +3172,13 @@ impl From<FloatUnion> for ContinuousExpression {
 
 /// Continuous expression.
 ///
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`, `**`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a new :class:`FloatExpr` is returned.
-/// If `abs` is applied, a new :class:`FloatExpr` is returned.
-/// `round`, `trunc`, `floor`, and `ceil` return an :class:`IntExpr`.
+/// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`/`, :code:`//`, :code:`%`, :code:`**`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, :class:`int`, or :class:`float` is applied, a new :class:`FloatExpr` is returned.
+/// If :func:`abs` is applied, a new :class:`FloatExpr` is returned.
+/// :func:`round`, :func:`trunc`, :func:`floor`, and :func:`ceil` return an :class:`IntExpr`.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, :class:`int`, or :class:`float` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :class:`didppy.max` and :class:`didppy.min` should be used instead of :class:`max` and :class:`min` as comparison operators are overloaded.
+/// Note that :class:`didppy.max` and :class:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 /// Parameters
 /// ----------
@@ -3468,13 +3468,13 @@ impl FloatExprPy {
 
 /// Continuous variable.
 ///
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`, `**`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a new :class:`FloatExpr` is returned.
-/// If `abs` is applied, a new :class:`FloatExpr` is returned.
-/// `round`, `trunc`, `floor`, and `ceil` return an :class:`IntExpr`.
+/// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`/`, :code:`//`, :code:`%`, :code:`**`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, :class:`int`, or :class:`float` is applied, a new :class:`FloatExpr` is returned.
+/// If :func:`abs` is applied, a new :class:`FloatExpr` is returned.
+/// :func:`round`, :func:`trunc`, :func:`floor`, and :func:`ceil` return an :class:`IntExpr`.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, :class:`int`, or :class:`float` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :class:`didppy.max` and :class:`didppy.min` should be used instead of :class:`max` and :class:`min` as comparison operators are overloaded.
+/// Note that :class:`didppy.max` and :class:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 /// Examples
 /// --------
@@ -3662,13 +3662,13 @@ impl FloatVarPy {
 
 /// Continuous resource variable.
 ///
-/// If an arithmetic operator (`+`, `-`, `*`, `/`, `//`, `%`, `**`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a new :class:`FloatExpr` is returned.
-/// If `abs` is applied, a new :class:`FloatExpr` is returned.
-/// `round`, `trunc`, `floor`, and `ceil` return an :class:`IntExpr`.
+/// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`/`, :code:`//`, :code:`%`, :code:`**`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, :class:`int`, or :class:`float` is applied, a new :class:`FloatExpr` is returned.
+/// If :func:`abs` is applied, a new :class:`FloatExpr` is returned.
+/// :func:`round`, :func:`trunc`, :func:`floor`, and :func:`ceil` return an :class:`IntExpr`.
 ///
-/// If a comparison operator (`<`, `<=`, `==`, `!=`, `>`, `>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, `int`, or `float` is applied, a :class:`Condition` is returned.
+/// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, :class:`int`, or :class:`float` is applied, a :class:`Condition` is returned.
 ///
-/// Note that :class:`didppy.max` and :class:`didppy.min` should be used instead of :class:`max` and :class:`min` as comparison operators are overloaded.
+/// Note that :class:`didppy.max` and :class:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
 /// Examples
 /// --------
@@ -3880,7 +3880,7 @@ pub fn sqrt(x: FloatUnion) -> FloatExprPy {
     FloatExprPy(ContinuousExpression::from(x).sqrt())
 }
 
-/// Returns an expression representing the logarithm of `x` using y `as` a base.
+/// Returns an expression representing the logarithm of :code:`x` using y :code:`as` a base.
 ///
 /// Parameters
 /// ----------
@@ -3954,7 +3954,7 @@ pub fn float(x: IntUnion) -> FloatExprPy {
 /// Raises
 /// ------
 /// TypeError
-///     If the types of `x` and `y` mismatch.
+///     If the types of :code:`x` and :code:`y` mismatch.
 ///
 /// Examples
 /// --------
@@ -4013,7 +4013,7 @@ pub fn max(x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
 /// Raises
 /// ------
 /// TypeError
-///     If the types of `x` and `y` mismatch.
+///     If the types of :code:`x` and :code:`y` mismatch.
 ///
 /// Examples
 /// --------
@@ -4057,9 +4057,9 @@ pub fn min(x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
 
 /// Condition.
 ///
-/// The negation of a condition can be crated by `~x`.
-/// The conjunction of two conditions can be crated by `x & y`.
-/// The disjunction of two conditions can be crated by `x | y`.
+/// The negation of a condition can be crated by :code:`~x`.
+/// The conjunction of two conditions can be crated by :code:`x & y`.
+/// The disjunction of two conditions can be crated by :code:`x | y`.
 ///
 /// Examples
 /// --------
@@ -4127,12 +4127,12 @@ impl ConditionPy {
     /// -------
     /// ElementExpr, SetExpr, IntExpr, or FloatExpr
     ///     The 'if-then-else' expression.
-    ///     The type of the return value is determined according to the types of `x` and `y`.
+    ///     The type of the return value is determined according to the types of :code:`x` and :code:`y`.
     ///
     /// Raises
     /// ------
     /// TypeError
-    ///     If the types of `x` and `y` mismatch.
+    ///     If the types of :code:`x` and :code:`y` mismatch.
     ///
     /// Examples
     /// --------

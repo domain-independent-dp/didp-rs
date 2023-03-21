@@ -10,9 +10,9 @@ use std::rc::Rc;
 ///
 /// This performs Dijkstra's algorithm.
 ///
-/// To apply this solver, the cost must be computed in the form of `x + state_cost`, `x * state_cost`, `didppy.max(x, state_cost)`,
-/// or `didppy.min(x, state_cost)` where, `state_cost` is either of :func:`didppy.IntExpr.state_cost()` and :func:`didppy.FloatExpr.state_cost()`,
-/// and `x` is a value independent of `state_cost`.
+/// To apply this solver, the cost must be computed in the form of :code:`x + state_cost`, :code:`x * state_cost`, :code:`didppy.max(x, state_cost)`,
+/// or :code:`didppy.min(x, state_cost)` where, :code:`state_cost` is either of :meth:`IntExpr.state_cost()` and :meth:`FloatExpr.state_cost()`,
+/// and :code:`x` is a value independent of :code:`state_cost`.
 /// In addition, the model must be minimization.
 /// Otherwise, it cannot compute the cost correctly and may not produce the optimal solution.
 ///
@@ -32,11 +32,11 @@ use std::rc::Rc;
 /// Raises
 /// ------
 /// OverflowError
-///     If `initial_registry_capacity` is negative.
+///     If :code:`initial_registry_capacity` is negative.
 ///
 /// Examples
 /// --------
-/// Example with `+` operator.
+/// Example with :code:`+` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
@@ -54,7 +54,7 @@ use std::rc::Rc;
 /// >>> print(solution.cost)
 /// 1
 ///
-/// Example with `max` operator.
+/// Example with :code:`max` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()

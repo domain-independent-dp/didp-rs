@@ -53,6 +53,13 @@ cargo test --no-default-features
 pytest
 ```
 
+### Build Documents
+
+```bash
+pip install -r docs/requirements.txt
+sphinx-build docs docs/_build
+```
+
 ## Build Release Version
 
 ```bash

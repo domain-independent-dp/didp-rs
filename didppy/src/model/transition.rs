@@ -43,8 +43,8 @@ impl IntoPy<Py<PyAny>> for IntOrFloat {
 }
 /// Transition.
 ///
-/// An effect on a variable can be accessed by `transition[var]`, where `transition` is :class:`Transition` and
-/// `var` is either of :class:`ElementVar`, :class:`ElementResourceVar`, :class:`SetVar`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatVar`, and :class:`FloatResourceVar`.
+/// An effect on a variable can be accessed by :code:`transition[var]`, where :code:`transition` is :class:`Transition` and
+/// :code:`var` is either of :class:`ElementVar`, :class:`ElementResourceVar`, :class:`SetVar`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatVar`, and :class:`FloatResourceVar`.
 ///
 /// Parameters
 /// ----------
@@ -53,7 +53,7 @@ impl IntoPy<Py<PyAny>> for IntOrFloat {
 /// cost: IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, float, or None, default: None
 ///     Cost expression.
 ///     :func:`IntExpr.state_cost()` or :func:`FloatExpr.state_cost()` can be used to represent the cost of the transitioned state.
-///     If `None`, :func:`IntExpr.state_cost()` is used.
+///     If :code:`None`, :func:`IntExpr.state_cost()` is used.
 /// preconditions: list of Condition or None, default: None
 ///     Preconditions, which must be satisfied by a state to be applicable.
 /// effects: list of tuple of a variable and an expression or None, default: None
@@ -65,7 +65,7 @@ impl IntoPy<Py<PyAny>> for IntOrFloat {
 /// RuntimeError
 ///     If multiple effects are defined for the same variable.
 /// TypeError
-///     If the types of a variable and an expression in `effects` mismatch.
+///     If the types of a variable and an expression in :code:`effects` mismatch.
 ///
 /// Examples
 /// --------
@@ -367,7 +367,7 @@ impl TransitionPy {
     /// Raises
     /// ------
     /// TypeError
-    ///     If the types of `var` and `expr` mismatch.
+    ///     If the types of :code:`var` and :code:`expr` mismatch.
     ///
     /// Examples
     /// --------
@@ -523,7 +523,7 @@ impl TransitionPy {
     /// Raises
     /// ------
     /// TypeError
-    ///     If the type of `cost` mismatches the cost type of `model`.
+    ///     If the type of :code:`cost` mismatches the cost type of :code:`model`.
     /// PanicException
     ///     If the cost expression is invalid.
     ///

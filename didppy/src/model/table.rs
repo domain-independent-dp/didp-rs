@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 
 /// 1-dimensional table of element constants.
 ///
-/// `t[x]` returns an element expression referring to an item where `t` is :class:`ElementTable1D` and `x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[x]` returns an element expression referring to an item where :code:`t` is :class:`ElementTable1D` and :code:`x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -41,7 +41,7 @@ impl ElementTable1DPy {
 
 /// 2-dimensional table of element constants.
 ///
-/// `t[x, y]` returns an element expression referring to an item where `t` is :class:`ElementTable2D` and `x` and `y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[x, y]` returns an element expression referring to an item where :code:`t` is :class:`ElementTable2D` and :code:`x` and :code:`y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -78,7 +78,7 @@ impl ElementTable2DPy {
 
 /// 3-dimensional table of element constants.
 ///
-/// `t[x, y, z]` returns an element expression referring to an item where `t` is :class:`ElementTable3D` and `x`, `y`, and `z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[x, y, z]` returns an element expression referring to an item where :code:`t` is :class:`ElementTable3D` and :code:`x`, :code:`y`, and :code:`z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -115,7 +115,7 @@ impl ElementTable3DPy {
 
 /// Table of element constants.
 ///
-/// `t[index]` returns an element expression referring to an item where `t` is :class:`ElementTable` and `index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[index]` returns an element expression referring to an item where :code:`t` is :class:`ElementTable` and :code:`index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -152,7 +152,7 @@ impl ElementTablePy {
 
 /// 1-dimensional table of set constants.
 ///
-/// `t[x]` returns a set expression referring to an item where `t` is :class:`SetTable1D` and `x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[x]` returns a set expression referring to an item where :code:`t` is :class:`SetTable1D` and :code:`x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -295,7 +295,7 @@ impl SetTable1DPy {
 
 /// 2-dimensional table of set constants.
 ///
-/// `t[x, y]` returns a set expression referring to an item where `t` is :class:`SetTable2D` and `x` and `y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[x, y]` returns a set expression referring to an item where :code:`t` is :class:`SetTable2D` and :code:`x` and :code:`y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -457,7 +457,7 @@ impl SetTable2DPy {
 
 /// 3-dimensional table of set constants.
 ///
-/// `t[x, y, z]` returns a set expression referring to an item where `t` is :class:`SetTable3D` and `x`, `y`, and `z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[x, y, z]` returns a set expression referring to an item where :code:`t` is :class:`SetTable3D` and :code:`x`, :code:`y`, and :code:`z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -630,7 +630,7 @@ impl SetTable3DPy {
 
 /// Table of set constants.
 ///
-/// `t[index]` returns a set expression referring to an item where `t` is :class:`SetTable` and `index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[index]` returns a set expression referring to an item where :code:`t` is :class:`SetTable` and :code:`index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -690,7 +690,7 @@ impl SetTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `indices`.
+    ///     If a negative integer is in :code:`indices`.
     ///
     /// Examples
     /// --------
@@ -731,7 +731,7 @@ impl SetTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `indices`.
+    ///     If a negative integer is in :code:`indices`.
     ///
     /// Examples
     /// --------
@@ -772,7 +772,7 @@ impl SetTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `indices`.
+    ///     If a negative integer is in :code:`indices`.
     ///
     /// Examples
     /// --------
@@ -799,7 +799,7 @@ impl SetTablePy {
 
 /// 1-dimensional table of bool constants.
 ///
-/// `t[x]` returns a condition referring to an item where `t` is :class:`BoolTable1D` and `x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[x]` returns a condition referring to an item where :code:`t` is :class:`BoolTable1D` and :code:`x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -835,7 +835,7 @@ impl BoolTable1DPy {
 
 /// 2-dimensional table of bool constants.
 ///
-/// `t[x, y]` returns a condition referring to an item where `t` is :class:`BoolTable2D` and `x` and `y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[x, y]` returns a condition referring to an item where :code:`t` is :class:`BoolTable2D` and :code:`x` and :code:`y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -872,7 +872,7 @@ impl BoolTable2DPy {
 
 /// 3-dimensional table of bool constants.
 ///
-/// `t[x, y, z]` returns a condition referring to an item where `t` is :class:`BoolTable3D` and `x`, `y`, and `z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[x, y, z]` returns a condition referring to an item where :code:`t` is :class:`BoolTable3D` and :code:`x`, :code:`y`, and :code:`z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -911,7 +911,7 @@ impl BoolTable3DPy {
 
 /// Table of bool constants.
 ///
-/// `t[index]` returns a condition referring to an item where `t` is :class:`BoolTable` and `index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
+/// :code:`t[index]` returns a condition referring to an item where :code:`t` is :class:`BoolTable` and :code:`index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
 ///
 /// Examples
 /// --------
@@ -965,8 +965,8 @@ impl From<ArgumentUnion> for ArgumentExpression {
 
 /// 1-dimensional table of integer constants.
 ///
-/// `t[x]` returns an integer expression referring to an item where `t` is :class:`IntTable1D` and `x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
-/// If `x` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x]` returns the sum of constants over `x`.
+/// :code:`t[x]` returns an integer expression referring to an item where :code:`t` is :class:`IntTable1D` and :code:`x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
+/// If :code:`x` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, :code:`t[x]` returns the sum of constants over :code:`x`.
 ///
 /// Examples
 /// --------
@@ -1092,8 +1092,8 @@ impl IntTable1DPy {
 
 /// 2-dimensional table of integer constants.
 ///
-/// `t[x, y]` returns an integer expression referring to an item where `t` is :class:`IntTable2D` and `x` and `y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
-/// If `x` and/or `y` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x, y]` returns the sum of constants over `x` and `y`.
+/// :code:`t[x, y]` returns an integer expression referring to an item where :code:`t` is :class:`IntTable2D` and :code:`x` and :code:`y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
+/// If :code:`x` and/or :code:`y` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, :code:`t[x, y]` returns the sum of constants over :code:`x` and :code:`y`.
 ///
 /// Examples
 /// --------
@@ -1259,8 +1259,8 @@ impl IntTable2DPy {
 
 /// 3-dimensional table of integer constants.
 ///
-/// `t[x, y, z]` returns an integer expression referring to an item where `t` is :class:`IntTable3D` and `x`, `y`, and `z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
-/// If `x`, `y`, and/or `z` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x, y, z]` returns the sum of constants over `x`, `y`, and `z`.
+/// :code:`t[x, y, z]` returns an integer expression referring to an item where :code:`t` is :class:`IntTable3D` and :code:`x`, :code:`y`, and :code:`z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
+/// If :code:`x`, :code:`y`, and/or :code:`z` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, :code:`t[x, y, z]` returns the sum of constants over :code:`x`, :code:`y`, and :code:`z`.
 ///
 /// Examples
 /// --------
@@ -1432,8 +1432,8 @@ impl IntTable3DPy {
 
 /// Table of integer constants.
 ///
-/// `t[index]` returns an integer expression referring to an item where `t` is :class:`IntTable` and `index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
-/// If one of `index` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[index]` returns the sum of constants.
+/// :code:`t[index]` returns an integer expression referring to an item where :code:`t` is :class:`IntTable` and :code:`index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
+/// If one of :code:`index` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, :code:`t[index]` returns the sum of constants.
 ///
 /// Examples
 /// --------
@@ -1491,7 +1491,7 @@ impl IntTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `indices`.
+    ///     If a negative integer is in :code:`indices`.
     ///
     /// Examples
     /// --------
@@ -1532,7 +1532,7 @@ impl IntTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `indices`.
+    ///     If a negative integer is in :code:`indices`.
     ///
     /// Examples
     /// --------
@@ -1573,7 +1573,7 @@ impl IntTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `indices`.
+    ///     If a negative integer is in :code:`indices`.
     ///
     /// Examples
     /// --------
@@ -1600,8 +1600,8 @@ impl IntTablePy {
 
 /// 1-dimensional table of continuous constants.
 ///
-/// `t[x]` returns an continuous expression referring to an item where `t` is :class:`FloatTable1D` and `x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
-/// If `x` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x]` returns the sum of constants over `x`.
+/// :code:`t[x]` returns an continuous expression referring to an item where :code:`t` is :class:`FloatTable1D` and :code:`x` is :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
+/// If :code:`x` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, :code:`t[x]` returns the sum of constants over :code:`x`.
 ///
 /// Examples
 /// --------
@@ -1727,8 +1727,8 @@ impl FloatTable1DPy {
 
 /// 2-dimensional table of continuous constants.
 ///
-/// `t[x, y]` returns a continuous expression referring to an item where `t` is :class:`FloatTable2D` and `x` and `y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
-/// If `x` and/or `y` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x, y]` returns the sum of constants over `x` and `y`.
+/// :code:`t[x, y]` returns a continuous expression referring to an item where :code:`t` is :class:`FloatTable2D` and :code:`x` and :code:`y` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
+/// If :code:`x` and/or :code:`y` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, :code:`t[x, y]` returns the sum of constants over :code:`x` and :code:`y`.
 ///
 /// Examples
 /// --------
@@ -1894,8 +1894,8 @@ impl FloatTable2DPy {
 
 /// Table of continuous constants.
 ///
-/// `t[x, y, z]` returns a continuous expression referring to an item where `t` is :class:`FloatTable3D` and `x`, `y`, and `z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
-/// If `x`, `y`, and/or `z` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[x, y, z]` returns the sum of constants over `x`, `y`, and `z`.
+/// :code:`t[x, y, z]` returns a continuous expression referring to an item where :code:`t` is :class:`FloatTable3D` and :code:`x`, :code:`y`, and :code:`z` are :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
+/// If :code:`x`, :code:`y`, and/or :code:`z` are/is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, :code:`t[x, y, z]` returns the sum of constants over :code:`x`, :code:`y`, and :code:`z`.
 ///
 /// Examples
 /// --------
@@ -2067,8 +2067,8 @@ impl FloatTable3DPy {
 
 /// Table of continuous constants.
 ///
-/// `t[index]` returns a continuous expression referring to an item where `t` is :class:`FloatTable` and `index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or `int`.
-/// If one of `index` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, `t[index]` returns the sum of constants.
+/// :code:`t[index]` returns a continuous expression referring to an item where :code:`t` is :class:`FloatTable` and :code:`index` is a sequence of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int`.
+/// If one of :code:`index` is :class:`SetExpr`, :class:`SetVar`, or :class:`SetConst`, :code:`t[index]` returns the sum of constants.
 ///
 /// Examples
 /// --------
@@ -2126,7 +2126,7 @@ impl FloatTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `index`.
+    ///     If a negative integer is in :code:`index`.
     ///
     /// Examples
     /// --------
@@ -2167,7 +2167,7 @@ impl FloatTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `index`.
+    ///     If a negative integer is in :code:`index`.
     ///
     /// Examples
     /// --------
@@ -2208,7 +2208,7 @@ impl FloatTablePy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     If a negative integer is in `index`.
+    ///     If a negative integer is in :code:`index`.
     ///
     /// Examples
     /// --------
