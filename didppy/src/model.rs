@@ -492,9 +492,9 @@ impl ModelPy {
     /// Raises
     /// ------
     /// OverflowError
-    ///     if `number` is negative.
+    ///     if :code:`number` is negative.
     /// RuntimeError
-    ///     If `name` is already used.
+    ///     If :code:`name` is already used.
     ///
     /// Examples
     /// --------
@@ -519,7 +519,7 @@ impl ModelPy {
         }
     }
 
-    // Disabled due to the conflict with `create_set_const` and `add_set_table`.
+    // Disabled due to the conflict with :code:`create_set_const` and :code:`add_set_table`.
     // /// set_number_of_object(object_type, number)
     // ///
     // /// Sets the number of objects associated with an object type.
@@ -536,7 +536,7 @@ impl ModelPy {
     // /// RuntimeError
     // ///     If the object type is not included in the model.
     // /// OverflowError
-    // ///     If `number` is negative.
+    // ///     If :code:`number` is negative.
     // ///
     // /// Examples
     // /// --------
@@ -574,9 +574,9 @@ impl ModelPy {
     /// ------
     /// RuntimeError
     ///     If the object type is not included in the model.
-    ///     If an element in `value` is greater than or equal to the number of objects.
+    ///     If an element in :code:`value` is greater than or equal to the number of objects.
     /// TypeError
-    ///     If an element in `value` is negative.
+    ///     If an element in :code:`value` is negative.
     ///
     /// Examples
     /// --------
@@ -651,7 +651,7 @@ impl ModelPy {
     ///     Value of the variable in the target state.
     /// name: str or None, default: None
     ///     Name of the variable.
-    ///     If None, `__element_var_{id}` is used where `{id}` is the id of the variable.
+    ///     If None, :code:`__element_var_{id}` is used where :code:`{id}` is the id of the variable.
     ///
     /// Returns
     /// -------
@@ -661,11 +661,11 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `object_type` is not included in the model.
-    ///     If `target` is greater than or equal to the number of the objects.
-    ///     If `name` is already used.
+    ///     If :code:`object_type` is not included in the model.
+    ///     If :code:`target` is greater than or equal to the number of the objects.
+    ///     If :code:`name` is already used.
     /// OverflowError
-    ///     If `target` is negative.
+    ///     If :code:`target` is negative.
     ///
     /// Examples
     /// --------
@@ -749,7 +749,7 @@ impl ModelPy {
     ///     Prefer a smaller value or not.
     /// name: str or None, default: None
     ///     Name of the variable.
-    ///     If None, `__element_resource_var_{id}` is used where `{id}` is the id of the variable.
+    ///     If None, :code:`__element_resource_var_{id}` is used where :code:`{id}` is the id of the variable.
     ///
     /// Returns
     /// -------
@@ -759,11 +759,11 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `object_type` is not included in the model.
-    ///     If `target` is greater than or equal to the number of the objects.
-    ///     If `name` is already used.
+    ///     If :code:`object_type` is not included in the model.
+    ///     If :code:`target` is greater than or equal to the number of the objects.
+    ///     If :code:`name` is already used.
     /// OverflowError
-    ///     If `target` is negative.
+    ///     If :code:`target` is negative.
     ///
     /// Examples
     /// --------
@@ -846,7 +846,7 @@ impl ModelPy {
     ///     Value of the variable in the target state.
     /// name: str or None, default: None
     ///     Name of the variable.
-    ///     If None, `__set_var_{id}` is used where `{id}` is the id of the variable.
+    ///     If None, :code:`__set_var_{id}` is used where :code:`{id}` is the id of the variable.
     ///
     /// Returns
     /// -------
@@ -856,11 +856,11 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `object_type` is not included in the model.
-    ///     If a value in `target` is greater than or equal to the number of the objects.
-    ///     If `name` is already used.
+    ///     If :code:`object_type` is not included in the model.
+    ///     If a value in :code:`target` is greater than or equal to the number of the objects.
+    ///     If :code:`name` is already used.
     /// TypeError
-    ///     If a value in `target` is negative.
+    ///     If a value in :code:`target` is negative.
     ///
     /// Examples
     /// --------
@@ -937,7 +937,7 @@ impl ModelPy {
     ///     Value of the variable in the target state.
     /// name: str or None, default: None
     ///     Name of the variable.
-    ///     If None, `__int_var_{id}` is used where `{id}` is the id of the variable.
+    ///     If None, :code:`__int_var_{id}` is used where :code:`{id}` is the id of the variable.
     ///
     /// Returns
     /// -------
@@ -947,7 +947,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `name` is already used.
+    ///     If :code:`name` is already used.
     ///
     /// Examples
     /// --------
@@ -1018,7 +1018,7 @@ impl ModelPy {
     ///     Prefer a smaller value or not.
     /// name: str or None, default: None
     ///     Name of the variable.
-    ///     If None, `__int_resource_var_{id}` is used where `{id}` is the id of the variable.
+    ///     If None, :code:`__int_resource_var_{id}` is used where :code:`{id}` is the id of the variable.
     ///
     /// Returns
     /// -------
@@ -1028,7 +1028,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `name` is already used.
+    ///     If :code:`name` is already used.
     ///
     /// Examples
     /// --------
@@ -1106,7 +1106,7 @@ impl ModelPy {
     ///     Value of the variable in the target state.
     /// name: str or None, default: None
     ///     Name of the variable.
-    ///     If None, `__float_var_{id}` is used where `{id}` is the id of the variable.
+    ///     If None, :code:`__float_var_{id}` is used where :code:`{id}` is the id of the variable.
     ///
     /// Returns
     /// -------
@@ -1116,7 +1116,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `name` is already used.
+    ///     If :code:`name` is already used.
     ///
     /// Examples
     /// --------
@@ -1188,7 +1188,7 @@ impl ModelPy {
     ///     Prefer a smaller value or not.
     /// name: str or None, default: None
     ///     Name of the variable.
-    ///     If None, `__float_resource_var_{id}` is used where `{id}` is the id of the variable.
+    ///     If None, :code:`__float_resource_var_{id}` is used where :code:`{id}` is the id of the variable.
     ///
     /// Returns
     /// -------
@@ -1198,7 +1198,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `name` is already used.
+    ///     If :code:`name` is already used.
     ///
     /// Examples
     /// --------
@@ -1290,9 +1290,9 @@ impl ModelPy {
     /// -------
     /// int, set, or float
     ///     The value in the target state.
-    ///     For :class:`ElementVar`, :class:`ElementResourceVar`, :class:`IntVar`, and :class:`IntResourceVar`, `int` is returned.
-    ///     For :class:`SetVar`, `set` is returned.
-    ///     For :class:`FloatVar` and :class:`FloatResourceVar`, `float` is returned.
+    ///     For :class:`ElementVar`, :class:`ElementResourceVar`, :class:`IntVar`, and :class:`IntResourceVar`, :class:`int` is returned.
+    ///     For :class:`SetVar`, :class:`set` is returned.
+    ///     For :class:`FloatVar` and :class:`FloatResourceVar`, :class:`float` is returned.
     ///
     /// Raises
     /// ------
@@ -1358,21 +1358,21 @@ impl ModelPy {
     ///     Variable.
     /// target: int, SetConst, list of int, set of int, or float
     ///     Value in the target state.
-    ///     For :class:`ElementVar`, :class:`ElementResourceVar`, :class:`IntVar`, and :class:`IntResourceVar`, it should be `int`.
-    ///     For :class:`SetVar`, it should be :class:`SetConst`, `list` of `int`, or `set` of `int`.
-    ///     For :class:`FloatVar` and :class:`FloatResourceVar`, it should be `float`.
+    ///     For :class:`ElementVar`, :class:`ElementResourceVar`, :class:`IntVar`, and :class:`IntResourceVar`, it should be :class:`int`.
+    ///     For :class:`SetVar`, it should be :class:`SetConst`, :class:`list` of :class:`int`, or :class:`set` of :class:`int`.
+    ///     For :class:`FloatVar` and :class:`FloatResourceVar`, it should be :class:`float`.
     ///
     /// Raises
     /// ------
     /// TypeError
-    ///     If the types of `var` and `target` mismatch.
+    ///     If the types of :code:`var` and :code:`target` mismatch.
     /// RuntimeError
     ///     If the variable is not included in the model.
-    ///     If `var` is :class:`ElementVar` or :class:`ElementResourceVar` and `target` is greater than or equal to the number of the associated objects.
-    ///     If `var` is :class:`SetVar` and a value in `target` is greater than or equal to the number of the associated objects.
+    ///     If :code:`var` is :class:`ElementVar` or :class:`ElementResourceVar` and :code:`target` is greater than or equal to the number of the associated objects.
+    ///     If :code:`var` is :class:`SetVar` and a value in :code:`target` is greater than or equal to the number of the associated objects.
     /// OverflowError
-    ///     If `var` is :class:`ElementVar` or :class:`ElementResourceVar` and `target` is negative.
-    ///     If `var` is :class:`SetVar` and a value in `target` is negative.
+    ///     If :code:`var` is :class:`ElementVar` or :class:`ElementResourceVar` and :code:`target` is negative.
+    ///     If :code:`var` is :class:`SetVar` and a value in :code:`target` is negative.
     ///
     /// Examples
     /// --------
@@ -1442,7 +1442,7 @@ impl ModelPy {
     /// Returns
     /// -------
     /// bool
-    ///     `True` if less is better and `False` otherwise.
+    ///     :code:`True` if less is better and :code:`False` otherwise.
     ///
     /// Raises
     /// ------
@@ -1618,7 +1618,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If one of `conditions` is invalid.
+    ///     If one of :code:`conditions` is invalid.
     ///     E.g., it uses a variable not included in the model or the cost of the transitioned state.
     /// PanicException
     ///     If an index of a table is out of range.
@@ -1796,9 +1796,9 @@ impl ModelPy {
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `bound` is invalid.
+    ///     If :code:`bound` is invalid.
     ///     E.g., it uses a variable not included in the model or the cost of the transitioned state.
-    ///     If the cost type of model is integer, and `bound` is :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or `float`.
+    ///     If the cost type of model is integer, and :code:`bound` is :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or :class:`float`.
     /// PanicException
     ///     If an index of a table is out of range.
     ///
@@ -1886,7 +1886,7 @@ impl ModelPy {
     /// Raises
     /// ------
     /// TypeError
-    ///     If the type of `cost` and the cost type mismatches.
+    ///     If the type of :code:`cost` and the cost type mismatches.
     /// PanicException
     ///     If expressions in the transitions are not valid.
     ///
@@ -1928,8 +1928,8 @@ impl ModelPy {
     ///
     /// Adds a table of element constants.
     /// Up to 3-dimensional tables can be added by passing a nested list.
-    /// For more than 4-dimensional tables, use `dict`.
-    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and `int` as indices.
+    /// For more than 4-dimensional tables, use :class:`dict`.
+    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and :class:`int` as indices.
     ///
     /// Parameters
     /// ----------
@@ -1937,29 +1937,29 @@ impl ModelPy {
     ///     Table of constants.
     /// default: int or None, default: None
     ///     Default value.
-    ///     Used only when `dict` is given.
-    ///     If a key not included in `dict` is given, the table returns `default`.
+    ///     Used only when :class:`dict` is given.
+    ///     If a key not included in :class:`dict` is given, the table returns :code:`default`.
     /// name: str or None, default: None
     ///     Name of the table.
-    ///     If `None`, `__element_table{dimension}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
+    ///     If :code:`None`, :code:`__element_table{dimension}_{id}` is used where :code:`{dimension}` is :code:`_1d`, :code:`_2d`, :code:`_3d`, or empty depending on the input and :code:`{id}` is the id of the table.
     ///
     /// Returns
     /// -------
     /// ElementTable1D, ElementTable2D, ElementTable3D, or ElementTable
-    ///     :class:`ElementTable1D` is returned if `table` is `list` of `int`.
-    ///     :class:`ElementTable2D` is returned if `table` is `list` of `list` of `int`.
-    ///     :class:`ElementTable3D` is returned if `table` is `list` of `list` of `list` of `int`.
-    ///     :class:`ElementTable` is returned if `dict` is given.
+    ///     :class:`ElementTable1D` is returned if :code:`table` is :class:`list` of :class:`int`.
+    ///     :class:`ElementTable2D` is returned if :code:`table` is :class:`list` of :class:`list` of :class:`int`.
+    ///     :class:`ElementTable3D` is returned if :code:`table` is :class:`list` of :class:`list` of :class:`list` of :class:`int`.
+    ///     :class:`ElementTable` is returned if :class:`dict` is given.
     ///
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `name` is already used.
+    ///     If :code:`name` is already used.
     /// TypeError
-    ///     If `table` is `dict` and `default` is `None`.
-    ///     If `table` is `dict` and one of its keys contains a negative value.
+    ///     If :code:`table` is :class:`dict` and :code:`default` is :code:`None`.
+    ///     If :code:`table` is :class:`dict` and one of its keys contains a negative value.
     /// OverflowError
-    ///     If a value in `table` or `default` is negative.
+    ///     If a value in :code:`table` or :code:`default` is negative.
     ///
     /// Examples
     /// --------
@@ -2043,45 +2043,45 @@ impl ModelPy {
     ///
     /// Adds a table of set constants.
     /// Up to 3-dimensional tables can be added by passing a nested list.
-    /// For more than 4-dimensional tables, use `dict`.
-    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and `int` as indices.
+    /// For more than 4-dimensional tables, use :class:`dict`.
+    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and :class:`int` as indices.
     /// The union, intersection, and symmetric difference of sets in a table can be taken by using :class:`SetExpr`, :class:`SetVar`, and :class:`SetConst` in indices.
     ///
     /// Parameters
     /// ----------
     /// table: list of set values, list of list of set values, list of list of list of set values, or dict
     ///     Table of constants.
-    ///     A set value can be `SetConst`, `list` of `int`, or `set` of `int`.
+    ///     A set value can be :code:`SetConst`, :class:`list` of :class:`int`, or :class:`set` of :class:`int`.
     /// default: SetConst, list of int, set of int, or None, default: None
     ///     Default value.
-    ///     Used only when `dict` is given.
-    ///     If a key not included in `dict` is given, the table returns `default`.
+    ///     Used only when :class:`dict` is given.
+    ///     If a key not included in :class:`dict` is given, the table returns :code:`default`.
     /// name: str or None, default: None
     ///     Name of the table.
-    ///     If `None`, `__set_table{dimension}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
+    ///     If :code:`None`, :code:`__set_table{dimension}_{id}` is used where :code:`{dimension}` is :code:`_1d`, :code:`_2d`, :code:`_3d`, or empty depending on the input and :code:`{id}` is the id of the table.
     /// object_type: ObjectType or None, default: None
     ///     Object type associated with constants.
-    ///     Mandatory if `list` of `int` or `set` of `int` is used in `table` or `default`.
+    ///     Mandatory if :class:`list` of :class:`int` or :class:`set` of :class:`int` is used in :code:`table` or :code:`default`.
     ///     Otherwise, it is ignored.
     ///
     /// Returns
     /// -------
     /// SetTable1D, SetTable2D, SetTable3D, or SetTable
-    ///     :class:`SetTable1D` is returned if `table` is `list`.
-    ///     :class:`SetTable2D` is returned if `table` is `list` of `list``.
-    ///     :class:`SetTable3D` is returned if `table` is `list` of `list` of `list`.
-    ///     :class:`SetTable` is returned if `dict` is given.
+    ///     :class:`SetTable1D` is returned if :code:`table` is :class:`list`.
+    ///     :class:`SetTable2D` is returned if :code:`table` is :class:`list` of :class:`list``.
+    ///     :class:`SetTable3D` is returned if :code:`table` is :class:`list` of :class:`list` of :class:`list`.
+    ///     :class:`SetTable` is returned if :class:`dict` is given.
     ///
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `name` is already used.
+    ///     If :code:`name` is already used.
     /// TypeError
-    ///     If `table` is `dict` and `default` is `None`.
-    ///     if `list` of `int` or `set` of `int` is used in `table` and `object_type` is `None`.
+    ///     If :code:`table` is :class:`dict` and :code:`default` is :code:`None`.
+    ///     if :class:`list` of :class:`int` or :class:`set` of :class:`int` is used in :code:`table` and :code:`object_type` is :code:`None`.
     /// OverflowError
-    ///     If a value in `table` or `default` is negative.
-    ///     If `table` is `dict` and one of its keys contains a negative value.
+    ///     If a value in :code:`table` or :code:`default` is negative.
+    ///     If :code:`table` is :class:`dict` and one of its keys contains a negative value.
     ///
     /// Examples
     /// --------
@@ -2226,8 +2226,8 @@ impl ModelPy {
     ///
     /// Adds a table of bool constants.
     /// Up to 3-dimensional tables can be added by passing a nested list.
-    /// For more than 4-dimensional tables, use `dict`.
-    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and `int` as indices.
+    /// For more than 4-dimensional tables, use :class:`dict`.
+    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and :class:`int` as indices.
     ///
     /// Parameters
     /// ----------
@@ -2235,28 +2235,28 @@ impl ModelPy {
     ///     Table of constants.
     /// default: bool or None, default: None
     ///     Default value.
-    ///     Used only when `dict` is given.
-    ///     If a key not included in `dict` is given, the table returns `default`.
+    ///     Used only when :class:`dict` is given.
+    ///     If a key not included in :class:`dict` is given, the table returns :code:`default`.
     /// name: str or None, default: None
     ///     Name of the table.
-    ///     If `None`, `__bool_table{dimension}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
+    ///     If :code:`None`, :code:`__bool_table{dimension}_{id}` is used where :code:`{dimension}` is :code:`_1d`, :code:`_2d`, :code:`_3d`, or empty depending on the input and :code:`{id}` is the id of the table.
     ///
     /// Returns
     /// -------
     /// BoolTable1D, BoolTable2D, BoolTable3D, or BoolTable
-    ///     :class:`BoolTable1D` is returned if `table` is `list` of `bool`.
-    ///     :class:`BoolTable2D` is returned if `table` is `list` of `list` of `bool`.
-    ///     :class:`BoolTable3D` is returned if `table` is `list` of `list` of `list` of `bool`.
-    ///     :class:`BoolTable` is returned if `dict` is given.
+    ///     :class:`BoolTable1D` is returned if :code:`table` is :class:`list` of :code:`bool`.
+    ///     :class:`BoolTable2D` is returned if :code:`table` is :class:`list` of :class:`list` of :code:`bool`.
+    ///     :class:`BoolTable3D` is returned if :code:`table` is :class:`list` of :class:`list` of :class:`list` of :code:`bool`.
+    ///     :class:`BoolTable` is returned if :class:`dict` is given.
     ///
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `name` is already used.
+    ///     If :code:`name` is already used.
     /// TypeError
-    ///     If `table` is `dict` and `default` is `None`.
+    ///     If :code:`table` is :class:`dict` and :code:`default` is :code:`None`.
     /// OverflowError
-    ///     If `table` is `dict` and one of its keys contains a negative value.
+    ///     If :code:`table` is :class:`dict` and one of its keys contains a negative value.
     ///
     /// Examples
     /// --------
@@ -2340,8 +2340,8 @@ impl ModelPy {
     ///
     /// Adds a table of integer constants.
     /// Up to 3-dimensional tables can be added by passing a nested list.
-    /// For more than 4-dimensional tables, use `dict`.
-    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and `int` as indices.
+    /// For more than 4-dimensional tables, use :class:`dict`.
+    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and :class:`int` as indices.
     /// The sum, product, maximum, and minimum of values in a table can be taken by using :class:`SetExpr`, :class:`SetVar`, and :class:`SetConst` in indices.
     ///
     /// Parameters
@@ -2350,28 +2350,28 @@ impl ModelPy {
     ///     Table of constants.
     /// default: int or None, default: None
     ///     Default value.
-    ///     Used only when `dict` is given.
-    ///     If a key not included in `dict` is given, the table returns `default`.
+    ///     Used only when :class:`dict` is given.
+    ///     If a key not included in :class:`dict` is given, the table returns :code:`default`.
     /// name: str or None, default: None
     ///     Name of the table.
-    ///     If `None`, `__int_table{dimension}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
+    ///     If :code:`None`, :code:`__int_table{dimension}_{id}` is used where :code:`{dimension}` is :code:`_1d`, :code:`_2d`, :code:`_3d`, or empty depending on the input and :code:`{id}` is the id of the table.
     ///
     /// Returns
     /// -------
     /// IntTable1D, IntTable2D, IntTable3D, or IntTable
-    ///     :class:`IntTable1D` is returned if `table` is `list` of `int`.
-    ///     :class:`IntTable2D` is returned if `table` is `list` of `list` of `int`.
-    ///     :class:`IntTable3D` is returned if `table` is `list` of `list` of `list` of `int`.
-    ///     :class:`IntTable` is returned if `dict` is given.
+    ///     :class:`IntTable1D` is returned if :code:`table` is :class:`list` of :class:`int`.
+    ///     :class:`IntTable2D` is returned if :code:`table` is :class:`list` of :class:`list` of :class:`int`.
+    ///     :class:`IntTable3D` is returned if :code:`table` is :class:`list` of :class:`list` of :class:`list` of :class:`int`.
+    ///     :class:`IntTable` is returned if :class:`dict` is given.
     ///
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `name` is already used.
+    ///     If :code:`name` is already used.
     /// TypeError
-    ///     If `table` is `dict` and `default` is `None`.
+    ///     If :code:`table` is :class:`dict` and :code:`default` is :code:`None`.
     /// OverflowError
-    ///     If `table` is `dict` and one of its keys contains a negative value.
+    ///     If :code:`table` is :class:`dict` and one of its keys contains a negative value.
     ///
     /// Examples
     /// --------
@@ -2466,8 +2466,8 @@ impl ModelPy {
     ///
     /// Adds a table of continuous constants.
     /// Up to 3-dimensional tables can be added by passing a nested list.
-    /// For more than 4-dimensional tables, use `dict`.
-    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and `int` as indices.
+    /// For more than 4-dimensional tables, use :class:`dict`.
+    /// Values in the table can be accessed in expressions using tuples of :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, and :class:`int` as indices.
     /// The sum, product, maximum, and minimum of values in a table can be taken by using :class:`SetExpr`, :class:`SetVar`, and :class:`SetConst` in indices.
     ///
     /// Parameters
@@ -2476,28 +2476,28 @@ impl ModelPy {
     ///     Table of constants.
     /// default: int or None, default: None
     ///     Default value.
-    ///     Used only when `dict` is given.
-    ///     If a key not included in `dict` is given, the table returns `default`.
+    ///     Used only when :class:`dict` is given.
+    ///     If a key not included in :class:`dict` is given, the table returns :code:`default`.
     /// name: str or None, default: None
     ///     Name of the table.
-    ///     If `None`, `__float_table{dimension}_{id}` is used where `{dimension}` is `_1d`, `_2d`, `_3d`, or empty depending on the input and `{id}` is the id of the table.
+    ///     If :code:`None`, :code:`__float_table{dimension}_{id}` is used where :code:`{dimension}` is :code:`_1d`, :code:`_2d`, :code:`_3d`, or empty depending on the input and :code:`{id}` is the id of the table.
     ///
     /// Returns
     /// -------
     /// FloatTable1D, FloatTable2D, FloatTable3D, or FloatTable
-    ///     :class:`FloatTable1D` is returned if `table` is `list` of `int`.
-    ///     :class:`FloatTable2D` is returned if `table` is `list` of `list` of `int`.
-    ///     :class:`FloatTable3D` is returned if `table` is `list` of `list` of `list` of `int`.
-    ///     :class:`FloatTable` is returned if `dict` is given.
+    ///     :class:`FloatTable1D` is returned if :code:`table` is :class:`list` of :class:`int`.
+    ///     :class:`FloatTable2D` is returned if :code:`table` is :class:`list` of :class:`list` of :class:`int`.
+    ///     :class:`FloatTable3D` is returned if :code:`table` is :class:`list` of :class:`list` of :class:`list` of :class:`int`.
+    ///     :class:`FloatTable` is returned if :class:`dict` is given.
     ///
     /// Raises
     /// ------
     /// RuntimeError
-    ///     If `name` is already used.
+    ///     If :code:`name` is already used.
     /// TypeError
-    ///     If `table` is `dict` and `default` is `None`.
+    ///     If :code:`table` is :class:`dict` and :code:`default` is :code:`None`.
     /// OverflowError
-    ///     If `table` is `dict` and one of its keys contains a negative value.
+    ///     If :code:`table` is :class:`dict` and one of its keys contains a negative value.
     ///
     /// Examples
     /// --------
@@ -2599,7 +2599,7 @@ impl ModelPy {
     // ///     Table to update.
     // /// index: int or sequence of int
     // ///     Index to update.
-    // ///     It should be `int` for a 1D table.
+    // ///     It should be :class:`int` for a 1D table.
     // ///     The length should be 2 and 3 for 2D and 3D tables, respectively.
     // /// value: int, SetConst, list of int, set of int, bool, or float
     // ///     Value to set.
@@ -2607,14 +2607,14 @@ impl ModelPy {
     // /// Raises
     // /// ------
     // /// RuntimeError
-    // ///     If `table` is not included in the model.
-    // ///     If `index` is out of bound of the table.
+    // ///     If :code:`table` is not included in the model.
+    // ///     If :code:`index` is out of bound of the table.
     // /// TypeError
-    // ///     If `table` and the shape of `index` mismatch.
+    // ///     If :code:`table` and the shape of :code:`index` mismatch.
     // /// OverflowError
-    // ///     If a value in `index` is negative.
-    // ///     If `table` is a table of element constants and `value` is negative.
-    // ///     If `table` is a table of set constants and a value in `value` is negative.
+    // ///     If a value in :code:`index` is negative.
+    // ///     If :code:`table` is a table of element constants and :code:`value` is negative.
+    // ///     If :code:`table` is a table of set constants and a value in :code:`value` is negative.
     // #[pyo3(text_signature = "(table, index, value)")]
     // #[args(ob = "None")]
     // fn set_table_item(
@@ -2662,12 +2662,12 @@ impl ModelPy {
     // /// Raises
     // /// ------
     // /// RuntimeError
-    // ///     If `table` is not included in the model.
+    // ///     If :code:`table` is not included in the model.
     // /// TypeError
-    // ///     If `table` and the shape of `index` mismatch.
+    // ///     If :code:`table` and the shape of :code:`index` mismatch.
     // /// OverflowError
-    // ///     If `table` is a table of element constants and `value` is negative.
-    // ///     If `table` is a table of set constants and a value in `value` is negative.
+    // ///     If :code:`table` is a table of element constants and :code:`value` is negative.
+    // ///     If :code:`table` is a table of set constants and a value in :code:`value` is negative.
     // #[pyo3(text_signature = "(table, value)")]
     // fn set_default(&mut self, table: SetDefaultArgUnion, value: &PyAny) -> PyResult<()> {
     //     let result = match table {
@@ -2713,18 +2713,18 @@ impl ModelPy {
     // ///     Table of constants.
     // /// default: SetConst, list of int, set of int, or None, default: None
     // ///     Default value.
-    // ///     Used only when `dict` is given.
-    // ///     If a key not included in `dict` is given, the table returns `default`.
+    // ///     Used only when :class:`dict` is given.
+    // ///     If a key not included in :class:`dict` is given, the table returns :code:`default`.
     // ///
     // /// Raises
     // /// ------
     // /// RuntimeError
-    // ///     If `table` is not included in the model.
+    // ///     If :code:`table` is not included in the model.
     // /// TypeError
-    // ///     If `table` is `dict` and `default` is `None`.
+    // ///     If :code:`table` is :class:`dict` and :code:`default` is :code:`None`.
     // /// OverflowError
-    // ///     If `table` is a table of element or set constants and a value in `table` or `default` is negative.
-    // ///     If `table` is `dict` and one of its keys contains a negative value.
+    // ///     If :code:`table` is a table of element or set constants and a value in :code:`table` or :code:`default` is negative.
+    // ///     If :code:`table` is :class:`dict` and one of its keys contains a negative value.
     // #[pyo3(text_signature = "(table, default=None, name=None)")]
     // #[args(default = "None")]
     // fn update_table(
@@ -2809,7 +2809,7 @@ impl ModelPy {
     //             for i in list {
     //                 if i >= capacity {
     //                     return Err(PyRuntimeError::new_err(format!(
-    //                         "value `{}` >= capacity `{} of a set`",
+    //                         "value `{}` >= capacity :code:`{} of a set`",
     //                         i, capacity
     //                     )));
     //                 }
@@ -2822,7 +2822,7 @@ impl ModelPy {
     //             for i in hash_set {
     //                 if i >= capacity {
     //                     return Err(PyRuntimeError::new_err(format!(
-    //                         "value `{}` >= capacity `{} of a set`",
+    //                         "value `{}` >= capacity :code:`{} of a set`",
     //                         i, capacity
     //                     )));
     //                 }

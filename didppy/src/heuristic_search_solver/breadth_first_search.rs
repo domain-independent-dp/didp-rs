@@ -11,30 +11,30 @@ use std::rc::Rc;
 ///
 /// This performs breadth-first search using the dual bound as the heuristic function.
 ///
-/// To apply this solver, the cost must be computed in the form of `x + state_cost`, `x * state_cost`, `didppy.max(x, state_cost)`,
-/// or `didppy.min(x, state_cost)` where, `state_cost` is either of :func:`didppy.IntExpr.state_cost()` and :func:`didppy.FloatExpr.state_cost()`,
-/// and `x` is a value independent of `state_cost`.
+/// To apply this solver, the cost must be computed in the form of :code:`x + state_cost`, :code:`x * state_cost`, :code:`didppy.max(x, state_cost)`,
+/// or :code:`didppy.min(x, state_cost)` where, :code:`state_cost` is either of :meth:`IntExpr.state_cost()` and :meth:`FloatExpr.state_cost()`,
+/// and :code:`x` is a value independent of :code:`state_cost`.
 /// Otherwise, it may not produce the optimal solution.
 ///
 /// Breadth-first searches layer by layer, where the i th layer contains states that can be reached with i transitions.
 /// By default, this solver only keeps states in the current layer to check for duplicates.
-/// If `keep_all_layers` is `True`, this solver keeps states in all layers to check for duplicates.
+/// If :code:`keep_all_layers` is :code:`True`, this solver keeps states in all layers to check for duplicates.
 ///
 /// Parameters
 /// ----------
 /// model: Model
 ///     DyPDL model to solve.
 /// f_operator: FOperator, default: FOperator.Plus
-///     If the cost is computed by `+`, this should be :attr:`~FOperator.Plus`.
-///     If the cost is computed by `*`, this should be :attr:`~FOperator.Product`.
-///     If the cost is computed by `max`, this should be :attr:`~FOperator.Max`.
-///     If the cost is computed by `min`, this should be :attr:`~FOperator.Min`.
+///     If the cost is computed by :code:`+`, this should be :attr:`~FOperator.Plus`.
+///     If the cost is computed by :code:`*`, this should be :attr:`~FOperator.Product`.
+///     If the cost is computed by :code:`max`, this should be :attr:`~FOperator.Max`.
+///     If the cost is computed by :code:`min`, this should be :attr:`~FOperator.Min`.
 /// primal_bound: int, float, or None, default: None
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
 /// get_all_solutions: bool, default: False
-///     Return a solution if it is not improving when `search_next()` is called.
+///     Return a solution if it is not improving when :code:`search_next()` is called.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
 /// initial_registry_capacity: int, default: 1000000
@@ -45,13 +45,13 @@ use std::rc::Rc;
 /// Raises
 /// ------
 /// TypeError
-///     If the type of `primal_bound` and the cost type of `model` are different.
+///     If the type of :code:`primal_bound` and the cost type of :code:`model` are different.
 /// PanicException
-///     If `time_limit` is negative.
+///     If :code:`time_limit` is negative.
 ///
 /// Examples
 /// --------
-/// Example with `+` operator.
+/// Example with :code:`+` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
@@ -69,7 +69,7 @@ use std::rc::Rc;
 /// >>> print(solution.cost)
 /// 1
 ///
-/// Example with `max` operator.
+/// Example with :code:`max` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()

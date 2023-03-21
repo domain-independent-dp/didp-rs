@@ -11,14 +11,14 @@ use std::rc::Rc;
 ///
 /// This performs CABS using the dual bound as the heuristic function.
 ///
-/// To apply this solver, the cost must be computed in the form of `x + state_cost`, `x * state_cost`, `didppy.max(x, state_cost)`,
-/// or `didppy.min(x, state_cost)` where, `state_cost` is either of :func:`didppy.IntExpr.state_cost()` and :func:`didppy.FloatExpr.state_cost()`,
-/// and `x` is a value independent of `state_cost`.
+/// To apply this solver, the cost must be computed in the form of :code:`x + state_cost`, :code:`x * state_cost`, :code:`didppy.max(x, state_cost)`,
+/// or :code:`didppy.min(x, state_cost)` where, :code:`state_cost` is either of :meth:`IntExpr.state_cost()` and :meth:`FloatExpr.state_cost()`,
+/// and :code:`x` is a value independent of :code:`state_cost`.
 /// Otherwise, it cannot compute the cost correctly and may not produce the optimal solution.
 ///
 /// CABS searches layer by layer, where the i th layer contains states that can be reached with i transitions.
 /// By default, this solver only keeps states in the current layer to check for duplicates.
-/// If `keep_all_layers` is `True`, CABS keeps states in all layers to check for duplicates.
+/// If :code:`keep_all_layers` is :code:`True`, CABS keeps states in all layers to check for duplicates.
 ///
 /// Parameters
 /// ----------
@@ -26,10 +26,10 @@ use std::rc::Rc;
 ///     DyPDL model to solve.
 /// f_operator: FOperator, default: FOperator.Plus
 ///     Operator to combine a g-value and the dual bound to compute the f-value.
-///     If the cost is computed by `+`, this should be :attr:`~FOperator.Plus`.
-///     If the cost is computed by `*`, this should be :attr:`~FOperator.Product`.
-///     If the cost is computed by `max`, this should be :attr:`~FOperator.Max`.
-///     If the cost is computed by `min`, this should be :attr:`~FOperator.Min`.
+///     If the cost is computed by :code:`+`, this should be :attr:`~FOperator.Plus`.
+///     If the cost is computed by :code:`*`, this should be :attr:`~FOperator.Product`.
+///     If the cost is computed by :code:`max`, this should be :attr:`~FOperator.Max`.
+///     If the cost is computed by :code:`min`, this should be :attr:`~FOperator.Min`.
 /// initial_beam_size: int, default: 1
 ///     Initial beam size.
 /// keep_all_layers: bool, default: False
@@ -45,9 +45,9 @@ use std::rc::Rc;
 /// Raises
 /// ------
 /// TypeError
-///     If `primal_bound` is `float` and `model` is float cost.
+///     If :code:`primal_bound` is :code:`float` and :code:`model` is float cost.
 /// PanicException
-///     If `time_limit` is negative.
+///     If :code:`time_limit` is negative.
 ///
 /// References
 /// ----------
@@ -61,7 +61,7 @@ use std::rc::Rc;
 ///
 /// Examples
 /// --------
-/// Example with `+` operator.
+/// Example with :code:`+` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
@@ -79,7 +79,7 @@ use std::rc::Rc;
 /// >>> print(solution.cost)
 /// 1
 ///
-/// Example with `max` operator.
+/// Example with :code:`max` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()

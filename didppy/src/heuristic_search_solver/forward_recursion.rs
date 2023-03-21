@@ -27,7 +27,7 @@ use std::rc::Rc;
 /// Raises
 /// ------
 /// OverflowError
-///     If `initial_registry_capacity` is negative.
+///     If :code:`initial_registry_capacity` is negative.
 #[pyclass(unsendable, name = "ForwardRecursion")]
 #[pyo3(text_signature = "(model, time_limit=None, quiet=False, initial_registry_capacity=1000000)")]
 pub struct ForwardRecursionPy(

@@ -30,8 +30,8 @@ impl IntoPy<Py<PyAny>> for VariableValueUnion {
 
 /// DyPDL state.
 ///
-/// Values of state variables can be accessed by `state[var]`, where `state` is :class:`State` and
-/// `var` is either of :class:`ElementVar`, :class:`ElementResourceVar`, :class:`SetVar`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatVar`, and :class:`FloatResourceVar`.
+/// Values of state variables can be accessed by :code:`state[var]`, where :code:`state` is :class:`State` and
+/// :code:`var` is either of :class:`ElementVar`, :class:`ElementResourceVar`, :class:`SetVar`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatVar`, and :class:`FloatResourceVar`.
 ///
 /// Examples
 /// --------

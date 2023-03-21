@@ -11,9 +11,9 @@ use std::rc::Rc;
 ///
 /// This performs DFBB using the dual bound as the heuristic function.
 ///
-/// To apply this solver, the cost must be computed in the form of `x + state_cost`, `x * state_cost`, `didppy.max(x, state_cost)`,
-/// or `didppy.min(x, state_cost)` where, `state_cost` is either of :func:`didppy.IntExpr.state_cost()` and :func:`didppy.FloatExpr.state_cost()`,
-/// and `x` is a value independent of `state_cost`.
+/// To apply this solver, the cost must be computed in the form of :code:`x + state_cost`, :code:`x * state_cost`, :code:`didppy.max(x, state_cost)`,
+/// or :code:`didppy.min(x, state_cost)` where, :code:`state_cost` is either of :meth:`IntExpr.state_cost()` and :meth:`FloatExpr.state_cost()`,
+/// and :code:`x` is a value independent of :code:`state_cost`.
 /// Otherwise, it cannot compute the cost correctly and may not produce the optimal solution.
 ///
 /// Parameters
@@ -22,17 +22,17 @@ use std::rc::Rc;
 ///     DyPDL model to solve.
 /// f_operator: FOperator, default: FOperator.Plus
 ///     Operator to combine a g-value and the dual bound to compute the f-value.
-///     If the cost is computed by `+`, this should be :attr:`~FOperator.Plus`.
-///     If the cost is computed by `*`, this should be :attr:`~FOperator.Product`.
-///     If the cost is computed by `max`, this should be :attr:`~FOperator.Max`.
-///     If the cost is computed by `min`, this should be :attr:`~FOperator.Min`.
+///     If the cost is computed by :code:`+`, this should be :attr:`~FOperator.Plus`.
+///     If the cost is computed by :code:`*`, this should be :attr:`~FOperator.Product`.
+///     If the cost is computed by :code:`max`, this should be :attr:`~FOperator.Max`.
+///     If the cost is computed by :code:`min`, this should be :attr:`~FOperator.Min`.
 /// primal_bound: int, float, or None, default: None
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
 ///     The count starts when a solver is created.
 /// get_all_solutions: bool, default: False
-///     Return a solution if it is not improving when `search_next()` is called.
+///     Return a solution if it is not improving when :code:`search_next()` is called.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
 /// initial_registry_capacity: int, default: 1000000
@@ -43,11 +43,11 @@ use std::rc::Rc;
 /// Raises
 /// ------
 /// TypeError
-///     If the type of `primal_bound` and the cost type of `model` are different.
+///     If the type of :code:`primal_bound` and the cost type of :code:`model` are different.
 /// OverflowError
-///     If `initial_registry_capacity` is negative.
+///     If :code:`initial_registry_capacity` is negative.
 /// PanicException
-///     If `time_limit` is negative.
+///     If :code:`time_limit` is negative.
 ///
 /// References
 /// ----------
@@ -57,7 +57,7 @@ use std::rc::Rc;
 ///
 /// Examples
 /// -------
-/// Example with `+` operator.
+/// Example with :code:`+` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()
@@ -75,7 +75,7 @@ use std::rc::Rc;
 /// >>> print(solution.cost)
 /// 1
 ///
-/// Example with `max` operator.
+/// Example with :code:`max` operator.
 ///
 /// >>> import didppy as dp
 /// >>> model = dp.Model()

@@ -3,15 +3,15 @@ use pyo3::prelude::*;
 
 /// An enum representing an operator to compute the f-value combining an h-value and a g-value.
 ///
-/// `Plus` (0): f = g + h
+/// :attr:`~FOperator.Plus` (0): f = g + h
 ///
-/// `Max` (1): f = max(g, h)
+/// :attr:`~FOperator.Max` (1): f = max(g, h)
 ///
-/// `Min` (2): f = min(g, h)
+/// :attr:`~FOperator.Min` (2): f = min(g, h)
 ///
-/// `Product` (3): f = g * h
+/// :attr:`~FOperator.Product` (3): f = g * h
 ///
-/// `Overwrite` (4): f = h
+/// :attr:`~FOperator.Overwrite` (4): f = h
 #[pyclass(name = "FOperator")]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum FOperator {
