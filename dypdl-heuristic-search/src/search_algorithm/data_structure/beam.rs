@@ -73,7 +73,7 @@ pub trait BeamInterface<
     /// Removes nodes from the beam, returning all removed nodes as an iterator.
     fn drain(&mut self) -> BeamDrain<'_, I, V>;
 
-    /// Insert a node if it is not dominated  and its f-value is sufficient.
+    /// Insert a node if it is not dominated and its g- and f-value satisfy criteria.
     ///
     /// The first returned value represents if a new search node (not an update version of an existing node) is generated.
     /// The second returned value represents if the pruning due to the beam size happened.
@@ -88,23 +88,6 @@ pub trait BeamInterface<
     ) -> (bool, bool)
     where
         F: FnOnce(StateInRegistry<K>, T, Option<&I>) -> Option<I>;
-}
-
-/// Common structure of beam.
-#[derive(Debug, Clone)]
-pub struct BeamBase<I: InBeam, V: Ord + Deref<Target = I>> {
-    /// Priority queue to store nodes.
-    pub queue: collections::BinaryHeap<V>,
-}
-
-impl<I: InBeam, V: Ord + Deref<Target = I>> BeamBase<I, V> {
-    /// Removes nodes from the beam, returning all removed nodes as an iterator.
-    #[inline]
-    pub fn drain(&mut self) -> BeamDrain<'_, I, V> {
-        BeamDrain {
-            queue_iter: self.queue.drain(),
-        }
-    }
 }
 
 /// Beam for beam search.
@@ -190,7 +173,7 @@ where
     /// Capacity of the beam, or the beam size.
     pub capacity: usize,
     size: usize,
-    beam: BeamBase<I, V>,
+    queue: collections::BinaryHeap<V>,
     phantom: PhantomData<(T, U, K)>,
 }
 
@@ -208,16 +191,14 @@ where
         Beam {
             capacity,
             size: 0,
-            beam: BeamBase {
-                queue: collections::BinaryHeap::with_capacity(capacity),
-            },
+            queue: collections::BinaryHeap::with_capacity(capacity),
             phantom: PhantomData::default(),
         }
     }
 
     /// Removes a node having the lowest priority from the beam.
     pub fn pop(&mut self) -> Option<V> {
-        self.beam.queue.pop().map(|node| {
+        self.queue.pop().map(|node| {
             node.remove_from_beam();
             self.size -= 1;
             self.clean_garbage();
@@ -226,11 +207,11 @@ where
     }
 
     fn clean_garbage(&mut self) {
-        let mut peek = self.beam.queue.peek();
+        let mut peek = self.queue.peek();
 
         while peek.map_or(false, |node| !node.in_beam()) {
-            self.beam.queue.pop();
-            peek = self.beam.queue.peek();
+            self.queue.pop();
+            peek = self.queue.peek();
         }
     }
 }
@@ -258,7 +239,9 @@ where
     #[inline]
     fn drain(&mut self) -> BeamDrain<'_, I, V> {
         self.size = 0;
-        self.beam.drain()
+        BeamDrain {
+            queue_iter: self.queue.drain(),
+        }
     }
 
     fn insert<F>(
@@ -274,7 +257,7 @@ where
         F: FnOnce(StateInRegistry<K>, T, Option<&I>) -> Option<I>,
     {
         if self.size < self.capacity
-            || self.beam.queue.peek().map_or(true, |node| {
+            || self.queue.peek().map_or(true, |node| {
                 (f < node.f()) || (f == node.f() && g > node.g())
             })
         {
@@ -298,7 +281,7 @@ where
                 }
 
                 if self.size < self.capacity {
-                    self.beam.queue.push(node);
+                    self.queue.push(node);
                     self.size += 1;
                 }
             }

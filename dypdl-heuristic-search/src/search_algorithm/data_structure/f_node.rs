@@ -31,8 +31,8 @@ use std::rc::Rc;
 /// let model = Rc::new(model);
 /// let mut registry = StateRegistry::new(model.clone());
 ///
-/// let h_evaluator = |_: &_, _: &_| Some(0);
-/// let f_evaluator = |g, h, _: &_, _: &_| g + h;
+/// let h_evaluator = |_: &_| Some(0);
+/// let f_evaluator = |g, h, _: &_| g + h;
 ///
 /// let (node, h, f) = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator).unwrap();
 /// assert_eq!(h, 0);
@@ -120,13 +120,13 @@ impl<T: Numeric + Ord> BfsNodeInterface<T> for FNode<T> {
         f_evaluator: F,
     ) -> Option<(Rc<Self>, T, T)>
     where
-        H: Fn(&StateInRegistry<Rc<HashableSignatureVariables>>, &dypdl::Model) -> Option<T>,
-        F: Fn(T, T, &StateInRegistry<Rc<HashableSignatureVariables>>, &dypdl::Model) -> T,
+        H: FnOnce(&StateInRegistry<Rc<HashableSignatureVariables>>) -> Option<T>,
+        F: FnOnce(T, T, &StateInRegistry<Rc<HashableSignatureVariables>>) -> T,
     {
         let initial_state = StateInRegistry::from(registry.model().target.clone());
         let g = T::zero();
-        let h = h_evaluator(&initial_state, registry.model())?;
-        let f = f_evaluator(g, h, &initial_state, registry.model());
+        let h = h_evaluator(&initial_state)?;
+        let f = f_evaluator(g, h, &initial_state);
 
         let (h_priority, f_priority) = if registry.model().reduce_function == ReduceFunction::Min {
             (-h, -f)
@@ -153,10 +153,10 @@ impl<T: Numeric + Ord> BfsNodeInterface<T> for FNode<T> {
         h_evaluator: H,
         f_evaluator: F,
         primal_bound: Option<T>,
-    ) -> Option<(Rc<FNode<T>>, T, T, bool)>
+    ) -> Option<(Rc<Self>, T, T, bool)>
     where
-        H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-        F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+        H: FnOnce(&StateInRegistry) -> Option<T>,
+        F: FnOnce(T, T, &StateInRegistry) -> T,
     {
         let (state, g) = registry.model().generate_successor_state(
             self.state(),
@@ -165,20 +165,26 @@ impl<T: Numeric + Ord> BfsNodeInterface<T> for FNode<T> {
             None,
         )?;
 
-        let h = h_evaluator(&state, registry.model())?;
-        let f = f_evaluator(g, h, &state, registry.model());
+        let model = registry.model().clone();
 
-        if exceed_bound(registry.model(), f, primal_bound) {
-            return None;
-        }
+        let constructor = |state: StateInRegistry, g: T, other: Option<&FNode<T>>| {
+            let h = if let Some(other) = other {
+                other.h
+            } else {
+                h_evaluator(&state)?
+            };
+            let f = f_evaluator(g, h, &state);
 
-        let (h_priority, f_priority) = if registry.model().reduce_function == ReduceFunction::Min {
-            (-h, -f)
-        } else {
-            (h, f)
-        };
+            if exceed_bound(&model, f, primal_bound) {
+                return None;
+            }
 
-        let constructor = |state: StateInRegistry, g: T, _: Option<&FNode<T>>| {
+            let (h_priority, f_priority) = if model.reduce_function == ReduceFunction::Min {
+                (-h, -f)
+            } else {
+                (h, f)
+            };
+
             Some(FNode {
                 state,
                 g,
@@ -202,6 +208,12 @@ impl<T: Numeric + Ord> BfsNodeInterface<T> for FNode<T> {
                 generated = false;
             }
         }
+
+        let (h, f) = if model.reduce_function == ReduceFunction::Min {
+            (-successor.h, -successor.f)
+        } else {
+            (successor.h, successor.f)
+        };
 
         Some((successor, h, f, generated))
     }
@@ -387,8 +399,8 @@ mod tests {
             ..Default::default()
         });
         let mut registry = StateRegistry::new(model.clone());
-        let h_evaluator = |_: &StateInRegistry, _: &Model| Some(1);
-        let f_evaluator = |_, _, _: &StateInRegistry, _: &Model| 1;
+        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let f_evaluator = |_, _, _: &StateInRegistry| 1;
         let result = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
         let (node, h, f) = result.unwrap();
         assert_eq!(node.state, StateInRegistry::from(model.target.clone()));
@@ -408,8 +420,8 @@ mod tests {
             ..Default::default()
         });
         let mut registry = StateRegistry::new(model.clone());
-        let h_evaluator = |_: &StateInRegistry, _: &Model| Some(1);
-        let f_evaluator = |_, _, _: &StateInRegistry, _: &Model| 1;
+        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let f_evaluator = |_, _, _: &StateInRegistry| 1;
         let result = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
         let (node, h, f) = result.unwrap();
         assert_eq!(node.state, StateInRegistry::from(model.target.clone()));
@@ -428,8 +440,8 @@ mod tests {
         name_to_integer_variable.insert(String::from("v1"), 0);
         let model = Rc::new(Model::default());
         let mut registry = StateRegistry::new(model);
-        let h_evaluator = |_: &StateInRegistry, _: &Model| None;
-        let f_evaluator = |_, _, _: &StateInRegistry, _: &Model| 1;
+        let h_evaluator = |_: &StateInRegistry| None;
+        let f_evaluator = |_, _, _: &StateInRegistry| 1;
         let result = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
         assert_eq!(result, None)
     }
@@ -438,8 +450,8 @@ mod tests {
     fn generate_initial_node_pruned_by_duplicate() {
         let model = Rc::new(Model::default());
         let mut registry = StateRegistry::new(model);
-        let h_evaluator = |_: &StateInRegistry, _: &Model| Some(1);
-        let f_evaluator = |_, _, _: &StateInRegistry, _: &Model| 1;
+        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let f_evaluator = |_, _, _: &StateInRegistry| 1;
         let result = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
         assert!(result.is_some());
         let result = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
@@ -470,8 +482,8 @@ mod tests {
             ..Default::default()
         });
         let mut registry = StateRegistry::new(model);
-        let h_evaluator = |_: &StateInRegistry, _: &Model| Some(1);
-        let f_evaluator = |_, _, _: &StateInRegistry, _: &Model| 2;
+        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let f_evaluator = |_, _, _: &StateInRegistry| 2;
 
         let node = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
         assert!(node.is_some());
@@ -565,8 +577,8 @@ mod tests {
             ..Default::default()
         });
         let mut registry = StateRegistry::new(model);
-        let h_evaluator = |_: &StateInRegistry, _: &Model| Some(1);
-        let f_evaluator = |_, _, _: &StateInRegistry, _: &Model| 2;
+        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let f_evaluator = |_, _, _: &StateInRegistry| 2;
 
         let node = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
         assert!(node.is_some());
@@ -660,8 +672,8 @@ mod tests {
             ..Default::default()
         });
         let mut registry = StateRegistry::new(model);
-        let h_evaluator = |_: &StateInRegistry, _: &Model| Some(1);
-        let f_evaluator = |_, _, _: &StateInRegistry, _: &Model| 2;
+        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let f_evaluator = |_, _, _: &StateInRegistry| 2;
 
         let node = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
         assert!(node.is_some());
@@ -759,8 +771,8 @@ mod tests {
             ..Default::default()
         });
         let mut registry = StateRegistry::new(model);
-        let h_evaluator = |_: &StateInRegistry, _: &Model| Some(1);
-        let f_evaluator = |_, _, _: &StateInRegistry, _: &Model| 1;
+        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let f_evaluator = |_, _, _: &StateInRegistry| 1;
 
         let node = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
         assert!(node.is_some());
@@ -825,8 +837,8 @@ mod tests {
             ..Default::default()
         });
         let mut registry = StateRegistry::new(model);
-        let h_evaluator = |_: &StateInRegistry, _: &Model| Some(1);
-        let f_evaluator = |_, _, _: &StateInRegistry, _: &Model| 1;
+        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let f_evaluator = |_, _, _: &StateInRegistry| 1;
 
         let node = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
         assert!(node.is_some());
@@ -862,7 +874,7 @@ mod tests {
             )),
             ..Default::default()
         });
-        let h_evaluator = |_: &StateInRegistry, _: &Model| None;
+        let h_evaluator = |_: &StateInRegistry| None;
         let result =
             node.generate_successor(transition, &mut registry, h_evaluator, f_evaluator, None);
         assert_eq!(result, None);
@@ -892,8 +904,8 @@ mod tests {
             ..Default::default()
         });
         let mut registry = StateRegistry::new(model);
-        let h_evaluator = |_: &StateInRegistry, _: &Model| Some(1);
-        let f_evaluator = |_, _, _: &StateInRegistry, _: &Model| 1;
+        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let f_evaluator = |_, _, _: &StateInRegistry| 1;
 
         let node = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
         assert!(node.is_some());
@@ -958,8 +970,8 @@ mod tests {
             ..Default::default()
         });
         let mut registry = StateRegistry::new(model);
-        let h_evaluator = |_: &StateInRegistry, _: &Model| Some(1);
-        let f_evaluator = |_, _, _: &StateInRegistry, _: &Model| 1;
+        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let f_evaluator = |_, _, _: &StateInRegistry| 1;
 
         let node = FNode::generate_initial_node(&mut registry, h_evaluator, f_evaluator);
         assert!(node.is_some());

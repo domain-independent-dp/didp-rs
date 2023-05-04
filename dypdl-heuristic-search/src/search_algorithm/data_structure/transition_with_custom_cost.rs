@@ -196,8 +196,8 @@ impl TransitionWithCustomCost {
     /// };
     ///
     /// let parent = CustomCostParent { state: &state, cost: 0, g: 0.0 };
-    /// let h_evaluator = |_: &_, _: &_| Some(0.0);
-    /// let f_evaluator = |g, h, _: &_, _: &_| g + h;
+    /// let h_evaluator = |_: &_| Some(0.0);
+    /// let f_evaluator = |g, h, _: &_| g + h;
     /// let expected_state = transition.apply(parent.state, &model.table_registry);
     /// let result = transition.generate_successor_state(
     ///     &parent, &model, None, h_evaluator, f_evaluator, false
@@ -217,8 +217,8 @@ impl TransitionWithCustomCost {
         T: Numeric,
         U: Numeric,
         S: StateInterface + From<dypdl::State>,
-        H: Fn(&S, &dypdl::Model) -> Option<U>,
-        F: Fn(U, U, &S, &dypdl::Model) -> U,
+        H: Fn(&S) -> Option<U>,
+        F: Fn(U, U, &S) -> U,
     {
         let state = self.apply(parent.state, &model.table_registry);
 
@@ -226,8 +226,8 @@ impl TransitionWithCustomCost {
             let g = self
                 .custom_cost
                 .eval_cost(parent.g, parent.state, &model.table_registry);
-            let h = h_evaluator(&state, model)?;
-            let f = f_evaluator(g, h, &state, model);
+            let h = h_evaluator(&state)?;
+            let f = f_evaluator(g, h, &state);
 
             if bound.map_or(false, |bound| {
                 (maximize && f <= bound) || (!maximize && f >= bound)
@@ -685,8 +685,8 @@ mod tests {
             forced: false,
             id: 0,
         };
-        let h_evaluator = |_: &dypdl::State, _: &dypdl::Model| Some(1);
-        let f_evaluator = |_, _, _: &dypdl::State, _: &dypdl::Model| 4;
+        let h_evaluator = |_: &dypdl::State| Some(1);
+        let f_evaluator = |_, _, _: &dypdl::State| 4;
         let parent = CustomCostParent {
             state: &state,
             cost: 0,
@@ -728,8 +728,8 @@ mod tests {
         };
         let state = dypdl::State::default();
         let transition = TransitionWithCustomCost::default();
-        let h_evaluator = |_: &dypdl::State, _: &dypdl::Model| Some(1);
-        let f_evaluator = |_, _, _: &dypdl::State, _: &dypdl::Model| 4;
+        let h_evaluator = |_: &dypdl::State| Some(1);
+        let f_evaluator = |_, _, _: &dypdl::State| 4;
         let parent = CustomCostParent {
             state: &state,
             cost: 0,
@@ -751,8 +751,8 @@ mod tests {
         let model = dypdl::Model::default();
         let state = dypdl::State::default();
         let transition = TransitionWithCustomCost::default();
-        let h_evaluator = |_: &dypdl::State, _: &dypdl::Model| Some(1);
-        let f_evaluator = |_, _, _: &dypdl::State, _: &dypdl::Model| 4;
+        let h_evaluator = |_: &dypdl::State| Some(1);
+        let f_evaluator = |_, _, _: &dypdl::State| 4;
         let parent = CustomCostParent {
             state: &state,
             cost: 0,

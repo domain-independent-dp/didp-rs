@@ -19,8 +19,8 @@ pub trait BfsNodeInterface<T: Numeric>: Sized + StateInformation<T> + Ord {
         f_evaluator: F,
     ) -> Option<(Rc<Self>, T, T)>
     where
-        H: Fn(&StateInRegistry<Rc<HashableSignatureVariables>>, &dypdl::Model) -> Option<T>,
-        F: Fn(T, T, &StateInRegistry<Rc<HashableSignatureVariables>>, &dypdl::Model) -> T;
+        H: FnOnce(&StateInRegistry<Rc<HashableSignatureVariables>>) -> Option<T>,
+        F: FnOnce(T, T, &StateInRegistry<Rc<HashableSignatureVariables>>) -> T;
 
     /// Returns a successor node and its h- and f-values if it it is not dominated by existing node and its f-value does not exceed the given primal bound.
     /// The last value returned indicates if a new search node is generated without dominating another open node.
@@ -33,8 +33,8 @@ pub trait BfsNodeInterface<T: Numeric>: Sized + StateInformation<T> + Ord {
         primal_bound: Option<T>,
     ) -> Option<(Rc<Self>, T, T, bool)>
     where
-        H: Fn(&StateInRegistry<Rc<HashableSignatureVariables>>, &dypdl::Model) -> Option<T>,
-        F: Fn(T, T, &StateInRegistry<Rc<HashableSignatureVariables>>, &dypdl::Model) -> T;
+        H: FnOnce(&StateInRegistry<Rc<HashableSignatureVariables>>) -> Option<T>,
+        F: FnOnce(T, T, &StateInRegistry<Rc<HashableSignatureVariables>>) -> T;
 
     /// Returns if the node is closed.
     fn closed(&self) -> bool;

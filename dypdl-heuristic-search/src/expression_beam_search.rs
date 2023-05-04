@@ -128,7 +128,7 @@ where
     ) -> Solution<T>
     where
         U: variable_type::Numeric + Ord + fmt::Display + 'static,
-        H: Fn(&StateInRegistry, &dypdl::Model) -> Option<U>,
+        H: Fn(&StateInRegistry) -> Option<U>,
     {
         let beam_constructor = |beam_size| Beam::<T, U, BeamSearchNode<T, U>>::new(beam_size);
         let parameters = BeamSearchParameters {
@@ -144,8 +144,7 @@ where
                 quiet: self.parameters.parameters.quiet,
             },
         };
-        let f_evaluator =
-            move |g, h, _: &StateInRegistry, _: &dypdl::Model| self.f_evaluator_type.eval(g, h);
+        let f_evaluator = move |g, h, _: &StateInRegistry| self.f_evaluator_type.eval(g, h);
         let target = StateInRegistry::from(model.target.clone());
         let problem = BeamSearchProblemInstance {
             generator,
@@ -154,7 +153,7 @@ where
             target,
             solution_suffix: &[],
         };
-        let solution = beam_search(
+        let (solution, _) = beam_search(
             &problem,
             &beam_constructor,
             &h_evaluator,
@@ -197,13 +196,13 @@ where
             false,
         );
 
-        let h_evaluator = |state: &StateInRegistry, model: &dypdl::Model| {
+        let h_evaluator = |state: &StateInRegistry| {
             Some(
                 self.custom_expression_parameters
                     .h_expression
                     .as_ref()
                     .map_or(U::zero(), |expression| {
-                        expression.eval(state, &model.table_registry)
+                        expression.eval(state, &self.model.table_registry)
                     }),
             )
         };

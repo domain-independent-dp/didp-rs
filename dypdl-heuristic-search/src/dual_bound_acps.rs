@@ -20,7 +20,7 @@ use std::str;
 ///
 /// # References
 ///
-/// Ryo Kuroiwa and J. Christopher Beck."Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,""
+/// Ryo Kuroiwa and J. Christopher Beck."Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
 /// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
 ///
 /// Sataya Gautam Vadlamudi, Piyush Gaurav, Sandip Aine, and Partha Pratim Chakrabarti. "Anytime Column Search,""
@@ -75,16 +75,15 @@ where
         parameters,
         initial_registry_capacity,
     };
-    let h_evaluator = |state: &StateInRegistry, model: &dypdl::Model| {
-        Some(model.eval_dual_bound(state).unwrap_or_else(T::zero))
-    };
+    let h_model = model.clone();
+    let h_evaluator =
+        move |state: &StateInRegistry| Some(h_model.eval_dual_bound(state).unwrap_or_else(T::zero));
     let (f_pruning, f_evaluator_type) = if model.has_dual_bounds() {
         (true, f_evaluator_type)
     } else {
         (false, FEvaluatorType::Plus)
     };
-    let f_evaluator =
-        move |g, h, _: &StateInRegistry, _: &dypdl::Model| f_evaluator_type.eval(g, h);
+    let f_evaluator = move |g, h, _: &StateInRegistry| f_evaluator_type.eval(g, h);
     Box::new(Acps::<_, FNode<_>, _, _>::new(
         model,
         h_evaluator,

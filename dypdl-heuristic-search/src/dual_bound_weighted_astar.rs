@@ -66,15 +66,15 @@ where
         parameters,
         initial_registry_capacity,
     };
-    let h_evaluator = |state: &StateInRegistry, model: &dypdl::Model| {
-        Some(model.eval_dual_bound(state).unwrap_or_else(T::zero))
-    };
+    let h_model = model.clone();
+    let h_evaluator =
+        move |state: &StateInRegistry| Some(h_model.eval_dual_bound(state).unwrap_or_else(T::zero));
     let (f_pruning, f_evaluator_type) = if model.has_dual_bounds() {
         (true, f_evaluator_type)
     } else {
         (false, FEvaluatorType::Plus)
     };
-    let f_evaluator = move |g, h: T, _: &StateInRegistry, _: &dypdl::Model| {
+    let f_evaluator = move |g, h: T, _: &StateInRegistry| {
         f_evaluator_type.eval(g, T::from_continuous(weight * h.to_continuous()))
     };
     Box::new(BestFirstSearch::<_, FNode<_>, _, _>::new(

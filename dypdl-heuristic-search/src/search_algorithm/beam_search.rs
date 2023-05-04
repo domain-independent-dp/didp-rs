@@ -66,8 +66,8 @@ pub struct BeamSearchParameters<T, U> {
 /// increment.add_effect(variable, variable + 1).unwrap();
 /// model.add_forward_transition(increment.clone()).unwrap();
 ///
-/// let h_evaluator = |_: &_, _: &_| Some(0);
-/// let f_evaluator = |g, h, _: &_, _: &_| g + h;
+/// let h_evaluator = |_: &_| Some(0);
+/// let f_evaluator = |g, h, _: &_| g + h;
 ///
 /// let model = Rc::new(model);
 /// let generator = SuccessorGenerator::from_model_without_custom_cost(model.clone(), false);
@@ -80,11 +80,12 @@ pub struct BeamSearchParameters<T, U> {
 /// };
 /// let parameters = BeamSearchParameters { beam_size: 1, ..Default::default() };
 /// let beam_constructor = |beam_size| Beam::<_, _, BeamSearchNode<_, _>>::new(beam_size);
-/// let solution = beam_search(&problem, &beam_constructor, h_evaluator, f_evaluator, parameters);
+/// let (solution, dual_bound) = beam_search(&problem, &beam_constructor, h_evaluator, f_evaluator, parameters);
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions.len(), 1);
 /// assert_eq!(Transition::from(solution.transitions[0].clone()), increment);
 /// assert!(!solution.is_infeasible);
+/// assert_eq!(dual_bound, Some(1));
 /// ```
 pub fn beam_search<T, U, I, B, C, H, F>(
     problem: &BeamSearchProblemInstance<T, U>,
@@ -92,15 +93,15 @@ pub fn beam_search<T, U, I, B, C, H, F>(
     h_evaluator: H,
     f_evaluator: F,
     parameters: BeamSearchParameters<T, U>,
-) -> Solution<T, TransitionWithCustomCost>
+) -> (Solution<T, TransitionWithCustomCost>, Option<U>)
 where
     T: variable_type::Numeric,
     U: variable_type::Numeric + Ord,
     I: InformationInBeam<T, U> + CustomCostNodeInterface<T, U>,
     B: BeamInterface<T, U, I>,
     C: Fn(usize) -> B,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<U>,
-    F: Fn(U, U, &StateInRegistry, &dypdl::Model) -> U,
+    H: Fn(&StateInRegistry) -> Option<U>,
+    F: Fn(U, U, &StateInRegistry) -> U,
 {
     let time_keeper = parameters
         .parameters
@@ -127,27 +128,29 @@ where
     let g = problem.g;
     let initial_state = problem.target.clone();
 
-    let h = h_evaluator(&initial_state, model);
+    let f = if let Some(f) = h_evaluator(&initial_state).and_then(|h| {
+        let f = f_evaluator(g, h, &initial_state);
 
-    if h.is_none() {
-        return Solution {
-            is_infeasible: true,
-            ..Default::default()
-        };
-    }
-
-    let h = h.unwrap();
-    let f = f_evaluator(g, h, &initial_state, model);
-
-    if f_bound.map_or(false, |bound| {
-        (maximize && f <= bound) || (!maximize && f >= bound)
+        if f_bound.map_or(false, |bound| {
+            (maximize && f <= bound) || (!maximize && f >= bound)
+        }) {
+            None
+        } else {
+            Some(f)
+        }
     }) {
-        return Solution {
-            is_infeasible: true,
-            ..Default::default()
-        };
-    }
+        f
+    } else {
+        return (
+            Solution {
+                is_infeasible: true,
+                ..Default::default()
+            },
+            None,
+        );
+    };
 
+    let mut f_dual_bound = f;
     let (g, f) = if maximize { (-g, -f) } else { (g, f) };
     let constructor = |state, cost, _: Option<&_>| Some(I::new(g, f, state, cost, None, None));
     current_beam.insert(&mut registry, initial_state, cost, g, f, constructor);
@@ -162,6 +165,7 @@ where
 
     while !current_beam.is_empty() {
         let mut incumbent: Option<(Rc<I>, T, _)> = None;
+        let mut peak_f = None;
 
         for node in current_beam.drain() {
             if let Some(result) = rollout(node.state(), node.cost(), problem.solution_suffix, model)
@@ -181,7 +185,7 @@ where
                     println!("Reached time limit.");
                 }
 
-                return incumbent.map_or_else(
+                let solution = incumbent.map_or_else(
                     || Solution {
                         expanded,
                         generated,
@@ -203,6 +207,8 @@ where
                         }
                     },
                 );
+
+                return (solution, Some(f_dual_bound));
             }
 
             if pruned && incumbent.is_some() {
@@ -226,6 +232,12 @@ where
                     &f_evaluator,
                     maximize,
                 ) {
+                    if peak_f.map_or(true, |peak_f| {
+                        (maximize && f > peak_f) || (!maximize && f < peak_f)
+                    }) {
+                        peak_f = Some(f);
+                    }
+
                     let (g, f) = if maximize { (-g, -f) } else { (g, f) };
                     let constructor = |state, cost, _: Option<&_>| {
                         Some(I::new(g, f, state, cost, Some(&node), Some(transition)))
@@ -248,19 +260,30 @@ where
             println!("Expanded: {}", expanded);
         }
 
+        if let Some(peak_f) = peak_f {
+            if !pruned
+                && ((maximize && f_dual_bound > peak_f) || (!maximize && f_dual_bound < peak_f))
+            {
+                f_dual_bound = peak_f;
+            }
+        }
+
         if let Some((node, cost, suffix)) = &incumbent {
             let mut transitions = node.transitions();
             transitions.extend_from_slice(suffix);
 
-            return Solution {
-                cost: Some(*cost),
-                transitions,
-                expanded,
-                generated,
-                is_optimal: !pruned && next_beam.is_empty(),
-                time: time_keeper.elapsed_time(),
-                ..Default::default()
-            };
+            return (
+                Solution {
+                    cost: Some(*cost),
+                    transitions,
+                    expanded,
+                    generated,
+                    is_optimal: !pruned && next_beam.is_empty(),
+                    time: time_keeper.elapsed_time(),
+                    ..Default::default()
+                },
+                Some(f_dual_bound),
+            );
         }
 
         mem::swap(&mut current_beam, &mut next_beam);
@@ -270,11 +293,14 @@ where
         }
     }
 
-    Solution {
-        expanded,
-        generated,
-        is_infeasible: !pruned,
-        time: time_keeper.elapsed_time(),
-        ..Default::default()
-    }
+    (
+        Solution {
+            expanded,
+            generated,
+            is_infeasible: !pruned,
+            time: time_keeper.elapsed_time(),
+            ..Default::default()
+        },
+        if pruned { Some(f_dual_bound) } else { None },
+    )
 }

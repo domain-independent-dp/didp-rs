@@ -264,7 +264,7 @@ where
 
     /// Get the model.
     #[inline]
-    pub fn model(&self) -> &dypdl::Model {
+    pub fn model(&self) -> &R {
         &self.model
     }
 
@@ -1267,7 +1267,7 @@ mod tests {
     fn get_model() {
         let model = Rc::new(generate_model());
         let registry = StateRegistry::<i32, MockInformation>::new(model.clone());
-        assert_eq!(registry.model(), model.as_ref());
+        assert_eq!(registry.model(), &model);
     }
 
     #[test]

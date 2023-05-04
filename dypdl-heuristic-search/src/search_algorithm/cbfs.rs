@@ -22,7 +22,7 @@ use std::rc::Rc;
 ///
 /// # References
 ///
-/// Ryo Kuroiwa and J. Christopher Beck. "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,""
+/// Ryo Kuroiwa and J. Christopher Beck. "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
 /// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
 ///
 /// Gio K. Kao, Edward C. Sewell, and Sheldom H. Jacobson. "A Branch, Bound and Remember Algorithm for the 1|r_i|Σt_i scheduling problem,"
@@ -52,8 +52,8 @@ use std::rc::Rc;
 /// increment.add_effect(variable, variable + 1).unwrap();
 /// model.add_forward_transition(increment.clone()).unwrap();
 ///
-/// let h_evaluator = |_: &_, _: &_| Some(0);
-/// let f_evaluator = |g, h, _: &_, _: &_| g + h;
+/// let h_evaluator = |_: &_| Some(0);
+/// let f_evaluator = |g, h, _: &_| g + h;
 ///
 /// let model = Rc::new(model);
 /// let generator = SuccessorGenerator::from_model(model.clone(), false);
@@ -73,8 +73,8 @@ pub struct Cbfs<T, N, H, F>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNodeInterface<T>,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    H: Fn(&StateInRegistry) -> Option<T>,
+    F: Fn(T, T, &StateInRegistry) -> T,
 {
     generator: SuccessorGenerator,
     h_evaluator: H,
@@ -94,8 +94,8 @@ impl<T, N, H, F> Cbfs<T, N, H, F>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNodeInterface<T>,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    H: Fn(&StateInRegistry) -> Option<T>,
+    F: Fn(T, T, &StateInRegistry) -> T,
 {
     /// Create a new CBFS solver.
     pub fn new(
@@ -161,8 +161,8 @@ impl<T, N, H, F> Search<T> for Cbfs<T, N, H, F>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNodeInterface<T>,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    H: Fn(&StateInRegistry) -> Option<T>,
+    F: Fn(T, T, &StateInRegistry) -> T,
 {
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
         let mut i = 0;

@@ -47,8 +47,8 @@ use std::rc::Rc;
 /// increment.add_effect(variable, variable + 1).unwrap();
 /// model.add_forward_transition(increment.clone()).unwrap();
 ///
-/// let h_evaluator = |_: &_, _: &_| Some(0);
-/// let f_evaluator = |g, h, _: &_, _: &_| g + h;
+/// let h_evaluator = |_: &_| Some(0);
+/// let f_evaluator = |g, h, _: &_| g + h;
 ///
 /// let model = Rc::new(model);
 /// let generator = SuccessorGenerator::from_model(model.clone(), false);
@@ -67,8 +67,8 @@ use std::rc::Rc;
 pub struct Dfbb<T, H, F>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    H: Fn(&StateInRegistry) -> Option<T>,
+    F: Fn(T, T, &StateInRegistry) -> T,
 {
     generator: SuccessorGenerator,
     h_evaluator: H,
@@ -86,8 +86,8 @@ where
 impl<T, H, F> Dfbb<T, H, F>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    H: Fn(&StateInRegistry) -> Option<T>,
+    F: Fn(T, T, &StateInRegistry) -> T,
 {
     /// Create a new DFBB solver.
     pub fn new(
@@ -136,8 +136,8 @@ where
 impl<T, H, F> Search<T> for Dfbb<T, H, F>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    H: Fn(&StateInRegistry) -> Option<T>,
+    F: Fn(T, T, &StateInRegistry) -> T,
 {
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
         while let Some(node) = self.open.pop() {
@@ -185,8 +185,8 @@ where
             }
 
             if let (true, Some(bound)) = (self.f_pruning, self.primal_bound) {
-                if let Some(h) = (self.h_evaluator)(node.state(), self.registry.model()) {
-                    let f = (self.f_evaluator)(node.cost(), h, node.state(), self.registry.model());
+                if let Some(h) = (self.h_evaluator)(node.state()) {
+                    let f = (self.f_evaluator)(node.cost(), h, node.state());
 
                     if self.f_pruning && exceed_bound(self.registry.model(), f, Some(bound)) {
                         continue;

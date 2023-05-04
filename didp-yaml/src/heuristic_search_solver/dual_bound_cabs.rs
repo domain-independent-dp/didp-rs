@@ -70,6 +70,17 @@ where
             .into())
         }
     };
+    let max_beam_size = match map.get(&yaml_rust::Yaml::from_str("max_beam_size")) {
+        Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
+        Some(value) => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected Integer for `max_beam_size`, but found `{:?}`",
+                value
+            ))
+            .into())
+        }
+        None => None,
+    };
     let parameters = solver_parameters::parse_from_map(map)?;
     Ok(create_dual_bound_cabs(
         Rc::new(model),
@@ -77,5 +88,6 @@ where
         f_evaluator_type,
         beam_size,
         keep_all_layers,
+        max_beam_size,
     ))
 }

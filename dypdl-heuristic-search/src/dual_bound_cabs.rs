@@ -57,7 +57,7 @@ use std::str;
 /// let parameters = Parameters::default();
 /// let f_evaluator_type = FEvaluatorType::Plus;
 ///
-/// let mut solver = create_dual_bound_cabs(model, parameters, f_evaluator_type, 1, false);
+/// let mut solver = create_dual_bound_cabs(model, parameters, f_evaluator_type, 1, false, None);
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
@@ -69,6 +69,7 @@ pub fn create_dual_bound_cabs<T>(
     f_evaluator_type: FEvaluatorType,
     beam_size: usize,
     keep_all_layers: bool,
+    max_beam_size: Option<usize>,
 ) -> Box<dyn Search<T>>
 where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,
@@ -76,16 +77,15 @@ where
 {
     let beam_constructor = Beam::<T, T, BeamSearchNode<T, T>>::new;
     let generator = SuccessorGenerator::from_model_without_custom_cost(model.clone(), false);
-    let h_evaluator = |state: &StateInRegistry, model: &dypdl::Model| {
-        Some(model.eval_dual_bound(state).unwrap_or_else(T::zero))
-    };
+    let h_model = model.clone();
+    let h_evaluator =
+        move |state: &StateInRegistry| Some(h_model.eval_dual_bound(state).unwrap_or_else(T::zero));
     let (f_pruning, f_evaluator_type) = if model.has_dual_bounds() {
         (true, f_evaluator_type)
     } else {
         (false, FEvaluatorType::Plus)
     };
-    let f_evaluator =
-        move |g, h, _: &StateInRegistry, _: &dypdl::Model| f_evaluator_type.eval(g, h);
+    let f_evaluator = move |g, h, _: &StateInRegistry| f_evaluator_type.eval(g, h);
     let parameters = BeamSearchParameters {
         beam_size,
         maximize: model.reduce_function == ReduceFunction::Max,
@@ -99,6 +99,7 @@ where
         h_evaluator,
         f_evaluator,
         beam_constructor,
+        max_beam_size,
         parameters,
     ))
 }

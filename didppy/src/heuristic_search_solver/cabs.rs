@@ -34,6 +34,8 @@ use std::rc::Rc;
 ///     Initial beam size.
 /// keep_all_layers: bool, default: False
 ///     Keep all layers of the search graph for duplicate detection in memory.
+/// max_beam_size: int or None, default: None
+///     Maximum beam size.
 /// primal_bound: int, float, or None, default: None
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
@@ -98,7 +100,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "CABS")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, keep_all_layers=False, primal_bound=None, time_limit=None, quiet=False)"
+    text_signature = "(model, f_operator=0, keep_all_layers=False, max_beam_size=None, primal_bound=None, time_limit=None, quiet=False)"
 )]
 pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
@@ -110,6 +112,7 @@ impl CabsPy {
         f_operator = FOperator::Plus,
         initial_beam_size = 1,
         keep_all_layers = false,
+        max_beam_size = None,
         primal_bound = None,
         time_limit = None,
         quiet = false
@@ -120,6 +123,7 @@ impl CabsPy {
         f_operator: FOperator,
         initial_beam_size: usize,
         keep_all_layers: bool,
+        max_beam_size: Option<usize>,
         primal_bound: Option<&PyAny>,
         time_limit: Option<f64>,
         quiet: bool,
@@ -146,6 +150,7 @@ impl CabsPy {
                 f_evaluator_type,
                 initial_beam_size,
                 keep_all_layers,
+                max_beam_size,
             );
             Ok(CabsPy(WrappedSolver::Float(solver)))
         } else {
@@ -166,6 +171,7 @@ impl CabsPy {
                 f_evaluator_type,
                 initial_beam_size,
                 keep_all_layers,
+                max_beam_size,
             );
             Ok(CabsPy(WrappedSolver::Int(solver)))
         }
