@@ -172,7 +172,7 @@ where
             {
                 if result.is_base {
                     if !exceed_bound(model, result.cost, primal_bound) {
-                        primal_bound = Some(node.cost());
+                        primal_bound = Some(result.cost);
                         incumbent = Some((node, result.cost, result.transitions));
                     }
 
