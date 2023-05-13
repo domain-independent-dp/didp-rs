@@ -33,6 +33,7 @@ extensions = [
     "sphinx.ext.autosummary",
     "sphinx.ext.autosectionlabel",
     "sphinxcontrib.bibtex",
+    "sphinxcontrib.jquery",
 ]
 
 autosectionlabel_prefix_document = True
