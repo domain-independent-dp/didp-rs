@@ -3,7 +3,7 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_apps, FEvaluatorType, Search};
+use dypdl_heuristic_search::{create_dual_bound_apps, FEvaluatorType, Search, Parameters, ProgressiveSearchParameters};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -137,7 +137,7 @@ impl AppsPy {
         width_bound: Option<usize>,
         reset_width: bool,
     ) -> PyResult<AppsPy> {
-        let progressive_parameters = dypdl_heuristic_search::ProgressiveSearchParameters {
+        let progressive_parameters = ProgressiveSearchParameters {
             init: width_init,
             step: width_step,
             bound: width_bound,
@@ -153,18 +153,18 @@ impl AppsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<OrderedContinuous> {
+            let parameters = Parameters::<OrderedContinuous> {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
                 quiet,
+                initial_registry_capacity: Some(initial_registry_capacity),
             };
             let solver = create_dual_bound_apps::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                progressive_parameters,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
+                progressive_parameters,
             );
             Ok(AppsPy(WrappedSolver::Float(solver)))
         } else {
@@ -173,18 +173,18 @@ impl AppsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
+            let parameters = Parameters::<Integer> {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
                 quiet,
+                initial_registry_capacity: Some(initial_registry_capacity),
             };
             let solver = create_dual_bound_apps::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                progressive_parameters,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
+                progressive_parameters,
             );
             Ok(AppsPy(WrappedSolver::Int(solver)))
         }

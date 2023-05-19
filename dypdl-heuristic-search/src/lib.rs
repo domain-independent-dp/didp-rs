@@ -27,5 +27,7 @@ pub use dual_bound_weighted_astar::create_dual_bound_weighted_astar;
 pub use expression_beam_search::{CustomExpressionParameters, ExpressionBeamSearch};
 pub use f_evaluator_type::FEvaluatorType;
 pub use search_algorithm::data_structure::TransitionWithCustomCost;
-pub use search_algorithm::util::{Parameters, ProgressiveSearchParameters};
-pub use search_algorithm::{Dijkstra, ForwardRecursion, Search, Solution};
+pub use search_algorithm::{
+    BeamSearchParameters, BrfsParameters, CabsParameters, DbdfsParameters, ForwardRecursion,
+    Parameters, ProgressiveSearchParameters, Search, Solution,
+};

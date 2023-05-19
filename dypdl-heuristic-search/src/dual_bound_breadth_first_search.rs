@@ -1,9 +1,8 @@
 use super::f_evaluator_type::FEvaluatorType;
-use super::search_algorithm::data_structure::state_registry::StateInRegistry;
-use super::search_algorithm::util::{ForwardSearchParameters, Parameters};
-use super::search_algorithm::Search;
-use super::search_algorithm::{BreadthFirstSearch, SuccessorGenerator};
-use dypdl::variable_type;
+use super::search_algorithm::{
+    BreadthFirstSearch, BrfsParameters, CostNode, FNode, Search, SearchInput, SuccessorGenerator,
+};
+use dypdl::{variable_type, Transition};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -23,8 +22,9 @@ use std::str;
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::{FEvaluatorType, create_dual_bound_breadth_first_search};
-/// use dypdl_heuristic_search::search_algorithm::util::Parameters;
+/// use dypdl_heuristic_search::{
+///     create_dual_bound_breadth_first_search, FEvaluatorType, BrfsParameters
+/// };
 /// use std::rc::Rc;
 ///
 /// let mut model = Model::default();
@@ -39,11 +39,11 @@ use std::str;
 /// model.add_dual_bound(IntegerExpression::from(0)).unwrap();
 ///
 /// let model = Rc::new(model);
-/// let parameters = Parameters::default();
+/// let parameters = BrfsParameters::default();
 /// let f_evaluator_type = FEvaluatorType::Plus;
 ///
 /// let mut solver = create_dual_bound_breadth_first_search(
-///     model, parameters, f_evaluator_type, false, None
+///     model, parameters, f_evaluator_type,
 /// );
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
@@ -52,36 +52,62 @@ use std::str;
 /// ```
 pub fn create_dual_bound_breadth_first_search<T>(
     model: Rc<dypdl::Model>,
-    parameters: Parameters<T>,
+    parameters: BrfsParameters<T>,
     f_evaluator_type: FEvaluatorType,
-    keep_all_layers: bool,
-    initial_registry_capacity: Option<usize>,
 ) -> Box<dyn Search<T>>
 where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let generator = SuccessorGenerator::from_model(model.clone(), false);
-    let parameters = ForwardSearchParameters {
-        generator,
-        parameters,
-        initial_registry_capacity,
-    };
-    let h_model = model.clone();
-    let h_evaluator =
-        move |state: &StateInRegistry| Some(h_model.eval_dual_bound(state).unwrap_or_else(T::zero));
-    let (f_pruning, f_evaluator_type) = if model.has_dual_bounds() {
-        (true, f_evaluator_type)
+    let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+
+    if model.has_dual_bounds() {
+        let state = model.target.clone();
+        let h_evaluator = move |state: &_| model.eval_dual_bound(state);
+        let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
+        let node = FNode::generate_root_node(
+            state,
+            T::zero(),
+            &generator.model,
+            &h_evaluator,
+            &f_evaluator,
+            parameters.parameters.primal_bound,
+        );
+        let input = SearchInput {
+            node,
+            generator,
+            solution_suffix: &[],
+        };
+        let transition_evaluator =
+            move |node: &FNode<_>, transition, registry: &mut _, primal_bound| {
+                node.insert_successor_node(
+                    transition,
+                    registry,
+                    &h_evaluator,
+                    &f_evaluator,
+                    primal_bound,
+                )
+            };
+
+        Box::new(BreadthFirstSearch::<_, FNode<_>, _, _>::new(
+            input,
+            transition_evaluator,
+            parameters,
+        ))
     } else {
-        (false, FEvaluatorType::Plus)
-    };
-    let f_evaluator = move |g, h, _: &StateInRegistry| f_evaluator_type.eval(g, h);
-    Box::new(BreadthFirstSearch::new(
-        model,
-        h_evaluator,
-        f_evaluator,
-        f_pruning,
-        keep_all_layers,
-        parameters,
-    ))
+        let node = CostNode::generate_root_node(model.target.clone(), T::zero(), &model);
+        let input = SearchInput {
+            node: Some(node),
+            generator,
+            solution_suffix: &[],
+        };
+        let transition_evaluator = |node: &CostNode<_>, transition, registry: &mut _, _| {
+            node.insert_successor_node(transition, registry)
+        };
+        Box::new(BreadthFirstSearch::<_, CostNode<_>, _, _>::new(
+            input,
+            transition_evaluator,
+            parameters,
+        ))
+    }
 }

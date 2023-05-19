@@ -1,17 +1,21 @@
-use super::beam_search::{beam_search, BeamSearchParameters};
-use super::data_structure::beam::{BeamInterface, InformationInBeam};
-use super::data_structure::state_registry::StateInRegistry;
-use super::data_structure::{
-    BeamSearchProblemInstance, CustomCostNodeInterface, SuccessorGenerator,
-    TransitionWithCustomCost,
-};
-use super::search::{Search, Solution};
-use super::util;
-use dypdl::variable_type;
+use super::beam_search::BeamSearchParameters;
+use super::data_structure::{exceed_bound, BfsNode};
+use super::search::{Parameters, Search, SearchInput, Solution};
+use super::util::print_primal_bound;
+use super::util::{update_bound_if_better, TimeKeeper};
+use dypdl::{variable_type, Transition, TransitionInterface};
 use std::error::Error;
 use std::fmt;
-use std::marker::PhantomData;
 use std::str;
+
+/// Parameters for CABS.
+#[derive(Debug, PartialEq, Clone, Copy, Default)]
+pub struct CabsParameters<T> {
+    /// Maximum beam size.
+    pub max_beam_size: Option<usize>,
+    /// Parameters for beam search.
+    pub beam_search_parameters: BeamSearchParameters<T>,
+}
 
 /// Complete Anytime Beam Search (CABS).
 ///
@@ -21,13 +25,8 @@ use std::str;
 /// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
 /// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
 ///
-/// It uses `h_evaluator` and `f_evaluator` for pruning.
-/// If `h_evaluator` returns `None`, the state is pruned.
-/// If `parameters.f_pruning` and `f_evaluator` returns a value that exceeds the f bound, the state is pruned.
-///
-/// Beam search searches layer by layer, where the i th layer contains states that can be reached with i transitions.
-/// By default, this solver only keeps states in the current layer to check for duplicates.
-/// If `parameters.keep_all_layers` is `true`, this solver keeps states in all layers to check for duplicates.
+/// Type parameter `B` is a type of a function that performs beam search.
+/// The function takes a `SearchInput` and `BeamSearchParameters` and returns a `Solution`.
 ///
 /// # References
 ///
@@ -41,11 +40,10 @@ use std::str;
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::search_algorithm::data_structure::beam::Beam;
-/// use dypdl_heuristic_search::search_algorithm::{BeamSearchParameters, Cabs, Search};
-/// use dypdl_heuristic_search::search_algorithm::data_structure::BeamSearchNode;
-/// use dypdl_heuristic_search::search_algorithm::data_structure::successor_generator::{
-///     SuccessorGenerator
+/// use dypdl_heuristic_search::Search;
+/// use dypdl_heuristic_search::search_algorithm::{
+///     beam_search, BeamSearchParameters, Cabs, CabsParameters, FNode, SearchInput,
+///     SuccessorGenerator,
 /// };
 /// use std::rc::Rc;
 ///
@@ -58,102 +56,109 @@ use std::str;
 /// increment.set_cost(IntegerExpression::Cost + 1);
 /// increment.add_effect(variable, variable + 1).unwrap();
 /// model.add_forward_transition(increment.clone()).unwrap();
+/// let model = Rc::new(model);
 ///
+/// let state = model.target.clone();
+/// let cost = 0;
 /// let h_evaluator = |_: &_| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
-///
-/// let model = Rc::new(model);
-/// let generator = SuccessorGenerator::from_model_without_custom_cost(model.clone(), false);
-/// let beam_constructor = |beam_size| Beam::<_, _, BeamSearchNode<_, _>>::new(beam_size);
-/// let parameters = BeamSearchParameters { beam_size: 1, ..Default::default() };
-///
-/// let mut solver = Cabs::new(
-///     generator, h_evaluator, f_evaluator, beam_constructor, None, parameters
+/// let primal_bound = None;
+/// let node = FNode::generate_root_node(
+///     state,
+///     cost,
+///     &model,
+///     &h_evaluator,
+///     &f_evaluator,
+///     primal_bound,
 /// );
+/// let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+/// let transition_evaluator = move |node: &FNode<_>, transition, primal_bound| {
+///     node.generate_successor_node(
+///         transition,
+///         &model,
+///         &h_evaluator,
+///         &f_evaluator,
+///         primal_bound,
+///     )
+/// };
+/// let beam_search = move |input: &SearchInput<_, _>, parameters| {
+///     beam_search(input, &transition_evaluator, parameters)
+/// };
+/// let parameters = CabsParameters::default();
+/// let input = SearchInput {
+///     node,
+///     generator,
+///     solution_suffix: &[],
+/// };
+///
+/// let mut solver = Cabs::new(input, beam_search, parameters);
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub struct Cabs<'a, T, I, B, C, H, F>
+pub struct Cabs<'a, T, N, B, V = Transition>
 where
-    T: variable_type::Numeric + fmt::Display + Ord,
+    T: variable_type::Numeric + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
-    I: InformationInBeam<T, T> + CustomCostNodeInterface<T, T>,
-    B: BeamInterface<T, T, I>,
-    C: Fn(usize) -> B,
-    H: Fn(&StateInRegistry) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry) -> T,
+    N: BfsNode<T, V>,
+    B: Fn(&SearchInput<N, V>, BeamSearchParameters<T>) -> Solution<T, V>,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
-    problem: BeamSearchProblemInstance<'a, T, T>,
-    h_evaluator: H,
-    f_evaluator: F,
-    beam_constructor: C,
-    maximize: bool,
-    f_pruning: bool,
+    input: SearchInput<'a, N, V>,
+    beam_search: B,
     keep_all_layers: bool,
     primal_bound: Option<T>,
     quiet: bool,
     beam_size: usize,
     max_beam_size: Option<usize>,
-    time_keeper: util::TimeKeeper,
-    solution: Solution<T, TransitionWithCustomCost>,
-    phantom: PhantomData<I>,
+    time_keeper: TimeKeeper,
+    solution: Solution<T, V>,
 }
 
-impl<'a, T, I, B, C, H, F> Cabs<'a, T, I, B, C, H, F>
+impl<'a, T, N, B, V> Cabs<'a, T, N, B, V>
 where
-    T: variable_type::Numeric + fmt::Display + Ord,
+    T: variable_type::Numeric + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
-    I: InformationInBeam<T, T> + CustomCostNodeInterface<T, T>,
-    B: BeamInterface<T, T, I>,
-    C: Fn(usize) -> B,
-    H: Fn(&StateInRegistry) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry) -> T,
+    N: BfsNode<T, V> + Clone,
+    B: Fn(&SearchInput<N, V>, BeamSearchParameters<T>) -> Solution<T, V>,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
     /// Create a new CABS solver.
     pub fn new(
-        generator: SuccessorGenerator<TransitionWithCustomCost>,
-        h_evaluator: H,
-        f_evaluator: F,
-        beam_constructor: C,
-        max_beam_size: Option<usize>,
-        parameters: BeamSearchParameters<T, T>,
-    ) -> Cabs<'a, T, I, B, C, H, F> {
-        let time_keeper = parameters
+        input: SearchInput<'a, N, V>,
+        beam_search: B,
+        parameters: CabsParameters<T>,
+    ) -> Cabs<'a, T, N, B, V> {
+        let mut time_keeper = parameters
+            .beam_search_parameters
             .parameters
             .time_limit
-            .map_or_else(util::TimeKeeper::default, util::TimeKeeper::with_time_limit);
-        let target = StateInRegistry::from(generator.model.target.clone());
-        let problem = BeamSearchProblemInstance {
-            generator,
-            target,
-            cost: T::zero(),
-            g: T::zero(),
-            solution_suffix: &[],
-        };
+            .map_or_else(TimeKeeper::default, TimeKeeper::with_time_limit);
+        time_keeper.stop();
+
         Cabs {
-            problem,
-            h_evaluator,
-            f_evaluator,
-            beam_constructor,
-            maximize: parameters.maximize,
-            f_pruning: parameters.f_pruning,
-            keep_all_layers: parameters.keep_all_layers,
-            primal_bound: parameters.parameters.primal_bound,
-            quiet: parameters.parameters.quiet,
-            beam_size: parameters.beam_size,
-            max_beam_size,
+            input,
+            beam_search,
+            keep_all_layers: parameters.beam_search_parameters.keep_all_layers,
+            primal_bound: parameters.beam_search_parameters.parameters.primal_bound,
+            quiet: parameters.beam_search_parameters.parameters.quiet,
+            beam_size: parameters.beam_search_parameters.beam_size,
+            max_beam_size: parameters.max_beam_size,
             time_keeper,
             solution: Solution::default(),
-            phantom: PhantomData::default(),
         }
     }
 
     //// Search for the next solution, returning the solution using `TransitionWithCustomCost`.
-    pub fn search_inner(&mut self) -> (Solution<T, TransitionWithCustomCost>, bool) {
+    pub fn search_inner(&mut self) -> (Solution<T, V>, bool) {
+        self.time_keeper.start();
+        let model = &self.input.generator.model;
+
         while !self.solution.is_terminated() {
-            let last = if let Some(max_beam_size) = self.max_beam_size {
+            let last = self.max_beam_size.map_or(false, |max_beam_size| {
                 if self.beam_size >= max_beam_size {
                     self.beam_size = max_beam_size;
 
@@ -165,100 +170,66 @@ where
                 } else {
                     false
                 }
-            } else {
-                false
-            };
+            });
 
-            if !self.quiet {
-                println!(
-                    "Beam size: {}, expanded: {}",
-                    self.beam_size, self.solution.expanded
-                );
-            }
-
-            let beam_constructor = |beam_size| (self.beam_constructor)(beam_size);
             let parameters = BeamSearchParameters {
                 beam_size: self.beam_size,
-                maximize: self.maximize,
                 keep_all_layers: self.keep_all_layers,
-                f_pruning: self.f_pruning,
-                f_bound: self.primal_bound,
-                parameters: util::Parameters {
+                parameters: Parameters {
                     primal_bound: self.primal_bound,
                     get_all_solutions: false,
                     quiet: true,
                     time_limit: self.time_keeper.remaining_time_limit(),
+                    ..Default::default()
                 },
             };
-            let (result, dual_bound) = beam_search(
-                &self.problem,
-                &beam_constructor,
-                &self.h_evaluator,
-                &self.f_evaluator,
-                parameters,
-            );
+            let result = (self.beam_search)(&self.input, parameters);
             self.solution.expanded += result.expanded;
             self.solution.generated += result.generated;
-            self.beam_size *= 2;
 
-            if let (true, Some(dual_bound)) = (self.f_pruning, dual_bound) {
-                if self.solution.best_bound.map_or(true, |best_bound| {
-                    (self.maximize && dual_bound < best_bound)
-                        || (!self.maximize && dual_bound > best_bound)
-                }) {
-                    self.solution.best_bound = Some(dual_bound);
-
-                    if !self.quiet {
-                        println!(
-                            "New dual bound: {}, expanded: {}",
-                            dual_bound, self.solution.expanded
-                        );
-                    }
-                }
+            if !self.quiet {
+                println!(
+                    "Searched with beam size: {}, expanded: {}, elapsed time: {}",
+                    self.beam_size,
+                    self.solution.expanded,
+                    self.time_keeper.elapsed_time()
+                );
             }
 
-            match result.cost {
-                Some(new_cost) => {
-                    let found_better = self.solution.cost.map_or(true, |current_cost| {
-                        match self.problem.generator.model.reduce_function {
-                            dypdl::ReduceFunction::Max => new_cost > current_cost,
-                            dypdl::ReduceFunction::Min => new_cost < current_cost,
-                            _ => false,
-                        }
-                    });
+            self.beam_size *= 2;
 
-                    if found_better || result.is_optimal {
-                        self.solution.transitions = result.transitions;
-                        self.solution.cost = Some(new_cost);
-                        self.primal_bound = Some(new_cost);
-                        self.solution.is_optimal = result.is_optimal;
-                        self.solution.time = self.time_keeper.elapsed_time();
+            if let Some(bound) = result.best_bound {
+                self.solution.time = self.time_keeper.elapsed_time();
+                update_bound_if_better(&mut self.solution, bound, model, self.quiet);
+            }
 
-                        if self.solution.is_optimal {
-                            self.solution.best_bound = Some(new_cost);
-                        }
+            if let Some(cost) = result.cost {
+                if !exceed_bound(model, cost, self.primal_bound) {
+                    self.primal_bound = Some(cost);
+                    self.solution.cost = Some(cost);
+                    self.solution.transitions = result.transitions;
+                    self.solution.is_optimal = result.is_optimal;
+                    self.solution.time = self.time_keeper.elapsed_time();
 
-                        if !self.quiet {
-                            println!(
-                                "New primal bound: {}, expanded: {}",
-                                new_cost, self.solution.expanded
-                            );
-                        }
-
-                        return (self.solution.clone(), result.is_optimal || last);
+                    if self.solution.is_optimal {
+                        self.solution.best_bound = Some(cost);
                     }
-                }
-                _ => {
-                    if result.is_infeasible {
-                        self.solution.is_optimal = self.solution.cost.is_some();
-                        self.solution.is_infeasible = self.solution.cost.is_none();
-                        self.solution.time = self.time_keeper.elapsed_time();
+
+                    if !self.quiet {
+                        print_primal_bound(&self.solution);
                     }
+
+                    self.time_keeper.stop();
+
+                    return (self.solution.clone(), self.solution.is_optimal || last);
                 }
+            } else if result.is_infeasible {
+                self.solution.is_optimal = self.solution.cost.is_some();
+                self.solution.is_infeasible = self.solution.cost.is_none();
+                self.solution.best_bound = self.solution.cost;
             }
 
             if last {
-                self.solution.time = self.time_keeper.elapsed_time();
                 break;
             }
 
@@ -267,24 +238,24 @@ where
                     println!("Reached time limit.");
                 }
 
-                self.solution.time = self.time_keeper.elapsed_time();
                 self.solution.time_out = true;
             }
         }
 
+        self.solution.time = self.time_keeper.elapsed_time();
+        self.time_keeper.stop();
         (self.solution.clone(), true)
     }
 }
 
-impl<'a, T, I, B, C, H, F> Search<T> for Cabs<'a, T, I, B, C, H, F>
+impl<'a, T, N, B, V> Search<T> for Cabs<'a, T, N, B, V>
 where
     T: variable_type::Numeric + fmt::Display + Ord,
     <T as str::FromStr>::Err: fmt::Debug,
-    I: InformationInBeam<T, T> + CustomCostNodeInterface<T, T>,
-    B: BeamInterface<T, T, I>,
-    C: Fn(usize) -> B,
-    H: Fn(&StateInRegistry) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry) -> T,
+    N: BfsNode<T, V> + Clone,
+    B: Fn(&SearchInput<N, V>, BeamSearchParameters<T>) -> Solution<T, V>,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
         let (solution, is_terminated) = self.search_inner();

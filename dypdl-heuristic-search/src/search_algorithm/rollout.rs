@@ -1,5 +1,9 @@
+use super::data_structure::StateInformation;
+use super::StateInRegistry;
 use dypdl::variable_type::Numeric;
 use dypdl::{Model, State, StateInterface, TransitionInterface};
+use std::fmt::Debug;
+use std::hash::Hash;
 
 /// Result of a rollout.
 #[derive(PartialEq, Clone, Debug)]
@@ -24,6 +28,10 @@ where
 ///
 /// Returns `None` if the rollout fails,
 /// e.g., if a transition is not applicable or a state constraint is violated.
+///
+/// # Panics
+///
+/// If expressions in the model or transitions are invalid.
 ///
 /// # Examples
 ///
@@ -128,6 +136,68 @@ where
     })
 }
 
+/// Get the solution cost and suffix if the rollout of the transitions from the node succeeds.
+///
+/// # Panics
+///
+/// If expressions in the model or transitions are invalid.
+///
+/// # Examples
+///
+/// ```
+/// use dypdl::prelude::*;
+/// use dypdl_heuristic_search::Solution;
+/// use dypdl_heuristic_search::search_algorithm::{
+///     FNode, StateInRegistry, get_solution_cost_and_suffix,
+/// };
+/// use dypdl_heuristic_search::search_algorithm::data_structure::GetTransitions;
+/// use dypdl_heuristic_search::search_algorithm::util::update_solution;
+/// use std::rc::Rc;
+///
+/// let mut model = Model::default();
+/// let var = model.add_integer_variable("var", 0).unwrap();
+/// model.add_base_case(vec![Condition::comparison_i(ComparisonOperator::Ge, var, 3)]).unwrap();
+///
+/// let mut transition = Transition::new("transition");
+/// transition.add_effect(var, var + 1).unwrap();
+/// transition.set_cost(IntegerExpression::Cost + 1);
+///
+/// let h_evaluator = |_: &StateInRegistry| Some(0);
+/// let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+/// let node = FNode::generate_root_node(
+///     model.target.clone(), 0, &model, &h_evaluator, &f_evaluator, None,
+/// ).unwrap();
+/// let node = node.generate_successor_node(
+///     Rc::new(transition.clone()), &model, &h_evaluator, &f_evaluator, None,
+/// ).unwrap();
+///
+/// let suffix = [transition.clone(), transition.clone()];
+/// let (cost, suffix) = get_solution_cost_and_suffix(&model, &node, &suffix).unwrap();
+///
+/// assert_eq!(cost, 3);
+/// assert_eq!(suffix, &[transition.clone(), transition]);
+/// ```
+pub fn get_solution_cost_and_suffix<'a, N, T, U, K>(
+    model: &Model,
+    node: &N,
+    transitions: &'a [T],
+) -> Option<(U, &'a [T])>
+where
+    N: StateInformation<U, K>,
+    U: Numeric,
+    T: TransitionInterface,
+    K: Hash + Eq + Clone + Debug,
+    StateInRegistry<K>: StateInterface + From<State>,
+{
+    let result = rollout(node.state(), node.cost(model), transitions, model)?;
+
+    if result.is_base {
+        Some((result.cost, result.transitions))
+    } else {
+        None
+    }
+}
+
 /// Iterator returning the result of a transition trace.
 pub struct Trace<'a, S, U, T> {
     state: S,
@@ -168,6 +238,10 @@ where
 }
 
 /// Returns the states and costs of a rollout without checking state constraints and base cases.
+///
+/// # Panics
+///
+/// If `transitions` is empty.
 ///
 /// # Examples
 ///
@@ -223,9 +297,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::super::data_structure::FNode;
     use super::*;
-    use dypdl::{expression::*, SignatureVariables};
-    use dypdl::{BaseCase, CostExpression, Effect, GroundedCondition, Transition};
+    use dypdl::expression::*;
+    use dypdl::prelude::*;
+    use dypdl::{BaseCase, Effect, GroundedCondition};
+    use std::rc::Rc;
 
     #[test]
     fn rollout_some_without_transitions_base() {
@@ -428,6 +505,93 @@ mod tests {
         let state = State::default();
         let transitions = vec![Transition::default()];
         let result = rollout(&state, 1, &transitions, &model);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn get_solution_cost_and_suffix_some() {
+        let mut model = Model::default();
+        let var = model.add_integer_variable("var", 0).unwrap();
+        model
+            .add_base_case(vec![Condition::comparison_i(
+                ComparisonOperator::Ge,
+                var,
+                3,
+            )])
+            .unwrap();
+
+        let mut transition = Transition::new("transition");
+        transition.add_effect(var, var + 1).unwrap();
+        transition.set_cost(IntegerExpression::Cost + 1);
+
+        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let node = FNode::generate_root_node(
+            model.target.clone(),
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        )
+        .unwrap();
+        let node = node
+            .generate_successor_node(
+                Rc::new(transition.clone()),
+                &model,
+                &h_evaluator,
+                &f_evaluator,
+                None,
+            )
+            .unwrap();
+
+        let suffix = [transition.clone(), transition.clone()];
+        let result = get_solution_cost_and_suffix(&model, &node, &suffix);
+        assert!(result.is_some());
+        let (cost, suffix) = result.unwrap();
+        assert_eq!(cost, 3);
+        assert_eq!(suffix, &[transition.clone(), transition]);
+    }
+
+    #[test]
+    fn get_solution_cost_and_suffix_none() {
+        let mut model = Model::default();
+        let var = model.add_integer_variable("var", 0).unwrap();
+        model
+            .add_base_case(vec![Condition::comparison_i(
+                ComparisonOperator::Ge,
+                var,
+                3,
+            )])
+            .unwrap();
+
+        let mut transition = Transition::new("transition");
+        transition.add_effect(var, var + 1).unwrap();
+        transition.set_cost(IntegerExpression::Cost + 1);
+
+        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let node = FNode::generate_root_node(
+            model.target.clone(),
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        )
+        .unwrap();
+        let node = node
+            .generate_successor_node(
+                Rc::new(transition.clone()),
+                &model,
+                &h_evaluator,
+                &f_evaluator,
+                None,
+            )
+            .unwrap();
+
+        let suffix = [transition.clone()];
+        let result = get_solution_cost_and_suffix(&model, &node, &suffix);
         assert_eq!(result, None);
     }
 

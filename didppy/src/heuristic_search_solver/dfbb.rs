@@ -3,7 +3,7 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_dfbb, FEvaluatorType, Search};
+use dypdl_heuristic_search::{create_dual_bound_dfbb, FEvaluatorType, Parameters, Search};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -93,9 +93,7 @@ use std::rc::Rc;
 /// >>> print(solution.cost)
 /// 2
 #[pyclass(unsendable, name = "DFBB")]
-#[pyo3(
-    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, quiet=False, bfs_tie_breaking=False)"
-)]
+#[pyo3(text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, quiet=False)")]
 pub struct DfbbPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
 #[pymethods]
@@ -109,7 +107,6 @@ impl DfbbPy {
         get_all_solutions = false,
         quiet = false,
         initial_registry_capacity = 1000000,
-        bfs_tie_breaking = false
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -120,7 +117,6 @@ impl DfbbPy {
         get_all_solutions: bool,
         quiet: bool,
         initial_registry_capacity: usize,
-        bfs_tie_breaking: bool,
     ) -> PyResult<DfbbPy> {
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
@@ -132,18 +128,17 @@ impl DfbbPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<OrderedContinuous> {
+            let parameters = Parameters::<OrderedContinuous> {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
                 quiet,
+                initial_registry_capacity: Some(initial_registry_capacity),
             };
             let solver = create_dual_bound_dfbb::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                bfs_tie_breaking,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
             );
             Ok(DfbbPy(WrappedSolver::Float(solver)))
         } else {
@@ -152,18 +147,17 @@ impl DfbbPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
+            let parameters = Parameters::<Integer> {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
                 quiet,
+                initial_registry_capacity: Some(initial_registry_capacity),
             };
             let solver = create_dual_bound_dfbb::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                bfs_tie_breaking,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
             );
             Ok(DfbbPy(WrappedSolver::Int(solver)))
         }

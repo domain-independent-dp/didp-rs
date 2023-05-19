@@ -1,7 +1,9 @@
 use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
-use dypdl_heuristic_search::{create_dual_bound_cabs, FEvaluatorType, Search};
+use dypdl_heuristic_search::{
+    create_dual_bound_cabs, BeamSearchParameters, CabsParameters, FEvaluatorType, Search,
+};
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
@@ -17,6 +19,13 @@ where
 {
     let map = match config {
         yaml_rust::Yaml::Hash(map) => map,
+        yaml_rust::Yaml::Null => {
+            return Ok(create_dual_bound_cabs(
+                Rc::new(model),
+                CabsParameters::default(),
+                FEvaluatorType::Plus,
+            ))
+        }
         _ => {
             return Err(util::YamlContentErr::new(format!(
                 "expected Hash for the solver config, but found `{:?}`",
@@ -82,12 +91,18 @@ where
         None => None,
     };
     let parameters = solver_parameters::parse_from_map(map)?;
+    let beam_search_parameters = BeamSearchParameters {
+        parameters,
+        beam_size,
+        keep_all_layers,
+    };
+    let parameters = CabsParameters {
+        max_beam_size,
+        beam_search_parameters,
+    };
     Ok(create_dual_bound_cabs(
         Rc::new(model),
         parameters,
         f_evaluator_type,
-        beam_size,
-        keep_all_layers,
-        max_beam_size,
     ))
 }

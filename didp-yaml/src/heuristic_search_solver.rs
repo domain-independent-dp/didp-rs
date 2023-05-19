@@ -1,7 +1,6 @@
 //! A module for heuristic search solvers for DyPDL.
 
 mod caasdy;
-mod dijkstra;
 mod dual_bound_acps;
 mod dual_bound_apps;
 mod dual_bound_breadth_first_search;
@@ -50,7 +49,6 @@ where
         "dual_bound_apps" => dual_bound_apps::load_from_yaml(model, config),
         "dual_bound_dbdfs" => dual_bound_dbdfs::load_from_yaml(model, config),
         "forward_recursion" => forward_recursion::load_from_yaml(model, config),
-        "dijkstra" => dijkstra::load_from_yaml(model, config),
         "dual_bound_breadth_first_search" => {
             dual_bound_breadth_first_search::load_from_yaml(model, config)
         }

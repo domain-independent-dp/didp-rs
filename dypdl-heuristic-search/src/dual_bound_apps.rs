@@ -1,12 +1,9 @@
 use super::f_evaluator_type::FEvaluatorType;
-use super::search_algorithm::data_structure::state_registry::StateInRegistry;
-use super::search_algorithm::data_structure::FNode;
-use super::search_algorithm::util::{
-    ForwardSearchParameters, Parameters, ProgressiveSearchParameters,
+use super::search_algorithm::{
+    Apps, CostNode, FNode, Parameters, ProgressiveSearchParameters, Search, SearchInput,
+    SuccessorGenerator,
 };
-use super::search_algorithm::Search;
-use super::search_algorithm::{Apps, SuccessorGenerator};
-use dypdl::variable_type;
+use dypdl::{variable_type, Transition};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -30,8 +27,9 @@ use std::str;
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::{FEvaluatorType, create_dual_bound_apps};
-/// use dypdl_heuristic_search::search_algorithm::util::{Parameters, ProgressiveSearchParameters};
+/// use dypdl_heuristic_search::{
+///     create_dual_bound_apps, FEvaluatorType, Parameters, ProgressiveSearchParameters
+/// };
 /// use std::rc::Rc;
 ///
 /// let mut model = Model::default();
@@ -51,7 +49,7 @@ use std::str;
 /// let f_evaluator_type = FEvaluatorType::Plus;
 ///
 /// let mut solver = create_dual_bound_apps(
-///     model, parameters, progressive_parameters, f_evaluator_type, None
+///     model, parameters, f_evaluator_type, progressive_parameters
 /// );
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
@@ -61,36 +59,63 @@ use std::str;
 pub fn create_dual_bound_apps<T>(
     model: Rc<dypdl::Model>,
     parameters: Parameters<T>,
-    progressive_parameters: ProgressiveSearchParameters,
     f_evaluator_type: FEvaluatorType,
-    initial_registry_capacity: Option<usize>,
+    progressive_parameters: ProgressiveSearchParameters,
 ) -> Box<dyn Search<T>>
 where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let generator = SuccessorGenerator::from_model(model.clone(), false);
-    let parameters = ForwardSearchParameters {
-        generator,
-        parameters,
-        initial_registry_capacity,
-    };
-    let h_model = model.clone();
-    let h_evaluator =
-        move |state: &StateInRegistry| Some(h_model.eval_dual_bound(state).unwrap_or_else(T::zero));
-    let (f_pruning, f_evaluator_type) = if model.has_dual_bounds() {
-        (true, f_evaluator_type)
+    let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+
+    if model.has_dual_bounds() {
+        let state = model.target.clone();
+        let h_evaluator = move |state: &_| model.eval_dual_bound(state);
+        let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
+        let node = FNode::generate_root_node(
+            state,
+            T::zero(),
+            &generator.model,
+            &h_evaluator,
+            &f_evaluator,
+            parameters.primal_bound,
+        );
+        let input = SearchInput {
+            node,
+            generator,
+            solution_suffix: &[],
+        };
+        let transition_evaluator =
+            move |node: &FNode<_>, transition, registry: &mut _, primal_bound| {
+                node.insert_successor_node(
+                    transition,
+                    registry,
+                    &h_evaluator,
+                    &f_evaluator,
+                    primal_bound,
+                )
+            };
+        Box::new(Apps::<_, FNode<_>, _, _>::new(
+            input,
+            transition_evaluator,
+            parameters,
+            progressive_parameters,
+        ))
     } else {
-        (false, FEvaluatorType::Plus)
-    };
-    let f_evaluator = move |g, h, _: &StateInRegistry| f_evaluator_type.eval(g, h);
-    Box::new(Apps::<_, FNode<_>, _, _>::new(
-        model,
-        h_evaluator,
-        f_evaluator,
-        f_pruning,
-        true,
-        progressive_parameters,
-        parameters,
-    ))
+        let node = CostNode::generate_root_node(model.target.clone(), T::zero(), &model);
+        let input = SearchInput {
+            node: Some(node),
+            generator,
+            solution_suffix: &[],
+        };
+        let transition_evaluator = |node: &CostNode<_>, transition, registry: &mut _, _| {
+            node.insert_successor_node(transition, registry)
+        };
+        Box::new(Apps::<_, CostNode<_>, _, _>::new(
+            input,
+            transition_evaluator,
+            parameters,
+            progressive_parameters,
+        ))
+    }
 }

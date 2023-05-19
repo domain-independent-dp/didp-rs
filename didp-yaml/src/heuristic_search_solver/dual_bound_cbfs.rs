@@ -1,7 +1,7 @@
 use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
-use dypdl_heuristic_search::{create_dual_bound_cbfs, FEvaluatorType, Search};
+use dypdl_heuristic_search::{create_dual_bound_cbfs, FEvaluatorType, Parameters, Search};
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
@@ -17,6 +17,18 @@ where
 {
     let map = match config {
         yaml_rust::Yaml::Hash(map) => map,
+        yaml_rust::Yaml::Null => {
+            return Ok(create_dual_bound_cbfs(
+                Rc::new(model),
+                {
+                    Parameters {
+                        initial_registry_capacity: Some(1000000),
+                        ..Default::default()
+                    }
+                },
+                FEvaluatorType::Plus,
+            ))
+        }
         _ => {
             return Err(util::YamlContentErr::new(format!(
                 "expected Hash for the solver config, but found `{:?}`",
@@ -49,23 +61,9 @@ where
         }
     };
     let parameters = solver_parameters::parse_from_map(map)?;
-    let initial_registry_capacity =
-        match map.get(&yaml_rust::Yaml::from_str("initial_registry_capacity")) {
-            Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
-            None => Some(1000000),
-            value => {
-                return Err(util::YamlContentErr::new(format!(
-                    "expected Integer for `initial_registry_capacity`, but found `{:?}`",
-                    value
-                ))
-                .into())
-            }
-        };
-
     Ok(create_dual_bound_cbfs(
         Rc::new(model),
         parameters,
         f_evaluator_type,
-        initial_registry_capacity,
     ))
 }

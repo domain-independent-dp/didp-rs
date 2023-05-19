@@ -2,6 +2,12 @@ use core::ops::Deref;
 use dypdl::{Transition, TransitionInterface};
 use std::rc::Rc;
 
+/// Trait to get a sequence of transitions.
+pub trait GetTransitions<V = Transition> {
+    /// Returns transitions to reach this node.
+    fn transitions(&self) -> Vec<V>;
+}
+
 /// Chain of transitions.
 ///
 /// # Examples
@@ -9,23 +15,23 @@ use std::rc::Rc;
 /// ```
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-///     TransitionChainInterface, TransitionChain
+///     RcChain, TransitionChain
 /// };
 /// use std::rc::Rc;
 ///
 /// let t1 = Transition::new("t1");
-/// let chain = Rc::new(TransitionChain::new(None, Rc::new(t1.clone())));
+/// let chain = Rc::new(RcChain::new(None, Rc::new(t1.clone())));
 /// assert_eq!(chain.last(), &t1);
 /// assert_eq!(chain.parent(), None);
 /// assert_eq!(chain.transitions(), vec![t1.clone()]);
 ///
 /// let t2 = Transition::new("t2");
-/// let new_chain = Rc::new(TransitionChain::new(Some(chain.clone()), Rc::new(t2.clone())));
+/// let new_chain = Rc::new(RcChain::new(Some(chain.clone()), Rc::new(t2.clone())));
 /// assert_eq!(new_chain.last(), &t2);
 /// assert_eq!(new_chain.parent(), Some(&chain));
 /// assert_eq!(new_chain.transitions(), vec![t1, t2]);
 /// ```
-pub trait TransitionChainInterface<T = Transition, R = Rc<T>, P = Rc<Self>>
+pub trait TransitionChain<T = Transition, R = Rc<T>, P = Rc<Self>>
 where
     T: TransitionInterface + Clone,
     R: Deref<Target = T>,
@@ -58,17 +64,25 @@ where
 
 /// Chain of transitions implemented by a linked list of `Rc`.
 #[derive(PartialEq, Debug)]
-pub struct TransitionChain {
+pub struct RcChain<T = Transition>
+where
+    T: TransitionInterface + Clone,
+    Transition: From<T>,
+{
     parent: Option<Rc<Self>>,
-    last: Rc<Transition>,
+    last: Rc<T>,
 }
 
-impl TransitionChainInterface for TransitionChain {
-    fn new(parent: Option<Rc<Self>>, last: Rc<Transition>) -> Self {
+impl<T> TransitionChain<T> for RcChain<T>
+where
+    T: TransitionInterface + Clone,
+    Transition: From<T>,
+{
+    fn new(parent: Option<Rc<Self>>, last: Rc<T>) -> Self {
         Self { parent, last }
     }
 
-    fn last(&self) -> &Transition {
+    fn last(&self) -> &T {
         &self.last
     }
 
@@ -87,7 +101,7 @@ mod tests {
             name: String::from("op1"),
             ..Default::default()
         });
-        let chain = TransitionChain::new(None, op1.clone());
+        let chain = RcChain::new(None, op1.clone());
         assert_eq!(chain.parent(), None);
         assert_eq!(chain.last(), &*op1);
     }
@@ -98,12 +112,12 @@ mod tests {
             name: String::from("op1"),
             ..Default::default()
         });
-        let chain1 = Rc::new(TransitionChain::new(None, op1));
+        let chain1 = Rc::new(RcChain::new(None, op1));
         let op2 = Rc::new(dypdl::Transition {
             name: String::from("op2"),
             ..Default::default()
         });
-        let chain2 = TransitionChain::new(Some(chain1.clone()), op2.clone());
+        let chain2 = RcChain::new(Some(chain1.clone()), op2.clone());
         assert_eq!(chain2.parent(), Some(&chain1));
         assert_eq!(chain2.last(), &*op2);
     }
@@ -114,12 +128,12 @@ mod tests {
             name: String::from("op1"),
             ..Default::default()
         };
-        let chain1 = Rc::new(TransitionChain::new(None, Rc::new(op1.clone())));
+        let chain1 = Rc::new(RcChain::new(None, Rc::new(op1.clone())));
         let op2 = dypdl::Transition {
             name: String::from("op2"),
             ..Default::default()
         };
-        let chain2 = Rc::new(TransitionChain::new(Some(chain1), Rc::new(op2.clone())));
+        let chain2 = Rc::new(RcChain::new(Some(chain1), Rc::new(op2.clone())));
         let result = chain2.transitions();
         let expected = vec![op1, op2];
         assert_eq!(result, expected);

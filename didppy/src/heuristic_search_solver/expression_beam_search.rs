@@ -201,29 +201,28 @@ impl ExpressionBeamSearchPy {
             forced_custom_costs,
             h_expression,
             custom_cost_type,
+            maximize,
         };
 
         match (model.float_cost(), custom_cost_type) {
             (true, CostType::Continuous) => {
                 let parameters = BeamSearchParameters {
                     beam_size,
-                    maximize,
-                    f_pruning: false,
-                    f_bound: None,
                     keep_all_layers,
                     parameters: Parameters::<OrderedContinuous> {
                         primal_bound: None,
                         time_limit,
                         get_all_solutions: false,
                         quiet,
+                        initial_registry_capacity: None,
                     },
                 };
                 let solver = Box::new(
                     ExpressionBeamSearch::<OrderedContinuous, OrderedContinuous>::new(
                         Rc::new(model.inner_as_ref().clone()),
                         parameters,
-                        custom_expression_parameters,
                         f_evaluator_type,
+                        custom_expression_parameters,
                     ),
                 );
                 Ok(ExpressionBeamSearchPy(WrappedSolver::Float(solver)))
@@ -231,66 +230,60 @@ impl ExpressionBeamSearchPy {
             (true, CostType::Integer) => {
                 let parameters = BeamSearchParameters {
                     beam_size,
-                    maximize,
-                    f_pruning: false,
-                    f_bound: None,
                     keep_all_layers,
                     parameters: Parameters::<OrderedContinuous> {
                         primal_bound: None,
                         time_limit,
                         get_all_solutions: false,
                         quiet,
+                        initial_registry_capacity: None,
                     },
                 };
                 let solver = Box::new(ExpressionBeamSearch::<OrderedContinuous, Integer>::new(
                     Rc::new(model.inner_as_ref().clone()),
                     parameters,
-                    custom_expression_parameters,
                     f_evaluator_type,
+                    custom_expression_parameters,
                 ));
                 Ok(ExpressionBeamSearchPy(WrappedSolver::Float(solver)))
             }
             (false, CostType::Continuous) => {
                 let parameters = BeamSearchParameters {
                     beam_size,
-                    maximize,
-                    f_pruning: false,
-                    f_bound: None,
                     keep_all_layers,
                     parameters: Parameters::<Integer> {
                         primal_bound: None,
                         time_limit,
                         get_all_solutions: false,
+                        initial_registry_capacity: None,
                         quiet,
                     },
                 };
                 let solver = Box::new(ExpressionBeamSearch::<Integer, OrderedContinuous>::new(
                     Rc::new(model.inner_as_ref().clone()),
                     parameters,
-                    custom_expression_parameters,
                     f_evaluator_type,
+                    custom_expression_parameters,
                 ));
                 Ok(ExpressionBeamSearchPy(WrappedSolver::Int(solver)))
             }
             (false, CostType::Integer) => {
                 let parameters = BeamSearchParameters {
                     beam_size,
-                    maximize,
-                    f_pruning: false,
-                    f_bound: None,
                     keep_all_layers,
                     parameters: Parameters::<Integer> {
                         primal_bound: None,
                         time_limit,
                         get_all_solutions: false,
+                        initial_registry_capacity: None,
                         quiet,
                     },
                 };
                 let solver = Box::new(ExpressionBeamSearch::<Integer, Integer>::new(
                     Rc::new(model.inner_as_ref().clone()),
                     parameters,
-                    custom_expression_parameters,
                     f_evaluator_type,
+                    custom_expression_parameters,
                 ));
                 Ok(ExpressionBeamSearchPy(WrappedSolver::Int(solver)))
             }

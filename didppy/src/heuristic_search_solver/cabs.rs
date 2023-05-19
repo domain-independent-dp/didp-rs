@@ -3,7 +3,10 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_cabs, FEvaluatorType, Search};
+use dypdl_heuristic_search::{
+    create_dual_bound_cabs, BeamSearchParameters, CabsParameters, FEvaluatorType, Parameters,
+    Search,
+};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -138,19 +141,24 @@ impl CabsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<OrderedContinuous> {
-                primal_bound,
-                time_limit,
-                get_all_solutions: false,
-                quiet,
+            let parameters = CabsParameters {
+                max_beam_size,
+                beam_search_parameters: BeamSearchParameters {
+                    beam_size: initial_beam_size,
+                    keep_all_layers,
+                    parameters: Parameters::<OrderedContinuous> {
+                        primal_bound,
+                        time_limit,
+                        get_all_solutions: false,
+                        quiet,
+                        initial_registry_capacity: None,
+                    },
+                },
             };
             let solver = create_dual_bound_cabs::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
                 f_evaluator_type,
-                initial_beam_size,
-                keep_all_layers,
-                max_beam_size,
             );
             Ok(CabsPy(WrappedSolver::Float(solver)))
         } else {
@@ -159,19 +167,24 @@ impl CabsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
-                primal_bound,
-                time_limit,
-                get_all_solutions: false,
-                quiet,
+            let parameters = CabsParameters {
+                max_beam_size,
+                beam_search_parameters: BeamSearchParameters {
+                    beam_size: initial_beam_size,
+                    keep_all_layers,
+                    parameters: Parameters::<Integer> {
+                        primal_bound,
+                        time_limit,
+                        get_all_solutions: false,
+                        quiet,
+                        initial_registry_capacity: None,
+                    },
+                },
             };
             let solver = create_dual_bound_cabs::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
                 f_evaluator_type,
-                initial_beam_size,
-                keep_all_layers,
-                max_beam_size,
             );
             Ok(CabsPy(WrappedSolver::Int(solver)))
         }

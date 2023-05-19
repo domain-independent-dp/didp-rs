@@ -76,7 +76,6 @@ This restriction is shared by the following path-finding (or heuristic search) b
 * :class:`~didppy.BreadthFirstSearch`
 * :class:`~didppy.WeightedAstar`
 * :class:`~didppy.ExpressionBeamSearch`
-* :class:`~didppy.Dijkstra` (also restricted to minimization)
 
 Currently, only :class:`~didppy.ForwardRecursion` supports arbitrary cost expressions.
 However, it does not support cyclic state spaces.

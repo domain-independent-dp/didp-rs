@@ -169,45 +169,41 @@ where
 
     match custom_cost_type {
         CostType::Integer => {
-            let parameters = BeamSearchParameters::<T, Integer> {
+            let parameters = BeamSearchParameters {
                 beam_size,
-                maximize,
-                f_pruning: false,
-                f_bound: None,
                 keep_all_layers,
                 parameters: solver_parameters::parse_from_map(map)?,
             };
-            Ok(Box::new(ExpressionBeamSearch::new(
+            Ok(Box::new(ExpressionBeamSearch::<_, Integer>::new(
                 Rc::new(model),
                 parameters,
+                f_evaluator_type,
                 CustomExpressionParameters {
                     custom_costs,
                     forced_custom_costs,
                     h_expression,
                     custom_cost_type,
+                    maximize,
                 },
-                f_evaluator_type,
             )))
         }
         CostType::Continuous => {
-            let parameters = BeamSearchParameters::<_, OrderedContinuous> {
+            let parameters = BeamSearchParameters {
                 beam_size,
-                maximize,
-                f_pruning: false,
-                f_bound: None,
                 keep_all_layers,
                 parameters: solver_parameters::parse_from_map(map)?,
             };
-            Ok(Box::new(ExpressionBeamSearch::new(
+            Ok(Box::new(ExpressionBeamSearch::<_, OrderedContinuous>::new(
                 Rc::new(model),
                 parameters,
+                f_evaluator_type,
                 CustomExpressionParameters {
                     custom_costs,
                     forced_custom_costs,
                     h_expression,
                     custom_cost_type,
+                    maximize,
                 },
-                f_evaluator_type,
             )))
         }
     }

@@ -47,10 +47,22 @@ where
             )))
         }
     };
+    let initial_registry_capacity =
+        match map.get(&yaml_rust::Yaml::from_str("initial_registry_capacity")) {
+            Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
+            None => Some(1000000),
+            value => {
+                return Err(util::YamlContentErr::new(format!(
+                    "expected Integer for `initial_registry_capacity`, but found `{:?}`",
+                    value
+                )))
+            }
+        };
     Ok(Parameters {
         primal_bound,
         time_limit,
         get_all_solutions,
         quiet,
+        initial_registry_capacity,
     })
 }

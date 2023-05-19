@@ -3,7 +3,9 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_dbdfs, FEvaluatorType, Search};
+use dypdl_heuristic_search::{
+    create_dual_bound_dbdfs, DbdfsParameters, FEvaluatorType, Parameters, Search,
+};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -136,18 +138,20 @@ impl DbdfsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<OrderedContinuous> {
-                primal_bound,
-                time_limit,
-                get_all_solutions,
-                quiet,
+            let parameters = DbdfsParameters::<OrderedContinuous> {
+                width,
+                parameters: Parameters::<OrderedContinuous> {
+                    primal_bound,
+                    time_limit,
+                    get_all_solutions,
+                    quiet,
+                    initial_registry_capacity: Some(initial_registry_capacity),
+                },
             };
             let solver = create_dual_bound_dbdfs::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                width,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
             );
             Ok(DbdfsPy(WrappedSolver::Float(solver)))
         } else {
@@ -156,18 +160,20 @@ impl DbdfsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
-                primal_bound,
-                time_limit,
-                get_all_solutions,
-                quiet,
+            let parameters = DbdfsParameters::<Integer> {
+                width,
+                parameters: Parameters::<Integer> {
+                    primal_bound,
+                    time_limit,
+                    get_all_solutions,
+                    quiet,
+                    initial_registry_capacity: Some(initial_registry_capacity),
+                },
             };
             let solver = create_dual_bound_dbdfs::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                width,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
             );
             Ok(DbdfsPy(WrappedSolver::Int(solver)))
         }

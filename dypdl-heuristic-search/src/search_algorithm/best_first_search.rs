@@ -1,10 +1,8 @@
-use super::data_structure::state_registry::{StateInRegistry, StateRegistry};
-use super::data_structure::{
-    exceed_bound, BfsNodeInterface, HashableSignatureVariables, SuccessorGenerator,
-};
-use super::search::{Search, Solution};
-use super::util;
-use dypdl::{variable_type, ReduceFunction};
+use super::data_structure::{exceed_bound, BfsNode, StateRegistry, SuccessorGenerator};
+use super::rollout::get_solution_cost_and_suffix;
+use super::search::{Parameters, Search, SearchInput, Solution};
+use super::util::{update_bound_if_better, update_solution, TimeKeeper};
+use dypdl::{variable_type, Transition, TransitionInterface};
 use std::collections::BinaryHeap;
 use std::error::Error;
 use std::fmt;
@@ -17,13 +15,11 @@ use std::rc::Rc;
 /// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
 /// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
 ///
-/// It uses `h_evaluator` and `f_evaluator` for pruning.
-/// If `h_evaluator` returns `None`, the state is pruned.
-/// If `f_pruning` and `f_evaluator` returns a value that exceeds the primal bound, the state is pruned.
+/// It searches a node in the best-first order.
 ///
-/// `ordered_by_f` indicates if the open list is ordered by the f-value.
-///
-/// `is_optimal` indicates if the optimality is guaranteed.
+/// Type parameter `N` is a node type that implements `BfsNode`.
+/// Type parameter `E` is a type of a function that evaluates a transition and insert a successor node into a state registry.
+/// The last argument of the function is the primal bound of the solution cost.
 ///
 /// # References
 ///
@@ -40,13 +36,9 @@ use std::rc::Rc;
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::search_algorithm::{BestFirstSearch, Search};
-/// use dypdl_heuristic_search::search_algorithm::data_structure::FNode;
-/// use dypdl_heuristic_search::search_algorithm::data_structure::successor_generator::{
-///     SuccessorGenerator
-/// };
-/// use dypdl_heuristic_search::search_algorithm::util::{
-///     ForwardSearchParameters, Parameters,
+/// use dypdl_heuristic_search::{Parameters, Search};
+/// use dypdl_heuristic_search::search_algorithm::{
+///     BestFirstSearch, FNode, SearchInput, SuccessorGenerator,
 /// };
 /// use std::rc::Rc;
 ///
@@ -59,107 +51,111 @@ use std::rc::Rc;
 /// increment.set_cost(IntegerExpression::Cost + 1);
 /// increment.add_effect(variable, variable + 1).unwrap();
 /// model.add_forward_transition(increment.clone()).unwrap();
+/// let model = Rc::new(model);
 ///
+/// let state = model.target.clone();
+/// let cost = 0;
 /// let h_evaluator = |_: &_| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
-///
-/// let model = Rc::new(model);
-/// let generator = SuccessorGenerator::from_model(model.clone(), false);
-/// let parameters = ForwardSearchParameters {
+/// let primal_bound = None;
+/// let node = FNode::generate_root_node(
+///     state,
+///     cost,
+///     &model,
+///     &h_evaluator,
+///     &f_evaluator,
+///     primal_bound,
+/// );
+/// let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+/// let input = SearchInput {
+///     node,
 ///     generator,
-///     parameters: Parameters::default(),
-///     initial_registry_capacity: None
+///     solution_suffix: &[],
 /// };
+/// let transition_evaluator =
+///     move |node: &FNode<_>, transition, registry: &mut _, primal_bound| {
+///         node.insert_successor_node(
+///             transition,
+///             registry,
+///             &h_evaluator,
+///             &f_evaluator,
+///             primal_bound,
+///         )
+///     };
+/// let parameters = Parameters::default();
 ///
-/// let mut solver = BestFirstSearch::<_, FNode<_>, _, _>::new(
-///     model, h_evaluator, f_evaluator, true, true, true, parameters
+/// let mut solver = BestFirstSearch::<_, FNode<_>, _>::new(
+///     input, transition_evaluator, parameters,
 /// );
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub struct BestFirstSearch<T, N, H, F>
+pub struct BestFirstSearch<'a, T, N, E, V = Transition>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNodeInterface<T>,
-    H: Fn(&StateInRegistry) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry) -> T,
+    N: BfsNode<T, V>,
+    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
-    generator: SuccessorGenerator,
-    h_evaluator: H,
-    f_evaluator: F,
-    f_pruning: bool,
-    ordered_by_f: bool,
-    is_optimal: bool,
+    generator: SuccessorGenerator<V>,
+    suffix: &'a [V],
+    transition_evaluator: E,
     primal_bound: Option<T>,
     get_all_solutions: bool,
     quiet: bool,
     open: BinaryHeap<Rc<N>>,
     registry: StateRegistry<T, N>,
-    time_keeper: util::TimeKeeper,
+    time_keeper: TimeKeeper,
     solution: Solution<T>,
     phantom: PhantomData<N>,
 }
 
-impl<T, N, H, F> BestFirstSearch<T, N, H, F>
+impl<'a, T, N, E, V> BestFirstSearch<'a, T, N, E, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNodeInterface<T>,
-    H: Fn(&StateInRegistry) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry) -> T,
+    N: BfsNode<T, V>,
+    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
-    /// Create a new best-first search solver.
+    /// Creates a new best-first search solver.
     pub fn new(
-        model: Rc<dypdl::Model>,
-        h_evaluator: H,
-        f_evaluator: F,
-        f_pruning: bool,
-        ordered_by_f: bool,
-        is_optimal: bool,
-        parameters: util::ForwardSearchParameters<T>,
-    ) -> BestFirstSearch<T, N, H, F> {
-        let time_keeper = parameters
-            .parameters
+        input: SearchInput<'a, N, V>,
+        transition_evaluator: E,
+        parameters: Parameters<T>,
+    ) -> BestFirstSearch<T, N, E, V> {
+        let mut time_keeper = parameters
             .time_limit
-            .map_or_else(util::TimeKeeper::default, util::TimeKeeper::with_time_limit);
-        let primal_bound = parameters.parameters.primal_bound;
-        let get_all_solutions = parameters.parameters.get_all_solutions;
-        let quiet = parameters.parameters.quiet;
+            .map_or_else(TimeKeeper::default, TimeKeeper::with_time_limit);
+        let primal_bound = parameters.primal_bound;
+        let get_all_solutions = parameters.get_all_solutions;
+        let quiet = parameters.quiet;
 
         let mut open = BinaryHeap::new();
-        let mut registry = StateRegistry::new(model);
+        let mut registry = StateRegistry::new(input.generator.model.clone());
 
         if let Some(capacity) = parameters.initial_registry_capacity {
             registry.reserve(capacity);
         }
 
         let mut solution = Solution::default();
-
-        if let Some((node, h, f)) =
-            N::generate_initial_node(&mut registry, &h_evaluator, &f_evaluator)
-        {
+        if let Some(node) = input.node {
+            let (node, _) = registry.insert(node).unwrap();
             open.push(node);
             solution.generated += 1;
-
-            if !quiet {
-                println!("Initial h = {}", h);
-            }
-
-            if f_pruning && is_optimal {
-                solution.best_bound = Some(f);
-            }
         } else {
             solution.is_infeasible = true;
         }
 
+        time_keeper.stop();
+
         BestFirstSearch {
-            generator: parameters.generator,
-            h_evaluator,
-            f_evaluator,
-            f_pruning,
-            ordered_by_f,
-            is_optimal,
+            generator: input.generator,
+            suffix: input.solution_suffix,
+            transition_evaluator,
             primal_bound,
             get_all_solutions,
             quiet,
@@ -172,101 +168,74 @@ where
     }
 }
 
-impl<T, N, H, F> Search<T> for BestFirstSearch<T, N, H, F>
+impl<'a, T, N, E, V> Search<T> for BestFirstSearch<'a, T, N, E, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNodeInterface<T>,
-    H: Fn(&StateInRegistry<Rc<HashableSignatureVariables>>) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry<Rc<HashableSignatureVariables>>) -> T,
+    N: BfsNode<T, V>,
+    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
-        let minimize = self.registry.model().reduce_function == ReduceFunction::Min;
+        self.time_keeper.start();
+        let model = &self.generator.model;
 
         while let Some(node) = self.open.pop() {
-            if node.closed() {
+            if node.is_closed() {
+                continue;
+            }
+            node.close();
+
+            if let Some(dual_bound) = node.bound(model) {
+                if exceed_bound(model, dual_bound, self.primal_bound) {
+                    if N::ordered_by_bound() {
+                        self.open.clear();
+                    }
+                    continue;
+                }
+
+                if N::ordered_by_bound() || self.open.is_empty() {
+                    self.solution.time = self.time_keeper.elapsed_time();
+                    update_bound_if_better(&mut self.solution, dual_bound, model, self.quiet);
+                }
+            }
+
+            if let Some((cost, suffix)) = get_solution_cost_and_suffix(model, &*node, self.suffix) {
+                if !exceed_bound(model, cost, self.primal_bound) {
+                    self.primal_bound = Some(cost);
+                    let time = self.time_keeper.elapsed_time();
+                    update_solution(&mut self.solution, &*node, cost, suffix, time, self.quiet);
+                    self.time_keeper.stop();
+
+                    return Ok((self.solution.clone(), self.solution.is_optimal));
+                } else if self.get_all_solutions {
+                    let mut solution = self.solution.clone();
+                    let time = self.time_keeper.elapsed_time();
+                    update_solution(&mut solution, &*node, cost, suffix, time, true);
+                    self.time_keeper.stop();
+
+                    return Ok((solution, false));
+                }
                 continue;
             }
 
-            node.close();
-
-            let f = node.get_bound(self.registry.model());
-
-            if self.f_pruning
-                && self.ordered_by_f
-                && exceed_bound(self.registry.model(), f, self.primal_bound)
-            {
-                self.open.clear();
-                break;
-            }
-
-            if let Some(best_bound) = self.solution.best_bound {
-                if (minimize && f > best_bound) || (!minimize && f < best_bound) {
-                    self.solution.best_bound = Some(f);
-
-                    if !self.quiet {
-                        println!("f = {}, expanded: {}", f, self.solution.expanded);
-                    }
-                }
-            }
-
-            if self.registry.model().is_base(node.state()) {
-                if exceed_bound(self.registry.model(), node.cost(), self.primal_bound) {
-                    if self.get_all_solutions {
-                        let mut solution = self.solution.clone();
-                        solution.cost = Some(node.cost());
-                        solution.transitions = node.transitions();
-                        solution.time = self.time_keeper.elapsed_time();
-
-                        return Ok((solution, false));
-                    }
-
-                    continue;
-                } else {
-                    let cost = node.cost();
-                    self.solution.cost = Some(cost);
-                    self.primal_bound = Some(cost);
-                    self.solution.transitions = node.transitions();
-
-                    if let Some(best_bound) = self.solution.best_bound {
-                        self.solution.is_optimal = cost == best_bound;
-                    }
-
-                    self.solution.time = self.time_keeper.elapsed_time();
-
-                    return Ok((self.solution.clone(), self.solution.is_optimal));
-                }
-            }
-
-            if self.time_keeper.check_time_limit() {
-                if !self.quiet {
-                    println!("Reached time limit.");
-                    println!("Expanded: {}", self.solution.expanded);
-                }
-
+            if self.time_keeper.check_time_limit(self.quiet) {
                 self.solution.time_out = true;
                 self.solution.time = self.time_keeper.elapsed_time();
+                self.time_keeper.stop();
 
                 return Ok((self.solution.clone(), true));
             }
 
             self.solution.expanded += 1;
 
-            let primal_bound = if self.f_pruning {
-                self.primal_bound
-            } else {
-                None
-            };
-
             for transition in self.generator.applicable_transitions(node.state()) {
-                let successor = node.generate_successor(
+                if let Some((successor, new_generated)) = (self.transition_evaluator)(
+                    &node,
                     transition,
                     &mut self.registry,
-                    &self.h_evaluator,
-                    &self.f_evaluator,
-                    primal_bound,
-                );
-
-                if let Some((successor, _, _, new_generated)) = successor {
+                    self.primal_bound,
+                ) {
                     self.open.push(successor);
 
                     if new_generated {
@@ -277,8 +246,10 @@ where
         }
 
         self.solution.is_infeasible = self.solution.cost.is_none();
-        self.solution.is_optimal = self.is_optimal && self.solution.cost.is_some();
+        self.solution.is_optimal = self.solution.cost.is_some();
+        self.solution.best_bound = self.solution.cost;
         self.solution.time = self.time_keeper.elapsed_time();
+        self.time_keeper.stop();
         Ok((self.solution.clone(), true))
     }
 }

@@ -3,7 +3,7 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_cbfs, FEvaluatorType, Search};
+use dypdl_heuristic_search::{create_dual_bound_cbfs, FEvaluatorType, Parameters, Search};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -131,17 +131,17 @@ impl CbfsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<OrderedContinuous> {
+            let parameters = Parameters::<OrderedContinuous> {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
                 quiet,
+                initial_registry_capacity: Some(initial_registry_capacity),
             };
             let solver = create_dual_bound_cbfs::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
             );
             Ok(CbfsPy(WrappedSolver::Float(solver)))
         } else {
@@ -150,17 +150,17 @@ impl CbfsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
+            let parameters = Parameters::<Integer> {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
                 quiet,
+                initial_registry_capacity: Some(initial_registry_capacity),
             };
             let solver = create_dual_bound_cbfs::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
             );
             Ok(CbfsPy(WrappedSolver::Int(solver)))
         }

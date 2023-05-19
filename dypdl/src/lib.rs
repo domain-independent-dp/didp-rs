@@ -389,6 +389,12 @@ impl Model {
         transition: &T,
         cost_bound: Option<U>,
     ) -> Option<(R, U)> {
+        let successor = transition.apply(state, &self.table_registry);
+
+        if !self.check_constraints(&successor) {
+            return None;
+        }
+
         let successor_cost = transition.eval_cost(cost, state, &self.table_registry);
 
         if cost_bound.map_or(false, |bound| match self.reduce_function {
@@ -399,13 +405,7 @@ impl Model {
             return None;
         }
 
-        let successor = transition.apply(state, &self.table_registry);
-
-        if self.check_constraints(&successor) {
-            Some((successor, successor_cost))
-        } else {
-            None
-        }
+        Some((successor, successor_cost))
     }
 
     /// Validate a solution consists of forward transitions.

@@ -101,7 +101,6 @@ Solvers
    didppy.BreadthFirstSearch
    didppy.WeightedAstar
    didppy.ExpressionBeamSearch
-   didppy.Dijkstra
 
 Solution
 --------

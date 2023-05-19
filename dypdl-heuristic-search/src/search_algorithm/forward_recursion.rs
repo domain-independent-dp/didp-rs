@@ -1,7 +1,7 @@
 use super::data_structure::{HashableState, SuccessorGenerator};
-use super::search::{Search, Solution};
+use super::search::{Parameters, Search, Solution};
 use super::util;
-use dypdl::{variable_type, TransitionInterface};
+use dypdl::{variable_type, Transition, TransitionInterface};
 use rustc_hash::FxHashMap;
 use std::error::Error;
 use std::fmt;
@@ -17,8 +17,8 @@ use std::str;
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::search_algorithm::{ForwardRecursion, Search};
-/// use dypdl_heuristic_search::search_algorithm::util::Parameters;
+/// use dypdl_heuristic_search::{Search, Parameters};
+/// use dypdl_heuristic_search::search_algorithm::{ForwardRecursion};
 /// use std::rc::Rc;
 ///
 /// let mut model = Model::default();
@@ -33,7 +33,7 @@ use std::str;
 ///
 /// let model = Rc::new(model);
 /// let parameters = Parameters::default();
-/// let mut solver = ForwardRecursion::new(model, parameters, None);
+/// let mut solver = ForwardRecursion::new(model, parameters);
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
@@ -45,8 +45,7 @@ where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     model: Rc<dypdl::Model>,
-    parameters: util::Parameters<T>,
-    initial_registry_capacity: Option<usize>,
+    parameters: Parameters<T>,
     terminated: bool,
     solution: Solution<T>,
 }
@@ -57,15 +56,10 @@ where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     /// Create a new forward recursion solver.
-    pub fn new(
-        model: Rc<dypdl::Model>,
-        parameters: util::Parameters<T>,
-        initial_registry_capacity: Option<usize>,
-    ) -> ForwardRecursion<T> {
+    pub fn new(model: Rc<dypdl::Model>, parameters: Parameters<T>) -> ForwardRecursion<T> {
         ForwardRecursion {
             model,
             parameters,
-            initial_registry_capacity,
             terminated: false,
             solution: Solution::default(),
         }
@@ -86,10 +80,10 @@ where
             .parameters
             .time_limit
             .map_or_else(util::TimeKeeper::default, util::TimeKeeper::with_time_limit);
-        let generator = SuccessorGenerator::from_model(self.model.clone(), false);
+        let generator = SuccessorGenerator::<Transition>::from_model(self.model.clone(), false);
         let mut memo = FxHashMap::default();
 
-        if let Some(capacity) = self.initial_registry_capacity {
+        if let Some(capacity) = self.parameters.initial_registry_capacity {
             memo.reserve(capacity);
         }
 
@@ -147,7 +141,7 @@ pub fn forward_recursion<T: variable_type::Numeric>(
         return *cost;
     }
 
-    if time_keeper.check_time_limit() {
+    if time_keeper.check_time_limit(true) {
         return None;
     }
 

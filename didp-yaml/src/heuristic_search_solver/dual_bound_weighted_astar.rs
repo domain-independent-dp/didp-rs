@@ -17,69 +17,21 @@ where
     T: Numeric + Ord + fmt::Display + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let (parameters, weight, f_evaluator_type, initial_registry_capacity) = match config {
-        yaml_rust::Yaml::Hash(map) => {
-            let f_evaluator_type = match map.get(&yaml_rust::Yaml::from_str("f")) {
-                Some(yaml_rust::Yaml::String(string)) => match &string[..] {
-                    "+" => FEvaluatorType::Plus,
-                    "max" => FEvaluatorType::Max,
-                    "min" => FEvaluatorType::Min,
-                    "h" => FEvaluatorType::Overwrite,
-                    op => {
-                        return Err(util::YamlContentErr::new(format!(
-                            "unexpected operator `{}` for `f`",
-                            op
-                        ))
-                        .into())
+    let map = match config {
+        yaml_rust::Yaml::Hash(map) => map,
+        yaml_rust::Yaml::Null => {
+            return Ok(create_dual_bound_weighted_astar(
+                Rc::new(model),
+                {
+                    Parameters {
+                        initial_registry_capacity: Some(1000000),
+                        ..Default::default()
                     }
                 },
-                None => FEvaluatorType::default(),
-                value => {
-                    return Err(util::YamlContentErr::new(format!(
-                        "expected String for `f`, but found `{:?}`",
-                        value
-                    ))
-                    .into())
-                }
-            };
-            let parameters = solver_parameters::parse_from_map(map)?;
-            let initial_registry_capacity =
-                match map.get(&yaml_rust::Yaml::from_str("initial_registry_capacity")) {
-                    Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
-                    None => Some(1000000),
-                    value => {
-                        return Err(util::YamlContentErr::new(format!(
-                            "expected Integer for `initial_registry_capacity`, but found `{:?}`",
-                            value
-                        ))
-                        .into())
-                    }
-                };
-            let weight = match map.get(&yaml_rust::Yaml::from_str("weight")) {
-                Some(yaml_rust::Yaml::Integer(value)) => *value as Continuous,
-                Some(yaml_rust::Yaml::Real(value)) => value.parse::<Continuous>()?,
-                Some(value) => {
-                    return Err(util::YamlContentErr::new(format!(
-                        "expected Integer or Float for `weight`, but found `{:?}`",
-                        value
-                    ))
-                    .into())
-                }
-                None => 1.0,
-            };
-            (
-                parameters,
-                weight,
-                f_evaluator_type,
-                initial_registry_capacity,
-            )
+                FEvaluatorType::Plus,
+                1.0,
+            ))
         }
-        yaml_rust::Yaml::Null => (
-            Parameters::default(),
-            1.0,
-            FEvaluatorType::default(),
-            Some(1000000),
-        ),
         _ => {
             return Err(util::YamlContentErr::new(format!(
                 "expected Hash for the solver config, but found `{:?}`",
@@ -88,11 +40,46 @@ where
             .into())
         }
     };
+    let f_evaluator_type = match map.get(&yaml_rust::Yaml::from_str("f")) {
+        Some(yaml_rust::Yaml::String(string)) => match &string[..] {
+            "+" => FEvaluatorType::Plus,
+            "max" => FEvaluatorType::Max,
+            "min" => FEvaluatorType::Min,
+            "h" => FEvaluatorType::Overwrite,
+            op => {
+                return Err(util::YamlContentErr::new(format!(
+                    "unexpected operator for `{}` for `f`",
+                    op
+                ))
+                .into())
+            }
+        },
+        None => FEvaluatorType::default(),
+        value => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected String for `f`, but found `{:?}`",
+                value
+            ))
+            .into())
+        }
+    };
+    let parameters = solver_parameters::parse_from_map(map)?;
+    let weight = match map.get(&yaml_rust::Yaml::from_str("weight")) {
+        Some(yaml_rust::Yaml::Integer(value)) => *value as Continuous,
+        Some(yaml_rust::Yaml::Real(value)) => value.parse::<Continuous>()?,
+        Some(value) => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected Integer or Float for `weight`, but found `{:?}`",
+                value
+            ))
+            .into())
+        }
+        None => 1.0,
+    };
     Ok(create_dual_bound_weighted_astar(
         Rc::new(model),
         parameters,
-        weight,
         f_evaluator_type,
-        initial_registry_capacity,
+        weight,
     ))
 }
