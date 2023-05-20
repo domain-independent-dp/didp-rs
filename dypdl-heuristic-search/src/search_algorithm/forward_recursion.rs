@@ -125,7 +125,7 @@ where
 type StateMemo<T> = FxHashMap<HashableState, (Option<T>, Option<Rc<dypdl::Transition>>)>;
 
 /// Performs a naive recursion while memoizing all encountered states.
-pub fn forward_recursion<T: variable_type::Numeric>(
+pub fn forward_recursion<T: variable_type::Numeric + Ord>(
     state: HashableState,
     model: &dypdl::Model,
     generator: &SuccessorGenerator,
@@ -133,8 +133,8 @@ pub fn forward_recursion<T: variable_type::Numeric>(
     time_keeper: &util::TimeKeeper,
     expanded: &mut usize,
 ) -> Option<T> {
-    if model.is_base(&state) {
-        return Some(T::zero());
+    if let Some(cost) = model.eval_base_cost(&state) {
+        return Some(cost);
     }
 
     if let Some((cost, _)) = memo.get(&state) {

@@ -134,6 +134,29 @@ where
             .into())
         }
     };
+    let custom_f_evaluator_type = match map.get(&yaml_rust::Yaml::from_str("custom_f")) {
+        Some(yaml_rust::Yaml::String(string)) => match &string[..] {
+            "+" => FEvaluatorType::Plus,
+            "max" => FEvaluatorType::Max,
+            "min" => FEvaluatorType::Min,
+            "h" => FEvaluatorType::Overwrite,
+            op => {
+                return Err(util::YamlContentErr::new(format!(
+                    "unexpected operator for custom f function `{}`",
+                    op
+                ))
+                .into())
+            }
+        },
+        None => FEvaluatorType::default(),
+        value => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected String, but found `{:?}`",
+                value
+            ))
+            .into())
+        }
+    };
     let beam_size = match map.get(&yaml_rust::Yaml::from_str("beam_size")) {
         Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
         value => {
@@ -182,6 +205,7 @@ where
                     custom_costs,
                     forced_custom_costs,
                     h_expression,
+                    f_evaluator_type: custom_f_evaluator_type,
                     custom_cost_type,
                     maximize,
                 },
@@ -201,6 +225,7 @@ where
                     custom_costs,
                     forced_custom_costs,
                     h_expression,
+                    f_evaluator_type: custom_f_evaluator_type,
                     custom_cost_type,
                     maximize,
                 },

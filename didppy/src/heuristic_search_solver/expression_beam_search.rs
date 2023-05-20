@@ -40,11 +40,18 @@ use std::rc::Rc;
 ///     If the name of a transition is not included, its cost expression is used.
 ///     If :code:`None`, the cost expressions in the DyPDL model are used for all transitions.
 /// f_operator: FOperator, default: FOperator.Plus
-///     Operator to combine a g-value and the dual bound to compute the f-value.
+///     Operator to combine a g-value and the base cost.
 ///     If the cost is computed by :code:`+`, this should be :attr:`~FOperator.Plus`.
 ///     If the cost is computed by :code:`*`, this should be :attr:`~FOperator.Product`.
 ///     If the cost is computed by :code:`max`, this should be :attr:`~FOperator.Max`.
 ///     If the cost is computed by :code:`min`, this should be :attr:`~FOperator.Min`.
+///     This solver keeps top :code:`b` best nodes with regard to f-values at each depth.
+/// custom_f_operator: FOperator, default: FOperator.Plus
+///     Operator to combine a g-value and the h-value to compute the f-value.
+///     If the custom cost is computed by :code:`+`, this should be :attr:`~FOperator.Plus`.
+///     If the custom cost is computed by :code:`*`, this should be :attr:`~FOperator.Product`.
+///     If the custom cost is computed by :code:`max`, this should be :attr:`~FOperator.Max`.
+///     If the custom cost is computed by :code:`min`, this should be :attr:`~FOperator.Min`.
 ///     This solver keeps top :code:`b` best nodes with regard to f-values at each depth.
 /// maximize: bool, default: False
 ///     Maximize f-values or not.
@@ -105,7 +112,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "ExpressionBeamSearch")]
 #[pyo3(
-    text_signature = "(model, beam_size, h_expression=None, custom_cost_dict=None, f_operator=0, maximize=False, keep_all_layers=False, float_custom_cost=None, time_limit=None, quiet=False)"
+    text_signature = "(model, beam_size, h_expression=None, custom_cost_dict=None, f_operator=0, custom_f_operator=0, maximize=False, keep_all_layers=False, float_custom_cost=None, time_limit=None, quiet=False)"
 )]
 pub struct ExpressionBeamSearchPy(
     WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>,
@@ -162,6 +169,7 @@ impl ExpressionBeamSearchPy {
         custom_cost_dict = None,
         h_expression = None,
         f_operator = FOperator::Plus,
+        custom_f_operator = FOperator::Plus,
         maximize = false,
         keep_all_layers = false,
         time_limit = None,
@@ -175,6 +183,7 @@ impl ExpressionBeamSearchPy {
         custom_cost_dict: Option<HashMap<String, CostUnion>>,
         h_expression: Option<CostUnion>,
         f_operator: FOperator,
+        custom_f_operator: FOperator,
         maximize: bool,
         keep_all_layers: bool,
         time_limit: Option<f64>,
@@ -200,6 +209,7 @@ impl ExpressionBeamSearchPy {
             custom_costs,
             forced_custom_costs,
             h_expression,
+            f_evaluator_type: FEvaluatorType::from(custom_f_operator),
             custom_cost_type,
             maximize,
         };

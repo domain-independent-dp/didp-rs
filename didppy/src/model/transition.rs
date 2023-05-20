@@ -176,12 +176,7 @@ impl TransitionPy {
     /// IntExpr or FloatExpr : Cost expression.
     #[getter]
     pub fn cost(&self) -> IntOrFloatExpr {
-        match self.0.cost {
-            CostExpression::Integer(ref cost) => IntOrFloatExpr::Int(IntExprPy::from(cost.clone())),
-            CostExpression::Continuous(ref cost) => {
-                IntOrFloatExpr::Float(FloatExprPy::from(cost.clone()))
-            }
-        }
+        self.0.cost.clone().into()
     }
 
     #[setter]

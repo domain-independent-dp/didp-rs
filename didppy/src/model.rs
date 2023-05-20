@@ -662,7 +662,6 @@ impl ModelPy {
     /// ------
     /// RuntimeError
     ///     If :code:`object_type` is not included in the model.
-    ///     If :code:`target` is greater than or equal to the number of the objects.
     ///     If :code:`name` is already used.
     /// OverflowError
     ///     If :code:`target` is negative.
@@ -760,7 +759,6 @@ impl ModelPy {
     /// ------
     /// RuntimeError
     ///     If :code:`object_type` is not included in the model.
-    ///     If :code:`target` is greater than or equal to the number of the objects.
     ///     If :code:`name` is already used.
     /// OverflowError
     ///     If :code:`target` is negative.
@@ -1368,7 +1366,6 @@ impl ModelPy {
     ///     If the types of :code:`var` and :code:`target` mismatch.
     /// RuntimeError
     ///     If the variable is not included in the model.
-    ///     If :code:`var` is :class:`ElementVar` or :class:`ElementResourceVar` and :code:`target` is greater than or equal to the number of the associated objects.
     ///     If :code:`var` is :class:`SetVar` and a value in :code:`target` is greater than or equal to the number of the associated objects.
     /// OverflowError
     ///     If :code:`var` is :class:`ElementVar` or :class:`ElementResourceVar` and :code:`target` is negative.
@@ -1591,22 +1588,26 @@ impl ModelPy {
         self.0.check_constraints(state.inner_as_ref())
     }
 
-    /// list of list of Conditions : Base cases.
+    /// list of tuple of list of Conditions and IntExpr or FloatExpr : Base cases with their cost expressions.
     #[getter]
-    fn base_cases(&self) -> Vec<Vec<ConditionPy>> {
+    fn base_cases(&self) -> Vec<(Vec<ConditionPy>, IntOrFloatExpr)> {
         self.0
             .base_cases
             .iter()
             .map(|base_case| {
-                Vec::from(base_case.clone())
-                    .into_iter()
-                    .map(|condition| ConditionPy::from(Condition::from(condition)))
-                    .collect()
+                let (conditions, cost) = base_case.clone().into();
+                (
+                    conditions.into_iter().map(ConditionPy::from).collect(),
+                    cost.map_or(
+                        IntOrFloatExpr::Int(IntExprPy::from(IntegerExpression::from(0))),
+                        IntOrFloatExpr::from,
+                    ),
+                )
             })
             .collect()
     }
 
-    /// add_base_case(conditions)
+    /// add_base_case(conditions, cost)
     ///
     /// Adds a base case to the model.
     ///
@@ -1614,6 +1615,12 @@ impl ModelPy {
     /// ----------
     /// conditions: list of Condition
     ///     Base case.
+    /// cost: IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, float, or None, default: None
+    ///     Expression to compute the value of a base state.
+    ///     This expression can use state variables in the base state.
+    ///     :func:`IntExpr.state_cost()` and :func:`FloatExpr.state_cost()` are not allowed.
+    ///     If None, the value of the base state is 0.
+    ///     When a state satisfies multiple base cases, the minimum/maximum value is used in minimization/maximization.
     ///
     /// Raises
     /// ------
@@ -1622,6 +1629,7 @@ impl ModelPy {
     ///     E.g., it uses a variable not included in the model or the cost of the transitioned state.
     /// PanicException
     ///     If an index of a table is out of range.
+    ///     If :func:`IntExpr.state_cost()` or :func:`FloatExpr.state_cost()` is used in :code:`cost`.
     ///
     /// Examples
     /// --------
@@ -1631,10 +1639,27 @@ impl ModelPy {
     /// >>> model.add_base_case([var >= 2, var <= 5])
     /// >>> model.is_base(model.target_state)
     /// True
-    #[pyo3(signature = (conditions))]
-    fn add_base_case(&mut self, conditions: Vec<ConditionPy>) -> PyResult<()> {
+    /// >>> model.eval_base_cost(model.target_state)
+    /// 0
+    /// >>> model.add_base_case([var >= 3, var <= 4], cost=-var)
+    /// >>> model.eval_base_cost(model.target_state)
+    /// -4
+    #[pyo3(signature = (conditions, cost = None))]
+    #[pyo3(text_signature = "(conditions, cost=None)")]
+    fn add_base_case(
+        &mut self,
+        conditions: Vec<ConditionPy>,
+        cost: Option<CostUnion>,
+    ) -> PyResult<()> {
         let conditions = conditions.into_iter().map(|x| x.into()).collect();
-        match self.0.add_base_case(conditions) {
+
+        let result = if let Some(cost) = cost {
+            self.0.add_base_case_with_cost(conditions, cost)
+        } else {
+            self.0.add_base_case(conditions)
+        };
+
+        match result {
             Ok(_) => Ok(()),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
         }
@@ -1670,6 +1695,47 @@ impl ModelPy {
     #[pyo3(signature = (state))]
     fn is_base(&self, state: &state::StatePy) -> bool {
         self.0.is_base(state.inner_as_ref())
+    }
+
+    /// is_base(state)
+    ///
+    /// Evaluates the cost of a base state.
+    ///
+    /// Parameters
+    /// ----------
+    /// state: State
+    ///     State to be evaluated.
+    ///
+    /// Returns
+    /// -------
+    /// int, float, or None
+    ///     None if the state is a base state.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If base cases are invalid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> model.add_base_case([var == 4], cost=2)
+    /// >>> model.eval_base_cost(model.target_state)
+    /// 2
+    #[pyo3(signature = (state))]
+    fn eval_base_cost(&self, state: &state::StatePy) -> Option<IntOrFloat> {
+        match self.0.cost_type {
+            CostType::Integer => self
+                .0
+                .eval_base_cost(state.inner_as_ref())
+                .map(IntOrFloat::Int),
+            CostType::Continuous => self
+                .0
+                .eval_base_cost::<OrderedContinuous, _>(state.inner_as_ref())
+                .map(|x| IntOrFloat::Float(x.to_continuous())),
+        }
     }
 
     /// get_transitions(forced, backward)
@@ -1917,7 +1983,9 @@ impl ModelPy {
             .collect::<Vec<_>>();
         if self.float_cost() {
             let cost: Continuous = cost.extract()?;
-            Ok(self.0.validate_forward(&transitions, cost, !quiet))
+            Ok(self
+                .0
+                .validate_forward(&transitions, OrderedContinuous::from(cost), !quiet))
         } else {
             let cost: Integer = cost.extract()?;
             Ok(self.0.validate_forward(&transitions, cost, !quiet))
@@ -5319,15 +5387,18 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let v_id = IntegerVariable::from(v).id();
-        let result = model.add_base_case(vec![ConditionPy::from(Condition::ComparisonI(
-            ComparisonOperator::Gt,
-            Box::new(IntegerExpression::Variable(v_id)),
-            Box::new(IntegerExpression::Variable(0)),
-        ))]);
+        let result = model.add_base_case(
+            vec![ConditionPy::from(Condition::ComparisonI(
+                ComparisonOperator::Gt,
+                Box::new(IntegerExpression::Variable(v_id)),
+                Box::new(IntegerExpression::Variable(0)),
+            ))],
+            None,
+        );
         assert!(result.is_ok());
         assert_eq!(
             model.0.base_cases,
-            vec![BaseCase::new(vec![GroundedCondition {
+            vec![BaseCase::from(vec![GroundedCondition {
                 condition: Condition::ComparisonI(
                     ComparisonOperator::Gt,
                     Box::new(IntegerExpression::Variable(v_id)),
@@ -5347,11 +5418,14 @@ mod tests {
         let v_id = IntegerVariable::from(v).id();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = model.add_base_case(vec![ConditionPy::from(Condition::ComparisonI(
-            ComparisonOperator::Gt,
-            Box::new(IntegerExpression::Variable(v_id)),
-            Box::new(IntegerExpression::Variable(0)),
-        ))]);
+        let result = model.add_base_case(
+            vec![ConditionPy::from(Condition::ComparisonI(
+                ComparisonOperator::Gt,
+                Box::new(IntegerExpression::Variable(v_id)),
+                Box::new(IntegerExpression::Variable(0)),
+            ))],
+            None,
+        );
         assert!(result.is_err());
         assert_eq!(model, snapshot);
     }

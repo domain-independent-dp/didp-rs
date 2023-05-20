@@ -2,7 +2,7 @@ use dypdl::variable_type;
 use std::cmp;
 
 /// How to combine the g-value and the h-value to compute the f-value.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FEvaluatorType {
     /// f = g + h.
     Plus,

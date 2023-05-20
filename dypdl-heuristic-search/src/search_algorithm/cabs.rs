@@ -81,8 +81,9 @@ pub struct CabsParameters<T> {
 ///         primal_bound,
 ///     )
 /// };
+/// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
 /// let beam_search = move |input: &SearchInput<_, _>, parameters| {
-///     beam_search(input, &transition_evaluator, parameters)
+///     beam_search(input, &transition_evaluator, base_cost_evaluator, parameters)
 /// };
 /// let parameters = CabsParameters::default();
 /// let input = SearchInput {

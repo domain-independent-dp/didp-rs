@@ -67,6 +67,14 @@ where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+    let base_cost_evaluator = move |cost, base_cost| f_evaluator_type.eval(cost, base_cost);
+    let cost = match f_evaluator_type {
+        FEvaluatorType::Plus => T::zero(),
+        FEvaluatorType::Product => T::one(),
+        FEvaluatorType::Max => T::min_value(),
+        FEvaluatorType::Min => T::max_value(),
+        FEvaluatorType::Overwrite => T::zero(),
+    };
 
     if model.has_dual_bounds() {
         let state = model.target.clone();
@@ -74,7 +82,7 @@ where
         let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
         let node = FNode::generate_root_node(
             state,
-            T::zero(),
+            cost,
             &generator.model,
             &h_evaluator,
             &f_evaluator,
@@ -98,11 +106,12 @@ where
         Box::new(Apps::<_, FNode<_>, _, _>::new(
             input,
             transition_evaluator,
+            base_cost_evaluator,
             parameters,
             progressive_parameters,
         ))
     } else {
-        let node = CostNode::generate_root_node(model.target.clone(), T::zero(), &model);
+        let node = CostNode::generate_root_node(model.target.clone(), cost, &model);
         let input = SearchInput {
             node: Some(node),
             generator,
@@ -114,6 +123,7 @@ where
         Box::new(Apps::<_, CostNode<_>, _, _>::new(
             input,
             transition_evaluator,
+            base_cost_evaluator,
             parameters,
             progressive_parameters,
         ))

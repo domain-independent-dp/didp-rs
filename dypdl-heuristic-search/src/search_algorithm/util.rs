@@ -145,7 +145,10 @@ where
 /// ).unwrap();
 ///
 /// let suffix = [transition.clone(), transition.clone()];
-/// let (cost, suffix) = get_solution_cost_and_suffix(&model, &node, &suffix).unwrap();
+/// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
+/// let (cost, suffix) = get_solution_cost_and_suffix(
+///     &model, &node, &suffix, base_cost_evaluator,
+/// ).unwrap();
 /// let time = 0.0;
 ///
 /// let mut solution = Solution::default();

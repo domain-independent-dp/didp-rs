@@ -124,7 +124,11 @@ There are some practical differences between :class:`~didppy.ElementVar` and :cl
 * :class:`~didppy.ElementVar` can be used to describe changes and conditions on :class:`~didppy.SetVar`.
 * :class:`~didppy.ElementVar` can be used to access a value of a table (explained later).
 
-While we use the integer cost and an integer variable for :math:`t`, we can use the float cost and a float variable for :code:`t` by using :meth:`~didppy.Model.add_float_var` if we want to use continuous travel time.
+The value of an element variable should be an integer between :code:`0` and :code:`n - 1` as it represents an element in the set :math:`N`.
+However, you may want to make it larger than :code:`n - 1` for some cases (explained later).
+In fact, you can increase its value to an arbitrary large number.
+
+While we use the integer cost and an integer variable for :math:`t`, we can use the float cost and a float variable for :math:`t` by using :meth:`~didppy.Model.add_float_var` if we want to use continuous travel time.
 
 The value of :class:`~didppy.SetVar` is a set of elements in :math:`N`.
 Because the object type of :code:`unvisited` is customer, which has :code:`n` objects, :code:`unvisited` can contain :code:`0` to :code:`n - 1` (**not** :code:`1` **to** :code:`n`).
@@ -203,6 +207,13 @@ Therefore, we cannot use :code:`c[location][j]` and need to register :code:`c` t
 Also, :code:`travel_time[location, j]` must be used instead of :code:`travel_time[location][j]`.
 For :code:`ready_time` and :code:`due_time`, we can actually use :code:`a` and :code:`b` instead because they are not indexed by state variables.
 
+When using a state variable or an expression as an index of a table, the value must not exceed the size of the table:
+you need to make sure that :code:`j` in :code:`travel_time[location, j]` is not larger than :code:`n - 1`.
+If :code:`j > n - 1`, the solver raises an error during solving.
+However, sometimes, you may want to use :code:`j > n - 1` to represent a special case;
+in the knapsack problem in the :doc:`quick start <quickstart>`, :code:`i` becomes :code:`n` in a state where all decisions are made.
+Please make sure that you do not access any table using :code:`i` in such a state.
+
 *Preconditions* :code:`preconditions` make sure that the transition is considered only when :math:`j \in U` (:code:`unvisited.contains(j)`) and :math:`t + c_{ij} \leq b_j` (:code:`time + travel_time[location, j] <= due_time[j]`).
 The value of the left-hand side state is computed by taking the minimum (maximum for maximization) of :code:`cost` over all transitions whose preconditions are satisfied by the state.
 :code:`preconditions` are defined by a :class:`list` of :class:`~didppy.Condition`.
@@ -263,12 +274,10 @@ In DIDPPy, a base case is defined by a :class:`list` of :class:`~didppy.Conditio
 
     model.add_base_case([unvisited.is_empty(), location == 0])
 
-When all conditions in a base case are satisfied, the value of the state is 0, and no further transitions are applied.
+When all conditions in a base case are satisfied, the value of the state is constant, and no further transitions are applied.
+By default, the cost is assumed to be 0, but you can use an expression to compute the value given a state by using the argument :code:`cost` in :meth:`~didppy.Model.add_base_case`.
 We can define multiple independent base cases by calling :meth:`~didppy.Model.add_base_case` multiple times, with different sets of conditions.
-In that case, the value of a state is 0 if any of the base cases is satisfied.
-
-If we want to define conditions with which a state has a non-zero constant value, we need to introduce a dummy transition to the base case, which increases the value by the constant.
-Indeed, the transition :code:`return` can be viewed as such a dummy transition for an equation :math:`V(U, i, t) = c_{i0} \text{ if } U = \emptyset`. 
+In that case, the value of a state is the minimum/maximum of the values of the satisfied base cases in minimization/maximization.
 
 Solving the Model
 -----------------

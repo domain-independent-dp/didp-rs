@@ -126,25 +126,30 @@ We can update :attr:`~didppy.Transition.cost` and the effects.
 Checking Base Cases
 -------------------
 
-We can check if a state satisfies the base cases with :meth:`~didppy.Model.is_base`.
+We can check if a state satisfies the base cases with :meth:`~didppy.Model.eval_base_cost`.
+If base cases are satisfied, the value of the state is returned.
+Otherwise, :code:`None` is returned.
 
 .. code-block:: python
 
     >>> import didppy as dp
     >>> model = dp.Model()
-    >>> var = model.add_int_var(target=0)
-    >>> model.add_base_case([var >= 2])
+    >>> var = model.add_int_var(target=2)
+    >>> model.add_base_case([var >= 2], cost=2)
     >>> state = model.target_state
-    >>> model.is_base(state)
-    False
+    >>> model.eval_base_cost(state)
+    2 
 
 We can get the base cases with :attr:`~didppy.Model.base_cases`.
+It returns a list of tuples of conditions (a list of conditions) and the cost.
 
 .. code-block:: python
 
     >>> base_cases = model.base_cases
-    >>> base_cases[0][0].eval(state, model)
-    False
+    >>> base_cases[0][0][0].eval(state, model)
+    True
+    >>> base_cases[0][1].eval(state, model)
+    2
 
 The order of base cases is preserved.
 

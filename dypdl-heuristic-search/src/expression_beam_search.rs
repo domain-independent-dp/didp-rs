@@ -49,6 +49,7 @@ use std::rc::Rc;
 ///     custom_costs: vec![CostExpression::from(ContinuousExpression::Cost + 1.5)],
 ///     forced_custom_costs: Vec::default(),
 ///     h_expression: Some(CostExpression::from(ContinuousExpression::from(variable))),
+///     f_evaluator_type: FEvaluatorType::Plus,
 ///     custom_cost_type: CostType::Continuous,
 ///     maximize: true,
 /// };
@@ -83,6 +84,8 @@ pub struct CustomExpressionParameters {
     pub forced_custom_costs: Vec<dypdl::CostExpression>,
     /// Expression for cost estimate .
     pub h_expression: Option<dypdl::CostExpression>,
+    /// The evaluator type to combine the g- and h-values.
+    pub f_evaluator_type: FEvaluatorType,
     /// Type of the custom cost.
     pub custom_cost_type: CostType,
     /// Maximize or not.
@@ -121,7 +124,7 @@ where
 
 impl<T, U> Search<T> for ExpressionBeamSearch<T, U>
 where
-    T: variable_type::Numeric + fmt::Display + 'static,
+    T: variable_type::Numeric + Ord + fmt::Display + 'static,
     U: variable_type::Numeric + Ord + fmt::Display + 'static,
 {
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
@@ -146,7 +149,11 @@ where
                     }),
             )
         };
-        let f_evaluator = |g, h, _: &_| self.f_evaluator_type.eval(g, h);
+        let f_evaluator = |g, h, _: &_| {
+            self.custom_expression_parameters
+                .f_evaluator_type
+                .eval(g, h)
+        };
         let node = CustomFNode::generate_root_node(
             self.model.target.clone(),
             T::zero(),
@@ -169,10 +176,12 @@ where
                 self.custom_expression_parameters.maximize,
             )
         };
+        let base_cost_evaluator = |cost, base_cost| self.f_evaluator_type.eval(cost, base_cost);
 
-        let solution = beam_search::<_, CustomFNode<T, U>, _, _>(
+        let solution = beam_search::<_, CustomFNode<T, U>, _, _, _>(
             &input,
             transition_evaluator,
+            base_cost_evaluator,
             self.parameters,
         );
 

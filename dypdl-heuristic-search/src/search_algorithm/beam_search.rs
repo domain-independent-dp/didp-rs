@@ -43,6 +43,8 @@ impl<T: Default> Default for BeamSearchParameters<T> {
 /// Type parameter `N` is a node type that implements `BfsNode`.
 /// Type parameter `E` is a type of a function that evaluates a transition and generate a successor node.
 /// The last argument of the function is the primal bound of the solution cost.
+/// Type parameter `B` is a type of a function that combines the g-value (the cost to a state) and the base cost.
+/// It should be the same function as the cost expression, e.g., `cost + base_cost` for `cost + w`.
 ///
 /// # Examples
 ///
@@ -93,24 +95,27 @@ impl<T: Default> Default for BeamSearchParameters<T> {
 ///         primal_bound,
 ///     )
 /// };
+/// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
 /// let parameters = BeamSearchParameters::default();
 /// let solution = beam_search(
-///     &input, transition_evaluator, parameters,
+///     &input, transition_evaluator, base_cost_evaluator, parameters,
 /// );
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions.len(), 1);
 /// assert_eq!(Transition::from(solution.transitions[0].clone()), increment);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub fn beam_search<'a, T, N, E, V>(
+pub fn beam_search<'a, T, N, E, B, V>(
     input: &'a SearchInput<'a, N, V>,
     transition_evaluator: E,
+    base_cost_evaluator: B,
     parameters: BeamSearchParameters<T>,
 ) -> Solution<T, V>
 where
-    T: variable_type::Numeric + Display,
+    T: variable_type::Numeric + Ord + Display,
     N: BfsNode<T, V> + Clone,
     E: Fn(&N, Rc<V>, Option<T>) -> Option<N>,
+    B: Fn(T, T) -> T,
     V: TransitionInterface + Clone + Default,
 {
     let time_keeper = parameters
@@ -158,7 +163,9 @@ where
         let mut layer_dual_bound = None;
 
         for node in current_beam.drain() {
-            if let Some((cost, suffix)) = get_solution_cost_and_suffix(model, &*node, suffix) {
+            if let Some((cost, suffix)) =
+                get_solution_cost_and_suffix(model, &*node, suffix, &base_cost_evaluator)
+            {
                 if !exceed_bound(model, cost, primal_bound) {
                     primal_bound = Some(cost);
                     incumbent = Some((node, cost, suffix));

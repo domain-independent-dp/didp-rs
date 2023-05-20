@@ -20,6 +20,8 @@ use std::rc::Rc;
 /// Type parameter `N` is a node type that implements `BfsNode`.
 /// Type parameter `E` is a type of a function that evaluates a transition and insert a successor node into a state registry.
 /// The last argument of the function is the primal bound of the solution cost.
+/// Type parameter `B` is a type of a function that combines the g-value (the cost to a state) and the base cost.
+/// It should be the same function as the cost expression, e.g., `cost + base_cost` for `cost + w`.
 ///
 /// # References
 ///
@@ -79,25 +81,30 @@ use std::rc::Rc;
 ///             primal_bound,
 ///         )
 ///     };
+/// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
 /// let parameters = Parameters::default();
 ///
-/// let mut solver = Cbfs::<_, FNode<_>, _>::new(input, transition_evaluator, parameters);
+/// let mut solver = Cbfs::<_, FNode<_>, _, _>::new(
+///     input, transition_evaluator, base_cost_evaluator, parameters,
+/// );
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub struct Cbfs<'a, T, N, E, V = Transition>
+pub struct Cbfs<'a, T, N, E, B, V = Transition>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,
     E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: Fn(T, T) -> T,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
 {
     generator: SuccessorGenerator<V>,
     suffix: &'a [V],
     transition_evaluator: E,
+    base_cost_evaluator: B,
     primal_bound: Option<T>,
     get_all_solutions: bool,
     quiet: bool,
@@ -107,11 +114,12 @@ where
     solution: Solution<T>,
 }
 
-impl<'a, T, N, E, V> Cbfs<'a, T, N, E, V>
+impl<'a, T, N, E, B, V> Cbfs<'a, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,
     E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: Fn(T, T) -> T,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
 {
@@ -119,8 +127,9 @@ where
     pub fn new(
         input: SearchInput<'a, N, V>,
         transition_evaluator: E,
+        base_cost_evaluator: B,
         parameters: Parameters<T>,
-    ) -> Cbfs<'a, T, N, E, V> {
+    ) -> Cbfs<'a, T, N, E, B, V> {
         let time_keeper = parameters
             .time_limit
             .map_or_else(TimeKeeper::default, TimeKeeper::with_time_limit);
@@ -155,6 +164,7 @@ where
             generator: input.generator,
             suffix: input.solution_suffix,
             transition_evaluator,
+            base_cost_evaluator,
             primal_bound,
             get_all_solutions,
             quiet,
@@ -166,11 +176,12 @@ where
     }
 }
 
-impl<'a, T, N, E, V> Search<T> for Cbfs<'a, T, N, E, V>
+impl<'a, T, N, E, B, V> Search<T> for Cbfs<'a, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,
     E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: Fn(T, T) -> T,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
 {
@@ -181,6 +192,7 @@ where
 
         self.time_keeper.start();
         let model = &self.generator.model;
+        let suffix = self.suffix;
         let mut i = 0;
         let mut no_node = true;
 
@@ -205,7 +217,7 @@ where
                 }
 
                 if let Some((cost, suffix)) =
-                    get_solution_cost_and_suffix(model, &*node, self.suffix)
+                    get_solution_cost_and_suffix(model, &*node, suffix, &self.base_cost_evaluator)
                 {
                     if !exceed_bound(model, cost, self.primal_bound) {
                         self.primal_bound = Some(cost);
