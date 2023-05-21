@@ -52,7 +52,6 @@ transitions:
     parameters:
       - name: to
         object: unvisited
-      - (is_empty (intersection unvisited (predecessors to)))
     cost: (+ cost (distance location to))
     effect:
       unvisited: (remove to unvisited)
@@ -61,6 +60,7 @@ transitions:
     preconditions:
       - (connected location to)
       - (<= (+ load (delta to)) capacity)
+      - (is_empty (intersection unvisited (predecessors to)))
   - name: finish
     cost: (+ cost (distance location goal))
     effect:
