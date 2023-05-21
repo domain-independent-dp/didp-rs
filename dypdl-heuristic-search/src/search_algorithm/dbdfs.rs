@@ -300,8 +300,7 @@ where
                 }
             }
 
-            // reverse sort
-            successors.sort_by(|a, b| b.cmp(a));
+            successors.sort();
 
             if let Some(best) = successors.pop() {
                 let mut successors = successors

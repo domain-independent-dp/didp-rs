@@ -245,8 +245,7 @@ where
                 }
             }
 
-            // reverse sort
-            successors.sort_by(|a, b| b.cmp(a));
+            successors.sort();
             self.open.append(&mut successors);
         }
 
