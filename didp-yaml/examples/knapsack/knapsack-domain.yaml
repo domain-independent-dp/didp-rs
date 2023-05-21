@@ -1,0 +1,39 @@
+domain: knapsack
+reduce: max
+cost_type: integer
+objects:
+  - item
+state_variables:
+  - name: r
+    type: integer
+  - name: i
+    type: element
+    object: item
+tables:
+  - name: number_of_items
+    type: element
+  - name: w
+    type: integer
+    args:
+      - item
+  - name: p
+    type: integer
+    args:
+      - item
+transitions:
+  - name: pack
+    cost: (+ (p i) cost)
+    effect:
+      r: (- r (w i))
+      i: (+ i 1)
+    preconditions:
+      - (< i number_of_items)
+      - (>= r (w i))
+  - name: ignore
+    cost: cost
+    effect:
+      i: (+ i 1)
+    preconditions:
+      - (< i number_of_items)
+base_cases:
+  - - (= i number_of_items)

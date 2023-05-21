@@ -1,0 +1,56 @@
+domain: talent scheduling
+reduce: min
+cost_type: integer
+objects:
+  - scene
+  - actor
+state_variables:
+  - name: remaining
+    type: set
+    object: scene
+tables:
+  - name: scene_to_actors
+    type: set
+    object: actor
+    args:
+      - scene
+  - name: duration
+    type: integer
+    args:
+      - scene
+  - name: actor_to_cost
+    type: integer
+    args:
+      - actor
+  - name: scene_to_min_cost
+    type: integer
+    args:
+      - scene
+transitions:
+  - name: shoot
+    parameters:
+      - name: s
+        object: remaining
+    cost: >
+      (+ cost
+         (* (duration s)
+            (sum actor_to_cost (union (scene_to_actors s)
+                                   (intersection (union scene_to_actors remaining)
+                                                 (union scene_to_actors ~remaining))))))
+    effect:
+      remaining: (remove s remaining)
+  - name: forced-shoot
+    forced: true
+    parameters:
+      - name: s
+        object: remaining
+    cost: >
+      (+ (scene_to_min_cost s) cost)
+    effect:
+      remaining: (remove s remaining)
+    preconditions:
+      - (= (scene_to_actors s) (intersection (union scene_to_actors ~remaining) (union scene_to_actors remaining)))
+base_cases:
+  - - (is_empty remaining)
+dual_bounds:
+  - (sum scene_to_min_cost remaining)

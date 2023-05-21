@@ -1,0 +1,12 @@
+domain: talent-scheduling
+problem: problem
+object_numbers:
+  scene: 4
+  actor: 4
+target:
+  remaining: [0, 1, 2, 3]
+table_values:
+  duration: { 0: 1, 1: 1, 2: 1, 3: 1 }
+  actor_to_cost: { 0: 1, 1: 3, 2: 1, 3: 2 }
+  scene_to_actors: { 0: [0, 1, 3], 1: [1, 2], 2: [0, 2, 3], 3: [0, 1, 2] }
+  scene_to_min_cost: { 0: 6, 1: 4, 2: 4, 3: 5 }

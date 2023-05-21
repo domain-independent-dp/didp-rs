@@ -82,11 +82,11 @@ Assume that the data is preprocessed, and we are given :math:`N_c` for each :mat
                 ((opened & remaining) | (neighbor_table[c] - opened)).len(),
                 dp.IntExpr.state_cost(),
             ),
-            preconditions=[remaining.contains(c)],
             effects=[
                 (remaining, remaining.remove(c)),
                 (opened, opened | neighbor_table[c]),
             ],
+            preconditions=[remaining.contains(c)],
         )
         model.add_transition(close)
 
