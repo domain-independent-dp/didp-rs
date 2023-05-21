@@ -3,7 +3,9 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_acps, FEvaluatorType, Search, Parameters, ProgressiveSearchParameters};
+use dypdl_heuristic_search::{
+    create_dual_bound_acps, FEvaluatorType, Parameters, ProgressiveSearchParameters, Search,
+};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -133,6 +135,10 @@ impl AcpsPy {
         width_bound: Option<usize>,
         reset_width: bool,
     ) -> PyResult<AcpsPy> {
+        if !quiet {
+            println!("Solver: ACPS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+        }
+
         let progressive_parameters = ProgressiveSearchParameters {
             init: width_init,
             step: width_step,

@@ -120,6 +120,13 @@ impl BreadthFirstSearchPy {
         initial_registry_capacity: usize,
         keep_all_layers: bool,
     ) -> PyResult<BreadthFirstSearchPy> {
+        if !quiet {
+            println!(
+                "Solver: BreadthFirstSearch from DIDPPy v{}",
+                env!("CARGO_PKG_VERSION")
+            );
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {

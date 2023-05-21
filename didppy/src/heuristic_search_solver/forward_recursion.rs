@@ -49,6 +49,13 @@ impl ForwardRecursionPy {
         quiet: bool,
         initial_registry_capacity: usize,
     ) -> ForwardRecursionPy {
+        if !quiet {
+            println!(
+                "Solver: ForwardRecursion from DIDPPy v{}",
+                env!("CARGO_PKG_VERSION")
+            );
+        }
+
         if model.float_cost() {
             let parameters = Parameters::<OrderedContinuous> {
                 primal_bound: None,

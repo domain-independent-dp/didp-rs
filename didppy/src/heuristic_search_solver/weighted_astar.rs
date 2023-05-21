@@ -121,6 +121,13 @@ impl WeightedAstarPy {
         quiet: bool,
         initial_registry_capacity: usize,
     ) -> PyResult<WeightedAstarPy> {
+        if !quiet {
+            println!(
+                "Solver: WeightedAstar from DIDPPy v{}",
+                env!("CARGO_PKG_VERSION")
+            );
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {

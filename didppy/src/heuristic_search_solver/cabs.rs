@@ -131,6 +131,10 @@ impl CabsPy {
         time_limit: Option<f64>,
         quiet: bool,
     ) -> PyResult<CabsPy> {
+        if !quiet {
+            println!("Solver: CABS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {

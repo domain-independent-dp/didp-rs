@@ -190,6 +190,13 @@ impl ExpressionBeamSearchPy {
         quiet: bool,
         float_custom_cost: Option<bool>,
     ) -> PyResult<ExpressionBeamSearchPy> {
+        if !quiet {
+            println!(
+                "Solver: ExpressionBeamSearch from DIDPPy v{}",
+                env!("CARGO_PKG_VERSION")
+            );
+        }
+
         let custom_cost_type =
             float_custom_cost.map_or(model.inner_as_ref().cost_type, |float_custom_cost| {
                 if float_custom_cost {

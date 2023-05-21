@@ -125,6 +125,10 @@ impl CaasdyPy {
         quiet: bool,
         initial_registry_capacity: usize,
     ) -> PyResult<CaasdyPy> {
+        if !quiet {
+            println!("Solver: CAASDy from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {

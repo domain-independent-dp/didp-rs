@@ -118,6 +118,10 @@ impl DfbbPy {
         quiet: bool,
         initial_registry_capacity: usize,
     ) -> PyResult<DfbbPy> {
+        if !quiet {
+            println!("Solver: DFBB from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {
