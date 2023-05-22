@@ -116,6 +116,7 @@ where
                 || self.model.reduce_function == dypdl::ReduceFunction::Min);
         self.solution.generated = self.solution.expanded;
         self.solution.is_infeasible = self.solution.cost.is_none();
+        self.solution.best_bound = self.solution.cost;
         self.solution.time = time_keeper.elapsed_time();
 
         Ok((self.solution.clone(), true))
