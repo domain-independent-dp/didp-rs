@@ -11,3 +11,5 @@ license = "MIT OR Apache-2.0"
 ordered-float = "3.0"
 dypdl = { path = "../dypdl", version = "0.3.4" }
 rustc-hash = "1.1"
+dashmap = "5.4"
+rayon = "1.7"

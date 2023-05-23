@@ -4,11 +4,12 @@ use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{
-    create_dual_bound_cabs, BeamSearchParameters, CabsParameters, FEvaluatorType, Parameters,
-    Search,
+    create_dual_bound_cabs, create_dual_bound_shared_memory_cabs, BeamSearchParameters,
+    CabsParameters, FEvaluatorType, Parameters, Search,
 };
 use pyo3::prelude::*;
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// Complete Anytime Beam Search (CABS) solver.
 ///
@@ -103,7 +104,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "CABS")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, keep_all_layers=False, max_beam_size=None, primal_bound=None, time_limit=None, quiet=False)"
+    text_signature = "(model, f_operator=0, keep_all_layers=False, max_beam_size=None, primal_bound=None, threads=1, time_limit=None, quiet=False)"
 )]
 pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
@@ -118,6 +119,7 @@ impl CabsPy {
         max_beam_size = None,
         primal_bound = None,
         time_limit = None,
+        threads = 1,
         quiet = false
     ))]
     #[allow(clippy::too_many_arguments)]
@@ -129,6 +131,7 @@ impl CabsPy {
         max_beam_size: Option<usize>,
         primal_bound: Option<&PyAny>,
         time_limit: Option<f64>,
+        threads: usize,
         quiet: bool,
     ) -> PyResult<CabsPy> {
         let f_evaluator_type = FEvaluatorType::from(f_operator);
@@ -155,11 +158,20 @@ impl CabsPy {
                     },
                 },
             };
-            let solver = create_dual_bound_cabs::<OrderedContinuous>(
-                Rc::new(model.inner_as_ref().clone()),
-                parameters,
-                f_evaluator_type,
-            );
+            let solver = if threads > 1 {
+                create_dual_bound_shared_memory_cabs::<OrderedContinuous>(
+                    Arc::new(model.inner_as_ref().clone()),
+                    parameters,
+                    f_evaluator_type,
+                    threads,
+                )
+            } else {
+                create_dual_bound_cabs::<OrderedContinuous>(
+                    Rc::new(model.inner_as_ref().clone()),
+                    parameters,
+                    f_evaluator_type,
+                )
+            };
             Ok(CabsPy(WrappedSolver::Float(solver)))
         } else {
             let primal_bound = if let Some(primal_bound) = primal_bound {
@@ -181,11 +193,20 @@ impl CabsPy {
                     },
                 },
             };
-            let solver = create_dual_bound_cabs::<Integer>(
-                Rc::new(model.inner_as_ref().clone()),
-                parameters,
-                f_evaluator_type,
-            );
+            let solver = if threads > 1 {
+                create_dual_bound_shared_memory_cabs::<Integer>(
+                    Arc::new(model.inner_as_ref().clone()),
+                    parameters,
+                    f_evaluator_type,
+                    threads,
+                )
+            } else {
+                create_dual_bound_cabs::<Integer>(
+                    Rc::new(model.inner_as_ref().clone()),
+                    parameters,
+                    f_evaluator_type,
+                )
+            };
             Ok(CabsPy(WrappedSolver::Int(solver)))
         }
     }
