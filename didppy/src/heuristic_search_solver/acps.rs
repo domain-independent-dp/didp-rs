@@ -32,6 +32,8 @@ use std::rc::Rc;
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
+/// get_all_solutions: bool, default: False
+///     Return a solution if it is not improving when :code:`search_next()` is called.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
 /// initial_registry_capacity: int, default: 1000000
@@ -102,7 +104,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "ACPS")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, width_init=1, width_step=1, width_bound=None, reset_width=False)"
+    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000, width_init=1, width_step=1, width_bound=None, reset_width=False)"
 )]
 pub struct AcpsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
@@ -114,6 +116,7 @@ impl AcpsPy {
         f_operator = FOperator::Plus,
         primal_bound = None,
         time_limit = None,
+        get_all_solutions = false,
         quiet = false,
         initial_registry_capacity = 1000000,
         width_init = 1,
@@ -127,6 +130,7 @@ impl AcpsPy {
         f_operator: FOperator,
         primal_bound: Option<&PyAny>,
         time_limit: Option<f64>,
+        get_all_solutions: bool,
         quiet: bool,
         initial_registry_capacity: usize,
         width_init: usize,
@@ -157,7 +161,7 @@ impl AcpsPy {
             let parameters = Parameters::<OrderedContinuous> {
                 primal_bound,
                 time_limit,
-                get_all_solutions: false,
+                get_all_solutions,
                 quiet,
                 initial_registry_capacity: Some(initial_registry_capacity),
             };
@@ -177,7 +181,7 @@ impl AcpsPy {
             let parameters = Parameters::<Integer> {
                 primal_bound,
                 time_limit,
-                get_all_solutions: false,
+                get_all_solutions,
                 quiet,
                 initial_registry_capacity: Some(initial_registry_capacity),
             };

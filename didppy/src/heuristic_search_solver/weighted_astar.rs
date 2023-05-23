@@ -90,7 +90,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "WeightedAstar")]
 #[pyo3(
-    text_signature = "(model, weight, f_operator=0, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000)"
+    text_signature = "(model, weight, f_operator=0, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000)"
 )]
 pub struct WeightedAstarPy(
     WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>,
