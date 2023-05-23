@@ -161,14 +161,25 @@ where
     while !current_beam.is_empty() {
         let mut incumbent = None;
         let mut layer_dual_bound = None;
+        let previously_pruned = pruned;
 
         for node in current_beam.drain() {
+            if let Some(dual_bound) = node.bound(model) {
+                if exceed_bound(model, dual_bound, primal_bound) {
+                    continue;
+                }
+            }
+
             if let Some((cost, suffix)) =
                 get_solution_cost_and_suffix(model, &*node, suffix, &base_cost_evaluator)
             {
                 if !exceed_bound(model, cost, primal_bound) {
                     primal_bound = Some(cost);
                     incumbent = Some((node, cost, suffix));
+
+                    if Some(cost) == best_dual_bound {
+                        break;
+                    }
                 }
                 continue;
             }
@@ -237,7 +248,7 @@ where
             );
         }
 
-        if let (false, Some(value)) = (pruned, layer_dual_bound) {
+        if let (false, Some(value)) = (previously_pruned, layer_dual_bound) {
             if best_dual_bound.map_or(true, |bound| !exceed_bound(model, bound, Some(value))) {
                 best_dual_bound = layer_dual_bound;
             }
@@ -246,7 +257,7 @@ where
         if let Some((node, cost, suffix)) = &incumbent {
             let mut transitions = node.transitions();
             transitions.extend_from_slice(suffix);
-            let is_optimal = !pruned && next_beam.is_empty();
+            let is_optimal = (!pruned && next_beam.is_empty()) || Some(*cost) == best_dual_bound;
 
             return Solution {
                 cost: Some(*cost),

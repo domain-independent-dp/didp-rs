@@ -210,18 +210,36 @@ where
             if self.open.is_empty() {
                 while self.open.len() < self.width {
                     if let Some(node) = self.children.pop() {
-                        if !node.is_closed() {
-                            self.open.push(node);
+                        if node.is_closed() {
+                            continue;
                         }
+                        if let Some(bound) = node.bound(model) {
+                            if exceed_bound(model, bound, self.primal_bound) {
+                                if N::ordered_by_bound() {
+                                    self.children.clear();
+                                }
+                                continue;
+                            }
+                        }
+                        self.open.push(node);
                     } else {
                         break;
                     }
                 }
 
                 while let Some(node) = self.children.pop() {
-                    if !node.is_closed() {
-                        self.suspend.push(node);
+                    if node.is_closed() {
+                        continue;
                     }
+                    if let Some(bound) = node.bound(model) {
+                        if exceed_bound(model, bound, self.primal_bound) {
+                            if N::ordered_by_bound() {
+                                self.children.clear();
+                            }
+                            continue;
+                        }
+                    }
+                    self.suspend.push(node);
                 }
 
                 // Run out current candidates
@@ -234,6 +252,17 @@ where
 
                     while self.open.len() < self.width {
                         if let Some(node) = self.suspend.pop() {
+                            if node.is_closed() {
+                                continue;
+                            }
+                            if let Some(bound) = node.bound(model) {
+                                if exceed_bound(model, bound, self.primal_bound) {
+                                    if N::ordered_by_bound() {
+                                        self.suspend.clear();
+                                    }
+                                    continue;
+                                }
+                            }
                             self.open.push(node);
                         } else {
                             break;
