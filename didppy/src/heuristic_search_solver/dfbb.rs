@@ -30,7 +30,6 @@ use std::rc::Rc;
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
-///     The count starts when a solver is created.
 /// get_all_solutions: bool, default: False
 ///     Return a solution if it is not improving when :code:`search_next()` is called.
 /// quiet: bool, default: False

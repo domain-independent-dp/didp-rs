@@ -32,7 +32,6 @@ use std::rc::Rc;
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
-///     The count starts when a solver is created.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
 /// initial_registry_capacity: int, default: 1000000
