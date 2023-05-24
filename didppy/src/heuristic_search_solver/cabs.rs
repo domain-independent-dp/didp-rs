@@ -1,11 +1,12 @@
+use super::beam_parallelization_method::BeamParallelizationMethod;
 use super::f_operator::FOperator;
 use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{
-    create_dual_bound_cabs, create_dual_bound_shared_memory_cabs, BeamSearchParameters,
-    CabsParameters, FEvaluatorType, Parameters, Search,
+    create_dual_bound_cabs, create_dual_bound_hd_sync_cabs, create_dual_bound_shared_memory_cabs,
+    BeamSearchParameters, CabsParameters, FEvaluatorType, Parameters, Search,
 };
 use pyo3::prelude::*;
 use std::rc::Rc;
@@ -42,6 +43,11 @@ use std::sync::Arc;
 ///     Maximum beam size.
 /// primal_bound: int, float, or None, default: None
 ///     Primal bound.
+/// threads: int, default 1
+///     Number of threads.
+/// parallelization_method: BeamParallelizationMethod, default: BeamParallelizationMethod.HDSync
+///     How to parallelize the search.
+///     When `threads` is 1, this parameter is ignored.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
 ///     The count starts when a solver is created.
@@ -104,7 +110,7 @@ use std::sync::Arc;
 /// 2
 #[pyclass(unsendable, name = "CABS")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, keep_all_layers=False, max_beam_size=None, primal_bound=None, threads=1, time_limit=None, quiet=False)"
+    text_signature = "(model, f_operator=0, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, primal_bound=None, threads=1, parallelization_method=1, time_limit=None, quiet=False)"
 )]
 pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
@@ -118,8 +124,9 @@ impl CabsPy {
         keep_all_layers = false,
         max_beam_size = None,
         primal_bound = None,
-        time_limit = None,
         threads = 1,
+        parallelization_method = BeamParallelizationMethod::HDSync,
+        time_limit = None,
         quiet = false
     ))]
     #[allow(clippy::too_many_arguments)]
@@ -130,8 +137,9 @@ impl CabsPy {
         keep_all_layers: bool,
         max_beam_size: Option<usize>,
         primal_bound: Option<&PyAny>,
-        time_limit: Option<f64>,
         threads: usize,
+        parallelization_method: BeamParallelizationMethod,
+        time_limit: Option<f64>,
         quiet: bool,
     ) -> PyResult<CabsPy> {
         let f_evaluator_type = FEvaluatorType::from(f_operator);
@@ -159,12 +167,25 @@ impl CabsPy {
                 },
             };
             let solver = if threads > 1 {
-                create_dual_bound_shared_memory_cabs::<OrderedContinuous>(
-                    Arc::new(model.inner_as_ref().clone()),
-                    parameters,
-                    f_evaluator_type,
-                    threads,
-                )
+                let model = Arc::new(model.inner_as_ref().clone());
+                match parallelization_method {
+                    BeamParallelizationMethod::HDSync => {
+                        create_dual_bound_hd_sync_cabs::<OrderedContinuous>(
+                            model,
+                            parameters,
+                            f_evaluator_type,
+                            threads,
+                        )
+                    }
+                    BeamParallelizationMethod::SharedMemory => {
+                        create_dual_bound_shared_memory_cabs::<OrderedContinuous>(
+                            model,
+                            parameters,
+                            f_evaluator_type,
+                            threads,
+                        )
+                    }
+                }
             } else {
                 create_dual_bound_cabs::<OrderedContinuous>(
                     Rc::new(model.inner_as_ref().clone()),
@@ -194,12 +215,23 @@ impl CabsPy {
                 },
             };
             let solver = if threads > 1 {
-                create_dual_bound_shared_memory_cabs::<Integer>(
-                    Arc::new(model.inner_as_ref().clone()),
-                    parameters,
-                    f_evaluator_type,
-                    threads,
-                )
+                let model = Arc::new(model.inner_as_ref().clone());
+                match parallelization_method {
+                    BeamParallelizationMethod::HDSync => create_dual_bound_hd_sync_cabs::<Integer>(
+                        model,
+                        parameters,
+                        f_evaluator_type,
+                        threads,
+                    ),
+                    BeamParallelizationMethod::SharedMemory => {
+                        create_dual_bound_shared_memory_cabs::<Integer>(
+                            model,
+                            parameters,
+                            f_evaluator_type,
+                            threads,
+                        )
+                    }
+                }
             } else {
                 create_dual_bound_cabs::<Integer>(
                     Rc::new(model.inner_as_ref().clone()),

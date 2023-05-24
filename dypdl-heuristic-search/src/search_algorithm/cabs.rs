@@ -8,6 +8,7 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::str;
@@ -108,19 +109,19 @@ pub struct Cabs<
     N,
     B,
     V = Transition,
-    K = Rc<HashableSignatureVariables>,
     D = Rc<V>,
     R = Rc<Model>,
+    K = Rc<HashableSignatureVariables>,
 > where
     T: variable_type::Numeric + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
     N: BfsNode<T, V, K>,
     B: Fn(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
     V: TransitionInterface + Clone + Default,
-    K: Hash + Eq + Clone + Debug,
+    Transition: From<V>,
     D: Deref<Target = V> + Clone,
     R: Deref<Target = Model> + Clone,
-    Transition: From<V>,
+    K: Hash + Eq + Clone + Debug,
 {
     input: SearchInput<'a, N, V, D, R>,
     beam_search: B,
@@ -131,27 +132,27 @@ pub struct Cabs<
     max_beam_size: Option<usize>,
     time_keeper: TimeKeeper,
     solution: Solution<T, V>,
-    phantom: std::marker::PhantomData<K>,
+    phantom: PhantomData<K>,
 }
 
-impl<'a, T, N, B, V, K, D, R> Cabs<'a, T, N, B, V, K, D, R>
+impl<'a, T, N, B, V, D, R, K> Cabs<'a, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
     N: BfsNode<T, V, K> + Clone,
     B: Fn(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
     V: TransitionInterface + Clone + Default,
-    K: Hash + Eq + Clone + Debug,
+    Transition: From<V>,
     D: Deref<Target = V> + Clone,
     R: Deref<Target = Model> + Clone,
-    Transition: From<V>,
+    K: Hash + Eq + Clone + Debug,
 {
     /// Create a new CABS solver.
     pub fn new(
         input: SearchInput<'a, N, V, D, R>,
         beam_search: B,
         parameters: CabsParameters<T>,
-    ) -> Cabs<'a, T, N, B, V, K, D, R> {
+    ) -> Cabs<'a, T, N, B, V, D, R, K> {
         let mut time_keeper = parameters
             .beam_search_parameters
             .parameters
@@ -169,7 +170,7 @@ where
             max_beam_size: parameters.max_beam_size,
             time_keeper,
             solution: Solution::default(),
-            phantom: std::marker::PhantomData,
+            phantom: PhantomData,
         }
     }
 
@@ -269,17 +270,17 @@ where
     }
 }
 
-impl<'a, T, N, B, V, K, D, R> Search<T> for Cabs<'a, T, N, B, V, K, D, R>
+impl<'a, T, N, B, V, D, R, K> Search<T> for Cabs<'a, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display + Ord,
     <T as str::FromStr>::Err: fmt::Debug,
     N: BfsNode<T, V, K> + Clone,
     B: Fn(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
     V: TransitionInterface + Clone + Default,
-    K: Hash + Eq + Clone + Debug,
+    Transition: From<V>,
     D: Deref<Target = V> + Clone,
     R: Deref<Target = Model> + Clone,
-    Transition: From<V>,
+    K: Hash + Eq + Clone + Debug,
 {
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
         let (solution, is_terminated) = self.search_inner();

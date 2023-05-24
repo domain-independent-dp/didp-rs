@@ -1,45 +1,47 @@
 use super::super::arc_chain::ArcChain;
-use super::super::concurrent_state_registry::ConcurrentStateRegistry;
 use crate::search_algorithm::data_structure::{
     GetTransitions, HashableSignatureVariables, StateInformation, TransitionChain,
 };
-use crate::search_algorithm::{BfsNode, StateInRegistry};
+use crate::search_algorithm::{BfsNode, StateInRegistry, StateRegistry};
 use dypdl::variable_type::Numeric;
 use dypdl::{Model, ReduceFunction, Transition, TransitionInterface};
+use std::cell::Cell;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
-use std::sync::atomic;
+use std::ops::Deref;
+use std::rc::Rc;
 use std::sync::Arc;
 
 /// Node ordered by its cost.
 ///
-/// This struct is sendable.
+/// This node is expected be used in a distributed parallel search algorithm,
+/// where a state belongs to a unique thread, but the transition chain is shared among threads.
 ///
 /// In minimization, a node having a lower cost is `Greater` in `Ord`.
 /// In maximization , a node having a higher cost is `Greater` in `Ord`.
 ///
 /// This node does not have information about a bound.
-#[derive(Debug)]
-pub struct SendableCostNode<T, V = Transition>
+#[derive(Debug, Clone)]
+pub struct DistributedCostNode<T, V = Transition>
 where
     T: Numeric,
     V: TransitionInterface + Clone,
     Transition: From<V>,
 {
-    state: StateInRegistry<Arc<HashableSignatureVariables>>,
+    state: StateInRegistry<Rc<HashableSignatureVariables>>,
     priority: T,
-    closed: atomic::AtomicBool,
+    closed: Cell<bool>,
     transitions: Option<Arc<ArcChain<V>>>,
 }
 
-impl<T, V> SendableCostNode<T, V>
+impl<T, V> DistributedCostNode<T, V>
 where
     T: Numeric + Ord,
     V: TransitionInterface + Clone,
     Transition: From<V>,
 {
     fn new(
-        state: StateInRegistry<Arc<HashableSignatureVariables>>,
+        state: StateInRegistry,
         priority: T,
         parent: Option<&Self>,
         transition: Option<Arc<V>>,
@@ -51,10 +53,10 @@ where
             ))
         });
 
-        SendableCostNode {
+        DistributedCostNode {
             state,
             priority,
-            closed: atomic::AtomicBool::new(false),
+            closed: Cell::new(false),
             transitions,
         }
     }
@@ -65,7 +67,7 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
-    /// use dypdl_heuristic_search::SendableCostNode;
+    /// use dypdl_heuristic_search::DistributedCostNode;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
     ///     GetTransitions, StateInformation,
@@ -76,7 +78,7 @@ where
     ///
     /// let state = model.target.clone();
     /// let cost = 0;
-    /// let node = SendableCostNode::<_>::generate_root_node(state, cost, &model);
+    /// let node = DistributedCostNode::<_>::generate_root_node(state, cost, &model);
     /// assert_eq!(node.state(), &StateInRegistry::from(model.target.clone()));
     /// assert_eq!(node.cost(&model), cost);
     /// assert!(!node.is_closed());
@@ -84,7 +86,7 @@ where
     /// ```
     pub fn generate_root_node<S>(state: S, cost: T, model: &Model) -> Self
     where
-        StateInRegistry<Arc<HashableSignatureVariables>>: From<S>,
+        StateInRegistry: From<S>,
     {
         let state = StateInRegistry::from(state);
         let priority = if model.reduce_function == ReduceFunction::Max {
@@ -93,7 +95,7 @@ where
             -cost
         };
 
-        SendableCostNode::new(state, priority, None, None)
+        DistributedCostNode::new(state, priority, None, None)
     }
 
     /// Generates a successor node given a transition and a DyPDL model.
@@ -108,7 +110,7 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
-    /// use dypdl_heuristic_search::SendableCostNode;
+    /// use dypdl_heuristic_search::DistributedCostNode;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
     ///     GetTransitions, StateInformation,
@@ -120,12 +122,12 @@ where
     ///
     /// let state = model.target.clone();
     /// let cost = 0;
-    /// let node = SendableCostNode::<_>::generate_root_node(state, cost, &model);
+    /// let node = DistributedCostNode::<_>::generate_root_node(state, cost, &model);
     ///
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
-    /// let expected_state: StateInRegistry<_> = transition.apply(&model.target, &model.table_registry);
+    /// let expected_state: StateInRegistry = transition.apply(&model.target, &model.table_registry);
     ///
     /// let node = node.generate_successor_node(Arc::new(transition.clone()), &model);
     /// assert!(node.is_some());
@@ -145,7 +147,7 @@ where
             -cost
         };
 
-        Some(SendableCostNode::new(
+        Some(DistributedCostNode::new(
             state,
             priority,
             Some(self),
@@ -167,9 +169,10 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
-    /// use dypdl_heuristic_search::SendableCostNode;
-    /// use dypdl_heuristic_search::parallel_search_algorithm::ConcurrentStateRegistry;
-    /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
+    /// use dypdl_heuristic_search::DistributedCostNode;
+    /// use dypdl_heuristic_search::search_algorithm::{
+    ///     StateInRegistry, StateRegistry,
+    /// };
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
     ///     GetTransitions, StateInformation,
     /// };
@@ -177,22 +180,20 @@ where
     ///
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 0).unwrap();
-    /// let registry = ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(
-    ///     Arc::new(model.clone()),
-    /// );
+    /// let mut registry = StateRegistry::<_, _, Arc<_>, _, _>::new(Arc::new(model.clone()));
     ///
     /// let state = model.target.clone();
     /// let cost = 0;
-    /// let node = SendableCostNode::<_>::generate_root_node(state, cost, &model);
+    /// let node = DistributedCostNode::<_>::generate_root_node(state, cost, &model);
     ///
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
-    /// let expected_state: StateInRegistry<_> = transition.apply(
+    /// let expected_state: StateInRegistry = transition.apply(
     ///     &model.target, &model.table_registry,
     /// );
     ///
-    /// let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+    /// let result = node.insert_successor_node(Arc::new(transition.clone()), &mut registry);
     /// assert!(result.is_some());
     /// let (node, generated) = result.unwrap();
     /// assert!(generated);
@@ -201,11 +202,15 @@ where
     /// assert!(!node.is_closed());
     /// assert_eq!(node.transitions(), vec![transition]);
     /// ```
-    pub fn insert_successor_node(
+    pub fn insert_successor_node<N, M>(
         &self,
         transition: Arc<V>,
-        registry: &ConcurrentStateRegistry<T, Self>,
-    ) -> Option<(Arc<SendableCostNode<T, V>>, bool)> {
+        registry: &mut StateRegistry<T, Self, N, Rc<HashableSignatureVariables>, M>,
+    ) -> Option<(N, bool)>
+    where
+        N: Deref<Target = Self> + From<Self> + Clone,
+        M: Deref<Target = Model> + Clone,
+    {
         let model = registry.model();
         let (state, cost) = model.generate_successor_state(
             self.state(),
@@ -218,8 +223,8 @@ where
         } else {
             -cost
         };
-        let constructor = |state: _, _: T, _: Option<&SendableCostNode<T, V>>| {
-            Some(SendableCostNode::new(
+        let constructor = |state: StateInRegistry, _: T, _: Option<&DistributedCostNode<T, V>>| {
+            Some(DistributedCostNode::new(
                 state,
                 priority,
                 Some(self),
@@ -244,23 +249,7 @@ where
     }
 }
 
-impl<T, V> Clone for SendableCostNode<T, V>
-where
-    T: Numeric + PartialOrd,
-    V: TransitionInterface + Clone,
-    Transition: From<V>,
-{
-    fn clone(&self) -> Self {
-        SendableCostNode {
-            state: self.state.clone(),
-            priority: self.priority,
-            closed: atomic::AtomicBool::new(self.closed.load(atomic::Ordering::Relaxed)),
-            transitions: self.transitions.clone(),
-        }
-    }
-}
-
-impl<T, V> PartialEq for SendableCostNode<T, V>
+impl<T, V> PartialEq for DistributedCostNode<T, V>
 where
     T: Numeric + PartialOrd,
     V: TransitionInterface + Clone,
@@ -274,7 +263,7 @@ where
     }
 }
 
-impl<T, V> Eq for SendableCostNode<T, V>
+impl<T, V> Eq for DistributedCostNode<T, V>
 where
     T: Numeric + Ord,
     V: TransitionInterface + Clone,
@@ -282,7 +271,7 @@ where
 {
 }
 
-impl<T, V> Ord for SendableCostNode<T, V>
+impl<T, V> Ord for DistributedCostNode<T, V>
 where
     T: Numeric + Ord,
     V: TransitionInterface + Clone,
@@ -294,7 +283,7 @@ where
     }
 }
 
-impl<T, V> PartialOrd for SendableCostNode<T, V>
+impl<T, V> PartialOrd for DistributedCostNode<T, V>
 where
     T: Numeric + Ord,
     V: TransitionInterface + Clone,
@@ -306,19 +295,19 @@ where
     }
 }
 
-impl<T, V> StateInformation<T, Arc<HashableSignatureVariables>> for SendableCostNode<T, V>
+impl<T, V> StateInformation<T> for DistributedCostNode<T, V>
 where
     T: Numeric,
     V: TransitionInterface + Clone,
     Transition: From<V>,
 {
     #[inline]
-    fn state(&self) -> &StateInRegistry<Arc<HashableSignatureVariables>> {
+    fn state(&self) -> &StateInRegistry {
         &self.state
     }
 
     #[inline]
-    fn state_mut(&mut self) -> &mut StateInRegistry<Arc<HashableSignatureVariables>> {
+    fn state_mut(&mut self) -> &mut StateInRegistry {
         &mut self.state
     }
 
@@ -338,16 +327,16 @@ where
 
     #[inline]
     fn is_closed(&self) -> bool {
-        self.closed.load(atomic::Ordering::Relaxed)
+        self.closed.get()
     }
 
     #[inline]
     fn close(&self) {
-        self.closed.store(true, atomic::Ordering::Relaxed)
+        self.closed.set(true);
     }
 }
 
-impl<T, V> GetTransitions<V> for SendableCostNode<T, V>
+impl<T, V> GetTransitions<V> for DistributedCostNode<T, V>
 where
     T: Numeric,
     V: TransitionInterface + Clone,
@@ -361,7 +350,7 @@ where
     }
 }
 
-impl<T, V> BfsNode<T, V, Arc<HashableSignatureVariables>> for SendableCostNode<T, V>
+impl<T, V> BfsNode<T, V> for DistributedCostNode<T, V>
 where
     T: Numeric + Ord + Display,
     V: TransitionInterface + Clone,
@@ -381,7 +370,7 @@ mod tests {
 
     #[test]
     fn ordered_by_bound() {
-        assert!(!SendableCostNode::<Integer>::ordered_by_bound());
+        assert!(!DistributedCostNode::<Integer>::ordered_by_bound());
     }
 
     #[test]
@@ -392,7 +381,7 @@ mod tests {
         assert!(variable.is_ok());
         let state = model.target.clone();
         let mut expected_state = StateInRegistry::from(state.clone());
-        let mut node = SendableCostNode::<_>::generate_root_node(state, 1, &model);
+        let mut node = DistributedCostNode::<_>::generate_root_node(state, 1, &model);
         assert_eq!(node.state(), &expected_state);
         assert_eq!(node.state_mut(), &mut expected_state);
         assert_eq!(node.cost(&model), 1);
@@ -409,7 +398,7 @@ mod tests {
         assert!(variable.is_ok());
         let state = model.target.clone();
         let mut expected_state = StateInRegistry::from(state.clone());
-        let mut node = SendableCostNode::<_>::generate_root_node(state, 1, &model);
+        let mut node = DistributedCostNode::<_>::generate_root_node(state, 1, &model);
         assert_eq!(node.state(), &expected_state);
         assert_eq!(node.state_mut(), &mut expected_state);
         assert_eq!(node.cost(&model), 1);
@@ -422,7 +411,7 @@ mod tests {
     fn close() {
         let model = dypdl::Model::default();
         let state = model.target.clone();
-        let node = SendableCostNode::<_>::generate_root_node(state, 0, &model);
+        let node = DistributedCostNode::<_>::generate_root_node(state, 0, &model);
         assert!(!node.is_closed());
         node.close();
         assert!(node.is_closed());
@@ -447,9 +436,8 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let mut expected_state: StateInRegistry<_> =
-            transition.apply(&state, &model.table_registry);
-        let node = SendableCostNode::generate_root_node(state, 0, &model);
+        let mut expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
 
         let successor = node.generate_successor_node(Arc::new(transition.clone()), &model);
         assert!(successor.is_some());
@@ -481,9 +469,8 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let mut expected_state: StateInRegistry<_> =
-            transition.apply(&state, &model.table_registry);
-        let node = SendableCostNode::generate_root_node(state, 0, &model);
+        let mut expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
 
         let successor = node.generate_successor_node(Arc::new(transition.clone()), &model);
         assert!(successor.is_some());
@@ -510,7 +497,7 @@ mod tests {
         assert!(result.is_ok());
 
         let state = model.target.clone();
-        let node = SendableCostNode::generate_root_node(state, 0, &model);
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
 
         let mut transition = Transition::default();
         let result = transition.add_effect(v1, v1 + 1);
@@ -533,10 +520,10 @@ mod tests {
         let v2 = model.add_integer_resource_variable("v2", false, 0);
         assert!(v2.is_ok());
         let v2 = v2.unwrap();
-        let model = Arc::new(model);
+        let model = Rc::new(model);
 
         let state = StateInRegistry::from(model.target.clone());
-        let registry = ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(model.clone());
+        let mut registry = StateRegistry::<_, DistributedCostNode<_>>::new(model.clone());
 
         let mut transition = Transition::default();
         let result = transition.add_effect(v1, v1 + 1);
@@ -545,12 +532,12 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let expected_state: StateInRegistry<_> = transition.apply(&state, &model.table_registry);
-        let node = SendableCostNode::generate_root_node(state, 0, &model);
+        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
         let result = registry.insert(node.clone());
         assert!(result.is_some());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let result = node.insert_successor_node(Arc::new(transition.clone()), &mut registry);
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.state(), &expected_state);
@@ -572,10 +559,10 @@ mod tests {
         let v2 = model.add_integer_resource_variable("v2", false, 0);
         assert!(v2.is_ok());
         let v2 = v2.unwrap();
-        let model = Arc::new(model);
+        let model = Rc::new(model);
 
         let state = StateInRegistry::from(model.target.clone());
-        let registry = ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(model.clone());
+        let mut registry = StateRegistry::<_, DistributedCostNode<_>>::new(model.clone());
 
         let mut transition = Transition::default();
         let result = transition.add_effect(v1, v1 + 1);
@@ -584,12 +571,12 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let expected_state: StateInRegistry<_> = transition.apply(&state, &model.table_registry);
-        let node = SendableCostNode::generate_root_node(state, 0, &model);
+        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
         let result = registry.insert(node.clone());
         assert!(result.is_some());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let result = node.insert_successor_node(Arc::new(transition.clone()), &mut registry);
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.state(), &expected_state);
@@ -615,10 +602,9 @@ mod tests {
         assert!(result.is_ok());
 
         let state = StateInRegistry::from(model.target.clone());
-        let registry =
-            ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model.clone()));
+        let mut registry = StateRegistry::<_, DistributedCostNode<_>>::new(Rc::new(model.clone()));
 
-        let node = SendableCostNode::generate_root_node(state, 0, &model);
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
 
         let mut transition = Transition::default();
         let result = transition.add_effect(v1, v1 + 1);
@@ -627,7 +613,7 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let result = node.insert_successor_node(Arc::new(transition), &registry);
+        let result = node.insert_successor_node(Arc::new(transition), &mut registry);
         assert_eq!(result, None);
         assert!(!node.is_closed());
     }
@@ -650,16 +636,15 @@ mod tests {
         assert!(result.is_ok());
 
         let state = StateInRegistry::from(model.target.clone());
-        let expected_state: StateInRegistry<_> = transition.apply(&state, &model.table_registry);
-        let node = SendableCostNode::generate_root_node(state, 0, &model);
-        let registry =
-            ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model.clone()));
+        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
+        let mut registry = StateRegistry::<_, DistributedCostNode<_>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
         assert!(result.is_some());
         let (node, dominated) = result.unwrap();
         assert!(dominated.is_none());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let result = node.insert_successor_node(Arc::new(transition.clone()), &mut registry);
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.state(), &expected_state);
@@ -690,16 +675,15 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = StateInRegistry::from(model.target.clone());
-        let expected_state: StateInRegistry<_> = transition.apply(&state, &model.table_registry);
-        let node = SendableCostNode::generate_root_node(state, 0, &model);
-        let registry =
-            ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model.clone()));
+        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
+        let mut registry = StateRegistry::<_, DistributedCostNode<_>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
         assert!(result.is_some());
         let (node, dominated) = result.unwrap();
         assert!(dominated.is_none());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let result = node.insert_successor_node(Arc::new(transition.clone()), &mut registry);
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.state(), &expected_state);
@@ -729,15 +713,14 @@ mod tests {
         assert!(result.is_ok());
 
         let state = StateInRegistry::from(model.target.clone());
-        let node = SendableCostNode::generate_root_node(state, 0, &model);
-        let registry =
-            ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model.clone()));
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
+        let mut registry = StateRegistry::<_, DistributedCostNode<_>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
         assert!(result.is_some());
         let (node, dominated) = result.unwrap();
         assert!(dominated.is_none());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let result = node.insert_successor_node(Arc::new(transition.clone()), &mut registry);
         assert!(result.is_none());
     }
 
@@ -759,15 +742,14 @@ mod tests {
         assert!(result.is_ok());
 
         let state = StateInRegistry::from(model.target.clone());
-        let node = SendableCostNode::generate_root_node(state, 0, &model);
-        let registry =
-            ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model.clone()));
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
+        let mut registry = StateRegistry::<_, DistributedCostNode<_>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
         assert!(result.is_some());
         let (node, dominated) = result.unwrap();
         assert!(dominated.is_none());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let result = node.insert_successor_node(Arc::new(transition.clone()), &mut registry);
         assert!(result.is_none());
     }
 
@@ -783,8 +765,8 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = model.target.clone();
-        let node1 = SendableCostNode::<_>::generate_root_node(state, 0, &model);
-        let node1 = Arc::new(node1);
+        let node1 = DistributedCostNode::<_>::generate_root_node(state, 0, &model);
+        let node1 = Rc::new(node1);
 
         let mut transition = Transition::default();
         let result = transition.add_effect(v1, v1 + 1);
@@ -793,12 +775,12 @@ mod tests {
         assert!(result.is_ok());
         let node2 = node1.generate_successor_node(Arc::new(transition), &model);
         assert!(node2.is_some());
-        let node2 = Arc::new(node2.unwrap());
+        let node2 = Rc::new(node2.unwrap());
 
         let mut transition = Transition::default();
         transition.set_cost(IntegerExpression::Cost + 1);
-        let registry = ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model));
-        let result = node1.insert_successor_node(Arc::new(transition), &registry);
+        let mut registry = StateRegistry::<_, DistributedCostNode<_>>::new(Rc::new(model));
+        let result = node1.insert_successor_node(Arc::new(transition), &mut registry);
         assert!(result.is_some());
         let (node3, _) = result.unwrap();
 
@@ -824,8 +806,8 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = model.target.clone();
-        let node1 = SendableCostNode::<_>::generate_root_node(state, 0, &model);
-        let node1 = Arc::new(node1);
+        let node1 = DistributedCostNode::<_>::generate_root_node(state, 0, &model);
+        let node1 = Rc::new(node1);
 
         let mut transition = Transition::default();
         let result = transition.add_effect(v1, v1 + 1);
@@ -834,12 +816,12 @@ mod tests {
         assert!(result.is_ok());
         let node2 = node1.generate_successor_node(Arc::new(transition), &model);
         assert!(node2.is_some());
-        let node2 = Arc::new(node2.unwrap());
+        let node2 = Rc::new(node2.unwrap());
 
         let mut transition = Transition::default();
         transition.set_cost(IntegerExpression::Cost + 1);
-        let registry = ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model));
-        let result = node1.insert_successor_node(Arc::new(transition), &registry);
+        let mut registry = StateRegistry::<_, DistributedCostNode<_>>::new(Rc::new(model));
+        let result = node1.insert_successor_node(Arc::new(transition), &mut registry);
         assert!(result.is_some());
         let (node3, _) = result.unwrap();
 

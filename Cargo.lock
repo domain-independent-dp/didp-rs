@@ -134,6 +134,7 @@ dependencies = [
 name = "dypdl-heuristic-search"
 version = "0.3.4"
 dependencies = [
+ "crossbeam-channel",
  "dashmap",
  "dypdl",
  "ordered-float",

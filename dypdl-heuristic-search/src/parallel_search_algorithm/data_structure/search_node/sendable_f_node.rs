@@ -79,7 +79,7 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
-    /// use dypdl_heuristic_search::parallel_search_algorithm::SendableFNode;
+    /// use dypdl_heuristic_search::SendableFNode;
     /// use dypdl_heuristic_search::search_algorithm::{StateInRegistry};
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
     ///     GetTransitions, StateInformation,
@@ -151,7 +151,7 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
-    /// use dypdl_heuristic_search::parallel_search_algorithm::SendableFNode;
+    /// use dypdl_heuristic_search::SendableFNode;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
     ///     GetTransitions, StateInformation,
@@ -245,9 +245,8 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
-    /// use dypdl_heuristic_search::parallel_search_algorithm::{
-    ///     ConcurrentStateRegistry, SendableFNode,
-    /// };
+    /// use dypdl_heuristic_search::SendableFNode;
+    /// use dypdl_heuristic_search::parallel_search_algorithm::ConcurrentStateRegistry;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
     ///     GetTransitions, StateInformation,

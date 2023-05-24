@@ -2,6 +2,7 @@
 
 mod acps;
 mod apps;
+mod beam_parallelization_method;
 mod breadth_first_search;
 mod caasdy;
 mod cabs;
@@ -16,6 +17,7 @@ mod wrapped_solver;
 
 pub use acps::AcpsPy;
 pub use apps::AppsPy;
+pub use beam_parallelization_method::BeamParallelizationMethod;
 pub use breadth_first_search::BreadthFirstSearchPy;
 pub use caasdy::CaasdyPy;
 pub use cabs::CabsPy;
