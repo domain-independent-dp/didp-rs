@@ -6,14 +6,15 @@ use crate::search_algorithm::{
     get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
     StateRegistry,
 };
+use bus::{Bus, BusReader};
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use dypdl::{variable_type, Model, TransitionInterface};
 use std::error::Error;
 use std::fmt::Display;
-use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::thread;
+use std::{iter, mem};
 
 /// Performs shared memory beam search.
 ///
@@ -91,8 +92,8 @@ use std::thread;
 /// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
 /// let parameters = BeamSearchParameters::default();
 /// let threads = 1;
-/// let solution = hd_sync_beam_search(
-///     &input, transition_evaluator, base_cost_evaluator, parameters, threads, false,
+/// let (solution, _) = hd_sync_beam_search(
+///     &input, transition_evaluator, base_cost_evaluator, parameters, threads,
 /// ).unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions.len(), 1);
@@ -116,25 +117,33 @@ where
     V: TransitionInterface + Clone + Default + Send + Sync,
 {
     let (node_txs, node_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| unbounded()).unzip();
-    let (layer_txs, layer_rxs): (Vec<_>, Vec<_>) =
-        (0..threads).map(|_| bounded(threads - 1)).unzip();
-    let (statistics_tx, statistics_rx) = bounded(threads);
     let (solution_tx, solution_rx) = bounded(1);
+    let (optimality_tx, optimality_rx) = bounded(1);
+    let (statistics_tx, statistics_rx) = bounded(threads);
+
+    let (local_layer_tx, local_layer_rx) = bounded(threads - 1);
+    let mut global_layer_tx = Bus::new(threads - 1);
+    let follower_channels = (0..threads - 1)
+        .map(|_| LayerChannel::Follower(local_layer_tx.clone(), global_layer_tx.add_rx()))
+        .collect::<Vec<_>>();
+    let leader_channel = LayerChannel::Leader(local_layer_rx, global_layer_tx);
+    let layer_channels = iter::once(leader_channel).chain(follower_channels);
 
     thread::scope(|s| {
-        for (id, (node_rx, layer_rx)) in node_rxs.into_iter().zip(layer_rxs).enumerate() {
+        for (id, (node_rx, layer_channel)) in node_rxs.into_iter().zip(layer_channels).enumerate() {
             let node_txs = node_txs.clone();
-            let layer_txs = layer_txs.clone();
-            let statistics_tx = statistics_tx.clone();
+
             let solution_tx = solution_tx.clone();
+            let optimality_tx = optimality_tx.clone();
+            let statistics_tx = statistics_tx.clone();
             let channels = Channels {
                 id,
                 node_txs,
                 node_rx,
-                layer_txs,
-                layer_rx,
-                statistics_tx,
+                layer_channel,
                 solution_tx,
+                optimality_tx,
+                statistics_tx,
             };
 
             s.spawn(|| {
@@ -150,6 +159,22 @@ where
     });
 
     let mut solution = Solution::default();
+
+    if let Some((cost, transitions)) = solution_rx.recv()? {
+        solution.cost = Some(cost);
+        solution.transitions = transitions;
+    }
+
+    let optimality_message = optimality_rx.recv()?;
+
+    if optimality_message.proved {
+        solution.is_optimal = solution.cost.is_some();
+        solution.is_infeasible = solution.cost.is_none();
+    }
+
+    solution.best_bound = optimality_message.bound;
+    solution.time_out = optimality_message.time_out;
+
     let mut statistics = HdSearchStatistics {
         expanded: Vec::with_capacity(threads),
         generated: Vec::with_capacity(threads),
@@ -167,36 +192,26 @@ where
         statistics.sent.push(information.sent);
     }
 
-    let information = solution_rx.recv()?;
-
-    if let Some(cost) = information.cost {
-        solution.cost = Some(cost);
-        solution.transitions = information.transitions.unwrap();
-        solution.is_optimal = information.proved;
-    } else {
-        solution.is_infeasible = information.proved;
-    }
-
-    solution.best_bound = information.bound;
-    solution.time_out = information.time_out;
-
     Ok((solution, statistics))
 }
 
-#[derive(Default, Clone, Copy)]
-struct LayerInformation<T> {
+#[derive(Default, Clone)]
+struct LocalLayerMessage<T> {
     id: usize,
     pruned: bool,
     is_empty: bool,
     bound: Option<T>,
     cost: Option<T>,
-    time_out: bool,
+}
+
+#[derive(Clone)]
+enum GlobalLayerMessage<T> {
+    Terminate(Option<usize>),
+    Bound(Option<T>),
 }
 
 #[derive(Default)]
-struct SolutionMessage<T, V> {
-    cost: Option<T>,
-    transitions: Option<Vec<V>>,
+struct OptimalityMessage<T> {
     bound: Option<T>,
     proved: bool,
     time_out: bool,
@@ -210,14 +225,22 @@ struct Statistics {
     sent: usize,
 }
 
+enum LayerChannel<T> {
+    Leader(Receiver<LocalLayerMessage<T>>, Bus<GlobalLayerMessage<T>>),
+    Follower(
+        Sender<LocalLayerMessage<T>>,
+        BusReader<GlobalLayerMessage<T>>,
+    ),
+}
+
 struct Channels<T, M, V> {
     id: usize,
     node_txs: Vec<Sender<Option<M>>>,
     node_rx: Receiver<Option<M>>,
-    layer_txs: Vec<Sender<LayerInformation<T>>>,
-    layer_rx: Receiver<LayerInformation<T>>,
+    layer_channel: LayerChannel<T>,
+    solution_tx: Sender<Option<(T, Vec<V>)>>,
+    optimality_tx: Sender<OptimalityMessage<T>>,
     statistics_tx: Sender<Statistics>,
-    solution_tx: Sender<SolutionMessage<T, V>>,
 }
 
 fn single_sync_beam_search<'a, T, N, M, E, B, V>(
@@ -225,9 +248,9 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
     transition_evaluator: E,
     base_cost_evaluator: B,
     parameters: BeamSearchParameters<T>,
-    channels: Channels<T, M, V>,
+    mut channels: Channels<T, M, V>,
 ) where
-    T: variable_type::Numeric + Ord + Display,
+    T: variable_type::Numeric + Ord + Display + Sync,
     N: BfsNode<T, V>,
     N: From<M>,
     M: Clone + SearchNodeMessage,
@@ -236,11 +259,13 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
     V: TransitionInterface + Clone + Default,
 {
     let id = channels.id;
-    let time_keeper = if id == 0 {
-        parameters
-            .parameters
-            .time_limit
-            .map(TimeKeeper::with_time_limit)
+    let time_keeper = if let LayerChannel::Leader(..) = &channels.layer_channel {
+        Some(
+            parameters
+                .parameters
+                .time_limit
+                .map_or_else(TimeKeeper::default, TimeKeeper::with_time_limit),
+        )
     } else {
         None
     };
@@ -279,6 +304,7 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
     let mut expanded = 0;
     let mut pruned = false;
     let mut best_dual_bound = None;
+    let mut layer_index = 0;
 
     loop {
         let mut incumbent = None;
@@ -376,99 +402,148 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
             }
         }
 
-        let mut is_empty = next_beam.is_empty();
-        let mut cost = incumbent.as_ref().map(|(_, cost, _)| *cost);
-        let mut time_out = time_keeper
-            .as_ref()
-            .map_or(false, |time_keeper| time_keeper.check_time_limit(quiet));
-
-        channels.layer_txs.iter().enumerate().for_each(|(i, tx)| {
-            if i != id {
-                let information = LayerInformation {
+        match &mut channels.layer_channel {
+            LayerChannel::Follower(tx, rx) => {
+                let information = LocalLayerMessage {
                     id,
                     pruned,
-                    is_empty,
+                    is_empty: next_beam.is_empty(),
                     bound: layer_dual_bound,
-                    cost,
-                    time_out,
+                    cost: incumbent.as_ref().map(|(_, cost, _)| *cost),
                 };
-                tx.send(information).unwrap()
-            }
-        });
+                tx.send(information).unwrap();
 
-        let mut goal_id = if cost.is_some() { Some(id) } else { None };
+                match rx.recv().unwrap() {
+                    GlobalLayerMessage::Terminate(goal_id) => {
+                        if Some(id) == goal_id {
+                            let (node, cost, suffix) = incumbent.unwrap();
+                            let mut transitions = node.transitions();
+                            transitions.extend_from_slice(suffix);
 
-        for _ in 0..threads - 1 {
-            let information = channels.layer_rx.recv().unwrap();
-            pruned |= information.pruned;
-            is_empty &= information.is_empty;
-            time_out |= information.time_out;
+                            channels
+                                .solution_tx
+                                .send(Some((cost, transitions)))
+                                .unwrap()
+                        }
 
-            if let Some(bound) = information.bound {
-                if !exceed_bound(model, bound, layer_dual_bound) {
-                    layer_dual_bound = Some(bound);
+                        channels
+                            .statistics_tx
+                            .send(Statistics {
+                                expanded,
+                                generated,
+                                kept,
+                                sent,
+                            })
+                            .unwrap();
+
+                        return;
+                    }
+                    GlobalLayerMessage::Bound(bound) => {
+                        best_dual_bound = bound;
+                    }
                 }
             }
+            LayerChannel::Leader(rx, tx) => {
+                let mut is_empty = next_beam.is_empty();
+                let mut cost = incumbent.as_ref().map(|(_, cost, _)| *cost);
+                let mut goal_id = if cost.is_some() { Some(id) } else { None };
 
-            if let Some(other) = information.cost {
-                if !exceed_bound(model, other, cost)
-                    || (Some(other) == cost && information.id < goal_id.unwrap())
-                {
-                    cost = Some(other);
-                    goal_id = Some(information.id);
+                for _ in 0..threads - 1 {
+                    let information = rx.recv().unwrap();
+                    pruned |= information.pruned;
+                    is_empty &= information.is_empty;
+
+                    if let Some(bound) = information.bound {
+                        if !exceed_bound(model, bound, layer_dual_bound) {
+                            layer_dual_bound = Some(bound);
+                        }
+                    }
+
+                    if let Some(other) = information.cost {
+                        if !exceed_bound(model, other, cost)
+                            || (Some(other) == cost && information.id < goal_id.unwrap())
+                        {
+                            cost = Some(other);
+                            goal_id = Some(information.id);
+                        }
+                    }
                 }
-            }
-        }
 
-        if let (false, Some(value)) = (previously_pruned, layer_dual_bound) {
-            if best_dual_bound.map_or(true, |bound| !exceed_bound(model, bound, Some(value))) {
-                best_dual_bound = Some(value);
-            }
-        }
+                if let (false, Some(value)) = (previously_pruned, layer_dual_bound) {
+                    if best_dual_bound
+                        .map_or(true, |bound| !exceed_bound(model, bound, Some(value)))
+                    {
+                        best_dual_bound = Some(value);
+                    }
+                }
 
-        if is_empty || time_out || goal_id.is_some() {
-            let proved = !pruned && is_empty;
+                let time_out = time_keeper.as_ref().unwrap().check_time_limit(quiet);
 
-            if let Some(goal_id) = goal_id {
-                if goal_id == id {
-                    let (node, cost, suffix) = incumbent.unwrap();
-                    let mut transitions = node.transitions();
-                    transitions.extend_from_slice(suffix);
-                    let proved = proved || Some(cost) == best_dual_bound;
+                if !quiet {
+                    println!(
+                        "Searched layer: {}, elapsed time: {}",
+                        layer_index,
+                        time_keeper.as_ref().unwrap().elapsed_time()
+                    );
+                }
+
+                if is_empty || time_out || goal_id.is_some() {
+                    let mut proved = !pruned && is_empty;
+
+                    if let Some(goal_id) = goal_id {
+                        if threads > 1 {
+                            tx.broadcast(GlobalLayerMessage::Terminate(Some(goal_id)));
+                        }
+
+                        if cost == best_dual_bound {
+                            proved = true;
+                        }
+
+                        if goal_id == id {
+                            let (node, cost, suffix) = incumbent.unwrap();
+                            let mut transitions = node.transitions();
+                            transitions.extend_from_slice(suffix);
+
+                            channels
+                                .solution_tx
+                                .send(Some((cost, transitions)))
+                                .unwrap()
+                        }
+                    } else {
+                        if threads > 1 {
+                            tx.broadcast(GlobalLayerMessage::Terminate(None));
+                        }
+
+                        channels.solution_tx.send(None).unwrap();
+
+                        if proved {
+                            best_dual_bound = None;
+                        }
+                    }
 
                     channels
-                        .solution_tx
-                        .send(SolutionMessage {
-                            cost: Some(cost),
-                            transitions: Some(transitions),
-                            bound: if proved { Some(cost) } else { best_dual_bound },
+                        .statistics_tx
+                        .send(Statistics {
+                            expanded,
+                            generated,
+                            kept,
+                            sent,
+                        })
+                        .unwrap();
+                    channels
+                        .optimality_tx
+                        .send(OptimalityMessage {
+                            bound: best_dual_bound,
                             proved,
                             time_out,
                         })
                         .unwrap();
-                }
-            } else if (is_empty || time_out) && id == 0 {
-                channels
-                    .solution_tx
-                    .send(SolutionMessage {
-                        bound: if proved { None } else { best_dual_bound },
-                        proved,
-                        time_out,
-                        ..Default::default()
-                    })
-                    .unwrap();
-            }
 
-            channels
-                .statistics_tx
-                .send(Statistics {
-                    expanded,
-                    generated,
-                    kept,
-                    sent,
-                })
-                .unwrap();
-            return;
+                    return;
+                } else if threads > 1 {
+                    tx.broadcast(GlobalLayerMessage::Bound(best_dual_bound));
+                }
+            }
         }
 
         mem::swap(&mut current_beam, &mut next_beam);
@@ -476,5 +551,7 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
         if !parameters.keep_all_layers {
             registry.clear();
         }
+
+        layer_index += 1;
     }
 }
