@@ -1,4 +1,5 @@
 use super::super::arc_chain::ArcChain;
+use super::cost_node_message::CostNodeMessage;
 use crate::search_algorithm::data_structure::{
     GetTransitions, HashableSignatureVariables, StateInformation, TransitionChain,
 };
@@ -32,6 +33,22 @@ where
     priority: T,
     closed: Cell<bool>,
     transitions: Option<Arc<ArcChain<V>>>,
+}
+
+impl<V, T> From<CostNodeMessage<T, V>> for DistributedCostNode<T, V>
+where
+    T: Numeric,
+    V: TransitionInterface + Clone,
+    Transition: From<V>,
+{
+    fn from(message: CostNodeMessage<T, V>) -> Self {
+        DistributedCostNode {
+            state: message.state.into(),
+            priority: message.priority,
+            closed: Cell::new(false),
+            transitions: message.transitions,
+        }
+    }
 }
 
 impl<T, V> DistributedCostNode<T, V>
@@ -155,6 +172,77 @@ where
         ))
     }
 
+    /// Generates a sendable successor node message given a transition and a DyPDL model.
+    ///
+    /// Returns `None` if the successor state is pruned by a state constraint.
+    ///
+    /// # Panics
+    ///
+    /// If an expression used in the transition is invalid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl_heuristic_search::DistributedCostNode;
+    /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
+    /// use dypdl_heuristic_search::search_algorithm::data_structure::{
+    ///     GetTransitions, StateInformation,
+    /// };
+    /// use std::sync::Arc;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 0).unwrap();
+    ///
+    /// let state = model.target.clone();
+    /// let cost = 0;
+    /// let node = DistributedCostNode::<_>::generate_root_node(state, cost, &model);
+    ///
+    /// let mut transition = Transition::new("transition");
+    /// transition.set_cost(IntegerExpression::Cost + 1);
+    /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let expected_state: StateInRegistry = transition.apply(&model.target, &model.table_registry);
+    ///
+    /// let node = node.generate_sendable_successor_node(Arc::new(transition.clone()), &model);
+    /// assert!(node.is_some());
+    /// let node = DistributedCostNode::from(node.unwrap());
+    /// assert_eq!(node.state(), &expected_state);
+    /// assert_eq!(node.cost(&model), 1);
+    /// assert!(!node.is_closed());
+    /// assert_eq!(node.transitions(), vec![transition]);
+    /// ```
+    pub fn generate_sendable_successor_node(
+        &self,
+        transition: Arc<V>,
+        model: &Model,
+    ) -> Option<CostNodeMessage<T, V>> {
+        let cost = self.cost(model);
+        let (state, cost) =
+            model.generate_successor_state(&self.state, cost, transition.as_ref(), None)?;
+        let priority = if model.reduce_function == ReduceFunction::Max {
+            cost
+        } else {
+            -cost
+        };
+
+        let transitions = Arc::new(ArcChain::new(self.transitions.clone(), transition));
+
+        Some(CostNodeMessage {
+            state,
+            priority,
+            transitions: Some(transitions),
+        })
+    }
+
+    /// Generates a successor node given a transition and inserts it into a state registry.
+    ///
+    /// Returns the successor node and whether a new entry is generated or not.
+    /// If the successor node dominates an existing non-closed node in the registry, the second return value is `false`.
+    /// Returns `None` if the successor state is pruned by a state constraint, or the successor node is dominated.
+    ///
+    /// # Panics
+    ///
+    /// If an expression used in the transition is invalid.
     /// Generates a successor node given a transition and inserts it into a state registry.
     ///
     /// Returns the successor node and whether a new entry is generated or not.
@@ -485,6 +573,99 @@ mod tests {
 
     #[test]
     fn generate_successor_pruned_by_constraint() {
+        let mut model = Model::default();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v1 = v1.unwrap();
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+        let v2 = v2.unwrap();
+        let result =
+            model.add_state_constraint(Condition::comparison_i(ComparisonOperator::Le, v1, 0));
+        assert!(result.is_ok());
+
+        let state = model.target.clone();
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
+
+        let mut transition = Transition::default();
+        let result = transition.add_effect(v1, v1 + 1);
+        assert!(result.is_ok());
+        let result = transition.add_effect(v2, v2 + 1);
+        assert!(result.is_ok());
+        transition.set_cost(IntegerExpression::Cost + 1);
+
+        let result = node.generate_successor_node(Arc::new(transition), &model);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn generate_sendable_successor_some_min() {
+        let mut model = Model::default();
+        model.set_minimize();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v1 = v1.unwrap();
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+        let v2 = v2.unwrap();
+
+        let mut transition = Transition::default();
+        let result = transition.add_effect(v1, v1 + 1);
+        assert!(result.is_ok());
+        let result = transition.add_effect(v2, v2 + 1);
+        assert!(result.is_ok());
+        transition.set_cost(IntegerExpression::Cost + 1);
+
+        let state = model.target.clone();
+        let mut expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
+
+        let successor = node.generate_sendable_successor_node(Arc::new(transition.clone()), &model);
+        assert!(successor.is_some());
+        let mut successor = DistributedCostNode::from(successor.unwrap());
+        assert_eq!(successor.state(), &expected_state);
+        assert_eq!(successor.state_mut(), &mut expected_state);
+        assert_eq!(successor.cost(&model), 1);
+        assert_eq!(successor.bound(&model), None);
+        assert!(!successor.is_closed());
+        assert_eq!(successor.transitions(), vec![transition]);
+    }
+
+    #[test]
+    fn generate_sendable_successor_some_max() {
+        let mut model = Model::default();
+        model.set_minimize();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v1 = v1.unwrap();
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+        let v2 = v2.unwrap();
+
+        let mut transition = Transition::default();
+        let result = transition.add_effect(v1, v1 + 1);
+        assert!(result.is_ok());
+        let result = transition.add_effect(v2, v2 + 1);
+        assert!(result.is_ok());
+        transition.set_cost(IntegerExpression::Cost + 1);
+
+        let state = model.target.clone();
+        let mut expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let node = DistributedCostNode::generate_root_node(state, 0, &model);
+
+        let successor = node.generate_sendable_successor_node(Arc::new(transition.clone()), &model);
+        assert!(successor.is_some());
+        let mut successor = DistributedCostNode::from(successor.unwrap());
+        assert_eq!(successor.state(), &expected_state);
+        assert_eq!(successor.state_mut(), &mut expected_state);
+        assert_eq!(successor.cost(&model), 1);
+        assert_eq!(successor.bound(&model), None);
+        assert!(!successor.is_closed());
+        assert_eq!(successor.transitions(), vec![transition]);
+    }
+
+    #[test]
+    fn generate_sendable_successor_pruned_by_constraint() {
         let mut model = Model::default();
         let v1 = model.add_integer_resource_variable("v1", true, 0);
         assert!(v1.is_ok());

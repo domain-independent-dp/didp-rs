@@ -6,5 +6,8 @@ mod search_node;
 mod successor_iterator;
 
 pub use concurrent_state_registry::ConcurrentStateRegistry;
-pub use search_node::{DistributedCostNode, DistributedFNode, SendableCostNode, SendableFNode};
+pub use search_node::{
+    CostNodeMessage, DistributedCostNode, DistributedFNode, FNodeMessage, SearchNodeMessage,
+    SendableCostNode, SendableFNode,
+};
 pub use successor_iterator::SendableSuccessorIterator;

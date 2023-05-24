@@ -1,15 +1,15 @@
-use crate::search_algorithm::data_structure::{exceed_bound, Beam, HashableSignatureVariables};
+use super::data_structure::SearchNodeMessage;
+use super::hd_search_statistics::HdSearchStatistics;
+use crate::search_algorithm::data_structure::{exceed_bound, Beam};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
     get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
-    StateInRegistry, StateRegistry,
+    StateRegistry,
 };
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use dypdl::{variable_type, Model, TransitionInterface};
-use rustc_hash::FxHasher;
 use std::error::Error;
-use std::fmt::{Debug, Display};
-use std::hash::{Hash, Hasher};
+use std::fmt::Display;
 use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -39,7 +39,7 @@ use std::thread;
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::Search;
 /// use dypdl_heuristic_search::parallel_search_algorithm::{
-///     hd_sync_beam_search, SendableFNode,
+///     DistributedFNode, FNodeMessage, hd_sync_beam_search,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::{
 ///     BeamSearchParameters, SearchInput, SuccessorGenerator,
@@ -62,7 +62,7 @@ use std::thread;
 /// let h_evaluator = |_: &_| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
-/// let node = SendableFNode::generate_root_node(
+/// let node = FNodeMessage::generate_root_node(
 ///     state,
 ///     cost,
 ///     &model,
@@ -79,8 +79,8 @@ use std::thread;
 ///     solution_suffix: &[],
 /// };
 /// let transition_evaluator =
-///     move |node: &SendableFNode<_>, transition, primal_bound| {
-///         node.generate_successor_node(
+///     move |node: &DistributedFNode<_>, transition, primal_bound| {
+///         node.generate_sendable_successor_node(
 ///             transition,
 ///             &model,
 ///             &h_evaluator,
@@ -99,18 +99,19 @@ use std::thread;
 /// assert_eq!(Transition::from(solution.transitions[0].clone()), increment);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub fn hd_sync_beam_search<'a, T, N, E, B, V>(
-    input: &'a SearchInput<'a, N, V, Arc<V>, Arc<Model>>,
+pub fn hd_sync_beam_search<'a, T, N, M, E, B, V>(
+    input: &'a SearchInput<'a, M, V, Arc<V>, Arc<Model>>,
     transition_evaluator: E,
     base_cost_evaluator: B,
     parameters: BeamSearchParameters<T>,
     threads: usize,
-    print_statistics: bool,
-) -> Result<Solution<T, V>, Box<dyn Error>>
+) -> Result<(Solution<T, V>, HdSearchStatistics), Box<dyn Error>>
 where
     T: variable_type::Numeric + Ord + Display + Send + Sync,
-    N: BfsNode<T, V, Arc<HashableSignatureVariables>> + Clone + Send + Sync,
-    E: Fn(&N, Arc<V>, Option<T>) -> Option<N> + Send + Sync,
+    N: BfsNode<T, V>,
+    N: From<M>,
+    M: Clone + SearchNodeMessage,
+    E: Fn(&N, Arc<V>, Option<T>) -> Option<M> + Send + Sync,
     B: Fn(T, T) -> T + Send + Sync,
     V: TransitionInterface + Clone + Default + Send + Sync,
 {
@@ -149,13 +150,21 @@ where
     });
 
     let mut solution = Solution::default();
-    let mut sent = 0;
+    let mut statistics = HdSearchStatistics {
+        expanded: Vec::with_capacity(threads),
+        generated: Vec::with_capacity(threads),
+        kept: Vec::with_capacity(threads),
+        sent: Vec::with_capacity(threads),
+    };
 
     for _ in 0..threads {
         let information = statistics_rx.recv()?;
         solution.expanded += information.expanded;
         solution.generated += information.generated;
-        sent += information.sent;
+        statistics.expanded.push(information.expanded);
+        statistics.generated.push(information.generated);
+        statistics.kept.push(information.kept);
+        statistics.sent.push(information.sent);
     }
 
     let information = solution_rx.recv()?;
@@ -171,11 +180,7 @@ where
     solution.best_bound = information.bound;
     solution.time_out = information.time_out;
 
-    if print_statistics {
-        println!("Sent: {}", sent);
-    }
-
-    Ok(solution)
+    Ok((solution, statistics))
 }
 
 #[derive(Default, Clone, Copy)]
@@ -201,42 +206,32 @@ struct SolutionMessage<T, V> {
 struct Statistics {
     expanded: usize,
     generated: usize,
+    kept: usize,
     sent: usize,
 }
 
-struct Channels<T, N, V> {
+struct Channels<T, M, V> {
     id: usize,
-    node_txs: Vec<Sender<Option<N>>>,
-    node_rx: Receiver<Option<N>>,
+    node_txs: Vec<Sender<Option<M>>>,
+    node_rx: Receiver<Option<M>>,
     layer_txs: Vec<Sender<LayerInformation<T>>>,
     layer_rx: Receiver<LayerInformation<T>>,
     statistics_tx: Sender<Statistics>,
     solution_tx: Sender<SolutionMessage<T, V>>,
 }
 
-// Random seed.
-const SEED: u32 = 0x5583c24d;
-
-fn assign_thread<K>(state: &StateInRegistry<K>, threads: usize) -> usize
-where
-    K: Hash + Clone + Eq + Debug,
-{
-    let mut hasher = FxHasher::default();
-    hasher.write_u32(SEED);
-    state.signature_variables.hash(&mut hasher);
-    hasher.finish() as usize % threads
-}
-
-fn single_sync_beam_search<'a, T, N, E, B, V>(
-    input: &'a SearchInput<'a, N, V, Arc<V>, Arc<Model>>,
+fn single_sync_beam_search<'a, T, N, M, E, B, V>(
+    input: &'a SearchInput<'a, M, V, Arc<V>, Arc<Model>>,
     transition_evaluator: E,
     base_cost_evaluator: B,
     parameters: BeamSearchParameters<T>,
-    channels: Channels<T, N, V>,
+    channels: Channels<T, M, V>,
 ) where
     T: variable_type::Numeric + Ord + Display,
-    N: BfsNode<T, V, Arc<HashableSignatureVariables>> + Clone,
-    E: Fn(&N, Arc<V>, Option<T>) -> Option<N>,
+    N: BfsNode<T, V>,
+    N: From<M>,
+    M: Clone + SearchNodeMessage,
+    E: Fn(&N, Arc<V>, Option<T>) -> Option<M>,
     B: Fn(T, T) -> T,
     V: TransitionInterface + Clone + Default,
 {
@@ -266,10 +261,12 @@ fn single_sync_beam_search<'a, T, N, E, B, V>(
     registry.reserve(capacity);
 
     let mut sent = 0;
+    let mut kept = 0;
     let mut generated = 0;
 
     if let Some(node) = input.node.clone() {
-        if id == assign_thread(node.state(), threads) {
+        if id == node.assign_thread(threads) {
+            let node = N::from(node);
             current_beam.insert(&mut registry, node);
             generated += 1;
 
@@ -317,15 +314,18 @@ fn single_sync_beam_search<'a, T, N, E, B, V>(
 
             for transition in generator.applicable_transitions(node.state()) {
                 if let Some(successor) = transition_evaluator(&node, transition, primal_bound) {
-                    if let Some(bound) = successor.bound(model) {
-                        if !exceed_bound(model, bound, layer_dual_bound) {
-                            layer_dual_bound = Some(bound);
-                        }
-                    }
-
-                    let sent_to = assign_thread(successor.state(), threads);
+                    let sent_to = successor.assign_thread(threads);
 
                     if sent_to == id {
+                        kept += 1;
+                        let successor = N::from(successor);
+
+                        if let Some(bound) = successor.bound(model) {
+                            if !exceed_bound(model, bound, layer_dual_bound) {
+                                layer_dual_bound = Some(bound);
+                            }
+                        }
+
                         let (new_generated, beam_pruning) =
                             next_beam.insert(&mut registry, successor);
 
@@ -354,6 +354,14 @@ fn single_sync_beam_search<'a, T, N, E, B, V>(
 
         while received_all < threads - 1 {
             if let Some(node) = channels.node_rx.recv().unwrap() {
+                let node = N::from(node);
+
+                if let Some(bound) = node.bound(model) {
+                    if !exceed_bound(model, bound, layer_dual_bound) {
+                        layer_dual_bound = Some(bound);
+                    }
+                }
+
                 let (new_generated, beam_pruning) = next_beam.insert(&mut registry, node);
 
                 if !pruned && beam_pruning {
@@ -456,6 +464,7 @@ fn single_sync_beam_search<'a, T, N, E, B, V>(
                 .send(Statistics {
                     expanded,
                     generated,
+                    kept,
                     sent,
                 })
                 .unwrap();

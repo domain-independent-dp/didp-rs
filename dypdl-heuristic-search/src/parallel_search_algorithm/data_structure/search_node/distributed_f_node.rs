@@ -1,6 +1,8 @@
 use super::super::arc_chain::ArcChain;
+use super::f_node_message::FNodeMessage;
 use crate::search_algorithm::data_structure::{
-    exceed_bound, GetTransitions, HashableSignatureVariables, StateInformation, TransitionChain,
+    exceed_bound, GetTransitions, HashableSignatureVariables, StateInformation,
+    StateWithHashableSignatureVariables, TransitionChain,
 };
 use crate::search_algorithm::{BfsNode, StateInRegistry, StateRegistry};
 use dypdl::variable_type::Numeric;
@@ -35,6 +37,24 @@ where
     f: T,
     closed: Cell<bool>,
     transitions: Option<Arc<ArcChain<V>>>,
+}
+
+impl<T, V> From<FNodeMessage<T, V>> for DistributedFNode<T, V>
+where
+    T: Numeric,
+    V: TransitionInterface + Clone,
+    Transition: From<V>,
+{
+    fn from(node: FNodeMessage<T, V>) -> Self {
+        DistributedFNode {
+            state: node.state.into(),
+            g: node.g,
+            h: node.h,
+            f: node.f,
+            closed: Cell::new(false),
+            transitions: node.transitions,
+        }
+    }
 }
 
 impl<T, V> DistributedFNode<T, V>
@@ -225,6 +245,106 @@ where
             Some(transition),
         ))
     }
+
+    /// Generates a sendable successor node message given a transition, a DyPDL model, h- and f-evaluators,
+    /// and a primal bound on the solution cost.
+    ///
+    /// Returns `None` if the successor state is pruned by a state constraint or a dead-end,
+    /// or the f-value exceeds the primal bound.
+    ///
+    /// `h_evaluator` is a function that takes a state and returns the dual bound (the h-value).
+    /// If `h_evaluator` returns `None`, the state is a dead-end, so the node is not generated.
+    /// `f_evaluator` is a function that takes g- and h-values and the state and returns the f-value.
+    ///
+    /// # Panics
+    ///
+    /// If an expression used in the transition is invalid.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl_heuristic_search::DistributedFNode;
+    /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
+    /// use dypdl_heuristic_search::search_algorithm::data_structure::{
+    ///     GetTransitions, StateInformation,
+    /// };
+    /// use std::sync::Arc;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 0).unwrap();
+    ///
+    /// let state = model.target.clone();
+    /// let cost = 0;
+    /// let h_evaluator = |_: &_| Some(0);
+    /// let f_evaluator = |g, h, _: &_| g + h;
+    /// let node = DistributedFNode::<_>::generate_root_node(
+    ///     state, cost, &model, &h_evaluator, &f_evaluator, None,
+    /// ).unwrap();
+    ///
+    /// let mut transition = Transition::new("transition");
+    /// transition.set_cost(IntegerExpression::Cost + 1);
+    /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let expected_state: StateInRegistry = transition.apply(
+    ///     &model.target, &model.table_registry,
+    /// );
+    ///
+    /// let h_evaluator = |_: &_| Some(0);
+    /// let f_evaluator = |g, h, _: &_| g + h;
+    /// let node = node.generate_sendable_successor_node(
+    ///     Arc::new(transition.clone()), &model, &h_evaluator, &f_evaluator, None,
+    /// );
+    /// assert!(node.is_some());
+    /// let node = DistributedFNode::from(node.unwrap());
+    /// assert_eq!(node.state(), &expected_state);
+    /// assert_eq!(node.cost(&model), 1);
+    /// assert_eq!(node.bound(&model), Some(1));
+    /// assert!(!node.is_closed());
+    /// assert_eq!(node.transitions(), vec![transition]);
+    /// ```
+    pub fn generate_sendable_successor_node<H, F>(
+        &self,
+        transition: Arc<V>,
+        model: &Model,
+        h_evaluator: H,
+        f_evaluator: F,
+        primal_bound: Option<T>,
+    ) -> Option<FNodeMessage<T, V>>
+    where
+        H: FnOnce(&StateWithHashableSignatureVariables) -> Option<T>,
+        F: FnOnce(T, T, &StateWithHashableSignatureVariables) -> T,
+    {
+        let (state, g) =
+            model.generate_successor_state(&self.state, self.g, transition.as_ref(), None)?;
+        let h = h_evaluator(&state)?;
+        let f = f_evaluator(g, h, &state);
+
+        if exceed_bound(model, f, primal_bound) {
+            return None;
+        }
+
+        let (h, f) = if model.reduce_function == ReduceFunction::Max {
+            (h, f)
+        } else {
+            (-h, -f)
+        };
+
+        let transitions = Some(Arc::new(ArcChain::new(
+            self.transitions.clone(),
+            transition,
+        )));
+
+        Some(FNodeMessage {
+            state,
+            g,
+            h,
+            f,
+            transitions,
+        })
+    }
+
+    /// Generates a successor node given a transition, h- and f- evaluators, and a primal bound on the solution cost,
+    /// and inserts it into a state registry.
 
     /// Generates a successor node given a transition, h- and f- evaluators, and a primal bound on the solution cost,
     /// and inserts it into a state registry.
@@ -876,6 +996,285 @@ mod tests {
 
         let h_evaluator = |_: &StateInRegistry| None;
         let result = node.generate_successor_node(
+            Arc::new(transition),
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn generate_sendable_successor_some_min() {
+        let mut model = Model::default();
+        model.set_minimize();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v1 = v1.unwrap();
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+        let v2 = v2.unwrap();
+
+        let mut transition = Transition::default();
+        let result = transition.add_effect(v1, v1 + 1);
+        assert!(result.is_ok());
+        let result = transition.add_effect(v2, v2 + 1);
+        assert!(result.is_ok());
+        transition.set_cost(IntegerExpression::Cost + 1);
+
+        let state = model.target.clone();
+        let mut expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let node = DistributedFNode::generate_root_node(
+            state,
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
+        assert!(node.is_some());
+        let node = node.unwrap();
+
+        let h_evaluator = |_: &_| Some(0);
+        let f_evaluator = |g, h, _: &_| g + h;
+        let successor = node.generate_sendable_successor_node(
+            Arc::new(transition.clone()),
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
+        assert!(successor.is_some());
+        let mut successor = DistributedFNode::from(successor.unwrap());
+        assert_eq!(successor.state(), &expected_state);
+        assert_eq!(successor.state_mut(), &mut expected_state);
+        assert_eq!(successor.cost(&model), 1);
+        assert_eq!(successor.bound(&model), Some(1));
+        assert!(!successor.is_closed());
+        assert_eq!(successor.transitions(), vec![transition]);
+    }
+
+    #[test]
+    fn generate_sendable_successor_some_max() {
+        let mut model = Model::default();
+        model.set_maximize();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v1 = v1.unwrap();
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+        let v2 = v2.unwrap();
+
+        let mut transition = Transition::default();
+        let result = transition.add_effect(v1, v1 + 1);
+        assert!(result.is_ok());
+        let result = transition.add_effect(v2, v2 + 1);
+        assert!(result.is_ok());
+        transition.set_cost(IntegerExpression::Cost + 1);
+
+        let state = model.target.clone();
+        let mut expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let node = DistributedFNode::generate_root_node(
+            state,
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
+        assert!(node.is_some());
+        let node = node.unwrap();
+
+        let h_evaluator = |_: &_| Some(0);
+        let f_evaluator = |g, h, _: &_| g + h;
+        let successor = node.generate_sendable_successor_node(
+            Arc::new(transition.clone()),
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
+        assert!(successor.is_some());
+        let mut successor = DistributedFNode::from(successor.unwrap());
+        assert_eq!(successor.state(), &expected_state);
+        assert_eq!(successor.state_mut(), &mut expected_state);
+        assert_eq!(successor.cost(&model), 1);
+        assert_eq!(successor.bound(&model), Some(1));
+        assert!(!successor.is_closed());
+        assert_eq!(successor.transitions(), vec![transition]);
+    }
+
+    #[test]
+    fn generate_sendable_successor_pruned_by_constraint() {
+        let mut model = Model::default();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v1 = v1.unwrap();
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+        let v2 = v2.unwrap();
+        let result =
+            model.add_state_constraint(Condition::comparison_i(ComparisonOperator::Le, v1, 0));
+        assert!(result.is_ok());
+
+        let state = model.target.clone();
+        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let node = DistributedFNode::generate_root_node(
+            state,
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
+        assert!(node.is_some());
+        let node = node.unwrap();
+
+        let mut transition = Transition::default();
+        let result = transition.add_effect(v1, v1 + 1);
+        assert!(result.is_ok());
+        let result = transition.add_effect(v2, v2 + 1);
+        assert!(result.is_ok());
+        transition.set_cost(IntegerExpression::Cost + 1);
+
+        let h_evaluator = |_: &_| Some(0);
+        let f_evaluator = |g, h, _: &_| g + h;
+        let result = node.generate_sendable_successor_node(
+            Arc::new(transition),
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn generate_sendable_successor_pruned_by_bound_min() {
+        let mut model = Model::default();
+        model.set_minimize();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v1 = v1.unwrap();
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+        let v2 = v2.unwrap();
+
+        let state = model.target.clone();
+        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let node = DistributedFNode::generate_root_node(
+            state,
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
+        assert!(node.is_some());
+        let node = node.unwrap();
+
+        let mut transition = Transition::default();
+        let result = transition.add_effect(v1, v1 + 1);
+        assert!(result.is_ok());
+        let result = transition.add_effect(v2, v2 + 1);
+        assert!(result.is_ok());
+        transition.set_cost(IntegerExpression::Cost + 1);
+
+        let result = node.generate_successor_node(
+            Arc::new(transition),
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            Some(0),
+        );
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn generate_sendable_successor_pruned_by_bound_max() {
+        let mut model = Model::default();
+        model.set_maximize();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v1 = v1.unwrap();
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+        let v2 = v2.unwrap();
+
+        let state = model.target.clone();
+        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let node = DistributedFNode::generate_root_node(
+            state,
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
+        assert!(node.is_some());
+        let node = node.unwrap();
+
+        let mut transition = Transition::default();
+        let result = transition.add_effect(v1, v1 + 1);
+        assert!(result.is_ok());
+        let result = transition.add_effect(v2, v2 + 1);
+        assert!(result.is_ok());
+        transition.set_cost(IntegerExpression::Cost + 1);
+
+        let h_evaluator = |_: &_| Some(0);
+        let f_evaluator = |g, h, _: &_| g + h;
+        let result = node.generate_sendable_successor_node(
+            Arc::new(transition),
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            Some(2),
+        );
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn generate_sendable_successor_pruned_by_h() {
+        let mut model = Model::default();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v1 = v1.unwrap();
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+        let v2 = v2.unwrap();
+
+        let state = model.target.clone();
+        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let node = DistributedFNode::generate_root_node(
+            state,
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
+        assert!(node.is_some());
+        let node = node.unwrap();
+
+        let mut transition = Transition::default();
+        let result = transition.add_effect(v1, v1 + 1);
+        assert!(result.is_ok());
+        let result = transition.add_effect(v2, v2 + 1);
+        assert!(result.is_ok());
+        transition.set_cost(IntegerExpression::Cost + 1);
+
+        let h_evaluator = |_: &_| None;
+        let f_evaluator = |g, h, _: &_| g + h;
+        let result = node.generate_sendable_successor_node(
             Arc::new(transition),
             &model,
             &h_evaluator,

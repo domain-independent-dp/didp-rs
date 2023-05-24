@@ -1,5 +1,5 @@
 use super::beam_search::BeamSearchParameters;
-use super::data_structure::{exceed_bound, BfsNode, HashableSignatureVariables};
+use super::data_structure::{exceed_bound, HashableSignatureVariables};
 use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::print_primal_bound;
 use super::util::{update_bound_if_better, TimeKeeper};
@@ -97,7 +97,7 @@ pub struct CabsParameters<T> {
 ///     solution_suffix: &[],
 /// };
 ///
-/// let mut solver = Cabs::new(input, beam_search, parameters);
+/// let mut solver = Cabs::<_, FNode<_>, _>::new(input, beam_search, parameters);
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
@@ -115,7 +115,6 @@ pub struct Cabs<
 > where
     T: variable_type::Numeric + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
-    N: BfsNode<T, V, K>,
     B: Fn(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
@@ -139,7 +138,6 @@ impl<'a, T, N, B, V, D, R, K> Cabs<'a, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
-    N: BfsNode<T, V, K> + Clone,
     B: Fn(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
@@ -274,7 +272,6 @@ impl<'a, T, N, B, V, D, R, K> Search<T> for Cabs<'a, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display + Ord,
     <T as str::FromStr>::Err: fmt::Debug,
-    N: BfsNode<T, V, K> + Clone,
     B: Fn(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,

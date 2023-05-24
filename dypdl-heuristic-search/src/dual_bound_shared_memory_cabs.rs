@@ -1,3 +1,5 @@
+use crate::search_algorithm::data_structure::HashableSignatureVariables;
+
 use super::f_evaluator_type::FEvaluatorType;
 use super::parallel_search_algorithm::{
     shared_memory_beam_search, SendableCostNode, SendableFNode,
@@ -108,7 +110,15 @@ where
             )
             .unwrap()
         };
-        Box::new(Cabs::new(input, beam_search, parameters))
+        Box::new(Cabs::<
+            _,
+            SendableFNode<_>,
+            _,
+            _,
+            _,
+            _,
+            Arc<HashableSignatureVariables>,
+        >::new(input, beam_search, parameters))
     } else {
         let node = SendableCostNode::generate_root_node(model.target.clone(), cost, &model);
         let input = SearchInput {
@@ -131,6 +141,14 @@ where
             )
             .unwrap()
         };
-        Box::new(Cabs::new(input, beam_search, parameters))
+        Box::new(Cabs::<
+            _,
+            SendableCostNode<_>,
+            _,
+            _,
+            _,
+            _,
+            Arc<HashableSignatureVariables>,
+        >::new(input, beam_search, parameters))
     }
 }

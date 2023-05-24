@@ -1,5 +1,7 @@
 use super::f_evaluator_type::FEvaluatorType;
-use super::parallel_search_algorithm::{hd_sync_beam_search, SendableCostNode, SendableFNode};
+use super::parallel_search_algorithm::{
+    hd_sync_beam_search, CostNodeMessage, DistributedCostNode, DistributedFNode, FNodeMessage,
+};
 use super::search_algorithm::{Cabs, CabsParameters, Search, SearchInput, SuccessorGenerator};
 use dypdl::{variable_type, Transition};
 use std::fmt;
@@ -67,12 +69,13 @@ where
         FEvaluatorType::Min => T::max_value(),
         FEvaluatorType::Overwrite => T::zero(),
     };
+    let print_statistics = !parameters.beam_search_parameters.parameters.quiet;
 
     if model.has_dual_bounds() {
         let h_model = model.clone();
         let h_evaluator = move |state: &_| h_model.eval_dual_bound(state);
         let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
-        let node = SendableFNode::generate_root_node(
+        let node = FNodeMessage::generate_root_node(
             model.target.clone(),
             cost,
             &model,
@@ -85,8 +88,8 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &SendableFNode<_>, transition, primal_bound| {
-            node.generate_successor_node(
+        let transition_evaluator = move |node: &DistributedFNode<_>, transition, primal_bound| {
+            node.generate_sendable_successor_node(
                 transition,
                 &model,
                 &h_evaluator,
@@ -95,38 +98,68 @@ where
             )
         };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
-            hd_sync_beam_search(
+            let (solution, statistics) = hd_sync_beam_search(
                 input,
                 &transition_evaluator,
                 base_cost_evaluator,
                 parameters,
                 threads,
-                !parameters.parameters.quiet,
             )
-            .unwrap()
+            .unwrap();
+
+            if print_statistics {
+                println!(
+                    "Searched with beam size: {}, threads: {}, kept: {}, sent: {}",
+                    parameters.beam_size,
+                    threads,
+                    statistics.kept.iter().sum::<usize>(),
+                    statistics.sent.iter().sum::<usize>(),
+                );
+            }
+
+            solution
         };
-        Box::new(Cabs::new(input, beam_search, parameters))
+        Box::new(Cabs::<_, FNodeMessage<_>, _, _, _, Arc<_>>::new(
+            input,
+            beam_search,
+            parameters,
+        ))
     } else {
-        let node = SendableCostNode::generate_root_node(model.target.clone(), cost, &model);
+        let node = CostNodeMessage::generate_root_node(model.target.clone(), cost, &model);
         let input = SearchInput {
             node: Some(node),
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &SendableCostNode<_>, transition, _| {
-            node.generate_successor_node(transition, &model)
+        let transition_evaluator = move |node: &DistributedCostNode<_>, transition, _| {
+            node.generate_sendable_successor_node(transition, &model)
         };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
-            hd_sync_beam_search(
+            let (solution, statistics) = hd_sync_beam_search(
                 input,
                 &transition_evaluator,
                 base_cost_evaluator,
                 parameters,
                 threads,
-                !parameters.parameters.quiet,
             )
-            .unwrap()
+            .unwrap();
+
+            if print_statistics {
+                println!(
+                    "Searched with beam size: {}, threads: {}, kept: {}, sent: {}",
+                    parameters.beam_size,
+                    threads,
+                    statistics.kept.iter().sum::<usize>(),
+                    statistics.sent.iter().sum::<usize>(),
+                );
+            }
+
+            solution
         };
-        Box::new(Cabs::new(input, beam_search, parameters))
+        Box::new(Cabs::<_, CostNodeMessage<_>, _, _, _, Arc<_>>::new(
+            input,
+            beam_search,
+            parameters,
+        ))
     }
 }

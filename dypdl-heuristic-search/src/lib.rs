@@ -32,7 +32,8 @@ pub use dual_bound_weighted_astar::create_dual_bound_weighted_astar;
 pub use expression_beam_search::{CustomExpressionParameters, ExpressionBeamSearch};
 pub use f_evaluator_type::FEvaluatorType;
 pub use parallel_search_algorithm::{
-    ConcurrentStateRegistry, DistributedCostNode, DistributedFNode, SendableCostNode, SendableFNode,
+    ConcurrentStateRegistry, CostNodeMessage, DistributedCostNode, DistributedFNode, FNodeMessage,
+    SendableCostNode, SendableFNode,
 };
 pub use search_algorithm::data_structure::TransitionWithCustomCost;
 pub use search_algorithm::{

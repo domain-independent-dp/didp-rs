@@ -106,7 +106,7 @@ where
                 parameters,
             )
         };
-        Box::new(Cabs::new(input, beam_search, parameters))
+        Box::new(Cabs::<_, FNode<_>, _>::new(input, beam_search, parameters))
     } else {
         let node = CostNode::generate_root_node(model.target.clone(), cost, &model);
         let input = SearchInput {
@@ -125,6 +125,10 @@ where
                 parameters,
             )
         };
-        Box::new(Cabs::new(input, beam_search, parameters))
+        Box::new(Cabs::<_, CostNode<_>, _>::new(
+            input,
+            beam_search,
+            parameters,
+        ))
     }
 }
