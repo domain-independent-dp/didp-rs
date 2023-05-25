@@ -8,7 +8,7 @@ use std::fmt;
 use std::str;
 use std::sync::Arc;
 
-/// Creates a shared memory parallel Complete Anytime Beam Search (CABS) solver using the dual bound as a heuristic function.
+/// Creates a Hash Distributed Complete Anytime Beam Search with layer synchronization (HDCABSSync) solver using the dual bound as a heuristic function.
 ///
 /// It iterates beam search with exponentially increasing beam width.
 /// `beam_size` specifies the initial beam width.

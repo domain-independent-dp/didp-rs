@@ -8,6 +8,8 @@ use pyo3::prelude::*;
 #[pyclass(name = "BeamParallelizationMethod")]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum BeamParallelizationMethod {
+    /// Use HD beam search.
+    HD = 0,
     /// Use HD sync beam search.
     HDSync = 1,
     /// Use shared memory beam search.

@@ -6,17 +6,16 @@ use crate::search_algorithm::{
     get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
     StateRegistry,
 };
-use bus::{Bus, BusReader};
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use dypdl::{variable_type, Model, TransitionInterface};
 use std::error::Error;
 use std::fmt::Display;
+use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::thread;
-use std::{iter, mem};
 
-/// Performs hash distributed beam search with layer synchronization.
+/// Performs hash distributed beam search.
 ///
 /// This function uses forward search based on the shortest path problem.
 /// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
@@ -40,7 +39,7 @@ use std::{iter, mem};
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::Search;
 /// use dypdl_heuristic_search::parallel_search_algorithm::{
-///     DistributedFNode, FNodeMessage, hd_sync_beam_search,
+///     DistributedFNode, FNodeMessage, hd_beam_search,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::{
 ///     BeamSearchParameters, SearchInput, SuccessorGenerator,
@@ -92,7 +91,7 @@ use std::{iter, mem};
 /// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
 /// let parameters = BeamSearchParameters::default();
 /// let threads = 1;
-/// let (solution, _) = hd_sync_beam_search(
+/// let (solution, _) = hd_beam_search(
 ///     &input, transition_evaluator, base_cost_evaluator, parameters, threads,
 /// ).unwrap();
 /// assert_eq!(solution.cost, Some(1));
@@ -100,7 +99,7 @@ use std::{iter, mem};
 /// assert_eq!(Transition::from(solution.transitions[0].clone()), increment);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub fn hd_sync_beam_search<'a, T, N, M, E, B, V>(
+pub fn hd_beam_search<'a, T, N, M, E, B, V>(
     input: &'a SearchInput<'a, M, V, Arc<V>, Arc<Model>>,
     transition_evaluator: E,
     base_cost_evaluator: B,
@@ -117,37 +116,32 @@ where
     V: TransitionInterface + Clone + Default + Send + Sync,
 {
     let (node_txs, node_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| unbounded()).unzip();
+    let (layer_txs, layer_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| unbounded()).unzip();
     let (solution_tx, solution_rx) = bounded(1);
     let (optimality_tx, optimality_rx) = bounded(1);
     let (statistics_tx, statistics_rx) = bounded(threads);
 
-    let (local_layer_tx, local_layer_rx) = bounded(threads - 1);
-    let mut global_layer_tx = Bus::new(1);
-    let follower_channels = (0..threads - 1)
-        .map(|_| LayerChannel::Follower(local_layer_tx.clone(), global_layer_tx.add_rx()))
-        .collect::<Vec<_>>();
-    let leader_channel = LayerChannel::Leader(local_layer_rx, global_layer_tx);
-    let layer_channels = iter::once(leader_channel).chain(follower_channels);
-
     thread::scope(|s| {
-        for (id, (node_rx, layer_channel)) in node_rxs.into_iter().zip(layer_channels).enumerate() {
-            let node_txs = node_txs.clone();
+        for (id, (node_rx, layer_rx)) in node_rxs.into_iter().zip(layer_rxs).enumerate() {
+            let node_tx = NodeSender::with_capacity(node_txs.clone(), parameters.beam_size);
+            let layer_txs = layer_txs.clone();
 
             let solution_tx = solution_tx.clone();
             let optimality_tx = optimality_tx.clone();
             let statistics_tx = statistics_tx.clone();
             let channels = Channels {
                 id,
-                node_txs,
+                node_tx,
                 node_rx,
-                layer_channel,
+                layer_txs,
+                layer_rx,
                 solution_tx,
                 optimality_tx,
                 statistics_tx,
             };
 
             s.spawn(|| {
-                single_sync_beam_search(
+                single_beam_search(
                     input,
                     &transition_evaluator,
                     &base_cost_evaluator,
@@ -195,6 +189,44 @@ where
     Ok((solution, statistics))
 }
 
+struct NodeSender<M> {
+    txs: Vec<Sender<M>>,
+    buffers: Vec<Vec<M>>,
+    channel_open: Vec<bool>,
+}
+
+impl<M> NodeSender<M> {
+    fn with_capacity(txs: Vec<Sender<M>>, capacity: usize) -> Self {
+        let threads = txs.len();
+
+        NodeSender {
+            txs,
+            buffers: (0..threads).map(|_| Vec::with_capacity(capacity)).collect(),
+            channel_open: vec![true; threads],
+        }
+    }
+
+    fn close_channels(&mut self) {
+        self.channel_open.iter_mut().for_each(|v| *v = false)
+    }
+
+    fn open_channel(&mut self, id: usize) {
+        self.channel_open[id] = true;
+
+        self.buffers[id]
+            .drain(..)
+            .for_each(|node| self.txs[id].send(node).unwrap());
+    }
+
+    fn send(&mut self, node: M, sent_to: usize) {
+        if self.channel_open[sent_to] {
+            self.txs[sent_to].send(node).unwrap()
+        } else {
+            self.buffers[sent_to].push(node)
+        }
+    }
+}
+
 #[derive(Default, Clone)]
 struct LocalLayerMessage<T> {
     id: usize,
@@ -202,12 +234,7 @@ struct LocalLayerMessage<T> {
     is_empty: bool,
     bound: Option<T>,
     cost: Option<T>,
-}
-
-#[derive(Clone)]
-enum GlobalLayerMessage<T> {
-    Terminate(Option<usize>),
-    Bound(Option<T>),
+    time_out: bool,
 }
 
 #[derive(Default)]
@@ -225,25 +252,18 @@ struct Statistics {
     sent: usize,
 }
 
-enum LayerChannel<T> {
-    Leader(Receiver<LocalLayerMessage<T>>, Bus<GlobalLayerMessage<T>>),
-    Follower(
-        Sender<LocalLayerMessage<T>>,
-        BusReader<GlobalLayerMessage<T>>,
-    ),
-}
-
 struct Channels<T, M, V> {
     id: usize,
-    node_txs: Vec<Sender<Option<M>>>,
+    node_tx: NodeSender<Option<M>>,
     node_rx: Receiver<Option<M>>,
-    layer_channel: LayerChannel<T>,
+    layer_txs: Vec<Sender<LocalLayerMessage<T>>>,
+    layer_rx: Receiver<LocalLayerMessage<T>>,
     solution_tx: Sender<Option<(T, Vec<V>)>>,
     optimality_tx: Sender<OptimalityMessage<T>>,
     statistics_tx: Sender<Statistics>,
 }
 
-fn single_sync_beam_search<'a, T, N, M, E, B, V>(
+fn single_beam_search<'a, T, N, M, E, B, V>(
     input: &'a SearchInput<'a, M, V, Arc<V>, Arc<Model>>,
     transition_evaluator: E,
     base_cost_evaluator: B,
@@ -259,7 +279,7 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
     V: TransitionInterface + Clone + Default,
 {
     let id = channels.id;
-    let time_keeper = if let LayerChannel::Leader(..) = &channels.layer_channel {
+    let time_keeper = if id == 0 {
         Some(
             parameters
                 .parameters
@@ -271,7 +291,7 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
     };
     let quiet = id != 0 || parameters.parameters.quiet;
     let mut primal_bound = parameters.parameters.primal_bound;
-    let threads = channels.node_txs.len();
+    let threads = channels.layer_txs.len();
 
     let model = &input.generator.model;
     let generator = &input.generator;
@@ -302,21 +322,88 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
     }
 
     let mut expanded = 0;
-    let mut pruned = false;
-    let mut best_dual_bound = None;
     let mut layer_index = 0;
 
+    let mut pruned = false;
+    let mut best_dual_bound = None;
+    let mut layer_dual_bound = None;
+    let mut time_out = time_keeper
+        .as_ref()
+        .map_or(false, |time_keeper| time_keeper.check_time_limit(quiet));
+    let mut incumbent = None;
+
+    // Initiates the search by sending messages.
+    channels.layer_txs.iter().enumerate().for_each(|(i, tx)| {
+        if i != id {
+            tx.send(LocalLayerMessage {
+                id,
+                pruned,
+                is_empty: current_beam.is_empty(),
+                bound: layer_dual_bound,
+                cost: None,
+                time_out,
+            })
+            .unwrap()
+        }
+    });
+
     loop {
-        let mut incumbent = None;
-        let previously_pruned = pruned;
-        let mut layer_dual_bound = None;
+        let mut is_empty = current_beam.is_empty();
+        let mut cost = incumbent.as_ref().map(|(_, cost, _)| *cost);
+        let mut goal_id = if cost.is_some() { Some(id) } else { None };
 
         {
+            let previously_pruned = pruned;
+            let mut previous_layer_dual_bound = layer_dual_bound;
+            layer_dual_bound = None;
+
+            let mut opened = 0;
+            let mut sent_all = false;
             let mut expanded_all = false;
             let mut received_all = 0;
             let mut iter = current_beam.drain();
 
-            while !expanded_all || received_all < threads - 1 {
+            while !sent_all || received_all < threads - 1 {
+                if opened < threads - 1 {
+                    // Receives the information of the previous layer.
+                    while let Ok(information) = channels.layer_rx.try_recv() {
+                        // Now, we are sure that the sender thread finishes the previous layer.
+                        // We can start to send nodes to the thread.
+                        channels.node_tx.open_channel(information.id);
+                        opened += 1;
+
+                        pruned |= information.pruned;
+                        is_empty &= information.is_empty;
+                        time_out |= information.time_out;
+
+                        if let Some(bound) = information.bound {
+                            if !exceed_bound(model, bound, previous_layer_dual_bound) {
+                                previous_layer_dual_bound = Some(bound);
+                            }
+                        }
+
+                        if opened == threads - 1 && !previously_pruned {
+                            if let Some(value) = previous_layer_dual_bound {
+                                if best_dual_bound
+                                    .map_or(true, |bound| !exceed_bound(model, bound, Some(value)))
+                                {
+                                    best_dual_bound = Some(value);
+                                }
+                            }
+                        }
+
+                        if let Some(other) = information.cost {
+                            if !exceed_bound(model, other, cost)
+                                || (Some(other) == cost && information.id < goal_id.unwrap())
+                            {
+                                cost = Some(other);
+                                primal_bound = Some(other);
+                                goal_id = Some(information.id);
+                            }
+                        }
+                    }
+                }
+
                 if !expanded_all {
                     // Expands a node.
                     if let Some(node) = iter.next() {
@@ -343,7 +430,7 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                             continue;
                         }
 
-                        if pruned && incumbent.is_some() {
+                        if (pruned && goal_id.is_some()) || time_out {
                             continue;
                         }
 
@@ -376,19 +463,25 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                                         generated += 1;
                                     }
                                 } else {
-                                    channels.node_txs[sent_to].send(Some(successor)).unwrap();
+                                    channels.node_tx.send(Some(successor), sent_to);
                                     sent += 1;
                                 }
                             }
                         }
                     } else {
                         expanded_all = true;
+                    }
+                }
 
-                        channels.node_txs.iter().enumerate().for_each(|(i, tx)| {
-                            if i != id {
-                                tx.send(None).unwrap()
-                            }
-                        });
+                // Notifies the other threads that the current thread sent all nodes
+                // and received the information of the previous layer from all threads.
+                if expanded_all && opened == threads - 1 && !sent_all {
+                    sent_all = true;
+
+                    for i in 0..threads {
+                        if i != id {
+                            channels.node_tx.send(None, i);
+                        }
                     }
                 }
 
@@ -422,163 +515,91 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
             }
         }
 
-        // Aggregates the information of the current layer.
-        match &mut channels.layer_channel {
-            LayerChannel::Follower(tx, rx) => {
-                // Sends the information to the leader.
-                let information = LocalLayerMessage {
+        if !quiet && id == 0 {
+            println!(
+                "Searched layer: {}, elapsed time: {}",
+                layer_index,
+                time_keeper.as_ref().unwrap().elapsed_time()
+            );
+        }
+
+        // Checks if the search is finished.
+        if is_empty || time_out || goal_id.is_some() {
+            let mut proved = !pruned && is_empty;
+
+            // Found a solution.
+            if let Some(goal_id) = goal_id {
+                if cost == best_dual_bound {
+                    proved = true;
+                }
+
+                if goal_id == id {
+                    let (node, cost, suffix) = incumbent.unwrap();
+                    let mut transitions = node.transitions();
+                    transitions.extend_from_slice(suffix);
+
+                    channels
+                        .solution_tx
+                        .send(Some((cost, transitions)))
+                        .unwrap()
+                }
+            // No solution.
+            } else {
+                if id == 0 {
+                    channels.solution_tx.send(None).unwrap();
+                }
+
+                if proved {
+                    best_dual_bound = None;
+                }
+            }
+
+            // Sends the statistics to the original thread.
+            channels
+                .statistics_tx
+                .send(Statistics {
+                    expanded,
+                    generated,
+                    kept,
+                    sent,
+                })
+                .unwrap();
+
+            if id == 0 {
+                // Sends the optimality information to the original thread.
+                channels
+                    .optimality_tx
+                    .send(OptimalityMessage {
+                        bound: best_dual_bound,
+                        proved,
+                        time_out,
+                    })
+                    .unwrap();
+            }
+
+            return;
+        }
+
+        channels.node_tx.close_channels();
+
+        time_out = time_keeper
+            .as_ref()
+            .map_or(time_out, |time_keeper| time_keeper.check_time_limit(quiet));
+
+        // Sends the information of the current layer to other threads.
+        channels.layer_txs.iter().enumerate().for_each(|(i, tx)| {
+            if i != id {
+                tx.send(LocalLayerMessage {
                     id,
                     pruned,
                     is_empty: next_beam.is_empty(),
                     bound: layer_dual_bound,
                     cost: incumbent.as_ref().map(|(_, cost, _)| *cost),
-                };
-                tx.send(information).unwrap();
-
-                // Receives the aggregated information from the leader.
-                match rx.recv().unwrap() {
-                    // Termination.
-                    GlobalLayerMessage::Terminate(goal_id) => {
-                        if Some(id) == goal_id {
-                            let (node, cost, suffix) = incumbent.unwrap();
-                            let mut transitions = node.transitions();
-                            transitions.extend_from_slice(suffix);
-
-                            channels
-                                .solution_tx
-                                .send(Some((cost, transitions)))
-                                .unwrap()
-                        }
-
-                        // Sends the statistics to the original thread.
-                        channels
-                            .statistics_tx
-                            .send(Statistics {
-                                expanded,
-                                generated,
-                                kept,
-                                sent,
-                            })
-                            .unwrap();
-
-                        return;
-                    }
-                    // Updates the dual bound.
-                    GlobalLayerMessage::Bound(bound) => {
-                        best_dual_bound = bound;
-                    }
-                }
+                    time_out,
+                })
+                .unwrap()
             }
-            LayerChannel::Leader(rx, tx) => {
-                let mut is_empty = next_beam.is_empty();
-                let mut cost = incumbent.as_ref().map(|(_, cost, _)| *cost);
-                let mut goal_id = if cost.is_some() { Some(id) } else { None };
-
-                // Receives and aggregates the information from each follower.
-                for _ in 0..threads - 1 {
-                    let information = rx.recv().unwrap();
-                    pruned |= information.pruned;
-                    is_empty &= information.is_empty;
-
-                    if let Some(bound) = information.bound {
-                        if !exceed_bound(model, bound, layer_dual_bound) {
-                            layer_dual_bound = Some(bound);
-                        }
-                    }
-
-                    if let Some(other) = information.cost {
-                        if !exceed_bound(model, other, cost)
-                            || (Some(other) == cost && information.id < goal_id.unwrap())
-                        {
-                            cost = Some(other);
-                            goal_id = Some(information.id);
-                        }
-                    }
-                }
-
-                if let (false, Some(value)) = (previously_pruned, layer_dual_bound) {
-                    if best_dual_bound
-                        .map_or(true, |bound| !exceed_bound(model, bound, Some(value)))
-                    {
-                        best_dual_bound = Some(value);
-                    }
-                }
-
-                let time_out = time_keeper.as_ref().unwrap().check_time_limit(quiet);
-
-                if !quiet {
-                    println!(
-                        "Searched layer: {}, elapsed time: {}",
-                        layer_index,
-                        time_keeper.as_ref().unwrap().elapsed_time()
-                    );
-                }
-
-                if is_empty || time_out || goal_id.is_some() {
-                    let mut proved = !pruned && is_empty;
-
-                    if let Some(goal_id) = goal_id {
-                        if threads > 1 {
-                            // Sends the termination signal to all followers
-                            // with the id of the thread that finds the best solution.
-                            tx.broadcast(GlobalLayerMessage::Terminate(Some(goal_id)));
-                        }
-
-                        if cost == best_dual_bound {
-                            proved = true;
-                        }
-
-                        if goal_id == id {
-                            let (node, cost, suffix) = incumbent.unwrap();
-                            let mut transitions = node.transitions();
-                            transitions.extend_from_slice(suffix);
-
-                            channels
-                                .solution_tx
-                                .send(Some((cost, transitions)))
-                                .unwrap()
-                        }
-                    } else {
-                        if threads > 1 {
-                            // Sends the termination signal to all followers without a solution.
-                            tx.broadcast(GlobalLayerMessage::Terminate(None));
-                        }
-
-                        // Sends no solution to the original thread.
-                        channels.solution_tx.send(None).unwrap();
-
-                        if proved {
-                            best_dual_bound = None;
-                        }
-                    }
-
-                    // Sends the statistics to the original thread.
-                    channels
-                        .statistics_tx
-                        .send(Statistics {
-                            expanded,
-                            generated,
-                            kept,
-                            sent,
-                        })
-                        .unwrap();
-                    // Sends the optimality information to the original thread.
-                    channels
-                        .optimality_tx
-                        .send(OptimalityMessage {
-                            bound: best_dual_bound,
-                            proved,
-                            time_out,
-                        })
-                        .unwrap();
-
-                    return;
-                } else if threads > 1 {
-                    // Sends the dual bound to all followers.
-                    tx.broadcast(GlobalLayerMessage::Bound(best_dual_bound));
-                }
-            }
-        }
+        });
 
         mem::swap(&mut current_beam, &mut next_beam);
 
