@@ -30,8 +30,6 @@ use std::rc::Rc;
 ///     DyPDL model to solve.
 /// beam_size: int
 ///     Beam size.
-/// h_expression: IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, float, or None, default: None
-///     Expression to compute an h-value.
 /// custom_cost_dict: dict[str, Union[IntExpr|IntVar|IntResourceVar|FloatExpr|FloatVar|FloatResourceVar|int|float] or None, default: None
 ///     Expressions to compute g-values.
 ///     A g-value is the cost of the path from the target state to the current state.
@@ -39,6 +37,8 @@ use std::rc::Rc;
 ///     An expression can use :code:`IntExpr.state_cost()` or :code:`FloatExpr.state_cost()`, which returns the current g-value.
 ///     If the name of a transition is not included, its cost expression is used.
 ///     If :code:`None`, the cost expressions in the DyPDL model are used for all transitions.
+/// h_expression: IntExpr, IntVar, IntResourceVar, FloatExpr, FloatVar, FloatResourceVar, int, float, or None, default: None
+///     Expression to compute an h-value.
 /// f_operator: FOperator, default: FOperator.Plus
 ///     Operator to combine a g-value and the base cost.
 ///     If the cost is computed by :code:`+`, this should be :attr:`~FOperator.Plus`.
@@ -58,13 +58,13 @@ use std::rc::Rc;
 ///     Greater f-values are better if :code:`True`, and smaller are better if :code:`False`.
 /// keep_all_layers: bool, default: False
 ///     Keep all layers of the search graph for duplicate detection in memory.
-/// float_custom_cost: bool or None, default: None
-///     Use continuous values for g-, h-, and f-values.
-///     The cost type of the model is used if :code:`None`.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
+/// float_custom_cost: bool or None, default: None
+///     Use continuous values for g-, h-, and f-values.
+///     The cost type of the model is used if :code:`None`.
 ///
 /// Raises
 /// ------
@@ -112,7 +112,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "ExpressionBeamSearch")]
 #[pyo3(
-    text_signature = "(model, beam_size, h_expression=None, custom_cost_dict=None, f_operator=0, custom_f_operator=0, maximize=False, keep_all_layers=False, float_custom_cost=None, time_limit=None, quiet=False)"
+    text_signature = "(model, beam_size, custom_cost_dict=None, h_expression=None, f_operator=0, custom_f_operator=0, maximize=False, keep_all_layers=False, time_limit=None, quiet=False, float_custom_cost=None)"
 )]
 pub struct ExpressionBeamSearchPy(
     WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>,
@@ -190,6 +190,13 @@ impl ExpressionBeamSearchPy {
         quiet: bool,
         float_custom_cost: Option<bool>,
     ) -> PyResult<ExpressionBeamSearchPy> {
+        if !quiet {
+            println!(
+                "Solver: ExpressionBeamSearch from DIDPPy v{}",
+                env!("CARGO_PKG_VERSION")
+            );
+        }
+
         let custom_cost_type =
             float_custom_cost.map_or(model.inner_as_ref().cost_type, |float_custom_cost| {
                 if float_custom_cost {

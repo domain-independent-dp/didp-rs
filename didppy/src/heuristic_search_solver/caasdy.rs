@@ -30,7 +30,6 @@ use std::rc::Rc;
 ///     Primal bound on the optimal cost (upper/lower bound for minimization/maximization).
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
-///     The count starts when a solver is created.
 /// get_all_solutions: bool, default: False
 ///     Return a new solution even if it is not improving when :code:`search_next()` is called.
 /// quiet: bool, default: False
@@ -100,7 +99,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "CAASDy")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000)"
+    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000)"
 )]
 pub struct CaasdyPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
@@ -125,6 +124,10 @@ impl CaasdyPy {
         quiet: bool,
         initial_registry_capacity: usize,
     ) -> PyResult<CaasdyPy> {
+        if !quiet {
+            println!("Solver: CAASDy from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {

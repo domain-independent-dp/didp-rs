@@ -1,3 +1,0 @@
-solver: dijkstra
-config:
-    time_limit: 1800

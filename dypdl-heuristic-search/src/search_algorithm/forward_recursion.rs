@@ -111,9 +111,13 @@ where
             _ => {}
         }
 
-        self.solution.is_optimal = self.solution.cost.is_some()
-            && (self.model.reduce_function == dypdl::ReduceFunction::Max
-                || self.model.reduce_function == dypdl::ReduceFunction::Min);
+        if self.model.reduce_function == dypdl::ReduceFunction::Max
+            || self.model.reduce_function == dypdl::ReduceFunction::Min
+        {
+            self.solution.is_optimal = self.solution.cost.is_some();
+            self.solution.best_bound = self.solution.cost;
+        }
+
         self.solution.generated = self.solution.expanded;
         self.solution.is_infeasible = self.solution.cost.is_none();
         self.solution.time = time_keeper.elapsed_time();

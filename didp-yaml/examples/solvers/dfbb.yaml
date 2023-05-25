@@ -1,4 +1,3 @@
 solver: dual_bound_dfbb
 config:
-    bfs_tie_breaking: true
-    time_limit: 1800
+  time_limit: 1800

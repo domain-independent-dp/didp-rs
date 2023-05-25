@@ -43,7 +43,6 @@ use std::rc::Rc;
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
-///     The count starts when a solver is created.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
 ///
@@ -103,7 +102,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "CABS")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, keep_all_layers=False, max_beam_size=None, primal_bound=None, time_limit=None, quiet=False)"
+    text_signature = "(model, f_operator=0, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, primal_bound=None, time_limit=None, quiet=False)"
 )]
 pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
@@ -131,6 +130,10 @@ impl CabsPy {
         time_limit: Option<f64>,
         quiet: bool,
     ) -> PyResult<CabsPy> {
+        if !quiet {
+            println!("Solver: CABS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {

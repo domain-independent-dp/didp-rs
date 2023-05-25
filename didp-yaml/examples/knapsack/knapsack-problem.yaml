@@ -1,0 +1,11 @@
+domain: knapsack
+problem: example
+object_numbers:
+  item: 4
+target:
+  i: 0
+  r: 50
+table_values:
+  number_of_items: 4
+  w: { 0: 10, 1: 20, 2: 30, 3: 40 }
+  p: { 0: 5, 1: 25, 2: 35, 3: 50 }

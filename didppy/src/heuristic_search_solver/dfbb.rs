@@ -30,7 +30,6 @@ use std::rc::Rc;
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
-///     The count starts when a solver is created.
 /// get_all_solutions: bool, default: False
 ///     Return a solution if it is not improving when :code:`search_next()` is called.
 /// quiet: bool, default: False
@@ -93,7 +92,9 @@ use std::rc::Rc;
 /// >>> print(solution.cost)
 /// 2
 #[pyclass(unsendable, name = "DFBB")]
-#[pyo3(text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, quiet=False)")]
+#[pyo3(
+    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000)"
+)]
 pub struct DfbbPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
 #[pymethods]
@@ -118,6 +119,10 @@ impl DfbbPy {
         quiet: bool,
         initial_registry_capacity: usize,
     ) -> PyResult<DfbbPy> {
+        if !quiet {
+            println!("Solver: DFBB from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {

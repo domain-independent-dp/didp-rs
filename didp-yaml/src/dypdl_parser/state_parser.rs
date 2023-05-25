@@ -22,6 +22,13 @@ pub fn load_state_from_yaml(
         let capacity = metadata.get_number_of_objects(object)?;
         let mut set = Set::with_capacity(capacity);
         for v in values {
+            if v >= capacity {
+                return Err(util::YamlContentErr::new(format!(
+                    "value `{}` is out of range of a set variable `{}`",
+                    v, name
+                ))
+                .into());
+            }
             set.insert(v);
         }
         set_variables.push(set);
@@ -29,20 +36,23 @@ pub fn load_state_from_yaml(
     let mut vector_variables = Vec::with_capacity(metadata.vector_variable_names.len());
     for name in &metadata.vector_variable_names {
         let vector = util::get_usize_array_by_key(value, name)?;
+        let variable = metadata.get_vector_variable(name)?;
+        let object = metadata.get_object_type_of(variable)?;
+        let capacity = metadata.get_number_of_objects(object)?;
+        for v in &vector {
+            if *v >= capacity {
+                return Err(util::YamlContentErr::new(format!(
+                    "value `{}` is out of range of a vector variable `{}`",
+                    v, name
+                ))
+                .into());
+            }
+        }
         vector_variables.push(vector);
     }
     let mut element_variables = Vec::with_capacity(metadata.element_variable_names.len());
-    for (variable_id, name) in metadata.element_variable_names.iter().enumerate() {
+    for name in &metadata.element_variable_names {
         let element = util::get_usize_by_key(value, name)?;
-        let object_id = metadata.element_variable_to_object[variable_id];
-        let capacity = metadata.object_numbers[object_id];
-        if element >= capacity {
-            return Err(util::YamlContentErr::new(format!(
-                "value `{}` for `{}` is out of the bound of `{}`, which has only {} objects",
-                element, name, metadata.object_type_names[object_id], capacity,
-            ))
-            .into());
-        }
         element_variables.push(element);
     }
     let mut integer_variables = Vec::with_capacity(metadata.integer_variable_names.len());
@@ -57,17 +67,8 @@ pub fn load_state_from_yaml(
     }
     let mut element_resource_variables =
         Vec::with_capacity(metadata.element_resource_variable_names.len());
-    for (variable_id, name) in metadata.element_resource_variable_names.iter().enumerate() {
+    for name in &metadata.element_resource_variable_names {
         let element = util::get_usize_by_key(value, name)?;
-        let object_id = metadata.element_resource_variable_to_object[variable_id];
-        let capacity = metadata.object_numbers[object_id];
-        if element >= capacity {
-            return Err(util::YamlContentErr::new(format!(
-                "value `{}` for `{}` is out of the bound of `{}`, which has only {} objects",
-                element, name, metadata.object_type_names[object_id], capacity,
-            ))
-            .into());
-        }
         element_resource_variables.push(element);
     }
     let mut integer_resource_variables =
@@ -548,7 +549,7 @@ cr3: 3
 s0: [0, 2]
 s1: [0, 1]
 s2: [0]
-s3: []
+s3: [3]
 p0: [0, 2]
 p1: [0, 1]
 p2: [0]
@@ -595,7 +596,7 @@ s3: []
 p0: [0, 2]
 p1: [0, 1]
 p2: [0]
-p3: []
+p3: [3]
 e0: 0
 e1: 1
 e2: 1
