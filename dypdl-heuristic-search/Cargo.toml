@@ -1,15 +1,19 @@
 [package]
 name = "dypdl-heuristic-search"
-version = "0.3.4"
+version = "0.4.0"
 edition = "2021"
-description = "Heristic search solvers for Dynamic Programming Description Language (DyPDL)."
+rust-version = "1.64"
+description = "Heuristic search solvers for Dynamic Programming Description Language (DyPDL)."
 license = "MIT OR Apache-2.0"
+authors = ["Ryo Kuroiwa <ryo.kuroiwa@mail.utoronto.ca>"]
+homepage = "https://didp.ai"
+repository = "https://github.com/domain-independent-dp/didp-rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 ordered-float = "3.0"
-dypdl = { path = "../dypdl", version = "0.3.4" }
+dypdl = { path = "../dypdl", version = "0.4.0" }
 rustc-hash = "1.1"
 dashmap = "5.4"
 rayon = "1.7"

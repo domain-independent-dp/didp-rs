@@ -300,8 +300,7 @@ where
                 }
             }
 
-            // reverse sort
-            successors.sort_by(|a, b| b.cmp(a));
+            successors.sort();
 
             if let Some(best) = successors.pop() {
                 let mut successors = successors
@@ -321,6 +320,7 @@ where
 
         self.solution.is_infeasible = self.solution.cost.is_none();
         self.solution.is_optimal = self.solution.cost.is_some();
+        self.solution.best_bound = self.solution.cost;
         self.solution.time = self.time_keeper.elapsed_time();
         self.time_keeper.stop();
         Ok((self.solution.clone(), true))

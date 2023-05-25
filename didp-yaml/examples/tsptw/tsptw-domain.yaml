@@ -1,6 +1,8 @@
 domain: TSPTW
 objects:
   - customer
+reduce: min
+cost_type: integer
 state_variables:
   - name: unvisited
     type: set
@@ -20,50 +22,47 @@ tables:
     type: integer
     args:
       - customer
-  - name: distance
+  - name: travel_time
     type: integer
     args:
       - customer
       - customer
-    default: 0
-  - name: min_distance_to
+  - name: min_to
     type: integer
     args:
       - customer
-  - name: min_distance_from
+  - name: min_from
     type: integer
     args:
       - customer
-constraints:
-  - condition: (<= (+ time (distance location to)) (due_date to))
-    forall:
-      - name: to
-        object: unvisited
-base_cases:
-  - - (is_empty unvisited)
-    - (= location 0)
-reduce: min
-cost_type: integer
 transitions:
   - name: visit
     parameters:
       - name: to
         object: unvisited
-    preconditions:
-      - (<= (+ time (distance location to)) (due_date to))
+    cost: (+ cost (travel_time location to))
     effect:
       unvisited: (remove to unvisited)
       location: to
-      time: (max (+ time (distance location to)) (ready_time to))
-    cost: (+ cost (distance location to))
+      time: (max (+ time (travel_time location to)) (ready_time to))
+    preconditions:
+      - (<= (+ time (travel_time location to)) (due_date to))
   - name: return
+    cost: (+ cost (travel_time location 0))
+    effect:
+      location: 0
+      time: (+ time (travel_time location 0))
     preconditions:
       - (is_empty unvisited)
       - (!= location 0)
-    effect:
-      location: 0
-      time: (+ time (distance location 0))
-    cost: (+ cost (distance location 0))
+base_cases:
+  - - (is_empty unvisited)
+    - (= location 0)
+constraints:
+  - condition: (<= (+ time (travel_time location to)) (due_date to))
+    forall:
+      - name: to
+        object: unvisited
 dual_bounds:
-  - (+ (sum min_distance_to unvisited) (if (!= location 0) (min_distance_to 0) 0))
-  - (+ (sum min_distance_from unvisited) (if (!= location 0) (min_distance_from location) 0))
+  - (+ (sum min_to unvisited) (if (!= location 0) (min_to 0) 0))
+  - (+ (sum min_from unvisited) (if (!= location 0) (min_from location) 0))

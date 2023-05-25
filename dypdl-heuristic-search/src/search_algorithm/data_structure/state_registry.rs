@@ -338,7 +338,7 @@ where
         F: FnOnce(StateInRegistry<K>, T, Option<&I>) -> Option<I>,
     {
         let entry = self.registry.entry(state.signature_variables.clone());
-        let v = match entry {
+        match entry {
             collections::hash_map::Entry::Occupied(entry) => {
                 // use signature variables already stored
                 state.signature_variables = entry.key().clone();
@@ -379,15 +379,21 @@ where
                         _ => {}
                     }
                 }
-                v
+                if let Some(information) = constructor(state, cost, None).map(V::from) {
+                    v.push(information.clone());
+                    Some((information, None))
+                } else {
+                    None
+                }
             }
-            collections::hash_map::Entry::Vacant(entry) => entry.insert(Vec::with_capacity(1)),
-        };
-        if let Some(information) = constructor(state, cost, None).map(V::from) {
-            v.push(information.clone());
-            Some((information, None))
-        } else {
-            None
+            collections::hash_map::Entry::Vacant(entry) => {
+                if let Some(information) = constructor(state, cost, None).map(V::from) {
+                    entry.insert(vec![information.clone()]);
+                    Some((information, None))
+                } else {
+                    None
+                }
+            }
         }
     }
 
