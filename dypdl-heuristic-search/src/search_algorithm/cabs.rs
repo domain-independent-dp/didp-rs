@@ -4,7 +4,6 @@ use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::print_primal_bound;
 use super::util::{update_bound_if_better, TimeKeeper};
 use dypdl::{variable_type, Model, Transition, TransitionInterface};
-use dypdl::{variable_type, Model, Transition, TransitionInterface};
 use std::error::Error;
 use std::fmt;
 use std::fmt::Debug;
@@ -124,7 +123,6 @@ pub struct Cabs<
     K: Hash + Eq + Clone + Debug,
 {
     input: SearchInput<'a, N, V, D, R>,
-    input: SearchInput<'a, N, V, D, R>,
     beam_search: B,
     keep_all_layers: bool,
     primal_bound: Option<T>,
@@ -134,10 +132,8 @@ pub struct Cabs<
     time_keeper: TimeKeeper,
     solution: Solution<T, V>,
     phantom: PhantomData<K>,
-    phantom: PhantomData<K>,
 }
 
-impl<'a, T, N, B, V, D, R, K> Cabs<'a, T, N, B, V, D, R, K>
 impl<'a, T, N, B, V, D, R, K> Cabs<'a, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display,
@@ -152,10 +148,8 @@ where
     /// Create a new CABS solver.
     pub fn new(
         input: SearchInput<'a, N, V, D, R>,
-        input: SearchInput<'a, N, V, D, R>,
         beam_search: B,
         parameters: CabsParameters<T>,
-    ) -> Cabs<'a, T, N, B, V, D, R, K> {
     ) -> Cabs<'a, T, N, B, V, D, R, K> {
         let mut time_keeper = parameters
             .beam_search_parameters
@@ -174,7 +168,6 @@ where
             max_beam_size: parameters.max_beam_size,
             time_keeper,
             solution: Solution::default(),
-            phantom: PhantomData,
             phantom: PhantomData,
         }
     }
@@ -275,7 +268,6 @@ where
     }
 }
 
-impl<'a, T, N, B, V, D, R, K> Search<T> for Cabs<'a, T, N, B, V, D, R, K>
 impl<'a, T, N, B, V, D, R, K> Search<T> for Cabs<'a, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display + Ord,

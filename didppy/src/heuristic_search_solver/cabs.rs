@@ -110,7 +110,7 @@ use std::sync::Arc;
 /// 2
 #[pyclass(unsendable, name = "CABS")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, primal_bound=None, time_limit=None, quiet=False)"
+    text_signature = "(model, f_operator=0, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, primal_bound=None, threads=1, parallelization_method=0,t  time_limit=None, quiet=False)"
 )]
 pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
