@@ -218,6 +218,12 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
         }
     }
 
+    let cost_type = if let Ok(cost_type) = util::get_yaml_by_key(domain, "cost_type") {
+        load_cost_type_from_yaml(cost_type)?
+    } else {
+        CostType::Integer
+    };
+
     let mut base_cases = Vec::new();
     if let Some(array) = domain.get(&yaml_rust::Yaml::from_str("base_cases")) {
         for base_case in util::get_array(array)? {
@@ -225,6 +231,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 base_case,
                 &state_metadata,
                 &table_registry,
+                &cost_type,
             )?;
             base_cases.push(base_case);
         }
@@ -235,6 +242,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 base_case,
                 &state_metadata,
                 &table_registry,
+                &cost_type,
             )?;
             base_cases.push(base_case);
         }
@@ -242,7 +250,11 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
     let mut base_states = Vec::new();
     if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("base_states")) {
         for base_state in util::get_array(array)? {
-            let base_state = load_state_from_yaml(base_state, &state_metadata)?;
+            let base_state = base_case_parser::load_base_state_from_yaml(
+                base_state,
+                &state_metadata,
+                &cost_type,
+            )?;
             base_states.push(base_state);
         }
     }
@@ -254,12 +266,6 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
         load_reduce_function_from_yaml(reduce_function)?
     } else {
         ReduceFunction::Min
-    };
-
-    let cost_type = if let Ok(cost_type) = util::get_yaml_by_key(domain, "cost_type") {
-        load_cost_type_from_yaml(cost_type)?
-    } else {
-        CostType::Integer
     };
 
     let mut forward_transitions = Vec::new();
@@ -748,7 +754,7 @@ dual_bounds:
                 },
             ],
             base_cases: vec![
-                BaseCase::new(vec![GroundedCondition {
+                BaseCase::from(vec![GroundedCondition {
                     condition: Condition::ComparisonI(
                         ComparisonOperator::Ge,
                         Box::new(IntegerExpression::Variable(0)),
@@ -756,7 +762,7 @@ dual_bounds:
                     ),
                     ..Default::default()
                 }]),
-                BaseCase::new(vec![GroundedCondition {
+                BaseCase::from(vec![GroundedCondition {
                     condition: Condition::ComparisonI(
                         ComparisonOperator::Ge,
                         Box::new(IntegerExpression::Variable(1)),
@@ -900,20 +906,26 @@ base_states:
                 ..Default::default()
             },
             base_states: vec![
-                State {
-                    signature_variables: SignatureVariables {
-                        integer_variables: vec![0],
+                (
+                    State {
+                        signature_variables: SignatureVariables {
+                            integer_variables: vec![0],
+                            ..Default::default()
+                        },
                         ..Default::default()
                     },
-                    ..Default::default()
-                },
-                State {
-                    signature_variables: SignatureVariables {
-                        integer_variables: vec![1],
+                    None,
+                ),
+                (
+                    State {
+                        signature_variables: SignatureVariables {
+                            integer_variables: vec![1],
+                            ..Default::default()
+                        },
                         ..Default::default()
                     },
-                    ..Default::default()
-                },
+                    None,
+                ),
             ],
             reduce_function: ReduceFunction::Sum,
             cost_type: CostType::Integer,
@@ -1122,7 +1134,7 @@ table_values:
                 ),
                 ..Default::default()
             }],
-            base_cases: vec![BaseCase::new(vec![
+            base_cases: vec![BaseCase::from(vec![
                 GroundedCondition {
                     condition: Condition::Set(Box::new(SetCondition::IsEmpty(
                         SetExpression::Reference(ReferenceExpression::Variable(0)),

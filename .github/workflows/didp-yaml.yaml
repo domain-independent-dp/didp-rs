@@ -3,20 +3,26 @@ name: didp-yaml
 on:
   push:
     paths:
+      - "dypdl/**"
+      - "dypdl-heuristic-search/**"
       - "didp-yaml/**"
       - "!didp-yaml/examples/**"
       - "!didp-yaml/docs/**"
       - "!**.md"
     branches:
       - main
+      - develop
   pull_request:
     paths:
+      - "dypdl/**"
+      - "dypdl-heuristic-search/**"
       - "didp-yaml/**"
       - "!didp-yaml/examples/**"
       - "!didp-yaml/docs/**"
       - "!**.md"
     branches:
       - main
+      - develop
 
 defaults:
   run:

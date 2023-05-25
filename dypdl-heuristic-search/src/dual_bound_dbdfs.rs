@@ -1,10 +1,8 @@
 use super::f_evaluator_type::FEvaluatorType;
-use super::search_algorithm::data_structure::state_registry::StateInRegistry;
-use super::search_algorithm::data_structure::{FNode, SuccessorGenerator};
-use super::search_algorithm::util::{ForwardSearchParameters, Parameters};
-use super::search_algorithm::Dbdfs;
-use super::search_algorithm::Search;
-use dypdl::variable_type;
+use super::search_algorithm::{
+    CostNode, Dbdfs, DbdfsParameters, FNode, Search, SearchInput, SuccessorGenerator,
+};
+use dypdl::{variable_type, Transition};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -15,8 +13,6 @@ use std::str;
 /// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
 /// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
 /// `f_evaluator_type` must be specified appropriately according to the cost expressions.
-///
-/// `width` is the width of the discrepancy to search.
 ///
 /// # References
 ///
@@ -30,8 +26,7 @@ use std::str;
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::{FEvaluatorType, create_dual_bound_dbdfs};
-/// use dypdl_heuristic_search::search_algorithm::util::Parameters;
+/// use dypdl_heuristic_search::{create_dual_bound_dbdfs, DbdfsParameters, FEvaluatorType};
 /// use std::rc::Rc;
 ///
 /// let mut model = Model::default();
@@ -46,10 +41,10 @@ use std::str;
 /// model.add_dual_bound(IntegerExpression::from(0)).unwrap();
 ///
 /// let model = Rc::new(model);
-/// let parameters = Parameters::default();
+/// let parameters = DbdfsParameters::default();
 /// let f_evaluator_type = FEvaluatorType::Plus;
 ///
-/// let mut solver = create_dual_bound_dbdfs(model, parameters, 1, f_evaluator_type, None);
+/// let mut solver = create_dual_bound_dbdfs(model, parameters, f_evaluator_type);
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
@@ -57,38 +52,71 @@ use std::str;
 /// ```
 pub fn create_dual_bound_dbdfs<T>(
     model: Rc<dypdl::Model>,
-    parameters: Parameters<T>,
-    width: usize,
+    parameters: DbdfsParameters<T>,
     f_evaluator_type: FEvaluatorType,
-    initial_registry_capacity: Option<usize>,
 ) -> Box<dyn Search<T>>
 where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let generator = SuccessorGenerator::from_model(model.clone(), false);
-    let parameters = ForwardSearchParameters {
-        generator,
-        parameters,
-        initial_registry_capacity,
+    let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+    let base_cost_evaluator = move |cost, base_cost| f_evaluator_type.eval(cost, base_cost);
+    let cost = match f_evaluator_type {
+        FEvaluatorType::Plus => T::zero(),
+        FEvaluatorType::Product => T::one(),
+        FEvaluatorType::Max => T::min_value(),
+        FEvaluatorType::Min => T::max_value(),
+        FEvaluatorType::Overwrite => T::zero(),
     };
-    let h_evaluator = |state: &StateInRegistry, model: &dypdl::Model| {
-        Some(model.eval_dual_bound(state).unwrap_or_else(T::zero))
-    };
-    let (f_pruning, f_evaluator_type) = if model.has_dual_bounds() {
-        (true, f_evaluator_type)
-    } else {
-        (false, FEvaluatorType::Plus)
-    };
-    let f_evaluator =
-        move |g, h, _: &StateInRegistry, _: &dypdl::Model| f_evaluator_type.eval(g, h);
 
-    Box::new(Dbdfs::<_, FNode<_>, _, _>::new(
-        model,
-        h_evaluator,
-        f_evaluator,
-        f_pruning,
-        width,
-        parameters,
-    ))
+    if model.has_dual_bounds() {
+        let state = model.target.clone();
+        let h_evaluator = move |state: &_| model.eval_dual_bound(state);
+        let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
+        let node = FNode::generate_root_node(
+            state,
+            cost,
+            &generator.model,
+            &h_evaluator,
+            &f_evaluator,
+            parameters.parameters.primal_bound,
+        );
+        let input = SearchInput {
+            node,
+            generator,
+            solution_suffix: &[],
+        };
+        let transition_evaluator =
+            move |node: &FNode<_>, transition, registry: &mut _, primal_bound| {
+                node.insert_successor_node(
+                    transition,
+                    registry,
+                    &h_evaluator,
+                    &f_evaluator,
+                    primal_bound,
+                )
+            };
+        Box::new(Dbdfs::<_, FNode<_>, _, _>::new(
+            input,
+            transition_evaluator,
+            base_cost_evaluator,
+            parameters,
+        ))
+    } else {
+        let node = CostNode::generate_root_node(model.target.clone(), cost, &model);
+        let input = SearchInput {
+            node: Some(node),
+            generator,
+            solution_suffix: &[],
+        };
+        let transition_evaluator = |node: &CostNode<_>, transition, registry: &mut _, _| {
+            node.insert_successor_node(transition, registry)
+        };
+        Box::new(Dbdfs::<_, CostNode<_>, _, _>::new(
+            input,
+            transition_evaluator,
+            base_cost_evaluator,
+            parameters,
+        ))
+    }
 }

@@ -1,0 +1,49 @@
+domain: prec-wt
+reduce: min
+cost_type: integer
+objects:
+  - job
+state_variables:
+  - name: scheduled
+    type: set
+    object: job
+tables:
+  - name: all_jobs
+    type: set
+    object: job
+  - name: processing_time
+    type: integer
+    args:
+      - job
+  - name: d
+    type: integer
+    args:
+      - job
+  - name: w
+    type: integer
+    args:
+      - job
+  - name: predecessors
+    type: set
+    object: job
+    args:
+      - job
+transitions:
+  - name: schedule
+    parameters:
+      - name: i
+        object: job
+    cost: >
+      (+ cost
+         (* (w i)
+            (max 0 (- (+ (sum processing_time scheduled) (processing_time i))
+                      (d i)))))
+    effect:
+      scheduled: (add i scheduled)
+    preconditions:
+      - (not (is_in i scheduled))
+      - (is_subset (predecessors i) scheduled)
+base_cases:
+  - - (= scheduled all_jobs)
+dual_bounds:
+  - 0

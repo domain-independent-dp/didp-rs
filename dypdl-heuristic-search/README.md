@@ -13,8 +13,7 @@ dypdl-heuristic-search is a library of heuristic search solvers for DyPDL.
 
 ```rust
 use dypdl::prelude::*;
-use dypdl_heuristic_search::{FEvaluatorType, create_dual_bound_cabs};
-use dypdl_heuristic_search::search_algorithm::util::Parameters;
+use dypdl_heuristic_search::{CabsParameters, create_dual_bound_cabs, FEvaluatorType};
 use std::rc::Rc;
 
 let mut model = Model::default();
@@ -29,10 +28,10 @@ model.add_forward_transition(increment.clone()).unwrap();
 model.add_dual_bound(IntegerExpression::from(0)).unwrap();
 
 let model = Rc::new(model);
-let parameters = Parameters::default();
+let parameters = CabsParameters::default();
 let f_evaluator_type = FEvaluatorType::Plus;
 
-let mut solver = create_dual_bound_cabs(model, parameters, f_evaluator_type, 1, false);
+let mut solver = create_dual_bound_cabs(model, parameters, f_evaluator_type);
 let solution = solver.search().unwrap();
 assert_eq!(solution.cost, Some(1));
 assert_eq!(solution.transitions, vec![increment]);

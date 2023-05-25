@@ -3,7 +3,9 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_apps, FEvaluatorType, Search};
+use dypdl_heuristic_search::{
+    create_dual_bound_apps, FEvaluatorType, Parameters, ProgressiveSearchParameters, Search,
+};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -30,7 +32,6 @@ use std::rc::Rc;
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
-///     The count starts when a solver is created.
 /// get_all_solutions: bool, default: False
 ///     Return a solution if it is not improving when :code:`search_next()` is called.
 /// quiet: bool, default: False
@@ -103,7 +104,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "APPS")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, width_init=1, width_step=1, width_bound=None, reset_width=False)"
+    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000, width_init=1, width_step=1, width_bound=None, reset_width=False)"
 )]
 pub struct AppsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
@@ -137,7 +138,11 @@ impl AppsPy {
         width_bound: Option<usize>,
         reset_width: bool,
     ) -> PyResult<AppsPy> {
-        let progressive_parameters = dypdl_heuristic_search::ProgressiveSearchParameters {
+        if !quiet {
+            println!("Solver: APPS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+        }
+
+        let progressive_parameters = ProgressiveSearchParameters {
             init: width_init,
             step: width_step,
             bound: width_bound,
@@ -153,18 +158,18 @@ impl AppsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<OrderedContinuous> {
+            let parameters = Parameters::<OrderedContinuous> {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
                 quiet,
+                initial_registry_capacity: Some(initial_registry_capacity),
             };
             let solver = create_dual_bound_apps::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                progressive_parameters,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
+                progressive_parameters,
             );
             Ok(AppsPy(WrappedSolver::Float(solver)))
         } else {
@@ -173,18 +178,18 @@ impl AppsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
+            let parameters = Parameters::<Integer> {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
                 quiet,
+                initial_registry_capacity: Some(initial_registry_capacity),
             };
             let solver = create_dual_bound_apps::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                progressive_parameters,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
+                progressive_parameters,
             );
             Ok(AppsPy(WrappedSolver::Int(solver)))
         }

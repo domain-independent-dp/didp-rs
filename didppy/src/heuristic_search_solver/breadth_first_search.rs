@@ -3,7 +3,9 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_breadth_first_search, FEvaluatorType, Search};
+use dypdl_heuristic_search::{
+    create_dual_bound_breadth_first_search, BrfsParameters, FEvaluatorType, Parameters, Search,
+};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -88,7 +90,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "BreadthFirstSearch")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, quiet=False, keep_all_layers=False)"
+    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000, keep_all_layers=False)"
 )]
 pub struct BreadthFirstSearchPy(
     WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>,
@@ -118,6 +120,13 @@ impl BreadthFirstSearchPy {
         initial_registry_capacity: usize,
         keep_all_layers: bool,
     ) -> PyResult<BreadthFirstSearchPy> {
+        if !quiet {
+            println!(
+                "Solver: BreadthFirstSearch from DIDPPy v{}",
+                env!("CARGO_PKG_VERSION")
+            );
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {
@@ -128,18 +137,20 @@ impl BreadthFirstSearchPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<OrderedContinuous> {
-                primal_bound,
-                time_limit,
-                get_all_solutions,
-                quiet,
+            let parameters = BrfsParameters {
+                keep_all_layers,
+                parameters: Parameters::<OrderedContinuous> {
+                    primal_bound,
+                    time_limit,
+                    get_all_solutions,
+                    quiet,
+                    initial_registry_capacity: Some(initial_registry_capacity),
+                },
             };
             let solver = create_dual_bound_breadth_first_search::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
                 f_evaluator_type,
-                keep_all_layers,
-                Some(initial_registry_capacity),
             );
             Ok(BreadthFirstSearchPy(WrappedSolver::Float(solver)))
         } else {
@@ -148,18 +159,20 @@ impl BreadthFirstSearchPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
-                primal_bound,
-                time_limit,
-                get_all_solutions,
-                quiet,
+            let parameters = BrfsParameters {
+                keep_all_layers,
+                parameters: Parameters::<Integer> {
+                    primal_bound,
+                    time_limit,
+                    get_all_solutions,
+                    quiet,
+                    initial_registry_capacity: Some(initial_registry_capacity),
+                },
             };
             let solver = create_dual_bound_breadth_first_search::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
                 f_evaluator_type,
-                keep_all_layers,
-                Some(initial_registry_capacity),
             );
             Ok(BreadthFirstSearchPy(WrappedSolver::Int(solver)))
         }

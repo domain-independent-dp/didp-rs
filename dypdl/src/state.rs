@@ -1253,7 +1253,7 @@ impl StateMetadata {
         Ok(ElementVariable(id))
     }
 
-    /// Returns an element resouce variable given a name.
+    /// Returns an element resource variable given a name.
     ///
     /// # Errors
     ///

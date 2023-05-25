@@ -3,7 +3,9 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_dbdfs, FEvaluatorType, Search};
+use dypdl_heuristic_search::{
+    create_dual_bound_dbdfs, DbdfsParameters, FEvaluatorType, Parameters, Search,
+};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -30,7 +32,6 @@ use std::rc::Rc;
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
-///     The count starts when a solver is created.
 /// get_all_solutions: bool, default: False
 ///     Return a solution if it is not improving when :code:`search_next()` is called.
 /// quiet: bool, default: False
@@ -98,7 +99,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "DBDFS")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000, width=1)"
+    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000, width=1)"
 )]
 pub struct DbdfsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
@@ -126,6 +127,10 @@ impl DbdfsPy {
         initial_registry_capacity: usize,
         width: usize,
     ) -> PyResult<DbdfsPy> {
+        if !quiet {
+            println!("Solver: DBDFS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {
@@ -136,18 +141,20 @@ impl DbdfsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<OrderedContinuous> {
-                primal_bound,
-                time_limit,
-                get_all_solutions,
-                quiet,
+            let parameters = DbdfsParameters::<OrderedContinuous> {
+                width,
+                parameters: Parameters::<OrderedContinuous> {
+                    primal_bound,
+                    time_limit,
+                    get_all_solutions,
+                    quiet,
+                    initial_registry_capacity: Some(initial_registry_capacity),
+                },
             };
             let solver = create_dual_bound_dbdfs::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                width,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
             );
             Ok(DbdfsPy(WrappedSolver::Float(solver)))
         } else {
@@ -156,18 +163,20 @@ impl DbdfsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
-                primal_bound,
-                time_limit,
-                get_all_solutions,
-                quiet,
+            let parameters = DbdfsParameters::<Integer> {
+                width,
+                parameters: Parameters::<Integer> {
+                    primal_bound,
+                    time_limit,
+                    get_all_solutions,
+                    quiet,
+                    initial_registry_capacity: Some(initial_registry_capacity),
+                },
             };
             let solver = create_dual_bound_dbdfs::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                width,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
             );
             Ok(DbdfsPy(WrappedSolver::Int(solver)))
         }

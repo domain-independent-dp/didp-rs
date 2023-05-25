@@ -134,6 +134,29 @@ where
             .into())
         }
     };
+    let custom_f_evaluator_type = match map.get(&yaml_rust::Yaml::from_str("custom_f")) {
+        Some(yaml_rust::Yaml::String(string)) => match &string[..] {
+            "+" => FEvaluatorType::Plus,
+            "max" => FEvaluatorType::Max,
+            "min" => FEvaluatorType::Min,
+            "h" => FEvaluatorType::Overwrite,
+            op => {
+                return Err(util::YamlContentErr::new(format!(
+                    "unexpected operator for custom f function `{}`",
+                    op
+                ))
+                .into())
+            }
+        },
+        None => FEvaluatorType::default(),
+        value => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected String, but found `{:?}`",
+                value
+            ))
+            .into())
+        }
+    };
     let beam_size = match map.get(&yaml_rust::Yaml::from_str("beam_size")) {
         Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
         value => {
@@ -169,45 +192,43 @@ where
 
     match custom_cost_type {
         CostType::Integer => {
-            let parameters = BeamSearchParameters::<T, Integer> {
+            let parameters = BeamSearchParameters {
                 beam_size,
-                maximize,
-                f_pruning: false,
-                f_bound: None,
                 keep_all_layers,
                 parameters: solver_parameters::parse_from_map(map)?,
             };
-            Ok(Box::new(ExpressionBeamSearch::new(
+            Ok(Box::new(ExpressionBeamSearch::<_, Integer>::new(
                 Rc::new(model),
                 parameters,
+                f_evaluator_type,
                 CustomExpressionParameters {
                     custom_costs,
                     forced_custom_costs,
                     h_expression,
+                    f_evaluator_type: custom_f_evaluator_type,
                     custom_cost_type,
+                    maximize,
                 },
-                f_evaluator_type,
             )))
         }
         CostType::Continuous => {
-            let parameters = BeamSearchParameters::<_, OrderedContinuous> {
+            let parameters = BeamSearchParameters {
                 beam_size,
-                maximize,
-                f_pruning: false,
-                f_bound: None,
                 keep_all_layers,
                 parameters: solver_parameters::parse_from_map(map)?,
             };
-            Ok(Box::new(ExpressionBeamSearch::new(
+            Ok(Box::new(ExpressionBeamSearch::<_, OrderedContinuous>::new(
                 Rc::new(model),
                 parameters,
+                f_evaluator_type,
                 CustomExpressionParameters {
                     custom_costs,
                     forced_custom_costs,
                     h_expression,
+                    f_evaluator_type: custom_f_evaluator_type,
                     custom_cost_type,
+                    maximize,
                 },
-                f_evaluator_type,
             )))
         }
     }

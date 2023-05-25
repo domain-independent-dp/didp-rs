@@ -1,12 +1,49 @@
-use super::data_structure::state_registry::{StateInRegistry, StateRegistry};
-use super::data_structure::{exceed_bound, BfsNodeInterface, SuccessorGenerator};
-use super::search::{Search, Solution};
-use super::util;
-use dypdl::variable_type;
+use super::data_structure::{exceed_bound, BfsNode, StateRegistry, SuccessorGenerator};
+use super::rollout::get_solution_cost_and_suffix;
+use super::search::{Parameters, Search, SearchInput, Solution};
+use super::util::{print_dual_bound, update_solution, TimeKeeper};
+use dypdl::{variable_type, Transition, TransitionInterface};
+use std::cmp;
 use std::collections;
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
+
+/// Parameters for progressive search.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct ProgressiveSearchParameters {
+    /// The initial width.
+    pub init: usize,
+    /// The amount of increase.
+    pub step: usize,
+    /// The maximum value of the width.
+    pub bound: Option<usize>,
+    /// Whether reset the bound when a better solution is found.
+    pub reset: bool,
+}
+
+impl ProgressiveSearchParameters {
+    /// Returns the increased width.
+    pub fn increase_width(&self, width: usize) -> usize {
+        if let Some(bound) = self.bound {
+            cmp::min(width + self.step, bound)
+        } else {
+            width + self.step
+        }
+    }
+}
+
+impl Default for ProgressiveSearchParameters {
+    /// Returns parameters where the initial width is 1, the step is 1, no bound, and no reset.
+    fn default() -> Self {
+        Self {
+            init: 1,
+            step: 1,
+            bound: None,
+            reset: false,
+        }
+    }
+}
 
 /// Anytime Column Progressive Search (ACPS).
 ///
@@ -14,15 +51,15 @@ use std::rc::Rc;
 /// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
 /// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
 ///
-/// It uses `h_evaluator` and `f_evaluator` for pruning.
-/// If `h_evaluator` returns `None`, the state is pruned.
-/// If `f_pruning` and `f_evaluator` returns a value that exceeds the primal bound, the state is pruned.
-///
-/// `ordered_by_f` indicates if the open list is ordered by the f-value.
+/// Type parameter `N` is a node type that implements `BfsNode`.
+/// Type parameter `E` is a type of a function that evaluates a transition and insert a successor node into a state registry.
+/// The last argument of the function is the primal bound of the solution cost.
+/// Type parameter `B` is a type of a function that combines the g-value (the cost to a state) and the base cost.
+/// It should be the same function as the cost expression, e.g., `cost + base_cost` for `cost + w`.
 ///
 /// # References
 ///
-/// Ryo Kuroiwa and J. Christopher Beck."Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,""
+/// Ryo Kuroiwa and J. Christopher Beck."Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
 /// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
 ///
 /// Sataya Gautam Vadlamudi, Piyush Gaurav, Sandip Aine, and Partha Pratim Chakrabarti. "Anytime Column Search,""
@@ -32,13 +69,9 @@ use std::rc::Rc;
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::search_algorithm::{Acps, Search};
-/// use dypdl_heuristic_search::search_algorithm::data_structure::FNode;
-/// use dypdl_heuristic_search::search_algorithm::data_structure::successor_generator::{
-///     SuccessorGenerator
-/// };
-/// use dypdl_heuristic_search::search_algorithm::util::{
-///     ForwardSearchParameters, Parameters, ProgressiveSearchParameters,
+/// use dypdl_heuristic_search::{Parameters, ProgressiveSearchParameters, Search};
+/// use dypdl_heuristic_search::search_algorithm::{
+///     Acps, FNode, SearchInput, SuccessorGenerator,
 /// };
 /// use std::rc::Rc;
 ///
@@ -51,75 +84,102 @@ use std::rc::Rc;
 /// increment.set_cost(IntegerExpression::Cost + 1);
 /// increment.add_effect(variable, variable + 1).unwrap();
 /// model.add_forward_transition(increment.clone()).unwrap();
-///
-/// let h_evaluator = |_: &_, _: &_| Some(0);
-/// let f_evaluator = |g, h, _: &_, _: &_| g + h;
-///
 /// let model = Rc::new(model);
-/// let generator = SuccessorGenerator::from_model(model.clone(), false);
-/// let progressive_parameters = ProgressiveSearchParameters::default();
-/// let parameters = ForwardSearchParameters {
+///
+/// let state = model.target.clone();
+/// let cost = 0;
+/// let h_evaluator = |_: &_| Some(0);
+/// let f_evaluator = |g, h, _: &_| g + h;
+/// let primal_bound = None;
+/// let node = FNode::generate_root_node(
+///     state,
+///     cost,
+///     &model,
+///     &h_evaluator,
+///     &f_evaluator,
+///     primal_bound,
+/// );
+/// let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+/// let input = SearchInput {
+///     node,
 ///     generator,
-///     parameters: Parameters::default(),
-///     initial_registry_capacity: None
+///     solution_suffix: &[],
 /// };
+/// let transition_evaluator =
+///     move |node: &FNode<_>, transition, registry: &mut _, primal_bound| {
+///         node.insert_successor_node(
+///             transition,
+///             registry,
+///             &h_evaluator,
+///             &f_evaluator,
+///             primal_bound,
+///         )
+///     };
+/// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
+/// let parameters = Parameters::default();
+/// let progressive_parameters = ProgressiveSearchParameters::default();
 ///
 /// let mut solver = Acps::<_, FNode<_>, _, _>::new(
-///     model, h_evaluator, f_evaluator, true, true, progressive_parameters, parameters
+///     input, transition_evaluator, base_cost_evaluator, parameters, progressive_parameters,
 /// );
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub struct Acps<T, N, H, F>
+pub struct Acps<'a, T, N, E, B, V = Transition>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNodeInterface<T>,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    N: BfsNode<T, V>,
+    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: Fn(T, T) -> T,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
-    generator: SuccessorGenerator,
-    h_evaluator: H,
-    f_evaluator: F,
-    f_pruning: bool,
-    ordered_by_f: bool,
-    progressive_parameters: util::ProgressiveSearchParameters,
+    generator: SuccessorGenerator<V>,
+    suffix: &'a [V],
+    transition_evaluator: E,
+    base_cost_evaluator: B,
+    progressive_parameters: ProgressiveSearchParameters,
     primal_bound: Option<T>,
+    get_all_solutions: bool,
     quiet: bool,
     width: usize,
     open: Vec<collections::BinaryHeap<Rc<N>>>,
     registry: StateRegistry<T, N>,
-    time_keeper: util::TimeKeeper,
+    layer_index: usize,
+    node_index: usize,
+    no_node: bool,
+    goal_found: bool,
+    time_keeper: TimeKeeper,
     solution: Solution<T>,
 }
 
-impl<T, N, H, F> Acps<T, N, H, F>
+impl<'a, T, N, E, B, V> Acps<'a, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNodeInterface<T>,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    N: BfsNode<T, V>,
+    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: Fn(T, T) -> T,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
-    /// Create a new ACPS solver.
+    /// Creates a new ACPS solver.
     pub fn new(
-        model: Rc<dypdl::Model>,
-        h_evaluator: H,
-        f_evaluator: F,
-        f_pruning: bool,
-        ordered_by_f: bool,
-        progressive_parameters: util::ProgressiveSearchParameters,
-        parameters: util::ForwardSearchParameters<T>,
-    ) -> Acps<T, N, H, F> {
-        let time_keeper = parameters
-            .parameters
+        input: SearchInput<'a, N, V>,
+        transition_evaluator: E,
+        base_cost_evaluator: B,
+        parameters: Parameters<T>,
+        progressive_parameters: ProgressiveSearchParameters,
+    ) -> Acps<'a, T, N, E, B, V> {
+        let mut time_keeper = parameters
             .time_limit
-            .map_or_else(util::TimeKeeper::default, util::TimeKeeper::with_time_limit);
-        let primal_bound = parameters.parameters.primal_bound;
-        let quiet = parameters.parameters.quiet;
+            .map_or_else(TimeKeeper::default, TimeKeeper::with_time_limit);
+        let primal_bound = parameters.primal_bound;
+        let quiet = parameters.quiet;
 
         let mut open = vec![collections::BinaryHeap::new()];
-        let mut registry = StateRegistry::new(model);
+        let mut registry = StateRegistry::<_, _>::new(input.generator.model.clone());
 
         if let Some(capacity) = parameters.initial_registry_capacity {
             registry.reserve(capacity);
@@ -127,153 +187,133 @@ where
 
         let mut solution = Solution::default();
 
-        if let Some((node, h, f)) =
-            N::generate_initial_node(&mut registry, &h_evaluator, &f_evaluator)
-        {
-            open[0].push(node);
+        if let Some(node) = input.node {
+            let (node, _) = registry.insert(node).unwrap();
             solution.generated += 1;
+            solution.best_bound = node.bound(&input.generator.model);
+            open[0].push(node);
 
             if !quiet {
-                println!("Initial h = {}", h);
-            }
-
-            if f_pruning {
-                solution.best_bound = Some(f);
+                solution.time = time_keeper.elapsed_time();
+                print_dual_bound(&solution);
             }
         } else {
             solution.is_infeasible = true;
         }
 
+        time_keeper.stop();
+
         Acps {
-            generator: parameters.generator,
-            h_evaluator,
-            f_evaluator,
-            f_pruning,
-            ordered_by_f,
+            generator: input.generator,
+            suffix: input.solution_suffix,
+            transition_evaluator,
+            base_cost_evaluator,
             progressive_parameters,
             primal_bound,
+            get_all_solutions: parameters.get_all_solutions,
             quiet,
             width: progressive_parameters.init,
             open,
             registry,
+            layer_index: 0,
+            node_index: 0,
+            no_node: true,
+            goal_found: false,
             time_keeper,
             solution,
         }
     }
 }
 
-impl<T, N, H, F> Search<T> for Acps<T, N, H, F>
+impl<'a, T, N, E, B, V> Search<T> for Acps<'a, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNodeInterface<T>,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    N: BfsNode<T, V>,
+    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: Fn(T, T) -> T,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
         if self.solution.is_terminated() {
             return Ok((self.solution.clone(), true));
         }
 
-        let mut i = 0;
-        let mut no_node = true;
+        self.time_keeper.start();
+        let model = &self.generator.model;
+        let suffix = self.suffix;
 
         loop {
-            let mut j = 0;
-            let mut goal_found = false;
+            while self.node_index < self.width && !self.open[self.layer_index].is_empty() {
+                let node = self.open[self.layer_index].pop().unwrap();
 
-            while j < self.width && !self.open[i].is_empty() {
-                let node = self.open[i].pop().unwrap();
+                if node.is_closed() {
+                    continue;
+                }
+                node.close();
 
-                if node.closed() {
+                if let Some(dual_bound) = node.bound(model) {
+                    if exceed_bound(model, dual_bound, self.primal_bound) {
+                        if N::ordered_by_bound() {
+                            self.open[self.layer_index].clear();
+                        }
+                        continue;
+                    }
+                }
+
+                if self.no_node {
+                    self.no_node = false;
+                }
+
+                if let Some((cost, suffix)) =
+                    get_solution_cost_and_suffix(model, &*node, suffix, &self.base_cost_evaluator)
+                {
+                    self.node_index += 1;
+
+                    if !exceed_bound(model, cost, self.primal_bound) {
+                        if !self.goal_found {
+                            self.goal_found = true;
+                        }
+
+                        self.primal_bound = Some(cost);
+                        let time = self.time_keeper.elapsed_time();
+                        update_solution(&mut self.solution, &*node, cost, suffix, time, self.quiet);
+                        self.time_keeper.stop();
+
+                        return Ok((self.solution.clone(), self.solution.is_optimal));
+                    } else if self.get_all_solutions {
+                        let mut solution = self.solution.clone();
+                        let time = self.time_keeper.elapsed_time();
+                        update_solution(&mut solution, &*node, cost, suffix, time, true);
+                        self.time_keeper.stop();
+
+                        return Ok((solution, false));
+                    }
                     continue;
                 }
 
-                node.close();
-
-                let f = node.get_bound(self.registry.model());
-
-                if self.f_pruning
-                    && self.ordered_by_f
-                    && exceed_bound(self.registry.model(), f, self.primal_bound)
-                {
-                    self.open[i].clear();
-                    break;
-                }
-
-                if no_node {
-                    no_node = false;
-                }
-
-                if self.registry.model().is_base(node.state()) {
-                    if exceed_bound(self.registry.model(), node.cost(), self.primal_bound) {
-                        continue;
-                    } else {
-                        if !goal_found {
-                            goal_found = true;
-                        }
-
-                        if !self.quiet {
-                            println!(
-                                "New primal bound: {}, expanded: {}",
-                                node.cost(),
-                                self.solution.expanded
-                            );
-                        }
-
-                        let cost = node.cost();
-                        self.solution.cost = Some(cost);
-                        self.solution.transitions = node.transitions();
-                        self.primal_bound = Some(cost);
-
-                        if let Some(bound) = self.solution.best_bound {
-                            self.solution.is_optimal = cost == bound;
-
-                            if self.solution.is_optimal {
-                                self.solution.time = self.time_keeper.elapsed_time();
-
-                                return Ok((self.solution.clone(), true));
-                            }
-                        }
-
-                        continue;
-                    }
-                }
-
-                if self.time_keeper.check_time_limit() {
-                    if !self.quiet {
-                        println!("Reached time limit.");
-                        println!("Expanded: {}", self.solution.expanded);
-                    }
-
+                if self.time_keeper.check_time_limit(self.quiet) {
                     self.solution.time_out = true;
                     self.solution.time = self.time_keeper.elapsed_time();
+                    self.time_keeper.stop();
 
                     return Ok((self.solution.clone(), true));
                 }
 
                 self.solution.expanded += 1;
 
-                let primal_bound = if self.f_pruning {
-                    self.primal_bound
-                } else {
-                    None
-                };
-
                 for transition in self.generator.applicable_transitions(node.state()) {
-                    let successor = node.generate_successor(
+                    if let Some((successor, new_generated)) = (self.transition_evaluator)(
+                        &node,
                         transition,
                         &mut self.registry,
-                        &self.h_evaluator,
-                        &self.f_evaluator,
-                        primal_bound,
-                    );
-
-                    if let Some((successor, _, _, new_generated)) = successor {
-                        while i + 1 >= self.open.len() {
+                        self.primal_bound,
+                    ) {
+                        while self.layer_index + 1 >= self.open.len() {
                             self.open.push(collections::BinaryHeap::new());
                         }
 
-                        self.open[i + 1].push(successor);
+                        self.open[self.layer_index + 1].push(successor);
 
                         if new_generated {
                             self.solution.generated += 1;
@@ -281,34 +321,75 @@ where
                     }
                 }
 
-                j += 1;
+                self.node_index += 1;
             }
 
-            if no_node && i + 1 == self.open.len() {
-                break;
-            } else if i + 1 == self.open.len() {
-                if self.progressive_parameters.reset && goal_found {
+            self.node_index = 0;
+
+            if self.goal_found {
+                self.layer_index = 0;
+                self.no_node = true;
+                self.goal_found = false;
+
+                if self.progressive_parameters.reset {
                     self.width = self.progressive_parameters.init;
                 } else {
                     self.width = self.progressive_parameters.increase_width(self.width);
                 }
-
-                if goal_found {
-                    self.solution.time = self.time_keeper.elapsed_time();
-
-                    return Ok((self.solution.clone(), false));
-                } else {
-                    i = 0;
-                    no_node = true;
+            } else if self.layer_index + 1 == self.open.len() {
+                if self.no_node {
+                    break;
                 }
+
+                self.layer_index = 0;
+                self.no_node = true;
+                self.width = self.progressive_parameters.increase_width(self.width);
             } else {
-                i += 1;
+                self.layer_index += 1;
             }
         }
 
         self.solution.is_infeasible = self.solution.cost.is_none();
         self.solution.is_optimal = self.solution.cost.is_some();
+        self.solution.best_bound = self.solution.cost;
         self.solution.time = self.time_keeper.elapsed_time();
+        self.time_keeper.stop();
         Ok((self.solution.clone(), true))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn progressive_increase_width() {
+        let parameters = ProgressiveSearchParameters {
+            init: 1,
+            step: 2,
+            bound: None,
+            reset: false,
+        };
+        assert_eq!(parameters.increase_width(3), 5);
+    }
+
+    #[test]
+    fn progressive_increase_width_bonded() {
+        let parameters = ProgressiveSearchParameters {
+            init: 1,
+            step: 2,
+            bound: Some(4),
+            reset: false,
+        };
+        assert_eq!(parameters.increase_width(3), 4);
+    }
+
+    #[test]
+    fn parameters_default() {
+        let parameters = ProgressiveSearchParameters::default();
+        assert_eq!(parameters.init, 1);
+        assert_eq!(parameters.step, 1);
+        assert_eq!(parameters.bound, None);
+        assert!(!parameters.reset);
     }
 }

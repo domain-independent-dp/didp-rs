@@ -3,7 +3,7 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_cbfs, FEvaluatorType, Search};
+use dypdl_heuristic_search::{create_dual_bound_cbfs, FEvaluatorType, Parameters, Search};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -30,7 +30,6 @@ use std::rc::Rc;
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
-///     The count starts when a solver is created.
 /// get_all_solutions: bool, default: False
 ///     Return a solution if it is not improving when :code:`search_next()` is called.
 /// quiet: bool, default: False
@@ -96,7 +95,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "CBFS")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000)"
+    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000)"
 )]
 pub struct CbfsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
@@ -121,6 +120,10 @@ impl CbfsPy {
         quiet: bool,
         initial_registry_capacity: usize,
     ) -> PyResult<CbfsPy> {
+        if !quiet {
+            println!("Solver: CBFS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {
@@ -131,17 +134,17 @@ impl CbfsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<OrderedContinuous> {
+            let parameters = Parameters::<OrderedContinuous> {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
                 quiet,
+                initial_registry_capacity: Some(initial_registry_capacity),
             };
             let solver = create_dual_bound_cbfs::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
             );
             Ok(CbfsPy(WrappedSolver::Float(solver)))
         } else {
@@ -150,17 +153,17 @@ impl CbfsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
+            let parameters = Parameters::<Integer> {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
                 quiet,
+                initial_registry_capacity: Some(initial_registry_capacity),
             };
             let solver = create_dual_bound_cbfs::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
             );
             Ok(CbfsPy(WrappedSolver::Int(solver)))
         }

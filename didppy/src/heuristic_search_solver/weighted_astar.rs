@@ -3,7 +3,9 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_weighted_astar, FEvaluatorType, Search};
+use dypdl_heuristic_search::{
+    create_dual_bound_weighted_astar, FEvaluatorType, Parameters, Search,
+};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -33,7 +35,6 @@ use std::rc::Rc;
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
-///     The count starts when a solver is created.
 /// get_all_solutions: bool, default: False
 ///     Return a solution if it is not improving when :code:`search_next()` is called.
 /// quiet: bool, default: False
@@ -89,7 +90,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "WeightedAstar")]
 #[pyo3(
-    text_signature = "(model, weight, f_operator=0, primal_bound=None, time_limit=None, quiet=False, initial_registry_capacity=1000000)"
+    text_signature = "(model, weight, f_operator=0, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000)"
 )]
 pub struct WeightedAstarPy(
     WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>,
@@ -119,6 +120,13 @@ impl WeightedAstarPy {
         quiet: bool,
         initial_registry_capacity: usize,
     ) -> PyResult<WeightedAstarPy> {
+        if !quiet {
+            println!(
+                "Solver: WeightedAstar from DIDPPy v{}",
+                env!("CARGO_PKG_VERSION")
+            );
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {
@@ -133,14 +141,14 @@ impl WeightedAstarPy {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
+                initial_registry_capacity: Some(initial_registry_capacity),
                 quiet,
             };
             let solver = create_dual_bound_weighted_astar(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                weight,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
+                weight,
             );
             Ok(WeightedAstarPy(WrappedSolver::Float(solver)))
         } else {
@@ -149,18 +157,18 @@ impl WeightedAstarPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
+            let parameters = Parameters::<Integer> {
                 primal_bound,
                 time_limit,
                 get_all_solutions,
+                initial_registry_capacity: Some(initial_registry_capacity),
                 quiet,
             };
             let solver = create_dual_bound_weighted_astar(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                weight,
                 f_evaluator_type,
-                Some(initial_registry_capacity),
+                weight,
             );
             Ok(WeightedAstarPy(WrappedSolver::Int(solver)))
         }

@@ -231,7 +231,7 @@ pub struct Model {
     /// Base cases.
     pub base_cases: Vec<BaseCase>,
     /// Explicit definitions of base states.
-    pub base_states: Vec<State>,
+    pub base_states: Vec<(State, Option<CostExpression>)>,
     /// Specifying how to compute the value of a state from applicable transitions.
     pub reduce_function: ReduceFunction,
     /// Type of the cost.
@@ -306,10 +306,60 @@ impl Model {
             || self
                 .base_states
                 .iter()
-                .any(|base| base.is_satisfied(state, &self.state_metadata))
+                .any(|(base, _)| base.is_satisfied(state, &self.state_metadata))
     }
 
-    /// Evaluate the dual bound given a state.
+    /// Evaluates the base cost given a state.
+    ///
+    /// Returns `None` if the state does not satisfy any base case.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 2).unwrap();
+    /// let state = model.target.clone();
+    ///
+    /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
+    /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 1);
+    /// model.add_base_case(vec![a, b]).unwrap();
+    /// assert!(!model.is_base(&state));
+    ///
+    /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
+    /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 2);
+    /// model.add_base_case(vec![a, b]).unwrap();
+    /// assert!(model.is_base(&state));
+    /// ```
+    pub fn eval_base_cost<T: variable_type::Numeric + Ord, U: StateInterface>(
+        &self,
+        state: &U,
+    ) -> Option<T> {
+        let costs = self
+            .base_cases
+            .iter()
+            .filter_map(|case| case.eval_cost(state, &self.table_registry))
+            .chain(self.base_states.iter().filter_map(|(base, cost)| {
+                if base.is_satisfied(state, &self.state_metadata) {
+                    Some(
+                        cost.as_ref()
+                            .map_or_else(T::zero, |cost| cost.eval(state, &self.table_registry)),
+                    )
+                } else {
+                    None
+                }
+            }));
+
+        match self.reduce_function {
+            ReduceFunction::Min => costs.min(),
+            ReduceFunction::Max => costs.max(),
+            ReduceFunction::Sum => costs.reduce(|acc, e| acc + e),
+            ReduceFunction::Product => costs.reduce(|acc, e| acc * e),
+        }
+    }
+
+    /// Evaluates the dual bound given a state.
     ///
     /// # Panics
     ///
@@ -389,6 +439,12 @@ impl Model {
         transition: &T,
         cost_bound: Option<U>,
     ) -> Option<(R, U)> {
+        let successor = transition.apply(state, &self.table_registry);
+
+        if !self.check_constraints(&successor) {
+            return None;
+        }
+
         let successor_cost = transition.eval_cost(cost, state, &self.table_registry);
 
         if cost_bound.map_or(false, |bound| match self.reduce_function {
@@ -399,13 +455,7 @@ impl Model {
             return None;
         }
 
-        let successor = transition.apply(state, &self.table_registry);
-
-        if self.check_constraints(&successor) {
-            Some((successor, successor_cost))
-        } else {
-            None
-        }
+        Some((successor, successor_cost))
     }
 
     /// Validate a solution consists of forward transitions.
@@ -430,7 +480,7 @@ impl Model {
     ///
     /// assert!(model.validate_forward(&transitions, cost, true));
     /// ```
-    pub fn validate_forward<T: variable_type::Numeric + fmt::Display>(
+    pub fn validate_forward<T: variable_type::Numeric + fmt::Display + Ord>(
         &self,
         transitions: &[Transition],
         cost: T,
@@ -439,6 +489,12 @@ impl Model {
         let mut state_vec = vec![self.target.clone()];
         for (i, transition) in transitions.iter().enumerate() {
             let state = state_vec.last().unwrap();
+            if self.is_base(state) {
+                if show_message {
+                    println!("The {} th state satisfies a base case while there are {} transitions left.", i, transitions.len() - i);
+                }
+                return false;
+            }
             if !transition.is_applicable(state, &self.table_registry) {
                 if show_message {
                     println!(
@@ -458,13 +514,15 @@ impl Model {
             }
             state_vec.push(next_state);
         }
-        if !self.is_base(state_vec.last().unwrap()) {
+        let mut validation_cost = if let Some(cost) = self.eval_base_cost(state_vec.last().unwrap())
+        {
+            cost
+        } else {
             if show_message {
                 println!("The last state is not a base state.")
             }
             return false;
-        }
-        let mut validation_cost = T::zero();
+        };
         state_vec.pop();
         for (state, transition) in state_vec.into_iter().zip(transitions).rev() {
             validation_cost = transition.eval_cost(validation_cost, &state, &self.table_registry);
@@ -660,7 +718,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// If the name is already used, the object type is not in the model, or the target value is greater than or equal to the number of the objects.
+    /// If the name is already used, or the object type is not in the model.
     ///
     /// # Examples
     ///
@@ -681,21 +739,12 @@ impl Model {
     where
         String: From<T>,
     {
-        let n = self.get_number_of_objects(ob)?;
-        if target >= n {
-            Err(ModelErr::new(format!(
-                "target value for element variable {} >= #objects ({})",
-                String::from(name),
-                n
-            )))
-        } else {
-            let v = self.state_metadata.add_element_variable(name, ob)?;
-            self.target
-                .signature_variables
-                .element_variables
-                .push(target);
-            Ok(v)
-        }
+        let v = self.state_metadata.add_element_variable(name, ob)?;
+        self.target
+            .signature_variables
+            .element_variables
+            .push(target);
+        Ok(v)
     }
 
     /// Returns an element resource variable given a name.
@@ -729,7 +778,7 @@ impl Model {
     ///
     /// # Errors
     ///
-    /// If the name is already used, the object type is not in the model, or the target value is greater than or equal to the number of the objects.
+    /// If the name is already used, or the object type is not in the model.
     ///
     /// # Examples
     ///
@@ -751,23 +800,14 @@ impl Model {
     where
         String: From<T>,
     {
-        let n = self.get_number_of_objects(ob)?;
-        if target >= n {
-            Err(ModelErr::new(format!(
-                "target value for element resource variable {} >= #objects ({})",
-                String::from(name),
-                n
-            )))
-        } else {
-            let v = self
-                .state_metadata
-                .add_element_resource_variable(name, ob, less_is_better)?;
-            self.target
-                .resource_variables
-                .element_variables
-                .push(target);
-            Ok(v)
-        }
+        let v = self
+            .state_metadata
+            .add_element_resource_variable(name, ob, less_is_better)?;
+        self.target
+            .resource_variables
+            .element_variables
+            .push(target);
+        Ok(v)
     }
 
     /// Returns a set variable given a name.
@@ -1167,7 +1207,35 @@ impl Model {
         Ok(())
     }
 
+    fn check_and_simplify_conditions(
+        &self,
+        conditions: Vec<expression::Condition>,
+    ) -> Result<Vec<GroundedCondition>, ModelErr> {
+        let mut simplified_conditions = Vec::with_capacity(conditions.len());
+
+        for condition in conditions {
+            self.check_expression(&condition, false)?;
+            let simplified = condition.simplify(&self.table_registry);
+
+            match simplified {
+                expression::Condition::Constant(true) => {
+                    eprintln!("base case condition {:?} is always satisfied", condition)
+                }
+                expression::Condition::Constant(false) => {
+                    eprintln!("base case condition {:?} cannot be satisfied", condition)
+                }
+                _ => {}
+            }
+
+            simplified_conditions.push(GroundedCondition::from(simplified));
+        }
+
+        Ok(simplified_conditions)
+    }
+
     /// Adds a base case.
+    ///
+    /// The cost of a base case is assumed to be zero.
     ///
     /// # Errors
     ///
@@ -1190,27 +1258,63 @@ impl Model {
         &mut self,
         conditions: Vec<expression::Condition>,
     ) -> Result<(), ModelErr> {
-        let mut simplified_conditions = Vec::with_capacity(conditions.len());
-        for condition in &conditions {
-            self.check_expression(condition, false)?;
-            let simplified = condition.simplify(&self.table_registry);
-            match simplified {
-                expression::Condition::Constant(true) => {
-                    eprintln!("base case condition {:?} is always satisfied", condition)
-                }
-                expression::Condition::Constant(false) => {
-                    eprintln!("base case condition {:?} cannot be satisfied", condition)
-                }
-                _ => {}
+        let conditions = self.check_and_simplify_conditions(conditions)?;
+        self.base_cases.push(BaseCase::from(conditions));
+        Ok(())
+    }
+
+    fn check_and_simplify_cost<T>(
+        &self,
+        cost: T,
+        allow_cost: bool,
+    ) -> Result<CostExpression, ModelErr>
+    where
+        CostExpression: From<T>,
+    {
+        match CostExpression::from(cost) {
+            CostExpression::Integer(cost) => {
+                self.check_expression(&cost, allow_cost)?;
+                Ok(cost.simplify(&self.table_registry).into())
             }
-            simplified_conditions.push(simplified);
+            CostExpression::Continuous(cost) => {
+                self.check_expression(&cost, allow_cost)?;
+                Ok(cost.simplify(&self.table_registry).into())
+            }
         }
-        self.base_cases.push(BaseCase::new(
-            simplified_conditions
-                .into_iter()
-                .map(GroundedCondition::from)
-                .collect(),
-        ));
+    }
+
+    /// Adds a base case with its cost.
+    ///
+    /// # Errors
+    ///
+    /// If a condition is invalid, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 2).unwrap();
+    ///
+    /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
+    /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 1);
+    /// let cost = 1;
+    /// assert!(model.add_base_case_with_cost(vec![a, b], 1).is_ok());
+    /// ```
+    #[inline]
+    pub fn add_base_case_with_cost<T>(
+        &mut self,
+        conditions: Vec<expression::Condition>,
+        cost: T,
+    ) -> Result<(), ModelErr>
+    where
+        CostExpression: From<T>,
+    {
+        let conditions = self.check_and_simplify_conditions(conditions)?;
+        let cost = self.check_and_simplify_cost(cost, false)?;
+        self.base_cases
+            .push(BaseCase::with_cost::<CostExpression>(conditions, cost));
         Ok(())
     }
 
@@ -1219,6 +1323,7 @@ impl Model {
     /// # Errors
     ///
     /// If a state is invalid, e.g., it contains variables not existing in this model.
+    #[inline]
     pub fn check_state<'a, T: StateInterface>(&self, state: &'a T) -> Result<(), ModelErr>
     where
         &'a T: panic::UnwindSafe,
@@ -1228,13 +1333,31 @@ impl Model {
 
     /// Adds a base state.
     ///
+    /// The cost of the state is assumed to be zero.
+    ///
     /// # Errors
     ///
     /// If a state is invalid, e.g., it contains variables not existing in this model.
     #[inline]
     pub fn add_base_state(&mut self, state: State) -> Result<(), ModelErr> {
         self.check_state(&state)?;
-        self.base_states.push(state);
+        self.base_states.push((state, None));
+        Ok(())
+    }
+
+    /// Adds a base state with its cost.
+    ///
+    /// # Errors
+    ///
+    /// If a state is invalid, e.g., it contains variables not existing in this model.
+    #[inline]
+    pub fn add_base_state_with_cost<T>(&mut self, state: State, cost: T) -> Result<(), ModelErr>
+    where
+        CostExpression: From<T>,
+    {
+        self.check_state(&state)?;
+        let cost = self.check_and_simplify_cost(cost, false)?;
+        self.base_states.push((state, Some(cost)));
         Ok(())
     }
 
@@ -1794,34 +1917,16 @@ pub trait AccessTarget<T, U> {
 }
 
 impl AccessTarget<ElementVariable, Element> for Model {
-    /// Returns the value in the target state.
-    ///
-    /// # Errors
-    ///
-    /// If the variable is not in the model.
     fn get_target(&self, variable: ElementVariable) -> Result<Element, ModelErr> {
         self.state_metadata.check_variable(variable)?;
         Ok(self.target.get_element_variable(variable.id()))
     }
 
-    /// Set the value in the target state
-    ///
-    /// # Errors
-    ///
-    /// If the variable is not in the model.
     fn set_target(&mut self, variable: ElementVariable, target: Element) -> Result<(), ModelErr> {
         let ob = self.get_object_type_of(variable)?;
-        let n = self.get_number_of_objects(ob)?;
-        if target >= n {
-            Err(ModelErr::new(format!(
-                "target value for element variable id {} >= #objects ({})",
-                variable.id(),
-                n
-            )))
-        } else {
-            self.target.signature_variables.element_variables[variable.id()] = target;
-            Ok(())
-        }
+        let _ = self.get_number_of_objects(ob)?;
+        self.target.signature_variables.element_variables[variable.id()] = target;
+        Ok(())
     }
 }
 
@@ -1837,17 +1942,9 @@ impl AccessTarget<ElementResourceVariable, Element> for Model {
         target: Element,
     ) -> Result<(), ModelErr> {
         let ob = self.get_object_type_of(variable)?;
-        let n = self.get_number_of_objects(ob)?;
-        if target >= n {
-            Err(ModelErr::new(format!(
-                "target value for element variable id {} >= #objects ({})",
-                variable.id(),
-                n
-            )))
-        } else {
-            self.target.resource_variables.element_variables[variable.id()] = target;
-            Ok(())
-        }
+        let _ = self.get_number_of_objects(ob)?;
+        self.target.resource_variables.element_variables[variable.id()] = target;
+        Ok(())
     }
 }
 
@@ -3053,33 +3150,246 @@ mod tests {
     }
 
     #[test]
-    fn is_base() {
+    fn is_base_case() {
         let state = state::State::default();
         let model = Model {
-            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+            base_cases: vec![BaseCase::from(vec![GroundedCondition {
                 condition: Condition::Constant(true),
                 ..Default::default()
             }])],
             ..Default::default()
         };
         assert!(model.is_base(&state));
+    }
+
+    #[test]
+    fn is_not_base_case() {
+        let state = state::State::default();
         let model = Model {
-            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+            base_cases: vec![BaseCase::from(vec![GroundedCondition {
                 condition: Condition::Constant(false),
                 ..Default::default()
             }])],
             ..Default::default()
         };
         assert!(!model.is_base(&state));
+    }
+
+    #[test]
+    fn is_base_state() {
+        let state = state::State::default();
         let model = Model {
-            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+            base_cases: vec![BaseCase::from(vec![GroundedCondition {
                 condition: Condition::Constant(false),
                 ..Default::default()
             }])],
-            base_states: vec![state::State::default()],
+            base_states: vec![(state::State::default(), None)],
             ..Default::default()
         };
         assert!(model.is_base(&state));
+    }
+
+    #[test]
+    fn eval_base_cost_zero() {
+        let state = state::State::default();
+        let model = Model {
+            base_cases: vec![
+                BaseCase::with_cost(
+                    vec![GroundedCondition {
+                        condition: Condition::Constant(false),
+                        ..Default::default()
+                    }],
+                    1,
+                ),
+                BaseCase::with_cost(
+                    vec![GroundedCondition {
+                        condition: Condition::Constant(true),
+                        ..Default::default()
+                    }],
+                    2,
+                ),
+            ],
+            base_states: vec![(state::State::default(), None)],
+            reduce_function: ReduceFunction::Min,
+            ..Default::default()
+        };
+        assert_eq!(model.eval_base_cost(&state), Some(0));
+    }
+
+    #[test]
+    fn eval_base_cost_min_some() {
+        let state = state::State::default();
+        let model = Model {
+            base_cases: vec![
+                BaseCase::with_cost(
+                    vec![GroundedCondition {
+                        condition: Condition::Constant(false),
+                        ..Default::default()
+                    }],
+                    1,
+                ),
+                BaseCase::with_cost(
+                    vec![GroundedCondition {
+                        condition: Condition::Constant(true),
+                        ..Default::default()
+                    }],
+                    2,
+                ),
+            ],
+            base_states: vec![(state::State::default(), Some(CostExpression::from(3)))],
+            reduce_function: ReduceFunction::Min,
+            ..Default::default()
+        };
+        assert_eq!(model.eval_base_cost(&state), Some(2));
+    }
+
+    #[test]
+    fn eval_base_cost_min_none() {
+        let state = state::State::default();
+        let model = Model {
+            base_cases: vec![BaseCase::with_cost(
+                vec![GroundedCondition {
+                    condition: Condition::Constant(false),
+                    ..Default::default()
+                }],
+                1,
+            )],
+            reduce_function: ReduceFunction::Min,
+            ..Default::default()
+        };
+        assert_eq!(model.eval_base_cost::<Integer, _>(&state), None);
+    }
+
+    #[test]
+    fn eval_base_cost_max_some() {
+        let state = state::State::default();
+        let model = Model {
+            base_cases: vec![
+                BaseCase::with_cost(
+                    vec![GroundedCondition {
+                        condition: Condition::Constant(false),
+                        ..Default::default()
+                    }],
+                    1,
+                ),
+                BaseCase::with_cost(
+                    vec![GroundedCondition {
+                        condition: Condition::Constant(true),
+                        ..Default::default()
+                    }],
+                    2,
+                ),
+            ],
+            base_states: vec![(state::State::default(), Some(CostExpression::from(3)))],
+            reduce_function: ReduceFunction::Max,
+            ..Default::default()
+        };
+        assert_eq!(model.eval_base_cost(&state), Some(3));
+    }
+
+    #[test]
+    fn eval_base_cost_max_none() {
+        let state = state::State::default();
+        let model = Model {
+            base_cases: vec![BaseCase::with_cost(
+                vec![GroundedCondition {
+                    condition: Condition::Constant(false),
+                    ..Default::default()
+                }],
+                1,
+            )],
+            reduce_function: ReduceFunction::Max,
+            ..Default::default()
+        };
+        assert_eq!(model.eval_base_cost::<Integer, _>(&state), None);
+    }
+
+    #[test]
+    fn eval_base_cost_sum() {
+        let state = state::State::default();
+        let model = Model {
+            base_cases: vec![
+                BaseCase::with_cost(
+                    vec![GroundedCondition {
+                        condition: Condition::Constant(false),
+                        ..Default::default()
+                    }],
+                    1,
+                ),
+                BaseCase::with_cost(
+                    vec![GroundedCondition {
+                        condition: Condition::Constant(true),
+                        ..Default::default()
+                    }],
+                    2,
+                ),
+            ],
+            base_states: vec![(state::State::default(), Some(CostExpression::from(3)))],
+            reduce_function: ReduceFunction::Sum,
+            ..Default::default()
+        };
+        assert_eq!(model.eval_base_cost(&state), Some(5));
+    }
+
+    #[test]
+    fn eval_base_cost_sum_none() {
+        let state = state::State::default();
+        let model = Model {
+            base_cases: vec![BaseCase::with_cost(
+                vec![GroundedCondition {
+                    condition: Condition::Constant(false),
+                    ..Default::default()
+                }],
+                1,
+            )],
+            reduce_function: ReduceFunction::Sum,
+            ..Default::default()
+        };
+        assert_eq!(model.eval_base_cost::<Integer, _>(&state), None);
+    }
+
+    #[test]
+    fn eval_base_cost_product() {
+        let state = state::State::default();
+        let model = Model {
+            base_cases: vec![
+                BaseCase::with_cost(
+                    vec![GroundedCondition {
+                        condition: Condition::Constant(false),
+                        ..Default::default()
+                    }],
+                    1,
+                ),
+                BaseCase::with_cost(
+                    vec![GroundedCondition {
+                        condition: Condition::Constant(true),
+                        ..Default::default()
+                    }],
+                    2,
+                ),
+            ],
+            base_states: vec![(state::State::default(), Some(CostExpression::from(3)))],
+            reduce_function: ReduceFunction::Product,
+            ..Default::default()
+        };
+        assert_eq!(model.eval_base_cost(&state), Some(6));
+    }
+
+    #[test]
+    fn eval_base_cost_product_none() {
+        let state = state::State::default();
+        let model = Model {
+            base_cases: vec![BaseCase::with_cost(
+                vec![GroundedCondition {
+                    condition: Condition::Constant(false),
+                    ..Default::default()
+                }],
+                1,
+            )],
+            reduce_function: ReduceFunction::Product,
+            ..Default::default()
+        };
+        assert_eq!(model.eval_base_cost::<Integer, _>(&state), None);
     }
 
     #[test]
@@ -3510,7 +3820,7 @@ mod tests {
                 ),
                 ..Default::default()
             }],
-            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+            base_cases: vec![BaseCase::from(vec![GroundedCondition {
                 condition: Condition::ComparisonI(
                     ComparisonOperator::Ge,
                     Box::new(IntegerExpression::Variable(0)),
@@ -3588,6 +3898,212 @@ mod tests {
     }
 
     #[test]
+    fn validate_forward_true_base_cost() {
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: State {
+                signature_variables: SignatureVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            state_constraints: vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(0)),
+                ),
+                ..Default::default()
+            }],
+            base_cases: vec![BaseCase::with_cost(
+                vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Ge,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(2)),
+                    ),
+                    ..Default::default()
+                }],
+                1,
+            )],
+            forward_transitions: vec![
+                Transition {
+                    name: String::from("increase"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("decrease"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Sub,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+            ],
+            forward_forced_transitions: vec![Transition {
+                name: String::from("forced increase"),
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Eq,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(0)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::Cost),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let transitions = vec![
+            model.forward_forced_transitions[0].clone(),
+            model.forward_transitions[0].clone(),
+        ];
+        assert!(model.validate_forward(&transitions, 2, true));
+    }
+
+    #[test]
+    fn validate_forward_base_case_false() {
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: State {
+                signature_variables: SignatureVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            state_constraints: vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(0)),
+                ),
+                ..Default::default()
+            }],
+            base_cases: vec![BaseCase::from(vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Ge,
+                    Box::new(IntegerExpression::Variable(0)),
+                    Box::new(IntegerExpression::Constant(2)),
+                ),
+                ..Default::default()
+            }])],
+            forward_transitions: vec![
+                Transition {
+                    name: String::from("increase"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("decrease"),
+                    effect: Effect {
+                        integer_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Sub,
+                                Box::new(IntegerExpression::Variable(0)),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Cost),
+                        Box::new(IntegerExpression::Constant(1)),
+                    )),
+                    ..Default::default()
+                },
+            ],
+            forward_forced_transitions: vec![Transition {
+                name: String::from("forced increase"),
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Eq,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::Constant(0)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::Cost),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let transitions = vec![
+            model.forward_forced_transitions[0].clone(),
+            model.forward_transitions[0].clone(),
+            model.forward_transitions[0].clone(),
+        ];
+        assert!(!model.validate_forward(&transitions, 1, true));
+    }
+
+    #[test]
     fn validate_forward_state_constraint_false() {
         let name_to_integer_variable = FxHashMap::default();
         let model = Model {
@@ -3611,7 +4127,7 @@ mod tests {
                 ),
                 ..Default::default()
             }],
-            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+            base_cases: vec![BaseCase::from(vec![GroundedCondition {
                 condition: Condition::ComparisonI(
                     ComparisonOperator::Ge,
                     Box::new(IntegerExpression::Variable(0)),
@@ -3696,7 +4212,7 @@ mod tests {
                 ),
                 ..Default::default()
             }],
-            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+            base_cases: vec![BaseCase::from(vec![GroundedCondition {
                 condition: Condition::ComparisonI(
                     ComparisonOperator::Ge,
                     Box::new(IntegerExpression::Variable(0)),
@@ -3797,7 +4313,7 @@ mod tests {
                 ),
                 ..Default::default()
             }],
-            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+            base_cases: vec![BaseCase::from(vec![GroundedCondition {
                 condition: Condition::ComparisonI(
                     ComparisonOperator::Ge,
                     Box::new(IntegerExpression::Variable(0)),
@@ -3895,7 +4411,7 @@ mod tests {
                 ),
                 ..Default::default()
             }],
-            base_cases: vec![BaseCase::new(vec![GroundedCondition {
+            base_cases: vec![BaseCase::from(vec![GroundedCondition {
                 condition: Condition::ComparisonI(
                     ComparisonOperator::Ge,
                     Box::new(IntegerExpression::Variable(0)),
@@ -4055,10 +4571,6 @@ mod tests {
         let v = v.unwrap();
         let v2 = model.add_element_variable(String::from("v"), ob, 2);
         assert!(v2.is_err());
-        let v2 = model.add_element_variable(String::from("v2"), ob, 10);
-        assert!(v2.is_err());
-        let result = model.set_target(v, 10);
-        assert!(result.is_err());
 
         let mut model = Model::default();
         let v2 = model.add_element_variable(String::from("v3"), ob, 2);
@@ -4114,10 +4626,6 @@ mod tests {
         let v = v.unwrap();
         let v2 = model.add_element_resource_variable(String::from("v"), ob, true, 2);
         assert!(v2.is_err());
-        let v2 = model.add_element_resource_variable(String::from("v2"), ob, true, 10);
-        assert!(v2.is_err());
-        let result = model.set_target(v, 10);
-        assert!(result.is_err());
 
         let mut model = Model::default();
         let v2 = model.add_element_resource_variable(String::from("v3"), ob, true, 2);
@@ -5988,7 +6496,7 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(
             model.base_cases,
-            vec![BaseCase::new(vec![GroundedCondition {
+            vec![BaseCase::from(vec![GroundedCondition {
                 condition: Condition::ComparisonI(
                     ComparisonOperator::Ge,
                     Box::new(IntegerExpression::Variable(v.id())),
@@ -6008,6 +6516,57 @@ mod tests {
         let mut model = Model::default();
         let condition = Condition::comparison_i(ComparisonOperator::Ge, v, 0);
         let result = model.add_base_case(vec![condition]);
+        assert!(result.is_err());
+        assert_eq!(model.base_cases, vec![]);
+    }
+
+    #[test]
+    fn add_base_case_with_cost_ok() {
+        let mut model = Model::default();
+        let v = model.add_integer_variable(String::from("v"), 0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        let condition =
+            Condition::comparison_i(ComparisonOperator::Ge, v, 3) & Condition::Constant(true);
+        let result = model.add_base_case_with_cost(vec![condition], 1);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.base_cases,
+            vec![BaseCase::with_cost(
+                vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Ge,
+                        Box::new(IntegerExpression::Variable(v.id())),
+                        Box::new(IntegerExpression::Constant(3))
+                    ),
+                    ..Default::default()
+                }],
+                1
+            )]
+        )
+    }
+
+    #[test]
+    fn add_base_case_with_cost_err_conditions() {
+        let mut model = Model::default();
+        let v = model.add_integer_variable(String::from("v"), 0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        let mut model = Model::default();
+        let condition = Condition::comparison_i(ComparisonOperator::Ge, v, 0);
+        let result = model.add_base_case_with_cost(vec![condition], 1);
+        assert!(result.is_err());
+        assert_eq!(model.base_cases, vec![]);
+    }
+
+    #[test]
+    fn add_base_case_with_cost_err_cost() {
+        let mut model = Model::default();
+        let v = model.add_integer_variable(String::from("v"), 0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+        let condition = Condition::comparison_i(ComparisonOperator::Ge, v, 3);
+        let result = model.add_base_case_with_cost(vec![condition], IntegerExpression::Cost);
         assert!(result.is_err());
         assert_eq!(model.base_cases, vec![]);
     }
@@ -6036,7 +6595,7 @@ mod tests {
         assert!(v.is_ok());
         let state = model.target.clone();
         assert!(model.add_base_state(state).is_ok());
-        assert_eq!(model.base_states, vec![model.target.clone()]);
+        assert_eq!(model.base_states, vec![(model.target.clone(), None)]);
     }
 
     #[test]
@@ -6046,6 +6605,41 @@ mod tests {
         assert!(v.is_ok());
         let state = State::default();
         assert!(model.add_base_state(state).is_err());
+        assert_eq!(model.base_states, vec![]);
+    }
+
+    #[test]
+    fn add_base_state_with_cost_ok() {
+        let mut model = Model::default();
+        let v = model.add_integer_variable(String::from("v"), 0);
+        assert!(v.is_ok());
+        let state = model.target.clone();
+        assert!(model.add_base_state_with_cost(state, 1).is_ok());
+        assert_eq!(
+            model.base_states,
+            vec![(model.target.clone(), Some(CostExpression::from(1)))]
+        );
+    }
+
+    #[test]
+    fn add_base_state_with_cost_err_state() {
+        let mut model = Model::default();
+        let v = model.add_integer_variable(String::from("v"), 0);
+        assert!(v.is_ok());
+        let state = State::default();
+        assert!(model.add_base_state(state).is_err());
+        assert_eq!(model.base_states, vec![]);
+    }
+
+    #[test]
+    fn add_base_state_with_cost_err_cost() {
+        let mut model = Model::default();
+        let v = model.add_integer_variable(String::from("v"), 0);
+        assert!(v.is_ok());
+        let state = model.target.clone();
+        assert!(model
+            .add_base_state_with_cost(state, IntegerExpression::Cost)
+            .is_err());
         assert_eq!(model.base_states, vec![]);
     }
 

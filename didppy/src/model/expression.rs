@@ -2304,6 +2304,15 @@ impl IntoPy<Py<PyAny>> for IntOrFloatExpr {
     }
 }
 
+impl From<CostExpression> for IntOrFloatExpr {
+    fn from(expr: CostExpression) -> Self {
+        match expr {
+            CostExpression::Integer(expr) => Self::Int(IntExprPy::from(expr)),
+            CostExpression::Continuous(expr) => Self::Float(FloatExprPy::from(expr)),
+        }
+    }
+}
+
 /// Integer expression.
 ///
 /// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`//`, :code:`%`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, or :class:`int` is applied, a new :class:`IntExpr` is returned.
@@ -11334,5 +11343,23 @@ mod tests {
             condition.if_then_else(x.as_ref(py), y.as_ref(py))
         });
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn int_or_float_expr_from_cost_expression_int() {
+        let expression = CostExpression::from(0);
+        assert_eq!(
+            IntOrFloatExpr::from(expression),
+            IntOrFloatExpr::Int(IntExprPy::from(IntegerExpression::Constant(0)))
+        )
+    }
+
+    #[test]
+    fn int_or_float_expr_from_cost_expression_float() {
+        let expression = CostExpression::from(0.0);
+        assert_eq!(
+            IntOrFloatExpr::from(expression),
+            IntOrFloatExpr::Float(FloatExprPy::from(ContinuousExpression::Constant(0.0)))
+        )
     }
 }

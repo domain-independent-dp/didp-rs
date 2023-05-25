@@ -10,7 +10,7 @@ use crate::state::{
 };
 use crate::table_registry;
 use crate::util::ModelErr;
-use crate::variable_type::{Element, FromNumeric, Numeric};
+use crate::variable_type::{Continuous, Element, FromNumeric, Numeric};
 use std::fmt::Debug;
 
 /// Wrapper for an integer expression or a continuous expression.
@@ -29,15 +29,36 @@ impl Default for CostExpression {
     }
 }
 
-impl From<IntegerExpression> for CostExpression {
-    fn from(cost: IntegerExpression) -> Self {
-        Self::Integer(cost)
+impl<T> From<T> for CostExpression
+where
+    IntegerExpression: From<T>,
+{
+    fn from(cost: T) -> Self {
+        Self::Integer(IntegerExpression::from(cost))
     }
 }
 
 impl From<ContinuousExpression> for CostExpression {
     fn from(cost: ContinuousExpression) -> Self {
         Self::Continuous(cost)
+    }
+}
+
+impl From<Continuous> for CostExpression {
+    fn from(cost: Continuous) -> Self {
+        Self::from(ContinuousExpression::from(cost))
+    }
+}
+
+impl From<ContinuousVariable> for CostExpression {
+    fn from(cost: ContinuousVariable) -> Self {
+        Self::from(ContinuousExpression::from(cost))
+    }
+}
+
+impl From<ContinuousResourceVariable> for CostExpression {
+    fn from(cost: ContinuousResourceVariable) -> Self {
+        Self::from(ContinuousExpression::from(cost))
     }
 }
 
@@ -503,6 +524,7 @@ mod tests {
     use crate::table;
     use crate::table_data;
     use crate::variable_type::*;
+    use crate::StateMetadata;
     use rustc_hash::FxHashMap;
 
     fn generate_registry() -> table_registry::TableRegistry {
@@ -559,13 +581,52 @@ mod tests {
     }
 
     #[test]
-    fn cost_expression_from() {
+    fn cost_expression_from_integer() {
         let expression = CostExpression::from(IntegerExpression::Cost);
         assert_eq!(expression, CostExpression::Integer(IntegerExpression::Cost));
+    }
+
+    #[test]
+    fn cost_expression_from_continuous_expression() {
         let expression = CostExpression::from(ContinuousExpression::Cost);
         assert_eq!(
             expression,
             CostExpression::Continuous(ContinuousExpression::Cost)
+        );
+    }
+
+    #[test]
+    fn cost_expression_from_continuous() {
+        let expression = CostExpression::from(1.0);
+        assert_eq!(
+            expression,
+            CostExpression::Continuous(ContinuousExpression::Constant(1.0))
+        );
+    }
+
+    #[test]
+    fn cost_expression_from_continuous_variable() {
+        let mut metadata = StateMetadata::default();
+        let var = metadata.add_continuous_variable("var");
+        assert!(var.is_ok());
+        let var = var.unwrap();
+        let expression = CostExpression::from(var);
+        assert_eq!(
+            expression,
+            CostExpression::Continuous(ContinuousExpression::Variable(0))
+        );
+    }
+
+    #[test]
+    fn cost_expression_from_continuous_resource_variable() {
+        let mut metadata = StateMetadata::default();
+        let var = metadata.add_continuous_resource_variable("var", false);
+        assert!(var.is_ok());
+        let var = var.unwrap();
+        let expression = CostExpression::from(var);
+        assert_eq!(
+            expression,
+            CostExpression::Continuous(ContinuousExpression::ResourceVariable(0))
         );
     }
 

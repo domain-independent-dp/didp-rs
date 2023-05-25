@@ -1,7 +1,7 @@
 use super::data_structure::{HashableState, SuccessorGenerator};
-use super::search::{Search, Solution};
+use super::search::{Parameters, Search, Solution};
 use super::util;
-use dypdl::{variable_type, TransitionInterface};
+use dypdl::{variable_type, Transition, TransitionInterface};
 use rustc_hash::FxHashMap;
 use std::error::Error;
 use std::fmt;
@@ -17,8 +17,8 @@ use std::str;
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::search_algorithm::{ForwardRecursion, Search};
-/// use dypdl_heuristic_search::search_algorithm::util::Parameters;
+/// use dypdl_heuristic_search::{Search, Parameters};
+/// use dypdl_heuristic_search::search_algorithm::{ForwardRecursion};
 /// use std::rc::Rc;
 ///
 /// let mut model = Model::default();
@@ -33,7 +33,7 @@ use std::str;
 ///
 /// let model = Rc::new(model);
 /// let parameters = Parameters::default();
-/// let mut solver = ForwardRecursion::new(model, parameters, None);
+/// let mut solver = ForwardRecursion::new(model, parameters);
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
@@ -45,8 +45,7 @@ where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     model: Rc<dypdl::Model>,
-    parameters: util::Parameters<T>,
-    initial_registry_capacity: Option<usize>,
+    parameters: Parameters<T>,
     terminated: bool,
     solution: Solution<T>,
 }
@@ -57,15 +56,10 @@ where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     /// Create a new forward recursion solver.
-    pub fn new(
-        model: Rc<dypdl::Model>,
-        parameters: util::Parameters<T>,
-        initial_registry_capacity: Option<usize>,
-    ) -> ForwardRecursion<T> {
+    pub fn new(model: Rc<dypdl::Model>, parameters: Parameters<T>) -> ForwardRecursion<T> {
         ForwardRecursion {
             model,
             parameters,
-            initial_registry_capacity,
             terminated: false,
             solution: Solution::default(),
         }
@@ -86,10 +80,10 @@ where
             .parameters
             .time_limit
             .map_or_else(util::TimeKeeper::default, util::TimeKeeper::with_time_limit);
-        let generator = SuccessorGenerator::from_model(self.model.clone(), false);
+        let generator = SuccessorGenerator::<Transition>::from_model(self.model.clone(), false);
         let mut memo = FxHashMap::default();
 
-        if let Some(capacity) = self.initial_registry_capacity {
+        if let Some(capacity) = self.parameters.initial_registry_capacity {
             memo.reserve(capacity);
         }
 
@@ -117,9 +111,13 @@ where
             _ => {}
         }
 
-        self.solution.is_optimal = self.solution.cost.is_some()
-            && (self.model.reduce_function == dypdl::ReduceFunction::Max
-                || self.model.reduce_function == dypdl::ReduceFunction::Min);
+        if self.model.reduce_function == dypdl::ReduceFunction::Max
+            || self.model.reduce_function == dypdl::ReduceFunction::Min
+        {
+            self.solution.is_optimal = self.solution.cost.is_some();
+            self.solution.best_bound = self.solution.cost;
+        }
+
         self.solution.generated = self.solution.expanded;
         self.solution.is_infeasible = self.solution.cost.is_none();
         self.solution.time = time_keeper.elapsed_time();
@@ -131,7 +129,7 @@ where
 type StateMemo<T> = FxHashMap<HashableState, (Option<T>, Option<Rc<dypdl::Transition>>)>;
 
 /// Performs a naive recursion while memoizing all encountered states.
-pub fn forward_recursion<T: variable_type::Numeric>(
+pub fn forward_recursion<T: variable_type::Numeric + Ord>(
     state: HashableState,
     model: &dypdl::Model,
     generator: &SuccessorGenerator,
@@ -139,15 +137,15 @@ pub fn forward_recursion<T: variable_type::Numeric>(
     time_keeper: &util::TimeKeeper,
     expanded: &mut usize,
 ) -> Option<T> {
-    if model.is_base(&state) {
-        return Some(T::zero());
+    if let Some(cost) = model.eval_base_cost(&state) {
+        return Some(cost);
     }
 
     if let Some((cost, _)) = memo.get(&state) {
         return *cost;
     }
 
-    if time_keeper.check_time_limit() {
+    if time_keeper.check_time_limit(true) {
         return None;
     }
 

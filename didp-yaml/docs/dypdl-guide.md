@@ -236,7 +236,9 @@ It can be also defined in a problem file.
 ### base_cases
 
 `base_cases` is optinal, and the value is a list of lists of conditions.
-You need to do either defining `base_cases` in a domain file, defining `base_cases` in a problem file, or defining `base_states` in a problem file.
+Alternately,  it can be a list of a map having a key `conditions` whose value is a list of conditions and `cost` whose value is an expression representing the value of the base case.
+If `cost` is not given, the value of the base case is 0.
+You need to do either defining `base_cases` in a domain file or a problem file.
 Each condition is defined in the same way as [`constraints`](#constraints).
 One list of conditions correspond to one base case.
 If a state satisfies any of base cases, the value of that state is 0, and the recursion of DP stops.
@@ -247,6 +249,16 @@ If a state satisfies any of base cases, the value of that state is 0, and the re
 base_cases:
   - - (is_empty unvisited)
     - (= location 0)
+```
+
+The above definition is equivalent to the following.
+
+```yaml
+base_cases:
+  - conditions:
+      - (is_empty unvisited)
+      - (= location 0)
+    cost: 0
 ```
 
 ### reduce

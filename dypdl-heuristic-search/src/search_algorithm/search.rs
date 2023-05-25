@@ -1,9 +1,42 @@
-use dypdl::variable_type;
+use super::data_structure::SuccessorGenerator;
+use dypdl::{variable_type::Numeric, Model, Transition, TransitionInterface};
 use std::error::Error;
+use std::{ops::Deref, rc::Rc};
+
+/// Input of a heuristic search solver.
+#[derive(Debug, PartialEq, Clone)]
+pub struct SearchInput<'a, N, V = Transition, D = Rc<V>, R = Rc<dypdl::Model>>
+where
+    V: TransitionInterface,
+    D: Deref<Target = V> + Clone,
+    R: Deref<Target = Model>,
+{
+    /// Root node.
+    pub node: Option<N>,
+    /// Successor generator.
+    pub generator: SuccessorGenerator<V, D, R>,
+    /// Suffix of the solution.
+    pub solution_suffix: &'a [V],
+}
+
+/// Common parameters for heuristic search solvers.
+#[derive(Debug, PartialEq, Clone, Copy, Default)]
+pub struct Parameters<T> {
+    /// Primal bound.
+    pub primal_bound: Option<T>,
+    /// Time limit.
+    pub time_limit: Option<f64>,
+    /// Returns all feasible solutions found.
+    pub get_all_solutions: bool,
+    /// Initial capacity of a data structure saving all states.
+    pub initial_registry_capacity: Option<usize>,
+    /// Suppress log output or not.
+    pub quiet: bool,
+}
 
 /// Information about a solution.
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct Solution<T: variable_type::Numeric, I = dypdl::Transition> {
+pub struct Solution<T: Numeric, V = Transition> {
     /// Solution cost.
     /// `None` if the model is infeasible.
     pub cost: Option<T>,
@@ -14,7 +47,7 @@ pub struct Solution<T: variable_type::Numeric, I = dypdl::Transition> {
     /// Infeasible model or not.
     pub is_infeasible: bool,
     /// Transitions corresponding to the solution.
-    pub transitions: Vec<I>,
+    pub transitions: Vec<V>,
     /// Number of expanded nodes.
     pub expanded: usize,
     /// Number of generated nodes.
@@ -25,7 +58,7 @@ pub struct Solution<T: variable_type::Numeric, I = dypdl::Transition> {
     pub time_out: bool,
 }
 
-impl<T: variable_type::Numeric, I> Solution<T, I> {
+impl<T: Numeric, V> Solution<T, V> {
     /// Returns whether the solution would never be improved.
     pub fn is_terminated(&self) -> bool {
         self.is_optimal || self.is_infeasible || self.time_out
@@ -33,7 +66,7 @@ impl<T: variable_type::Numeric, I> Solution<T, I> {
 }
 
 /// Trait representing an anytime search algorithm.
-pub trait Search<T: variable_type::Numeric> {
+pub trait Search<T: Numeric> {
     /// Searches for the best solution.
     ///
     /// # Errors

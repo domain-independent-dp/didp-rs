@@ -1,1 +1,3 @@
 solver: forward_recursion
+config:
+  time_limit: 1800

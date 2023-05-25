@@ -1,4 +1,4 @@
 solver: dual_bound_weighted_astar
 config:
-    weight: 1.1
-    time_limit: 1800
+  weight: 1.1
+  time_limit: 1800

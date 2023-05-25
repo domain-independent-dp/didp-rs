@@ -21,7 +21,6 @@ pub fn load_grounded_conditions_from_yaml(
     parameters: &FxHashMap<String, Element>,
 ) -> Result<Vec<GroundedCondition>, Box<dyn Error>> {
     lazy_static! {
-        static ref CONDITION_KEY: Yaml = Yaml::from_str("condition");
         static ref FORALL_KEY: Yaml = Yaml::from_str("forall");
     }
     match value {
@@ -36,7 +35,7 @@ pub fn load_grounded_conditions_from_yaml(
         }
         Yaml::Hash(map) => {
             let condition = util::get_string_by_key(map, "condition")?;
-            match map.get(&Yaml::from_str("forall")) {
+            match map.get(&FORALL_KEY) {
                 Some(forall) => {
                     let (
                         parameters_array,

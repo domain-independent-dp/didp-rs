@@ -18,11 +18,12 @@ where
     let map = match config {
         yaml_rust::Yaml::Hash(map) => map,
         yaml_rust::Yaml::Null => {
-            return Ok(Box::new(ForwardRecursion::new(
-                Rc::new(model),
-                Parameters::default(),
-                Some(1000000),
-            )))
+            return Ok(Box::new(ForwardRecursion::new(Rc::new(model), {
+                Parameters {
+                    initial_registry_capacity: Some(1000000),
+                    ..Default::default()
+                }
+            })))
         }
         _ => {
             return Err(util::YamlContentErr::new(format!(
@@ -33,21 +34,5 @@ where
         }
     };
     let parameters = solver_parameters::parse_from_map(map)?;
-    let initial_registry_capacity =
-        match map.get(&yaml_rust::Yaml::from_str("initial_registry_capacity")) {
-            Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
-            None => Some(1000000),
-            value => {
-                return Err(util::YamlContentErr::new(format!(
-                    "expected Integer for `initial_registry_capacity`, but found `{:?}`",
-                    value
-                ))
-                .into())
-            }
-        };
-    Ok(Box::new(ForwardRecursion::new(
-        Rc::new(model),
-        parameters,
-        initial_registry_capacity,
-    )))
+    Ok(Box::new(ForwardRecursion::new(Rc::new(model), parameters)))
 }

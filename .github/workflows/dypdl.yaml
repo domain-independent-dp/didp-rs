@@ -7,12 +7,14 @@ on:
       - "!**.md"
     branches:
       - main
+      - develop
   pull_request:
     paths:
       - "dypdl/**"
       - "!**.md"
     branches:
       - main
+      - develop
 
 defaults:
   run:

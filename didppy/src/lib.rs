@@ -62,7 +62,7 @@ fn didppy(_: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<heuristic_search_solver::DbdfsPy>()?;
     m.add_class::<heuristic_search_solver::ForwardRecursionPy>()?;
     m.add_class::<heuristic_search_solver::BreadthFirstSearchPy>()?;
-    m.add_class::<heuristic_search_solver::DijkstraPy>()?;
     m.add_class::<heuristic_search_solver::WeightedAstarPy>()?;
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

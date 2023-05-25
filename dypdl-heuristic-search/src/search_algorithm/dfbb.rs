@@ -1,23 +1,25 @@
-use super::data_structure::state_registry::{StateInRegistry, StateInformation, StateRegistry};
-use super::data_structure::{
-    exceed_bound, SearchNode, SuccessorGenerator, TransitionChainInterface,
-};
-use super::search::{Search, Solution};
-use super::util;
-use dypdl::variable_type;
+use super::data_structure::{exceed_bound, BfsNode, StateRegistry, SuccessorGenerator};
+use super::rollout::get_solution_cost_and_suffix;
+use super::search::{Parameters, Search, SearchInput, Solution};
+use super::util::{self, print_dual_bound, update_solution};
+use dypdl::{variable_type, Transition, TransitionInterface};
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
 
-/// Depth-First Branch-and-Bound (DFBB).
+/// Depth-First Branch-and-Bound which expands child nodes in the best-first order (DFBBBFS).
 ///
 /// This solver uses forward search based on the shortest path problem.
 /// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
 /// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
 ///
-/// It uses `h_evaluator` and `f_evaluator` for pruning.
-/// If `h_evaluator` returns `None`, the state is pruned.
-/// If `f_pruning` and `f_evaluator` returns a value that exceeds the primal bound, the state is pruned.
+/// It expands nodes in the depth-first order, but successor nodes are ordered by the best-first order.
+///
+/// Type parameter `N` is a node type that implements `BfsNode`.
+/// Type parameter `E` is a type of a function that evaluates a transition and insert a successor node into a state registry.
+/// The last argument of the function is the primal bound of the solution cost.
+/// Type parameter `B` is a type of a function that combines the g-value (the cost to a state) and the base cost.
+/// It should be the same function as the cost expression, e.g., `cost + base_cost` for `cost + w`.
 ///
 /// # References
 ///
@@ -28,12 +30,9 @@ use std::rc::Rc;
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::search_algorithm::{Dfbb, Search};
-/// use dypdl_heuristic_search::search_algorithm::data_structure::successor_generator::{
-///     SuccessorGenerator
-/// };
-/// use dypdl_heuristic_search::search_algorithm::util::{
-///     ForwardSearchParameters, Parameters,
+/// use dypdl_heuristic_search::{Parameters, Search};
+/// use dypdl_heuristic_search::search_algorithm::{
+///     Dfbb, FNode, SearchInput, SuccessorGenerator,
 /// };
 /// use std::rc::Rc;
 ///
@@ -46,82 +45,123 @@ use std::rc::Rc;
 /// increment.set_cost(IntegerExpression::Cost + 1);
 /// increment.add_effect(variable, variable + 1).unwrap();
 /// model.add_forward_transition(increment.clone()).unwrap();
-///
-/// let h_evaluator = |_: &_, _: &_| Some(0);
-/// let f_evaluator = |g, h, _: &_, _: &_| g + h;
-///
 /// let model = Rc::new(model);
-/// let generator = SuccessorGenerator::from_model(model.clone(), false);
-/// let parameters = ForwardSearchParameters {
-///     generator,
-///     parameters: Parameters::default(),
-///     initial_registry_capacity: None
-/// };
 ///
-/// let mut solver = Dfbb::new(model, h_evaluator, f_evaluator, true, parameters);
+/// let state = model.target.clone();
+/// let cost = 0;
+/// let h_evaluator = |_: &_| Some(0);
+/// let f_evaluator = |g, h, _: &_| g + h;
+/// let primal_bound = None;
+/// let node = FNode::generate_root_node(
+///     state,
+///     cost,
+///     &model,
+///     &h_evaluator,
+///     &f_evaluator,
+///     primal_bound,
+/// );
+/// let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+/// let input = SearchInput {
+///     node,
+///     generator,
+///     solution_suffix: &[],
+/// };
+/// let transition_evaluator =
+///     move |node: &FNode<_>, transition, registry: &mut _, primal_bound| {
+///         node.insert_successor_node(
+///             transition,
+///             registry,
+///             &h_evaluator,
+///             &f_evaluator,
+///             primal_bound,
+///         )
+///     };
+/// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
+/// let parameters = Parameters::default();
+///
+/// let mut solver = Dfbb::<_, FNode<_>, _, _>::new(
+///     input, transition_evaluator, base_cost_evaluator, parameters,
+/// );
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub struct Dfbb<T, H, F>
+pub struct Dfbb<'a, T, N, E, B, V = Transition>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    N: BfsNode<T, V>,
+    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: Fn(T, T) -> T,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
-    generator: SuccessorGenerator,
-    h_evaluator: H,
-    f_evaluator: F,
-    f_pruning: bool,
+    generator: SuccessorGenerator<V>,
+    suffix: &'a [V],
+    transition_evaluator: E,
+    base_cost_evaluator: B,
     primal_bound: Option<T>,
     get_all_solutions: bool,
     quiet: bool,
-    open: Vec<Rc<SearchNode<T>>>,
-    registry: StateRegistry<T, SearchNode<T>>,
+    open: Vec<Rc<N>>,
+    registry: StateRegistry<T, N>,
     time_keeper: util::TimeKeeper,
     solution: Solution<T>,
 }
 
-impl<T, H, F> Dfbb<T, H, F>
+impl<'a, T, N, E, B, V> Dfbb<'a, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    N: BfsNode<T, V>,
+    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: Fn(T, T) -> T,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
     /// Create a new DFBB solver.
     pub fn new(
-        model: Rc<dypdl::Model>,
-        h_evaluator: H,
-        f_evaluator: F,
-        f_pruning: bool,
-        parameters: util::ForwardSearchParameters<T>,
-    ) -> Dfbb<T, H, F> {
-        let time_keeper = parameters
-            .parameters
+        input: SearchInput<'a, N, V>,
+        transition_evaluator: E,
+        base_cost_evaluator: B,
+        parameters: Parameters<T>,
+    ) -> Dfbb<'a, T, N, E, B, V> {
+        let mut time_keeper = parameters
             .time_limit
             .map_or_else(util::TimeKeeper::default, util::TimeKeeper::with_time_limit);
-        let primal_bound = parameters.parameters.primal_bound;
-        let get_all_solutions = parameters.parameters.get_all_solutions;
-        let quiet = parameters.parameters.quiet;
+        let primal_bound = parameters.primal_bound;
+        let get_all_solutions = parameters.get_all_solutions;
+        let quiet = parameters.quiet;
 
         let mut open = Vec::new();
-        let mut registry = StateRegistry::new(model);
+        let mut registry = StateRegistry::<_, _>::new(input.generator.model.clone());
 
         if let Some(capacity) = parameters.initial_registry_capacity {
             registry.reserve(capacity);
         }
 
         let mut solution = Solution::default();
-        let node = SearchNode::generate_initial_node(&mut registry).unwrap();
-        open.push(node);
-        solution.generated += 1;
+
+        if let Some(node) = input.node {
+            let (node, _) = registry.insert(node).unwrap();
+            solution.best_bound = node.bound(&input.generator.model);
+            open.push(node);
+            solution.generated += 1;
+
+            if !quiet {
+                solution.time = time_keeper.elapsed_time();
+                print_dual_bound(&solution);
+            }
+        } else {
+            solution.is_infeasible = true;
+        }
+
+        time_keeper.stop();
 
         Dfbb {
-            generator: parameters.generator,
-            h_evaluator,
-            f_evaluator,
-            f_pruning,
+            generator: input.generator,
+            suffix: input.solution_suffix,
+            transition_evaluator,
+            base_cost_evaluator,
             primal_bound,
             get_all_solutions,
             quiet,
@@ -133,74 +173,53 @@ where
     }
 }
 
-impl<T, H, F> Search<T> for Dfbb<T, H, F>
+impl<'a, T, N, E, B, V> Search<T> for Dfbb<'a, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    H: Fn(&StateInRegistry, &dypdl::Model) -> Option<T>,
-    F: Fn(T, T, &StateInRegistry, &dypdl::Model) -> T,
+    N: BfsNode<T, V>,
+    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: Fn(T, T) -> T,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
+        self.time_keeper.start();
+        let model = &self.generator.model;
+
         while let Some(node) = self.open.pop() {
-            if *node.closed.borrow() {
+            if node.is_closed() {
+                continue;
+            }
+            node.close();
+
+            if let Some(dual_bound) = node.bound(model) {
+                if exceed_bound(model, dual_bound, self.primal_bound) {
+                    continue;
+                }
+            }
+
+            if let Some((cost, suffix)) =
+                get_solution_cost_and_suffix(model, &*node, self.suffix, &self.base_cost_evaluator)
+            {
+                if !exceed_bound(model, cost, self.primal_bound) {
+                    self.primal_bound = Some(cost);
+                    let time = self.time_keeper.elapsed_time();
+                    update_solution(&mut self.solution, &*node, cost, suffix, time, self.quiet);
+                    self.time_keeper.stop();
+
+                    return Ok((self.solution.clone(), self.solution.is_optimal));
+                } else if self.get_all_solutions {
+                    let mut solution = self.solution.clone();
+                    let time = self.time_keeper.elapsed_time();
+                    update_solution(&mut solution, &*node, cost, suffix, time, true);
+                    self.time_keeper.stop();
+
+                    return Ok((solution, false));
+                }
                 continue;
             }
 
-            *node.closed.borrow_mut() = true;
-
-            if self.registry.model().is_base(node.state()) {
-                if exceed_bound(self.registry.model(), node.cost(), self.primal_bound) {
-                    if self.get_all_solutions {
-                        let mut solution = self.solution.clone();
-                        solution.cost = Some(node.cost());
-                        solution.transitions = node
-                            .transitions
-                            .as_ref()
-                            .map_or_else(Vec::new, |transitions| transitions.transitions());
-                        solution.time = self.time_keeper.elapsed_time();
-
-                        return Ok((solution, false));
-                    }
-
-                    continue;
-                } else {
-                    if !self.quiet {
-                        println!(
-                            "New primal bound: {}, expanded: {}",
-                            node.cost(),
-                            self.solution.expanded
-                        );
-                    }
-
-                    let cost = node.cost();
-                    self.solution.cost = Some(cost);
-                    self.solution.time = self.time_keeper.elapsed_time();
-                    self.solution.transitions = node
-                        .transitions
-                        .as_ref()
-                        .map_or_else(Vec::new, |transition| transition.transitions());
-                    self.primal_bound = Some(cost);
-
-                    return Ok((self.solution.clone(), false));
-                }
-            }
-
-            if let (true, Some(bound)) = (self.f_pruning, self.primal_bound) {
-                if let Some(h) = (self.h_evaluator)(node.state(), self.registry.model()) {
-                    let f = (self.f_evaluator)(node.cost(), h, node.state(), self.registry.model());
-
-                    if self.f_pruning && exceed_bound(self.registry.model(), f, Some(bound)) {
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
-            }
-
-            if self.time_keeper.check_time_limit() {
-                if !self.quiet {
-                    println!("Expanded: {}", self.solution.expanded);
-                }
-
+            if self.time_keeper.check_time_limit(self.quiet) {
                 self.solution.time_out = true;
                 self.solution.time = self.time_keeper.elapsed_time();
 
@@ -209,22 +228,32 @@ where
 
             self.solution.expanded += 1;
 
+            let mut successors = vec![];
+
             for transition in self.generator.applicable_transitions(node.state()) {
-                if let Some((successor, new_generated)) =
-                    node.generate_successor(transition, &mut self.registry, None)
-                {
-                    self.open.push(successor);
+                if let Some((successor, new_generated)) = (self.transition_evaluator)(
+                    &node,
+                    transition,
+                    &mut self.registry,
+                    self.primal_bound,
+                ) {
+                    successors.push(successor);
 
                     if new_generated {
                         self.solution.generated += 1;
                     }
                 }
             }
+
+            successors.sort();
+            self.open.append(&mut successors);
         }
 
         self.solution.is_infeasible = self.solution.cost.is_none();
         self.solution.is_optimal = self.solution.cost.is_some();
+        self.solution.best_bound = self.solution.cost;
         self.solution.time = self.time_keeper.elapsed_time();
+        self.time_keeper.stop();
         Ok((self.solution.clone(), true))
     }
 }

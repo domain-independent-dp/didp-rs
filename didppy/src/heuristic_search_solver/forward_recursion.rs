@@ -2,7 +2,7 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{ForwardRecursion, Search};
+use dypdl_heuristic_search::{ForwardRecursion, Parameters, Search};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -49,30 +49,37 @@ impl ForwardRecursionPy {
         quiet: bool,
         initial_registry_capacity: usize,
     ) -> ForwardRecursionPy {
+        if !quiet {
+            println!(
+                "Solver: ForwardRecursion from DIDPPy v{}",
+                env!("CARGO_PKG_VERSION")
+            );
+        }
+
         if model.float_cost() {
-            let parameters = dypdl_heuristic_search::Parameters::<OrderedContinuous> {
+            let parameters = Parameters::<OrderedContinuous> {
                 primal_bound: None,
                 time_limit,
                 get_all_solutions: false,
+                initial_registry_capacity: Some(initial_registry_capacity),
                 quiet,
             };
             let solver = Box::new(ForwardRecursion::<OrderedContinuous>::new(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                Some(initial_registry_capacity),
             ));
             ForwardRecursionPy(WrappedSolver::Float(solver))
         } else {
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
+            let parameters = Parameters::<Integer> {
                 primal_bound: None,
                 time_limit,
                 get_all_solutions: false,
+                initial_registry_capacity: Some(initial_registry_capacity),
                 quiet,
             };
             let solver = Box::new(ForwardRecursion::<Integer>::new(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
-                Some(initial_registry_capacity),
             ));
             ForwardRecursionPy(WrappedSolver::Int(solver))
         }

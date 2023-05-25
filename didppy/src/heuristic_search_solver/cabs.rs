@@ -3,7 +3,10 @@ use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_cabs, FEvaluatorType, Search};
+use dypdl_heuristic_search::{
+    create_dual_bound_cabs, BeamSearchParameters, CabsParameters, FEvaluatorType, Parameters,
+    Search,
+};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
@@ -34,11 +37,12 @@ use std::rc::Rc;
 ///     Initial beam size.
 /// keep_all_layers: bool, default: False
 ///     Keep all layers of the search graph for duplicate detection in memory.
+/// max_beam_size: int or None, default: None
+///     Maximum beam size.
 /// primal_bound: int, float, or None, default: None
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
-///     The count starts when a solver is created.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
 ///
@@ -98,7 +102,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "CABS")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, keep_all_layers=False, primal_bound=None, time_limit=None, quiet=False)"
+    text_signature = "(model, f_operator=0, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, primal_bound=None, time_limit=None, quiet=False)"
 )]
 pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
@@ -110,6 +114,7 @@ impl CabsPy {
         f_operator = FOperator::Plus,
         initial_beam_size = 1,
         keep_all_layers = false,
+        max_beam_size = None,
         primal_bound = None,
         time_limit = None,
         quiet = false
@@ -120,10 +125,15 @@ impl CabsPy {
         f_operator: FOperator,
         initial_beam_size: usize,
         keep_all_layers: bool,
+        max_beam_size: Option<usize>,
         primal_bound: Option<&PyAny>,
         time_limit: Option<f64>,
         quiet: bool,
     ) -> PyResult<CabsPy> {
+        if !quiet {
+            println!("Solver: CABS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+        }
+
         let f_evaluator_type = FEvaluatorType::from(f_operator);
 
         if model.float_cost() {
@@ -134,18 +144,24 @@ impl CabsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<OrderedContinuous> {
-                primal_bound,
-                time_limit,
-                get_all_solutions: false,
-                quiet,
+            let parameters = CabsParameters {
+                max_beam_size,
+                beam_search_parameters: BeamSearchParameters {
+                    beam_size: initial_beam_size,
+                    keep_all_layers,
+                    parameters: Parameters::<OrderedContinuous> {
+                        primal_bound,
+                        time_limit,
+                        get_all_solutions: false,
+                        quiet,
+                        initial_registry_capacity: None,
+                    },
+                },
             };
             let solver = create_dual_bound_cabs::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
                 f_evaluator_type,
-                initial_beam_size,
-                keep_all_layers,
             );
             Ok(CabsPy(WrappedSolver::Float(solver)))
         } else {
@@ -154,18 +170,24 @@ impl CabsPy {
             } else {
                 None
             };
-            let parameters = dypdl_heuristic_search::Parameters::<Integer> {
-                primal_bound,
-                time_limit,
-                get_all_solutions: false,
-                quiet,
+            let parameters = CabsParameters {
+                max_beam_size,
+                beam_search_parameters: BeamSearchParameters {
+                    beam_size: initial_beam_size,
+                    keep_all_layers,
+                    parameters: Parameters::<Integer> {
+                        primal_bound,
+                        time_limit,
+                        get_all_solutions: false,
+                        quiet,
+                        initial_registry_capacity: None,
+                    },
+                },
             };
             let solver = create_dual_bound_cabs::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
                 parameters,
                 f_evaluator_type,
-                initial_beam_size,
-                keep_all_layers,
             );
             Ok(CabsPy(WrappedSolver::Int(solver)))
         }

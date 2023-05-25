@@ -1,5 +1,6 @@
-import didppy as dp
 import pytest
+
+import didppy as dp
 
 
 def test_default():
@@ -130,7 +131,7 @@ def test_add_element_var_with_name():
     assert model.get_target(var) == 1
 
 
-element_var_error_cases = [(-1, OverflowError), (4, RuntimeError), (1.5, TypeError)]
+element_var_error_cases = [(-1, OverflowError), (1.5, TypeError)]
 
 
 @pytest.mark.parametrize("value, error", element_var_error_cases)
@@ -538,10 +539,8 @@ class TestSetTarget:
     error_cases = [
         (element_var, -1, OverflowError),
         (element_var, 1.5, TypeError),
-        (element_var, 4, RuntimeError),
         (element_resource_var, -1, OverflowError),
         (element_resource_var, 1.5, TypeError),
-        (element_resource_var, 4, RuntimeError),
         (set_var, {}, TypeError),
         (set_var, {-1}, TypeError),
         (set_var, {1.5}, TypeError),
@@ -712,15 +711,43 @@ def test_add_base_case():
 
     assert len(model.base_cases) == 1
     assert len(model.base_cases[0]) == 2
-    assert model.base_cases[0][1].eval(state, model)
-    assert model.base_cases[0][1].eval(state, model)
+    assert model.base_cases[0][0][0].eval(state, model)
+    assert model.base_cases[0][0][1].eval(state, model)
+    assert model.base_cases[0][1].eval(state, model) == 0
 
     model.add_base_case([(int_var < 3) | ~set_var.contains(1)])
 
     assert len(model.base_cases) == 2
-    assert model.base_cases[0][1].eval(state, model)
-    assert model.base_cases[0][1].eval(state, model)
-    assert not model.base_cases[1][0].eval(state, model)
+    assert model.base_cases[0][0][0].eval(state, model)
+    assert model.base_cases[0][0][1].eval(state, model)
+    assert model.base_cases[0][1].eval(state, model) == 0
+    assert not model.base_cases[1][0][0].eval(state, model)
+    assert model.base_cases[1][1].eval(state, model) == 0
+
+
+def test_add_base_case_with_cost():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    set_var = model.add_set_var(object_type=obj, target=[0, 1])
+    int_var = model.add_int_var(target=3)
+    state = model.target_state
+
+    model.add_base_case([set_var.contains(0), set_var.contains(1)], cost=int_var + 1)
+
+    assert len(model.base_cases) == 1
+    assert len(model.base_cases[0]) == 2
+    assert model.base_cases[0][0][0].eval(state, model)
+    assert model.base_cases[0][0][1].eval(state, model)
+    assert model.base_cases[0][1].eval(state, model) == 4
+
+    model.add_base_case([(int_var < 3) | ~set_var.contains(1)], cost=2)
+
+    assert len(model.base_cases) == 2
+    assert model.base_cases[0][0][0].eval(state, model)
+    assert model.base_cases[0][0][1].eval(state, model)
+    assert model.base_cases[0][1].eval(state, model) == 4
+    assert not model.base_cases[1][0][0].eval(state, model)
+    assert model.base_cases[1][1].eval(state, model) == 2
 
 
 def test_add_base_case_error():
@@ -731,6 +758,14 @@ def test_add_base_case_error():
 
 
 def test_add_base_case_panic():
+    model = dp.Model()
+    int_var = model.add_int_var(target=3)
+
+    with pytest.raises(BaseException):
+        model.add_base_case([int_var > 0], cost=dp.IntExpr.state_cost())
+
+
+def test_add_base_case_panic_cost():
     model = dp.Model()
     table = model.add_int_table([1, 2, 3])
 
@@ -795,6 +830,51 @@ def test_check_base_case_error():
 
     with pytest.raises(BaseException):
         model.is_base(model.target_state)
+
+
+def test_eval_base_cost_zero():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    set_var = model.add_set_var(object_type=obj, target=[0, 1])
+    int_var = model.add_int_var(target=3)
+    model.add_base_case([set_var.contains(0), set_var.contains(1)])
+    model.add_base_case([int_var < 2, int_var > 0])
+    state = model.target_state
+
+    assert model.eval_base_cost(state) == 0
+
+
+def test_eval_base_cost_some():
+    model = dp.Model()
+    model.maximize = False
+    obj = model.add_object_type(number=4)
+    set_var = model.add_set_var(object_type=obj, target=[0, 1])
+    int_var = model.add_int_var(target=3)
+    model.add_base_case([set_var.contains(0), set_var.contains(1)], cost=int_var)
+    model.add_base_case([int_var <= 3, int_var >= 2], cost=4)
+    model.add_base_case([int_var < 2, int_var > 0], cost=2)
+    state = model.target_state
+
+    assert model.eval_base_cost(state) == 3
+
+
+def test_eval_base_case_none():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    set_var = model.add_set_var(object_type=obj, target=[0, 1])
+    int_var = model.add_int_var(target=3)
+    model.add_base_case(
+        [
+            set_var.contains(0),
+            set_var.contains(1),
+            set_var.contains(2),
+        ],
+        cost=2,
+    )
+    model.add_base_case([int_var < 2, int_var > 0])
+    state = model.target_state
+
+    assert model.eval_base_cost(state) is None
 
 
 def test_add_transition():

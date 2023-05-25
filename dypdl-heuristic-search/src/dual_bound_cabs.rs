@@ -1,13 +1,8 @@
 use super::f_evaluator_type::FEvaluatorType;
-use super::search_algorithm::data_structure::beam::Beam;
-use super::search_algorithm::data_structure::state_registry::StateInRegistry;
-use super::search_algorithm::data_structure::SuccessorGenerator;
-use super::search_algorithm::util::Parameters;
-use super::search_algorithm::Cabs;
-use super::search_algorithm::Search;
-use crate::search_algorithm::data_structure::BeamSearchNode;
-use crate::search_algorithm::BeamSearchParameters;
-use dypdl::{variable_type, ReduceFunction};
+use super::search_algorithm::{
+    beam_search, Cabs, CabsParameters, CostNode, FNode, Search, SearchInput, SuccessorGenerator,
+};
+use dypdl::{variable_type, Transition};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -22,10 +17,6 @@ use std::str;
 /// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
 /// `f_evaluator_type` must be specified appropriately according to the cost expressions.
 ///
-/// Beam search searches layer by layer, where the i th layer contains states that can be reached with i transitions.
-/// By default, this solver only keeps states in the current layer to check for duplicates.
-/// If `keep_all_layers` is `true`, this solver keeps states in all layers to check for duplicates.
-///
 /// # References
 ///
 /// Ryo Kuroiwa and J. Christopher Beck. "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
@@ -38,8 +29,7 @@ use std::str;
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::{FEvaluatorType, create_dual_bound_cabs};
-/// use dypdl_heuristic_search::search_algorithm::util::Parameters;
+/// use dypdl_heuristic_search::{CabsParameters, create_dual_bound_cabs, FEvaluatorType};
 /// use std::rc::Rc;
 ///
 /// let mut model = Model::default();
@@ -54,10 +44,10 @@ use std::str;
 /// model.add_dual_bound(IntegerExpression::from(0)).unwrap();
 ///
 /// let model = Rc::new(model);
-/// let parameters = Parameters::default();
+/// let parameters = CabsParameters::default();
 /// let f_evaluator_type = FEvaluatorType::Plus;
 ///
-/// let mut solver = create_dual_bound_cabs(model, parameters, f_evaluator_type, 1, false);
+/// let mut solver = create_dual_bound_cabs(model, parameters, f_evaluator_type);
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
@@ -65,40 +55,76 @@ use std::str;
 /// ```
 pub fn create_dual_bound_cabs<T>(
     model: Rc<dypdl::Model>,
-    parameters: Parameters<T>,
+    parameters: CabsParameters<T>,
     f_evaluator_type: FEvaluatorType,
-    beam_size: usize,
-    keep_all_layers: bool,
 ) -> Box<dyn Search<T>>
 where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let beam_constructor = Beam::<T, T, BeamSearchNode<T, T>>::new;
-    let generator = SuccessorGenerator::from_model_without_custom_cost(model.clone(), false);
-    let h_evaluator = |state: &StateInRegistry, model: &dypdl::Model| {
-        Some(model.eval_dual_bound(state).unwrap_or_else(T::zero))
+    let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+    let base_cost_evaluator = move |cost, base_cost| f_evaluator_type.eval(cost, base_cost);
+    let cost = match f_evaluator_type {
+        FEvaluatorType::Plus => T::zero(),
+        FEvaluatorType::Product => T::one(),
+        FEvaluatorType::Max => T::min_value(),
+        FEvaluatorType::Min => T::max_value(),
+        FEvaluatorType::Overwrite => T::zero(),
     };
-    let (f_pruning, f_evaluator_type) = if model.has_dual_bounds() {
-        (true, f_evaluator_type)
+
+    if model.has_dual_bounds() {
+        let h_model = model.clone();
+        let h_evaluator = move |state: &_| h_model.eval_dual_bound(state);
+        let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
+        let node = FNode::generate_root_node(
+            model.target.clone(),
+            cost,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            parameters.beam_search_parameters.parameters.primal_bound,
+        );
+        let input = SearchInput {
+            node,
+            generator,
+            solution_suffix: &[],
+        };
+        let transition_evaluator = move |node: &FNode<_>, transition, primal_bound| {
+            node.generate_successor_node(
+                transition,
+                &model,
+                &h_evaluator,
+                &f_evaluator,
+                primal_bound,
+            )
+        };
+        let beam_search = move |input: &SearchInput<_, _>, parameters| {
+            beam_search(
+                input,
+                &transition_evaluator,
+                base_cost_evaluator,
+                parameters,
+            )
+        };
+        Box::new(Cabs::new(input, beam_search, parameters))
     } else {
-        (false, FEvaluatorType::Plus)
-    };
-    let f_evaluator =
-        move |g, h, _: &StateInRegistry, _: &dypdl::Model| f_evaluator_type.eval(g, h);
-    let parameters = BeamSearchParameters {
-        beam_size,
-        maximize: model.reduce_function == ReduceFunction::Max,
-        f_pruning,
-        f_bound: None,
-        keep_all_layers,
-        parameters,
-    };
-    Box::new(Cabs::new(
-        generator,
-        h_evaluator,
-        f_evaluator,
-        beam_constructor,
-        parameters,
-    ))
+        let node = CostNode::generate_root_node(model.target.clone(), cost, &model);
+        let input = SearchInput {
+            node: Some(node),
+            generator,
+            solution_suffix: &[],
+        };
+        let transition_evaluator = move |node: &CostNode<_>, transition, _| {
+            node.generate_successor_node(transition, &model)
+        };
+        let beam_search = move |input: &SearchInput<_, _>, parameters| {
+            beam_search(
+                input,
+                &transition_evaluator,
+                base_cost_evaluator,
+                parameters,
+            )
+        };
+        Box::new(Cabs::new(input, beam_search, parameters))
+    }
 }

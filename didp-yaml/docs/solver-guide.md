@@ -19,7 +19,6 @@ We recommend using [`dual_bound_cabs`](#dual_bound_cabs) with the default parame
 |[dual_bound_breadth_first_search](#dual_bound_breadth_first_search)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||yes|yes|
 |[forward_recursion](#forward_recursion)|any|`min`, `max`|acyclic state space|yes|no|
 |[dual_bound_weighted_astar](#dual_bound_weighted_astar)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||no|no|
-|[dijkstra](#dijkstra)|`(+ <numeric expression> cost)` or `(max <numeric expression> cost)`|`min`|nonnegative cost increase|no|yes|
 
 ## Common Config
 
@@ -167,7 +166,7 @@ config:
     initial_registry_capacity: <nonnegative integer>
     init: <nonnegative integer>
     step: <nonnegative integer>
-    bound: <nonnegative integer>
+    width_bound: <nonnegative integer>
     reset: <bool>
 ```
 
@@ -179,7 +178,7 @@ config:
   - default: `1`
 - `step`: the amount of the increment of the beam size when reaching the last layer.
   - default: `1`
-- `bound`: the maximum beam size.
+- `width_bound`: the maximum beam size.
   - default: `null`
 - `reset`: if reset the beam size to `init` when a new improving solution is found.
   - default: `false`
@@ -203,7 +202,7 @@ config:
     initial_registry_capacity: <nonnegative integer>
     init: <nonnegative integer>
     step: <nonnegative integer>
-    bound: <nonnegative integer>
+    width_bound: <nonnegative integer>
     reset: <bool>
 ```
 
@@ -215,7 +214,7 @@ config:
   - default: `1`
 - `step`: the amount of the increment of the beam size when reaching the last layer.
   - default: `1`
-- `bound`: the maximum beam size.
+- `width_bound`: the maximum beam size.
   - default: `null`
 - `reset`: if reset the beam size to `init` when a new improving solution is found.
   - default: `false`
@@ -304,21 +303,3 @@ config:
 - `initial_registry_capacity`: the initial capacity of the data structure storing all generated states.
   - default: `1000000`
 - `weight`: the weight of the h-value.
-
-## djikstra
-
-Dijkstra's algorithm.
-
-The cost expressions should be in the form of `(+ <numeric expression> cost)` or `(max <numeric expression> cost)`, and `<numeric expression>` should be nonnegative.
-
-```yaml
-solver: dual_bound_weighted_astar 
-config:
-    f: <+|*|max|min>
-    initial_registry_capacity: <nonnegative integer>
-```
-
-- `f`: either of `+`, `*`, `max`, and `min`. If `+`/`*`/`max`/`min`, `f(s)`, the priority of a state `S` is computed as `h(S) + g(S)`/`h(S) * G(S)`/`max{h(S), g(S)}`/`min{h(S), g(S)}`, where `h(S)` is the h-value of `S` and `g(S)` is the cost to reach `S` from the target state.
-  - default: `+`
-- `initial_registry_capacity`: the initial capacity of the data structure storing all generated states.
-  - default: `1000000`
