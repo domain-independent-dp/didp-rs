@@ -115,6 +115,9 @@ where
     B: Fn(T, T) -> T + Send + Sync,
     V: TransitionInterface + Clone + Default + Send + Sync,
 {
+    let base_beam_size = parameters.beam_size / threads;
+    let modulo = parameters.beam_size % threads;
+
     let (node_txs, node_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| unbounded()).unzip();
     let (layer_txs, layer_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| unbounded()).unzip();
     let (solution_tx, solution_rx) = bounded(1);
@@ -140,11 +143,16 @@ where
                 statistics_tx,
             };
 
-            s.spawn(|| {
+            let mut parameters = parameters;
+            parameters.beam_size = base_beam_size + if id < modulo { 1 } else { 0 };
+            let transition_evaluator = &transition_evaluator;
+            let base_cost_evaluator = &base_cost_evaluator;
+
+            s.spawn(move || {
                 single_beam_search(
                     input,
-                    &transition_evaluator,
-                    &base_cost_evaluator,
+                    transition_evaluator,
+                    base_cost_evaluator,
                     parameters,
                     channels,
                 )
@@ -423,8 +431,9 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
                                 primal_bound = Some(cost);
                                 incumbent = Some((node, cost, suffix));
 
+                                // Optimal solution, ignore remaining open nodes.
                                 if Some(cost) == best_dual_bound {
-                                    break;
+                                    expanded_all = true;
                                 }
                             }
                             continue;

@@ -116,6 +116,9 @@ where
     B: Fn(T, T) -> T + Send + Sync,
     V: TransitionInterface + Clone + Default + Send + Sync,
 {
+    let base_beam_size = parameters.beam_size / threads;
+    let modulo = parameters.beam_size % threads;
+
     let (node_txs, node_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| unbounded()).unzip();
     let (solution_tx, solution_rx) = bounded(1);
     let (optimality_tx, optimality_rx) = bounded(1);
@@ -146,11 +149,16 @@ where
                 statistics_tx,
             };
 
-            s.spawn(|| {
+            let mut parameters = parameters;
+            parameters.beam_size = base_beam_size + if id < modulo { 1 } else { 0 };
+            let transition_evaluator = &transition_evaluator;
+            let base_cost_evaluator = &base_cost_evaluator;
+
+            s.spawn(move || {
                 single_sync_beam_search(
                     input,
-                    &transition_evaluator,
-                    &base_cost_evaluator,
+                    transition_evaluator,
+                    base_cost_evaluator,
                     parameters,
                     channels,
                 )
@@ -313,6 +321,7 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
 
         {
             let mut expanded_all = false;
+            let mut sent_all = false;
             let mut received_all = 0;
             let mut iter = current_beam.drain();
 
@@ -336,8 +345,9 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                                 primal_bound = Some(cost);
                                 incumbent = Some((node, cost, suffix));
 
+                                // Optimal solution, ignore remaining open nodes.
                                 if Some(cost) == best_dual_bound {
-                                    break;
+                                    expanded_all = true;
                                 }
                             }
                             continue;
@@ -383,13 +393,17 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                         }
                     } else {
                         expanded_all = true;
-
-                        channels.node_txs.iter().enumerate().for_each(|(i, tx)| {
-                            if i != id {
-                                tx.send(None).unwrap()
-                            }
-                        });
                     }
+                }
+
+                // Notifies the other threads that the current thread sent all nodes
+                if expanded_all && !sent_all {
+                    sent_all = true;
+                    channels.node_txs.iter().enumerate().for_each(|(i, tx)| {
+                        if i != id {
+                            tx.send(None).unwrap()
+                        }
+                    });
                 }
 
                 if received_all < threads - 1 {
