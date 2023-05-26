@@ -119,14 +119,16 @@ where
     let modulo = parameters.beam_size % threads;
 
     let (node_txs, node_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| unbounded()).unzip();
-    let (layer_txs, layer_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| unbounded()).unzip();
+    let (layer_txs, layer_rxs): (Vec<_>, Vec<_>) =
+        (0..threads).map(|_| bounded(threads - 1)).unzip();
     let (solution_tx, solution_rx) = bounded(1);
     let (optimality_tx, optimality_rx) = bounded(1);
     let (statistics_tx, statistics_rx) = bounded(threads);
 
     thread::scope(|s| {
         for (id, (node_rx, layer_rx)) in node_rxs.into_iter().zip(layer_rxs).enumerate() {
-            let node_tx = NodeSender::with_capacity(node_txs.clone(), parameters.beam_size);
+            let beam_size = base_beam_size + if id < modulo { 1 } else { 0 };
+            let node_tx = NodeSender::with_capacity_and_id(node_txs.clone(), beam_size, id);
             let layer_txs = layer_txs.clone();
 
             let solution_tx = solution_tx.clone();
@@ -144,7 +146,7 @@ where
             };
 
             let mut parameters = parameters;
-            parameters.beam_size = base_beam_size + if id < modulo { 1 } else { 0 };
+            parameters.beam_size = beam_size;
             let transition_evaluator = &transition_evaluator;
             let base_cost_evaluator = &base_cost_evaluator;
 
@@ -204,12 +206,21 @@ struct NodeSender<M> {
 }
 
 impl<M> NodeSender<M> {
-    fn with_capacity(txs: Vec<Sender<M>>, capacity: usize) -> Self {
+    fn with_capacity_and_id(txs: Vec<Sender<M>>, capacity: usize, id: usize) -> Self {
         let threads = txs.len();
+        let capacity = capacity / threads;
 
         NodeSender {
             txs,
-            buffers: (0..threads).map(|_| Vec::with_capacity(capacity)).collect(),
+            buffers: (0..threads)
+                .map(|i| {
+                    if i != id {
+                        Vec::with_capacity(capacity)
+                    } else {
+                        Vec::with_capacity(0)
+                    }
+                })
+                .collect(),
             channel_open: vec![true; threads],
         }
     }
