@@ -288,9 +288,12 @@ where
 
                         pruned = true;
                     }
-                }
 
-                beam.par_extend(non_dominated_successors.par_drain(..).take(beam_size));
+                    beam.par_extend(non_dominated_successors.par_drain(..beam_size));
+                    non_dominated_successors.clear();
+                } else {
+                    beam.par_extend(non_dominated_successors.par_drain(..));
+                }
             })
         }
 
