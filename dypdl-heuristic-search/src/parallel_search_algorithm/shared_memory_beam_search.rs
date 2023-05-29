@@ -276,7 +276,7 @@ where
                         if let (true, Some(value)) = (
                             N::ordered_by_bound(),
                             non_dominated_successors
-                                .last()
+                                .first()
                                 .and_then(|node| node.bound(model)),
                         ) {
                             if best_dual_bound

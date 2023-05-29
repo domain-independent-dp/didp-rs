@@ -13,8 +13,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::thread;
-use std::{iter, mem};
+use std::{cmp, iter, mem, thread};
 
 /// Performs hash distributed beam search with layer synchronization.
 ///
@@ -116,6 +115,7 @@ where
     B: Fn(T, T) -> T + Send + Sync,
     V: TransitionInterface + Clone + Default + Send + Sync,
 {
+    let threads = cmp::min(threads, parameters.beam_size);
     let base_beam_size = parameters.beam_size / threads;
     let modulo = parameters.beam_size % threads;
 
@@ -325,7 +325,7 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
             let mut received_all = 0;
             let mut iter = current_beam.drain();
 
-            while !expanded_all || received_all < threads - 1 {
+            while !sent_all || received_all < threads - 1 {
                 if !expanded_all {
                     // Expands a node.
                     if let Some(node) = iter.next() {

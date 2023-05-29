@@ -10,10 +10,9 @@ use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use dypdl::{variable_type, Model, TransitionInterface};
 use std::error::Error;
 use std::fmt::Display;
-use std::mem;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::thread;
+use std::{cmp, mem, thread};
 
 /// Performs hash distributed beam search.
 ///
@@ -115,6 +114,7 @@ where
     B: Fn(T, T) -> T + Send + Sync,
     V: TransitionInterface + Clone + Default + Send + Sync,
 {
+    let threads = cmp::min(threads, parameters.beam_size);
     let base_beam_size = parameters.beam_size / threads;
     let modulo = parameters.beam_size % threads;
 
