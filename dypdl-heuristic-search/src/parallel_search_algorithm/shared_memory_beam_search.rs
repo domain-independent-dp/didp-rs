@@ -1,4 +1,4 @@
-use super::data_structure::{ConcurrentStateRegistry, SendableSuccessorIterator};
+use super::data_structure::ConcurrentStateRegistry;
 use crate::search_algorithm::data_structure::{exceed_bound, HashableSignatureVariables};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
@@ -157,7 +157,6 @@ where
     let mut successors = Vec::with_capacity(beam_size);
     let mut non_dominated_successors = Vec::with_capacity(beam_size);
     let mut nodes_with_goal_information = Vec::with_capacity(beam_size);
-    let mut nodes_and_transitions = Vec::with_capacity(beam_size);
 
     let mut expanded = 0;
     let mut generated = 1;
@@ -245,25 +244,28 @@ where
             }
 
             thread_pool.install(|| {
-                nodes_and_transitions.par_extend(
+                successors.par_extend(
                     nodes_with_goal_information
-                        .par_drain(..)
+                        .par_iter()
                         .filter_map(|(node, result)| {
                             if result.is_none() {
-                                Some(SendableSuccessorIterator::new(node, generator))
+                                Some(generator.applicable_transitions(node.state()).filter_map(
+                                    |transition| {
+                                        transition_evaluator(
+                                            node,
+                                            transition,
+                                            &registry,
+                                            primal_bound,
+                                        )
+                                    },
+                                ))
                             } else {
                                 None
                             }
                         })
                         .flatten_iter(),
                 );
-
-                successors.par_extend(nodes_and_transitions.par_drain(..).filter_map(
-                    |(node, transition)| {
-                        transition_evaluator(&node, transition, &registry, primal_bound)
-                    },
-                ));
-
+                nodes_with_goal_information.clear();
                 non_dominated_successors
                     .par_extend(successors.par_drain(..).filter(|node| !node.is_closed()));
 

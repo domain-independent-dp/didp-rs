@@ -2,19 +2,22 @@ use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
 use dypdl_heuristic_search::{
-    create_dual_bound_cabs, BeamSearchParameters, CabsParameters, FEvaluatorType, Search,
+    create_dual_bound_cabs, create_dual_bound_hd_cabs, create_dual_bound_hd_sync_cabs,
+    create_dual_bound_shared_memory_cabs, BeamSearchParameters, CabsParameters, FEvaluatorType,
+    Search,
 };
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
 use std::str;
+use std::sync::Arc;
 
 pub fn load_from_yaml<T>(
     model: dypdl::Model,
     config: &yaml_rust::Yaml,
 ) -> Result<Box<dyn Search<T>>, Box<dyn Error>>
 where
-    T: Numeric + Ord + fmt::Display + 'static,
+    T: Numeric + Ord + fmt::Display + Send + Sync + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
     let map = match config {
@@ -100,9 +103,71 @@ where
         max_beam_size,
         beam_search_parameters,
     };
-    Ok(create_dual_bound_cabs(
-        Rc::new(model),
-        parameters,
-        f_evaluator_type,
-    ))
+    let threads = match map.get(&yaml_rust::Yaml::from_str("threads")) {
+        Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
+        Some(value) => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected Integer for `threads`, but found `{:?}`",
+                value
+            ))
+            .into())
+        }
+        None => 1,
+    };
+    let parallel_type = match map.get(&yaml_rust::Yaml::from_str("parallel_type")) {
+        Some(yaml_rust::Yaml::String(value)) => match value.as_str() {
+            "hd" => 0,
+            "hd-sync" => 1,
+            "sm" => 2,
+            _ => {
+                return Err(util::YamlContentErr::new(format!(
+                    "unexpected value for `parallel_type`: `{}`",
+                    value
+                ))
+                .into())
+            }
+        },
+        Some(value) => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected String for `parallel_type`, but found `{:?}`",
+                value
+            ))
+            .into())
+        }
+        None => 1,
+    };
+
+    if threads > 1 {
+        match parallel_type {
+            0 => Ok(create_dual_bound_hd_cabs(
+                Arc::new(model),
+                parameters,
+                f_evaluator_type,
+                threads,
+            )),
+            1 => Ok(create_dual_bound_hd_sync_cabs(
+                Arc::new(model),
+                parameters,
+                f_evaluator_type,
+                threads,
+            )),
+            2 => Ok(create_dual_bound_shared_memory_cabs(
+                Arc::new(model),
+                parameters,
+                f_evaluator_type,
+                threads,
+            )),
+            _ => Err(util::YamlContentErr::new(format!(
+                "unexpected value for `parallel_type`: `{}`",
+                parallel_type
+            ))
+            .into()),
+        }
+    } else {
+        Ok(create_dual_bound_cabs(
+            Rc::new(model),
+            parameters,
+            f_evaluator_type,
+        ))
+    }
 }
