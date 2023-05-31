@@ -165,6 +165,39 @@ where
         None
     }
 
+    /// Checks if the state is dominated by existing states.
+    pub fn contains_state(
+        &self,
+        state: &StateInRegistry<Arc<HashableSignatureVariables>>,
+        cost: T,
+    ) -> bool {
+        if let Some(v) = self.registry.get(&state.signature_variables) {
+            for other in v.value() {
+                let result = self.model.state_metadata.dominance(state, other.state());
+                match result {
+                    Some(Ordering::Equal) | Some(Ordering::Less)
+                        if (self.model.reduce_function == ReduceFunction::Max
+                            && cost <= other.cost(&self.model))
+                            || (self.model.reduce_function == ReduceFunction::Min
+                                && cost >= other.cost(&self.model)) =>
+                    {
+                        return true
+                    }
+                    _ => {}
+                }
+            }
+        }
+        false
+    }
+
+    /// Checks if the information is dominated by existing states.
+    #[inline]
+    pub fn contains(&self, information: &I) -> bool {
+        let state = information.state();
+        let cost = information.cost(&self.model);
+        self.contains_state(state, cost)
+    }
+
     /// Inserts a state and its information in the registry if it is not dominated by existing states
     /// given the state, its cost, and a constructor for the information.
     ///
@@ -184,6 +217,11 @@ where
     where
         F: FnOnce(StateInRegistry<Arc<HashableSignatureVariables>>, T, Option<&I>) -> Option<I>,
     {
+        // Checks if the information is dominated using only a read lock.
+        if self.contains_state(&state, cost) {
+            return None;
+        }
+
         let entry = self.registry.entry(state.signature_variables.clone());
         match entry {
             dashmap::mapref::entry::Entry::Occupied(entry) => {
@@ -248,6 +286,11 @@ where
     ///
     /// If the given state is not dominated, returns a pointer to the information and the information of a dominated state if it exists.
     pub fn insert(&self, mut information: I) -> Option<(Arc<I>, Option<Arc<I>>)> {
+        // Checks if the information is dominated using only a read lock.
+        if self.contains(&information) {
+            return None;
+        }
+
         let entry = self
             .registry
             .entry(information.state().signature_variables.clone());
@@ -417,6 +460,7 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
+        assert!(!registry.contains(&information));
         let information = registry.insert(information);
         assert!(information.is_some());
         let (information, dominated) = information.unwrap();
@@ -435,12 +479,14 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
+        assert!(!registry.contains(&information));
         let information = registry.insert(information);
         assert!(information.is_some());
         let (information, dominated) = information.unwrap();
         assert_eq!(dominated, None);
         assert_eq!(information.state, state);
         assert_eq!(information.value.get(), None);
+        assert!(registry.contains(&information));
         assert_eq!(registry.get(&state, 1), Some(information));
 
         let state = StateInRegistry {
@@ -453,12 +499,14 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
+        assert!(!registry.contains(&information));
         let information = registry.insert(information);
         assert!(information.is_some());
         let (information, dominated) = information.unwrap();
         assert_eq!(dominated, None);
         assert_eq!(information.state, state);
         assert_eq!(information.value.get(), None);
+        assert!(registry.contains(&information));
         assert_eq!(registry.get(&state, 1), Some(information));
 
         let state = StateInRegistry {
@@ -471,12 +519,14 @@ mod tests {
             cost: 0,
             value: Cell::new(None),
         };
-        let information = registry.insert(information);
-        assert!(information.is_some());
-        let (information, dominated) = information.unwrap();
+        assert!(!registry.contains(&information));
+        let result = registry.insert(information);
+        assert!(result.is_some());
+        let (information, dominated) = result.unwrap();
         assert_eq!(dominated, None);
         assert_eq!(information.state, state);
         assert_eq!(information.value.get(), None);
+        assert!(registry.contains(&information));
         assert_eq!(registry.get(&state, 0), Some(information));
     }
 
@@ -511,9 +561,11 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
-        let information = registry.insert(information);
-        assert!(information.is_none());
+        assert!(registry.contains(&information));
+        let result = registry.insert(information.clone());
+        assert!(result.is_none());
         assert_eq!(registry.get(&state, 1), Some(previous.clone()));
+        assert!(registry.contains(&information));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -525,9 +577,11 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
-        let information = registry.insert(information);
-        assert!(information.is_none());
+        assert!(registry.contains(&information));
+        let result = registry.insert(information.clone());
+        assert!(result.is_none());
         assert_eq!(registry.get(&state, 1), Some(previous.clone()));
+        assert!(registry.contains(&information));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -539,9 +593,11 @@ mod tests {
             cost: 2,
             value: Cell::new(None),
         };
-        let information = registry.insert(information);
-        assert!(information.is_none());
+        assert!(registry.contains(&information));
+        let result = registry.insert(information.clone());
+        assert!(result.is_none());
         assert_eq!(registry.get(&state, 2), Some(previous));
+        assert!(registry.contains(&information));
     }
 
     #[test]
@@ -559,7 +615,8 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
-        let information1 = registry.insert(information);
+        assert!(!registry.contains(&information));
+        let information1 = registry.insert(information.clone());
         assert!(information1.is_some());
         let (information1, dominated) = information1.unwrap();
         assert_eq!(information1.state, state);
@@ -569,6 +626,7 @@ mod tests {
             registry.get(&information1.state, 1),
             Some(information1.clone())
         );
+        assert!(registry.contains(&information));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -580,7 +638,8 @@ mod tests {
             cost: 0,
             value: Cell::new(None),
         };
-        let information2 = registry.insert(information);
+        assert!(!registry.contains(&information));
+        let information2 = registry.insert(information.clone());
         assert!(information2.is_some());
         let (information2, dominated) = information2.unwrap();
         assert_eq!(
@@ -601,6 +660,7 @@ mod tests {
             registry.get(&information2.state, 0),
             Some(information2.clone())
         );
+        assert!(registry.contains(&information));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -612,7 +672,8 @@ mod tests {
             cost: 0,
             value: Cell::new(None),
         };
-        let information3 = registry.insert(information);
+        assert!(!registry.contains(&information));
+        let information3 = registry.insert(information.clone());
         assert!(information3.is_some());
         let (information3, dominated) = information3.unwrap();
         assert_eq!(
@@ -634,6 +695,7 @@ mod tests {
             Some(information3.clone())
         );
         assert_eq!(registry.get(&information3.state, 0), Some(information3));
+        assert!(registry.contains(&information));
     }
 
     #[test]
@@ -670,6 +732,7 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(registry.get(&state, 1), None);
+        assert!(!registry.contains_state(&state, 1));
         let information = registry.insert_with(state, 1, constructor);
         assert!(information.is_some());
         let (information, dominated) = information.unwrap();
@@ -681,12 +744,14 @@ mod tests {
         assert_eq!(information.state, state);
         assert_eq!(information.value.get(), None);
         assert_eq!(registry.get(&state, 1), Some(information));
+        assert!(registry.contains_state(&state, 1));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![3, 1, 3]),
         };
         assert_eq!(registry.get(&state, 1), None);
+        assert!(!registry.contains_state(&state, 1));
         let information = registry.insert_with(state, 1, constructor);
         assert!(information.is_some());
         let (information, dominated) = information.unwrap();
@@ -698,12 +763,14 @@ mod tests {
         assert_eq!(information.state, state);
         assert_eq!(information.value.get(), None);
         assert_eq!(registry.get(&state, 1), Some(information));
+        assert!(registry.contains_state(&state, 1));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![0, 1, 3]),
         };
         assert_eq!(registry.get(&state, 0), None);
+        assert!(!registry.contains_state(&state, 0));
         let information = registry.insert_with(state, 0, constructor);
         assert!(information.is_some());
         let (information, dominated) = information.unwrap();
@@ -715,6 +782,7 @@ mod tests {
         assert_eq!(information.state, state);
         assert_eq!(information.value.get(), None);
         assert_eq!(registry.get(&state, 0), Some(information));
+        assert!(registry.contains_state(&state, 0));
     }
 
     #[test]
@@ -750,6 +818,7 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(registry.get(&state, 1), Some(previous.clone()));
+        assert!(registry.contains_state(&state, 1));
         let information = registry.insert_with(state, 1, constructor);
         assert!(information.is_none());
         let state = StateInRegistry {
@@ -757,12 +826,14 @@ mod tests {
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
         };
         assert_eq!(registry.get(&state, 1), Some(previous.clone()));
+        assert!(registry.contains_state(&state, 1));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
         };
         assert_eq!(registry.get(&state, 1), Some(previous.clone()));
+        assert!(registry.contains_state(&state, 1));
         let information = registry.insert_with(state, 1, constructor);
         assert!(information.is_none());
         let state = StateInRegistry {
@@ -770,12 +841,14 @@ mod tests {
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
         };
         assert_eq!(registry.get(&state, 1), Some(previous.clone()));
+        assert!(registry.contains_state(&state, 1));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(registry.get(&state, 2), Some(previous.clone()));
+        assert!(registry.contains_state(&state, 2));
         let information = registry.insert_with(state, 2, constructor);
         assert!(information.is_none());
         let state = StateInRegistry {
@@ -783,6 +856,7 @@ mod tests {
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
         };
         assert_eq!(registry.get(&state, 2), Some(previous));
+        assert!(registry.contains_state(&state, 2));
     }
 
     #[test]
@@ -810,6 +884,7 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(registry.get(&state, 1), None);
+        assert!(!registry.contains_state(&state, 1));
         let information1 = registry.insert_with(state, 1, constructor);
         assert!(information1.is_some());
         let (information1, dominated) = information1.unwrap();
@@ -825,12 +900,14 @@ mod tests {
             registry.get(&information1.state, 1),
             Some(information1.clone())
         );
+        assert!(registry.contains_state(&state, 1));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(registry.get(&state, 0), None);
+        assert!(!registry.contains_state(&state, 0));
         let information2 = registry.insert_with(state, 0, constructor);
         assert!(information2.is_some());
         let (information2, dominated) = information2.unwrap();
@@ -852,12 +929,14 @@ mod tests {
             registry.get(&information2.state, 0),
             Some(information2.clone())
         );
+        assert!(registry.contains_state(&information2.state, 0));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![2, 3, 3]),
         };
         assert_eq!(registry.get(&state, 0), None);
+        assert!(!registry.contains_state(&state, 0));
         let information3 = registry.insert_with(state, 0, constructor);
         assert!(information3.is_some());
         let (information3, dominated) = information3.unwrap();
@@ -879,6 +958,7 @@ mod tests {
             registry.get(&information2.state, 0),
             Some(information3.clone())
         );
+        assert!(registry.contains_state(&information3.state, 0));
         assert_eq!(registry.get(&information3.state, 0), Some(information3));
     }
 

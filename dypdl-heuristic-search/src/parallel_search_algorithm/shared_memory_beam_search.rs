@@ -74,14 +74,14 @@ use std::sync::Arc;
 ///     solution_suffix: &[],
 /// };
 /// let transition_evaluator =
-///     move |node: &SendableFNode<_>, transition, registry: &_, primal_bound| {
-///         node.insert_successor_node(
+///     move |node: &SendableFNode<_>, transition, primal_bound| {
+///         node.generate_successor_node(
 ///             transition,
-///             registry,
+///             &model,
 ///             &h_evaluator,
 ///             &f_evaluator,
 ///             primal_bound,
-///         ).map(|(successor, _)| successor)
+///         )
 /// };
 /// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
 /// let parameters = BeamSearchParameters::default();
@@ -253,7 +253,7 @@ where
                                     |transition| {
                                         transition_evaluator(node, transition, primal_bound)
                                             .and_then(|successor| {
-                                                registry.insert(successor).map(
+                                                registry.insert(successor).and_then(
                                                     |(successor, dominated)| {
                                                         if let Some(dominated) = dominated {
                                                             if !dominated.is_closed() {
@@ -261,7 +261,11 @@ where
                                                             }
                                                         }
 
-                                                        successor
+                                                        if !successor.is_closed() {
+                                                            Some(successor)
+                                                        } else {
+                                                            None
+                                                        }
                                                     },
                                                 )
                                             })
