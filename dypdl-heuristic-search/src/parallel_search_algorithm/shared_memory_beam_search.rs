@@ -124,18 +124,16 @@ where
     let suffix = input.solution_suffix;
 
     let mut beam = Vec::with_capacity(beam_size);
-    let mut registry = ConcurrentStateRegistry::new(model.clone());
     let capacity = parameters
         .parameters
         .initial_registry_capacity
         .unwrap_or_else(|| beam.capacity());
-
-    if let Err(error) = registry.try_reserve(capacity) {
-        return Err(Box::<dyn Error>::from(format!(
-            "Failed to reserve memory for the state registry: {:?}",
-            error
-        )));
-    }
+    let shard_amount = (threads * 4).next_power_of_two();
+    let mut registry = ConcurrentStateRegistry::with_capacity_and_shard_amount(
+        model.clone(),
+        capacity,
+        shard_amount,
+    );
 
     let node = if let Some(node) = input.node.clone() {
         node

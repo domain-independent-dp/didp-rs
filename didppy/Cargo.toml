@@ -29,3 +29,6 @@ default = ["extension-module", "abi3"]
 
 [build-dependencies]
 pyo3-build-config = "0.18"
+
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = {version = "0.5", features = ["disable_initial_exec_tls"]}

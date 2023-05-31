@@ -128,6 +128,7 @@ dependencies = [
  "pyo3",
  "pyo3-build-config",
  "rustc-hash",
+ "tikv-jemallocator",
 ]
 
 [[package]]

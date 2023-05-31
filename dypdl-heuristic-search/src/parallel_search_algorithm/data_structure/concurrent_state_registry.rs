@@ -122,6 +122,23 @@ where
         }
     }
 
+    #[inline]
+    pub fn with_capacity_and_shard_amount(
+        model: Arc<Model>,
+        capacity: usize,
+        shard_amount: usize,
+    ) -> ConcurrentStateRegistry<T, I> {
+        ConcurrentStateRegistry {
+            registry: DashMap::with_capacity_and_hasher_and_shard_amount(
+                capacity,
+                BuildHasherDefault::<FxHasher>::default(),
+                shard_amount,
+            ),
+            model,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
     /// Tries to reserve capacity.
     #[inline]
     pub fn try_reserve(&mut self, additional: usize) -> Result<(), TryReserveError> {

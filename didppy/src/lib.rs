@@ -5,6 +5,13 @@ mod model;
 
 pub use model::ModelPy;
 
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 /// DIDPPy -- DyPDL interface for Python
 #[pymodule]
 fn didppy(_: Python, m: &PyModule) -> PyResult<()> {
