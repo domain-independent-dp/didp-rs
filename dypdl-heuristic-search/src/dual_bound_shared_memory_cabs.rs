@@ -89,17 +89,15 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator =
-            move |node: &SendableFNode<_>, transition, registry: &_, primal_bound| {
-                node.insert_successor_node(
-                    transition,
-                    registry,
-                    &h_evaluator,
-                    &f_evaluator,
-                    primal_bound,
-                )
-                .map(|(successor, _)| successor)
-            };
+        let transition_evaluator = move |node: &SendableFNode<_>, transition, primal_bound| {
+            node.generate_successor_node(
+                transition,
+                &model,
+                &h_evaluator,
+                &f_evaluator,
+                primal_bound,
+            )
+        };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
             shared_memory_beam_search(
                 input,
@@ -126,15 +124,13 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator =
-            move |node: &SendableCostNode<_>, transition, registry: &_, _| {
-                node.insert_successor_node(transition, registry)
-                    .map(|(successor, _)| successor)
-            };
+        let transition_evaluator = move |node: &SendableCostNode<_>, transition, _| {
+            node.generate_successor_node(transition, &model)
+        };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
             shared_memory_beam_search(
                 input,
-                transition_evaluator,
+                &transition_evaluator,
                 base_cost_evaluator,
                 parameters,
                 threads,

@@ -105,7 +105,7 @@ where
     T: variable_type::Numeric + Ord + Display + Send + Sync,
     N: BfsNode<T, V, Arc<HashableSignatureVariables>> + Clone + Send + Sync,
     Arc<N>: Send + Sync,
-    E: Fn(&N, Arc<V>, &ConcurrentStateRegistry<T, N>, Option<T>) -> Option<Arc<N>> + Send + Sync,
+    E: Fn(&N, Arc<V>, Option<T>) -> Option<N> + Send + Sync,
     B: Fn(T, T) -> T + Send + Sync,
     V: TransitionInterface + Clone + Default + Send + Sync,
     Arc<V>: Send + Sync,
@@ -251,12 +251,20 @@ where
                             if result.is_none() {
                                 Some(generator.applicable_transitions(node.state()).filter_map(
                                     |transition| {
-                                        transition_evaluator(
-                                            node,
-                                            transition,
-                                            &registry,
-                                            primal_bound,
-                                        )
+                                        transition_evaluator(node, transition, primal_bound)
+                                            .and_then(|successor| {
+                                                registry.insert(successor).map(
+                                                    |(successor, dominated)| {
+                                                        if let Some(dominated) = dominated {
+                                                            if !dominated.is_closed() {
+                                                                dominated.close();
+                                                            }
+                                                        }
+
+                                                        successor
+                                                    },
+                                                )
+                                            })
                                     },
                                 ))
                             } else {
