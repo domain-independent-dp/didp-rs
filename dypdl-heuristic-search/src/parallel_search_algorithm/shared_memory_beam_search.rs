@@ -1,4 +1,4 @@
-use super::data_structure::ConcurrentStateRegistry;
+use super::data_structure::{ConcurrentStateRegistry, SendableSuccessorIterator};
 use crate::search_algorithm::data_structure::{exceed_bound, HashableSignatureVariables};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
@@ -244,30 +244,15 @@ where
             thread_pool.install(|| {
                 successors.par_extend(
                     nodes_with_goal_information
-                        .par_iter()
+                        .par_drain(..)
                         .filter_map(|(node, result)| {
                             if result.is_none() {
-                                Some(generator.applicable_transitions(node.state()).filter_map(
-                                    |transition| {
-                                        transition_evaluator(node, transition, primal_bound)
-                                            .and_then(|successor| {
-                                                registry.insert(successor).and_then(
-                                                    |(successor, dominated)| {
-                                                        if let Some(dominated) = dominated {
-                                                            if !dominated.is_closed() {
-                                                                dominated.close();
-                                                            }
-                                                        }
-
-                                                        if !successor.is_closed() {
-                                                            Some(successor)
-                                                        } else {
-                                                            None
-                                                        }
-                                                    },
-                                                )
-                                            })
-                                    },
+                                Some(SendableSuccessorIterator::new(
+                                    node,
+                                    generator,
+                                    &transition_evaluator,
+                                    &registry,
+                                    primal_bound,
                                 ))
                             } else {
                                 None
@@ -275,7 +260,6 @@ where
                         })
                         .flatten_iter(),
                 );
-                nodes_with_goal_information.clear();
                 non_dominated_successors
                     .par_extend(successors.par_drain(..).filter(|node| !node.is_closed()));
 
