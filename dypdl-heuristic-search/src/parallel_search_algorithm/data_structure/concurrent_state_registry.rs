@@ -234,6 +234,11 @@ where
     where
         F: FnOnce(StateInRegistry<Arc<HashableSignatureVariables>>, T, Option<&I>) -> Option<I>,
     {
+        // Checks if the state is dominated using only a read lock.
+        if self.contains_state(&state, cost) {
+            return None;
+        }
+
         let entry = self.registry.entry(state.signature_variables.clone());
         match entry {
             dashmap::mapref::entry::Entry::Occupied(entry) => {
@@ -298,6 +303,11 @@ where
     ///
     /// If the given state is not dominated, returns a pointer to the information and the information of a dominated state if it exists.
     pub fn insert(&self, mut information: I) -> Option<(Arc<I>, Option<Arc<I>>)> {
+        // Checks if the information is dominated using only a read lock.
+        if self.contains(&information) {
+            return None;
+        }
+
         let entry = self
             .registry
             .entry(information.state().signature_variables.clone());

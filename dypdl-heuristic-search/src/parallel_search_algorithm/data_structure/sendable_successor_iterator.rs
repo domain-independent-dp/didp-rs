@@ -77,11 +77,6 @@ where
                     if let Some(successor) =
                         (self.evaluator)(&self.node, op.clone(), self.primal_bound)
                     {
-                        // Checks if the node is dominated using only a read lock.
-                        if self.registry.contains(&successor) {
-                            return self.next();
-                        }
-
                         if let Some((successor, dominated)) = self.registry.insert(successor) {
                             if let Some(dominated) = dominated {
                                 if !dominated.is_closed() {
