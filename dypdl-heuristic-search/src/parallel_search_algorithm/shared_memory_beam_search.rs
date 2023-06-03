@@ -207,6 +207,23 @@ where
             }
         });
 
+        if let (Some(best_dual_bound), Some(cost)) =
+            (best_dual_bound, goal.as_ref().map(|(cost, _)| *cost))
+        {
+            if best_dual_bound == cost {
+                return Ok(Solution {
+                    cost: Some(cost),
+                    best_bound: Some(best_dual_bound),
+                    is_optimal: true,
+                    transitions: goal.unwrap().1,
+                    expanded,
+                    generated,
+                    time: time_keeper.elapsed_time(),
+                    ..Default::default()
+                });
+            }
+        }
+
         if time_keeper.check_time_limit(quiet) {
             return Ok(goal.map_or_else(
                 || Solution {
@@ -303,7 +320,7 @@ where
         }
 
         if let Some((cost, transitions)) = goal {
-            let is_optimal = !pruned && beam.is_empty();
+            let is_optimal = best_dual_bound == Some(cost) || (!pruned && beam.is_empty());
 
             return Ok(Solution {
                 cost: Some(cost),
