@@ -8,7 +8,6 @@ use dypdl::{variable_type, Model, ReduceFunction, TransitionInterface};
 use rayon::prelude::*;
 use std::error::Error;
 use std::fmt::Display;
-use std::mem;
 use std::sync::Arc;
 
 /// Performs shared memory beam search.
@@ -303,11 +302,10 @@ where
                         pruned = true;
                     }
 
-                    non_dominated_successors.truncate(beam_size);
-                    mem::swap(&mut beam, &mut non_dominated_successors);
+                    beam.par_extend(non_dominated_successors.par_drain(..beam_size));
                     non_dominated_successors.clear();
                 } else {
-                    mem::swap(&mut beam, &mut non_dominated_successors);
+                    beam.par_extend(non_dominated_successors.par_drain(..));
                 }
             })
         }
