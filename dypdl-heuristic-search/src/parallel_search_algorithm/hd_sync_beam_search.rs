@@ -511,7 +511,9 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                 }
 
                 if let (false, Some(value)) = (previously_pruned, layer_dual_bound) {
-                    if best_dual_bound
+                    if exceed_bound(model, value, cost) {
+                        best_dual_bound = cost
+                    } else if best_dual_bound
                         .map_or(true, |bound| !exceed_bound(model, bound, Some(value)))
                     {
                         best_dual_bound = Some(value);

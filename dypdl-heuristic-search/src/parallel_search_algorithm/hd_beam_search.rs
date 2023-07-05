@@ -403,7 +403,9 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
 
                         if opened == threads - 1 && !previously_pruned {
                             if let Some(value) = previous_layer_dual_bound {
-                                if best_dual_bound
+                                if exceed_bound(model, value, primal_bound) {
+                                    best_dual_bound = primal_bound;
+                                } else if best_dual_bound
                                     .map_or(true, |bound| !exceed_bound(model, bound, Some(value)))
                                 {
                                     best_dual_bound = Some(value);
@@ -416,8 +418,11 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
                                 || (Some(other) == cost && information.id < goal_id.unwrap())
                             {
                                 cost = Some(other);
-                                primal_bound = Some(other);
                                 goal_id = Some(information.id);
+
+                                if !exceed_bound(model, other, primal_bound) {
+                                    primal_bound = Some(other);
+                                }
                             }
                         }
                     }
