@@ -2391,7 +2391,7 @@ macro_rules! impl_check_numeric_table_expression {
                         self.check_expression(y, allow_cost)
                     }
                     expression::NumericTableExpression::Table3D(id, x, y, z) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
+                        self.table_registry.$x.check_table_3d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)?;
                         self.check_expression(z, allow_cost)
@@ -2445,7 +2445,7 @@ macro_rules! impl_check_numeric_table_expression {
                         self.check_expression(y, allow_cost)
                     }
                     expression::NumericTableExpression::Table3DReduce(_, id, x, y, z) => {
-                        self.table_registry.$x.check_table_2d(*id)?;
+                        self.table_registry.$x.check_table_3d(*id)?;
                         self.check_expression(x, allow_cost)?;
                         self.check_expression(y, allow_cost)?;
                         self.check_expression(z, allow_cost)
@@ -7204,6 +7204,123 @@ mod tests {
     }
 
     #[test]
+    fn add_forward_transition_with_table1d_ok() {
+        // Test success when the model that has only one Int table 1D,
+        // and using the constants inside in a forward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table1d = model.add_table_1d("t1", vec![0, 1]);
+        assert!(table1d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.forward_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(0)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
+    fn add_forward_transition_with_table2d_ok() {
+        // Test success when the model that has only one Int table 2D,
+        // and using the constants inside in a forward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table2d = model.add_table_2d("t1", vec![vec![0, 1]]);
+        assert!(table2d.is_ok());
+
+        // Try to access the element at index [0,1] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(1),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.forward_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(1)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
+    fn add_forward_transition_with_table3d_ok() {
+        // Test success when the model that has only one Int table 3D,
+        // and using the constants inside in a forward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table3d = model.add_table_3d("t1", vec![vec![vec![0, 1]]]);
+        assert!(table3d.is_ok());
+
+        // Try to access the element at index [0,0,1] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(1),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.forward_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(1)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
     fn add_forward_transition_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
@@ -7717,6 +7834,147 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_forward_transition_with_table1d_err() {
+        // Test failure when the model that has only one Int table 1D, but try to use the constants
+        // inside a Int table 2D or 3D in a forward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table1d = model.add_table_1d("t1", vec![0, 1]);
+        assert!(table1d.is_ok());
+
+        // Try to access the element at index [0,0] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_transition(transition);
+        assert!(result.is_err());
+
+        // Try to access the element at index [0,0,0] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_transition(transition);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_forward_transition_with_table2d_err() {
+        // Test failure when the model that has only one Int table 2D, but try to use the constants
+        // inside a Int table 1D or 3D in a forward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table2d = model.add_table_2d("t1", vec![vec![0, 1]]);
+        assert!(table2d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_transition(transition);
+        assert!(result.is_err());
+
+        // Try to access the element at index [0,0,0] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_transition(transition);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_forward_transition_with_table3d_err() {
+        // Test failure when the model that has only one Int table 3D, but try to use the constants
+        // inside a Int table 1D or 2D in a forward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table3d = model.add_table_3d("t1", vec![vec![vec![0, 1]]]);
+        assert!(table3d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_transition(transition);
+        assert!(result.is_err());
+
+        // Try to access the element at index [0,0] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_transition(transition);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -8269,6 +8527,123 @@ mod tests {
     }
 
     #[test]
+    fn add_forward_forced_transition_with_table1d_ok() {
+        // Test success when the model that has only one Int table 1D,
+        // and using the constants inside in a forward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table1d = model.add_table_1d("t1", vec![0, 1]);
+        assert!(table1d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_forced_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.forward_forced_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(0)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
+    fn add_forward_forced_transition_with_table2d_ok() {
+        // Test success when the model that has only one Int table 2D,
+        // and using the constants inside in a forward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table2d = model.add_table_2d("t1", vec![vec![0, 1]]);
+        assert!(table2d.is_ok());
+
+        // Try to access the element at index [0,1] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(1),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_forced_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.forward_forced_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(1)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
+    fn add_forward_forced_transition_with_table3d_ok() {
+        // Test success when the model that has only one Int table 3D,
+        // and using the constants inside in a forward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table3d = model.add_table_3d("t1", vec![vec![vec![0, 1]]]);
+        assert!(table3d.is_ok());
+
+        // Try to access the element at index [0,0,1] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(1),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_forced_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.forward_forced_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(1)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
     fn add_forward_forced_transition_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
@@ -8782,6 +9157,147 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_forward_forced_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_forward_forced_transition_with_table1d_err() {
+        // Test failure when the model that has only one Int table 1D, but try to use the constants
+        // inside a Int table 2D or 3D in a forward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table1d = model.add_table_1d("t1", vec![0, 1]);
+        assert!(table1d.is_ok());
+
+        // Try to access the element at index [0,0] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_forced_transition(transition);
+        assert!(result.is_err());
+
+        // Try to access the element at index [0,0,0] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_forced_transition(transition);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_forward_forced_transition_with_table2d_err() {
+        // Test failure when the model that has only one Int table 2D, but try to use the constants
+        // inside a Int table 1D or 3D in a forward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table2d = model.add_table_2d("t1", vec![vec![0, 1]]);
+        assert!(table2d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_forced_transition(transition);
+        assert!(result.is_err());
+
+        // Try to access the element at index [0,0,0] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_forced_transition(transition);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_forward_forced_transition_with_table3d_err() {
+        // Test failure when the model that has only one Int table 3D, but try to use the constants
+        // inside a Int table 1D or 2D in a forward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table3d = model.add_table_3d("t1", vec![vec![vec![0, 1]]]);
+        assert!(table3d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_forced_transition(transition);
+        assert!(result.is_err());
+
+        // Try to access the element at index [0,0] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_forward_forced_transition(transition);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -9334,6 +9850,123 @@ mod tests {
     }
 
     #[test]
+    fn add_backward_transition_with_table1d_ok() {
+        // Test success when the model that has only one Int table 1D,
+        // and using the constants inside in a backward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table1d = model.add_table_1d("t1", vec![0, 1]);
+        assert!(table1d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.backward_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(0)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
+    fn add_backward_transition_with_table2d_ok() {
+        // Test success when the model that has only one Int table 2D,
+        // and using the constants inside in a backward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table2d = model.add_table_2d("t1", vec![vec![0, 1]]);
+        assert!(table2d.is_ok());
+
+        // Try to access the element at index [0,1] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(1),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.backward_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(1)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
+    fn add_backward_transition_with_table3d_ok() {
+        // Test success when the model that has only one Int table 3D,
+        // and using the constants inside in a backward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table3d = model.add_table_3d("t1", vec![vec![vec![0, 1]]]);
+        assert!(table3d.is_ok());
+
+        // Try to access the element at index [0,0,1] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(1),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.backward_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(1)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
     fn add_backward_transition_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
@@ -9847,6 +10480,147 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_backward_transition_with_table1d_err() {
+        // Test failure when the model that has only one Int table 1D, but try to use the constants
+        // inside a Int table 2D or 3D in a backward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table1d = model.add_table_1d("t1", vec![0, 1]);
+        assert!(table1d.is_ok());
+
+        // Try to access the element at index [0,0] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_transition(transition);
+        assert!(result.is_err());
+
+        // Try to access the element at index [0,0,0] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_transition(transition);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_backward_transition_with_table2d_err() {
+        // Test failure when the model that has only one Int table 2D, but try to use the constants
+        // inside a Int table 1D or 3D in a backward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table2d = model.add_table_2d("t1", vec![vec![0, 1]]);
+        assert!(table2d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_transition(transition);
+        assert!(result.is_err());
+
+        // Try to access the element at index [0,0,0] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_transition(transition);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_backward_transition_with_table3d_err() {
+        // Test failure when the model that has only one Int table 3D, but try to use the constants
+        // inside a Int table 1D or 2D in a backward transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table3d = model.add_table_3d("t1", vec![vec![vec![0, 1]]]);
+        assert!(table3d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_transition(transition);
+        assert!(result.is_err());
+
+        //Try to access the element at index [0,0] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_transition(transition);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -10399,6 +11173,123 @@ mod tests {
     }
 
     #[test]
+    fn add_backward_forced_transition_with_table1d_ok() {
+        // Test success when the model that has only one Int table 1D,
+        // and using the constants inside in a backward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table1d = model.add_table_1d("t1", vec![0, 1]);
+        assert!(table1d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_forced_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.backward_forced_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(0)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
+    fn add_backward_forced_transition_with_table2d_ok() {
+        // Test success when the model that has only one Int table 2D,
+        // and using the constants inside in a backward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table2d = model.add_table_2d("t1", vec![vec![0, 1]]);
+        assert!(table2d.is_ok());
+
+        // Try to access the element at index [0,1] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(1),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_forced_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.backward_forced_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(1)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
+    fn add_backward_forced_transition_with_table3d_ok() {
+        // Test success when the model that has only one Int table 3D,
+        // and using the constants inside in a backward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table3d = model.add_table_3d("t1", vec![vec![vec![0, 1]]]);
+        assert!(table3d.is_ok());
+
+        // Try to access the element at index [0,0,1] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(1),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_forced_transition(transition);
+        assert!(result.is_ok());
+        assert_eq!(
+            model.backward_forced_transitions,
+            vec![Transition {
+                cost: CostExpression::Integer(
+                    IntegerExpression::Cost + IntegerExpression::Constant(1)
+                ),
+                ..Default::default()
+            }]
+        );
+    }
+
+    #[test]
     fn add_backward_forced_transition_err() {
         let mut model = Model {
             cost_type: CostType::Integer,
@@ -10912,6 +11803,147 @@ mod tests {
             ..Default::default()
         };
         assert!(model.add_backward_forced_transition(transition).is_err());
+    }
+
+    #[test]
+    fn add_backward_forced_transition_with_table1d_err() {
+        // Test failure when the model that has only one Int table 1D, but try to use the constants
+        // inside a Int table 2D or 3D in a backward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table1d = model.add_table_1d("t1", vec![0, 1]);
+        assert!(table1d.is_ok());
+
+        // Try to access the element at index [0,0] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_forced_transition(transition);
+        assert!(result.is_err());
+
+        // Try to access the element at index [0,0,0] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_forced_transition(transition);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_backward_forced_transition_with_table2d_err() {
+        // Test failure when the model that has only one Int table 2D, but try to use the constants
+        // inside a Int table 1D or 3D in a backward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table2d = model.add_table_2d("t1", vec![vec![0, 1]]);
+        assert!(table2d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_forced_transition(transition);
+        assert!(result.is_err());
+
+        // Try to access the element at index [0,0,0] in the first 3D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table3D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_forced_transition(transition);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_backward_forced_transition_with_table3d_err() {
+        // Test failure when the model that has only one Int table 3D, but try to use the constants
+        // inside a Int table 1D or 2D in a backward forced transition.
+        let mut model = Model {
+            cost_type: CostType::Integer,
+            ..Default::default()
+        };
+
+        let table3d = model.add_table_3d("t1", vec![vec![vec![0, 1]]]);
+        assert!(table3d.is_ok());
+
+        // Try to access the element at index 0 in the first 1D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table1D(
+                            0,
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_forced_transition(transition);
+        assert!(result.is_err());
+
+        // Try to access the element at index [0,0] in the first 2D Integer Table
+        let transition = Transition {
+            cost: CostExpression::Integer(
+                IntegerExpression::Cost
+                    + IntegerExpression::Table(Box::new(
+                        NumericTableExpression::<Integer>::Table2D(
+                            0,
+                            ElementExpression::Constant(0),
+                            ElementExpression::Constant(0),
+                        ),
+                    )),
+            ),
+            ..Default::default()
+        };
+        let result = model.add_backward_forced_transition(transition);
+        assert!(result.is_err());
     }
 
     #[test]
