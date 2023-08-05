@@ -93,7 +93,6 @@ impl IntoPy<Py<PyAny>> for IntOrFloat {
 /// >>> t[var].eval(state, model)
 /// 5
 #[pyclass(name = "Transition")]
-#[pyo3(text_signature = "(name, cost=None, preconditions=None, effects=None)")]
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct TransitionPy(Transition);
 
@@ -138,7 +137,8 @@ impl TransitionPy {
 #[pymethods]
 impl TransitionPy {
     #[new]
-    #[pyo3(signature = (name, cost = None, preconditions = vec![], effects = vec![]))]
+    #[pyo3(text_signature = "(name, cost=None, preconditions=None, effects=None)")]
+    #[pyo3(signature = (name, cost = None, preconditions = None, effects = None))]
     pub fn new_py(
         name: &str,
         cost: Option<CostUnion>,

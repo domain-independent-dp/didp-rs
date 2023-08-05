@@ -102,14 +102,14 @@ use std::rc::Rc;
 /// >>> print(solution.cost)
 /// 2
 #[pyclass(unsendable, name = "CABS")]
-#[pyo3(
-    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, quiet=False, initial_beam_size=1, keep_all_layers=False, max_beam_size=None)"
-)]
 pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
 #[pymethods]
 impl CabsPy {
     #[new]
+    #[pyo3(
+        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, initial_beam_size=1, keep_all_layers=False, max_beam_size=None)"
+    )]
     #[pyo3(signature = (
         model,
         f_operator = FOperator::Plus,

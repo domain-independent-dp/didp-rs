@@ -111,9 +111,6 @@ use std::rc::Rc;
 /// >>> print(solution.cost)
 /// 2
 #[pyclass(unsendable, name = "ExpressionBeamSearch")]
-#[pyo3(
-    text_signature = "(model, beam_size, custom_cost_dict=None, h_expression=None, f_operator=0, custom_f_operator=0, maximize=False, keep_all_layers=False, time_limit=None, quiet=False, float_custom_cost=None)"
-)]
 pub struct ExpressionBeamSearchPy(
     WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>,
 );
@@ -163,6 +160,9 @@ impl ExpressionBeamSearchPy {
 #[pymethods]
 impl ExpressionBeamSearchPy {
     #[new]
+    #[pyo3(
+        text_signature = "(model, beam_size, custom_cost_dict=None, h_expression=None, f_operator=didppy.FOperator.Plus, custom_f_operator=didppy.FOperator.Plus, maximize=False, keep_all_layers=False, time_limit=None, quiet=False, float_custom_cost=None)"
+    )]
     #[pyo3(signature = (
         model,
         beam_size,

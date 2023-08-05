@@ -121,14 +121,14 @@ use std::rc::Rc;
 /// >>> print(solution.cost)
 /// 2
 #[pyclass(unsendable, name = "LNBS")]
-#[pyo3(
-    text_signature = "(model, time_limit, f_operator=0, primal_bound=None, quiet=False, seed=2023, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, has_negative_cost=false, use_cost_weight=false, no_bandit=false, no_transition_mutex=false, cabs_initial_beam_size=None, cabs_max_beam_size=None)"
-)]
 pub struct LnbsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
 #[pymethods]
 impl LnbsPy {
     #[new]
+    #[pyo3(
+        text_signature = "(model, time_limit, f_operator=didppy.FOperator.Plus, primal_bound=None, quiet=False, seed=2023, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, has_negative_cost=false, use_cost_weight=false, no_bandit=false, no_transition_mutex=false, cabs_initial_beam_size=None, cabs_max_beam_size=None)"
+    )]
     #[pyo3(signature = (
         model,
         time_limit,
