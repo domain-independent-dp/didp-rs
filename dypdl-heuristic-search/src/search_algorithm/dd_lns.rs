@@ -43,7 +43,7 @@ pub struct DdLnsParameters<T> {
 /// # References
 ///
 /// Xavier Gillard and Pierre Schaus. "Large Neighborhood Search with Decision Diagrams,"
-/// Proceedings of the 31st International Joint Conference on Artificial Intelligence (IJCAI), 2022.
+/// Proceedings of the 31st International Joint Conference on Artificial Intelligence (IJCAI), pp. 4754-4760, 2022.
 ///
 /// # Examples
 ///
