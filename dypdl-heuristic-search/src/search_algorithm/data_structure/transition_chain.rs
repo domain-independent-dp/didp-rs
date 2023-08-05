@@ -6,6 +6,9 @@ use std::rc::Rc;
 pub trait GetTransitions<V = Transition> {
     /// Returns transitions to reach this node.
     fn transitions(&self) -> Vec<V>;
+
+    /// Returns the last transition to reach this node.
+    fn last(&self) -> Option<&V>;
 }
 
 /// Chain of transitions.

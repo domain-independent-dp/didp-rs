@@ -93,12 +93,14 @@ Solvers
    didppy.ForwardRecursion
    didppy.CABS
    didppy.CAASDy
+   didppy.LNBS
    didppy.DFBB
    didppy.CBFS
    didppy.ACPS
    didppy.APPS
    didppy.DBDFS
    didppy.BreadthFirstSearch
+   didppy.DDLNS
    didppy.WeightedAstar
    didppy.ExpressionBeamSearch
 

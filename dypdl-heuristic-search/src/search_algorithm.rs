@@ -9,8 +9,11 @@ mod cabs;
 mod cbfs;
 pub mod data_structure;
 mod dbdfs;
+mod dd_lns;
 mod dfbb;
 mod forward_recursion;
+mod lnbs;
+mod randomized_restricted_dd;
 mod rollout;
 mod search;
 pub mod util;
@@ -27,7 +30,10 @@ pub use data_structure::{
     TransitionWithCustomCost, TransitionWithId, WeightedFNode,
 };
 pub use dbdfs::{Dbdfs, DbdfsParameters};
+pub use dd_lns::{DdLns, DdLnsParameters};
 pub use dfbb::Dfbb;
 pub use forward_recursion::ForwardRecursion;
+pub use randomized_restricted_dd::{randomized_restricted_dd, RandomizedRestrictedDDParameters};
 pub use rollout::{get_solution_cost_and_suffix, get_trace, rollout, RolloutResult};
 pub use search::{Parameters, Search, SearchInput, Solution};
+pub use lnbs::{Lnbs, LnbsParameters};
