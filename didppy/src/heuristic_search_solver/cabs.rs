@@ -33,23 +33,24 @@ use std::rc::Rc;
 ///     If the cost is computed by :code:`*`, this should be :attr:`~FOperator.Product`.
 ///     If the cost is computed by :code:`max`, this should be :attr:`~FOperator.Max`.
 ///     If the cost is computed by :code:`min`, this should be :attr:`~FOperator.Min`.
-/// initial_beam_size: int, default: 1
-///     Initial beam size.
-/// keep_all_layers: bool, default: False
-///     Keep all layers of the search graph for duplicate detection in memory.
-/// max_beam_size: int or None, default: None
-///     Maximum beam size.
 /// primal_bound: int, float, or None, default: None
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
+/// initial_beam_size: int, default: 1
+///     Initial beam size.
+/// keep_all_layers: bool, default: False
+///     Keep all layers of the search graph for duplicate detection in memory.
+/// max_beam_size: int or None, default: None
+///     Maximum beam size.
+///     If `None`, the beam size is kept increased until proving optimality or infeasibility or reaching the time limit.
 ///
 /// Raises
 /// ------
 /// TypeError
-///     If :code:`primal_bound` is :code:`float` and :code:`model` is float cost.
+///     If :code:`primal_bound` is :code:`float` and :code:`model` is int cost.
 /// PanicException
 ///     If :code:`time_limit` is negative.
 ///
@@ -57,7 +58,7 @@ use std::rc::Rc;
 /// ----------
 /// Ryo Kuroiwa and J. Christopher Beck.
 /// "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
-/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 ///
 /// Weixiong Zhang.
 /// "Complete Anytime Beam Search,"
@@ -102,7 +103,7 @@ use std::rc::Rc;
 /// 2
 #[pyclass(unsendable, name = "CABS")]
 #[pyo3(
-    text_signature = "(model, f_operator=0, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, primal_bound=None, time_limit=None, quiet=False)"
+    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, quiet=False, initial_beam_size=1, keep_all_layers=False, max_beam_size=None)"
 )]
 pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
@@ -112,23 +113,23 @@ impl CabsPy {
     #[pyo3(signature = (
         model,
         f_operator = FOperator::Plus,
+        primal_bound = None,
+        time_limit = None,
+        quiet = false,
         initial_beam_size = 1,
         keep_all_layers = false,
         max_beam_size = None,
-        primal_bound = None,
-        time_limit = None,
-        quiet = false
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         model: &ModelPy,
         f_operator: FOperator,
-        initial_beam_size: usize,
-        keep_all_layers: bool,
-        max_beam_size: Option<usize>,
         primal_bound: Option<&PyAny>,
         time_limit: Option<f64>,
         quiet: bool,
+        initial_beam_size: usize,
+        keep_all_layers: bool,
+        max_beam_size: Option<usize>,
     ) -> PyResult<CabsPy> {
         if !quiet {
             println!("Solver: CABS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));

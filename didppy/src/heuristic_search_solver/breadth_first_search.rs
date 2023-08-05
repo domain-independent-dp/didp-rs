@@ -47,7 +47,7 @@ use std::rc::Rc;
 /// Raises
 /// ------
 /// TypeError
-///     If the type of :code:`primal_bound` and the cost type of :code:`model` are different.
+///     If :code:`primal_bound` is :code:`float` and :code:`model` is int cost.
 /// PanicException
 ///     If :code:`time_limit` is negative.
 ///

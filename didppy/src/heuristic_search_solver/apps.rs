@@ -50,7 +50,7 @@ use std::rc::Rc;
 /// Raises
 /// ------
 /// TypeError
-///     If the type of :code:`primal_bound` and the cost type of :code:`model` are different.
+///     If :code:`primal_bound` is :code:`float` and :code:`model` is int cost.
 /// OverflowError
 ///     If :code:`initial_registry_capacity`, :code:`width_init`, :code:`width_step`, or :code:`width_bound` is negative.
 /// PanicException
@@ -60,7 +60,7 @@ use std::rc::Rc;
 /// ----------
 /// Ryo Kuroiwa and J. Christopher Beck.
 /// "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
-/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 ///
 /// Sataya Gautam Vadlamudi, Sandip Aine, Partha Pratim Chakrabarti.
 /// "Anytime Pack Search," Natural Computing, vol. 15(3), pp. 395-414, 2016.
