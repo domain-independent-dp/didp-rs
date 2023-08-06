@@ -185,6 +185,7 @@ pub struct Lnbs<
     rng: Pcg64Mcg,
     time_keeper: TimeKeeper,
     solution: Solution<T, TransitionWithId<V>>,
+    first_call: bool,
     phantom: PhantomData<(D, R, K)>,
 }
 
@@ -281,6 +282,7 @@ where
             rng: Pcg64Mcg::seed_from_u64(parameters.seed),
             time_keeper,
             solution,
+            first_call: true,
             phantom: PhantomData::default(),
         }
     }
@@ -292,6 +294,13 @@ where
         }
 
         self.time_keeper.start();
+
+        if self.first_call {
+            self.first_call = false;
+            self.time_keeper.stop();
+
+            return (self.solution.clone(), false);
+        }
 
         let (states, costs): (Vec<_>, Vec<_>) = get_trace(
             &self.generator.model.target,

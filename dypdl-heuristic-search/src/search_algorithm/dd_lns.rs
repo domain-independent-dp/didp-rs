@@ -151,6 +151,7 @@ where
     rng: Pcg64Mcg,
     time_keeper: TimeKeeper,
     solution: Solution<T, TransitionWithId<V>>,
+    first_call: bool,
 }
 
 impl<T, N, E, B, G, V> DdLns<T, N, E, B, G, V>
@@ -198,6 +199,7 @@ where
             rng: Pcg64Mcg::seed_from_u64(seed),
             time_keeper,
             solution,
+            first_call: true,
         }
     }
 
@@ -208,6 +210,13 @@ where
         }
 
         self.time_keeper.start();
+
+        if self.first_call {
+            self.first_call = false;
+            self.time_keeper.stop();
+
+            return (self.solution.clone(), false);
+        }
 
         let max_depth = self.solution.transitions.len() - 2;
         let mut d = max_depth;
