@@ -431,7 +431,10 @@ where
                     self.solution.time = self.time_keeper.elapsed_time();
 
                     if !self.quiet {
-                        println!("Depth: {}, #beam: {}", depth, beam_size);
+                        println!(
+                            "A new primal bound is found with depth: {}, #beam: {}",
+                            depth, beam_size
+                        );
                         print_primal_bound(&self.solution);
                     }
 
