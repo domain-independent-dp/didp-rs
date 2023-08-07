@@ -1,8 +1,8 @@
 use super::beam_search::BeamSearchParameters;
 use super::data_structure::{
-    exceed_bound, BfsNode, StateInRegistry, StateRegistry, SuccessorGenerator, TransitionMutex,
-    TransitionWithId,
+    exceed_bound, BfsNode, StateInRegistry, StateRegistry, TransitionMutex, TransitionWithId,
 };
+use super::neighborhood_search::NeighborhoodSearchInput;
 use super::randomized_restricted_dd::{randomized_restricted_dd, RandomizedRestrictedDDParameters};
 use super::rollout::get_trace;
 use super::search::{Parameters, Search, SearchInput, Solution};
@@ -38,7 +38,6 @@ pub struct DdLnsParameters<T> {
 /// The last argument of the function is the primal bound of the solution cost.
 /// Type parameter `B` is a type of a function that combines the g-value (the cost to a state) and the base cost.
 /// It should be the same function as the cost expression, e.g., `cost + base_cost` for `cost + w`.
-/// Type parameter `G` is a type of a function that generates a root node given a state and its cost.
 ///
 /// # References
 ///
@@ -51,10 +50,11 @@ pub struct DdLnsParameters<T> {
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::{Parameters, Search, Solution};
 /// use dypdl_heuristic_search::search_algorithm::{
-///     BeamSearchParameters, DdLns, DdLnsParameters, FNode, SuccessorGenerator,
-///     TransitionWithId,
+///     BeamSearchParameters, DdLns, DdLnsParameters, FNode, NeighborhoodSearchInput,
+///     SuccessorGenerator, TransitionMutex, TransitionWithId,
 /// };
 /// use std::rc::Rc;
+/// use std::marker::PhantomData;
 ///
 /// let mut model = Model::default();
 /// let variable = model.add_integer_variable("variable", 0).unwrap();
@@ -70,7 +70,7 @@ pub struct DdLnsParameters<T> {
 /// let h_evaluator = |_: &_| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
-/// let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
+/// let successor_generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
 /// let transition_evaluator =
 ///     move |node: &FNode<_, _>, transition, registry: &mut _, primal_bound| {
 ///         node.insert_successor_node(
@@ -82,7 +82,7 @@ pub struct DdLnsParameters<T> {
 ///         )
 ///     };
 /// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-/// let root_generator = |state, cost| {
+/// let node_generator = |state, cost| {
 ///     FNode::generate_root_node(
 ///         state,
 ///         cost,
@@ -116,9 +116,24 @@ pub struct DdLnsParameters<T> {
 ///     },
 /// };
 ///
+/// let transition_mutex = TransitionMutex::new(
+///     successor_generator.transitions
+///     .iter()
+///     .chain(successor_generator.forced_transitions.iter())
+///     .map(|t| t.as_ref().clone())
+///     .collect()
+/// );
+///
+/// let input = NeighborhoodSearchInput {
+///     root_cost: 0,
+///     node_generator,
+///     successor_generator,
+///     solution,
+///     phantom: PhantomData::default(),
+/// };
+///
 /// let mut solver = DdLns::new(
-///     generator, transition_evaluator, base_cost_evaluator, root_generator, solution,
-///     parameters,
+///     input, transition_evaluator, base_cost_evaluator,transition_mutex, parameters,
 /// );
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
@@ -139,10 +154,9 @@ where
     G: Fn(StateInRegistry, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
 {
-    generator: SuccessorGenerator<TransitionWithId<V>>,
+    input: NeighborhoodSearchInput<T, N, G, StateInRegistry, TransitionWithId<V>>,
     transition_evaluator: E,
     base_cost_evaluator: B,
-    root_generator: G,
     beam_size: usize,
     keep_all_layers: bool,
     keep_probability: f64,
@@ -150,7 +164,6 @@ where
     transition_mutex: TransitionMutex,
     rng: Pcg64Mcg,
     time_keeper: TimeKeeper,
-    solution: Solution<T, TransitionWithId<V>>,
     first_call: bool,
 }
 
@@ -167,14 +180,14 @@ where
     B: Fn(T, T) -> T,
     G: Fn(StateInRegistry, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
 {
     /// Create a new DD-LNS solver.
     pub fn new(
-        generator: SuccessorGenerator<TransitionWithId<V>>,
+        input: NeighborhoodSearchInput<T, N, G, StateInRegistry, TransitionWithId<V>>,
         transition_evaluator: E,
         base_cost_evaluator: B,
-        root_generator: G,
-        solution: Solution<T, TransitionWithId<V>>,
+        transition_mutex: TransitionMutex,
         parameters: DdLnsParameters<T>,
     ) -> DdLns<T, N, E, B, G, V> {
         let mut time_keeper = parameters
@@ -182,15 +195,13 @@ where
             .parameters
             .time_limit
             .map_or_else(TimeKeeper::default, TimeKeeper::with_time_limit);
-        let transition_mutex = TransitionMutex::new(&generator.model, generator.backward);
         let seed = parameters.seed;
         time_keeper.stop();
 
         DdLns {
-            generator,
+            input,
             transition_evaluator,
             base_cost_evaluator,
-            root_generator,
             beam_size: parameters.beam_search_parameters.beam_size,
             keep_all_layers: parameters.beam_search_parameters.keep_all_layers,
             keep_probability: parameters.keep_probability,
@@ -198,15 +209,14 @@ where
             transition_mutex,
             rng: Pcg64Mcg::seed_from_u64(seed),
             time_keeper,
-            solution,
             first_call: true,
         }
     }
 
     //// Search for the next solution, returning the solution using `TransitionWithId`.
     pub fn search_inner(&mut self) -> (Solution<T, TransitionWithId<V>>, bool) {
-        if self.solution.is_terminated() || self.solution.transitions.len() < 2 {
-            return (self.solution.clone(), true);
+        if self.input.solution.is_terminated() || self.input.solution.transitions.is_empty() {
+            return (self.input.solution.clone(), true);
         }
 
         self.time_keeper.start();
@@ -215,33 +225,43 @@ where
             self.first_call = false;
             self.time_keeper.stop();
 
-            return (self.solution.clone(), false);
+            return (
+                self.input.solution.clone(),
+                self.input.solution.cost.is_none(),
+            );
         }
 
-        let max_depth = self.solution.transitions.len() - 2;
+        let model = &self.input.successor_generator.model;
+        let max_depth = self.input.solution.transitions.len() - 1;
         let mut d = max_depth;
 
         let (states, costs): (Vec<_>, Vec<_>) = get_trace(
-            &self.generator.model.target,
-            T::zero(),
-            &self.solution.transitions,
-            &self.generator.model,
+            &model.target,
+            self.input.root_cost,
+            &self.input.solution.transitions,
+            model,
         )
         .unzip();
 
         loop {
-            let prefix = &self.solution.transitions[..d];
-            let prefix_cost = if d == 0 { T::zero() } else { costs[d - 1] };
+            let prefix = &self.input.solution.transitions[..d];
+            let prefix_cost = if d == 0 {
+                self.input.root_cost
+            } else {
+                costs[d - 1]
+            };
             let target = StateInRegistry::from(if d == 0 {
-                self.generator.model.target.clone()
+                model.target.clone()
             } else {
                 states[d - 1].clone()
             });
-            let node = (self.root_generator)(target, prefix_cost);
+            let node = (self.input.node_generator)(target, prefix_cost);
             let suffix = &[];
-            let generator =
-                self.transition_mutex
-                    .filter_successor_generator(&self.generator, prefix, suffix);
+            let generator = self.transition_mutex.filter_successor_generator(
+                &self.input.successor_generator,
+                prefix,
+                suffix,
+            );
             let input = SearchInput {
                 node,
                 generator,
@@ -250,12 +270,12 @@ where
 
             let parameters = RandomizedRestrictedDDParameters {
                 keep_probability: self.keep_probability,
-                best_solution: Some(&self.solution.transitions),
+                best_solution: Some(&self.input.solution.transitions),
                 beam_search_parameters: BeamSearchParameters {
                     beam_size: self.beam_size,
                     keep_all_layers: self.keep_all_layers,
                     parameters: Parameters {
-                        primal_bound: self.solution.cost,
+                        primal_bound: self.input.solution.cost,
                         get_all_solutions: false,
                         quiet: true,
                         time_limit: self.time_keeper.remaining_time_limit(),
@@ -272,64 +292,59 @@ where
                 &mut self.rng,
             );
 
-            self.solution.expanded += solution.expanded;
-            self.solution.generated += solution.generated;
+            self.input.solution.expanded += solution.expanded;
+            self.input.solution.generated += solution.generated;
 
             if let Some(cost) = solution.cost {
-                if !exceed_bound(&self.generator.model, cost, self.solution.cost) {
-                    if let Some(best_bound) = self.solution.best_bound {
+                if !exceed_bound(model, cost, self.input.solution.cost) {
+                    if let Some(best_bound) = self.input.solution.best_bound {
                         if cost == best_bound {
-                            self.solution.is_optimal = true;
+                            self.input.solution.is_optimal = true;
                         }
                     }
 
-                    if Some(cost) == self.solution.best_bound {
-                        self.solution.is_optimal = true;
+                    if Some(cost) == self.input.solution.best_bound {
+                        self.input.solution.is_optimal = true;
                     }
 
                     if d == 0 && solution.is_optimal {
-                        self.solution.is_optimal = true;
-                        self.solution.best_bound = solution.cost;
+                        self.input.solution.is_optimal = true;
+                        self.input.solution.best_bound = solution.cost;
                     }
 
                     let mut transitions = prefix.to_vec();
                     transitions.extend(solution.transitions.into_iter());
-                    self.solution.transitions = transitions;
+                    self.input.solution.transitions = transitions;
 
-                    self.solution.cost = Some(cost);
-                    self.solution.time = self.time_keeper.elapsed_time();
+                    self.input.solution.cost = Some(cost);
+                    self.input.solution.time = self.time_keeper.elapsed_time();
 
                     if !self.quiet {
-                        print_primal_bound(&self.solution);
+                        print_primal_bound(&self.input.solution);
                     }
 
                     self.time_keeper.stop();
 
-                    return (self.solution.clone(), self.solution.is_optimal);
+                    return (self.input.solution.clone(), self.input.solution.is_optimal);
                 }
             }
 
             if d == 0 {
                 if let Some(bound) = solution.best_bound {
-                    update_bound_if_better(
-                        &mut self.solution,
-                        bound,
-                        &self.generator.model,
-                        self.quiet,
-                    );
+                    update_bound_if_better(&mut self.input.solution, bound, model, self.quiet);
                 }
 
                 if solution.is_infeasible {
-                    self.solution.is_optimal = self.solution.cost.is_some();
-                    self.solution.is_infeasible = self.solution.cost.is_none();
+                    self.input.solution.is_optimal = self.input.solution.cost.is_some();
+                    self.input.solution.is_infeasible = self.input.solution.cost.is_none();
 
-                    if self.solution.is_optimal {
-                        self.solution.best_bound = self.solution.cost;
+                    if self.input.solution.is_optimal {
+                        self.input.solution.best_bound = self.input.solution.cost;
                     }
 
                     self.time_keeper.stop();
 
-                    return (self.solution.clone(), true);
+                    return (self.input.solution.clone(), true);
                 }
 
                 d = max_depth;
@@ -338,11 +353,11 @@ where
             }
 
             if solution.time_out {
-                self.solution.time = self.time_keeper.elapsed_time();
+                self.input.solution.time = self.time_keeper.elapsed_time();
 
                 self.time_keeper.stop();
 
-                return (self.solution.clone(), true);
+                return (self.input.solution.clone(), true);
             }
         }
     }
@@ -361,7 +376,7 @@ where
     B: Fn(T, T) -> T,
     G: Fn(StateInRegistry, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
-    Transition: From<TransitionWithId<V>>,
+    Transition: From<V>,
 {
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
         let (solution, is_terminated) = self.search_inner();
@@ -373,7 +388,7 @@ where
             transitions: solution
                 .transitions
                 .into_iter()
-                .map(dypdl::Transition::from)
+                .map(|t| dypdl::Transition::from(t.transition))
                 .collect(),
             expanded: solution.expanded,
             generated: solution.generated,

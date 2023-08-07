@@ -1,6 +1,6 @@
 use super::f_operator::FOperator;
 use super::wrapped_solver::{SolutionPy, WrappedSolver};
-use crate::model::ModelPy;
+use crate::model::{ModelPy, TransitionPy};
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{
@@ -16,8 +16,6 @@ use std::rc::Rc;
 /// LNBS is complete, i.e., eventually finds the optimal solution, but is designed to find a good solution rather than proving the optimality.
 /// If you want to prove the optimality, :class:`didppy.CABS` or :class:`didppy.CAASDy` might be better.
 /// LNBS typically performs well in routing and scheduling problems, where solution costs are diverse.
-///
-/// It first performs CABS to find an initial feasible solution.
 ///
 /// To apply this solver, the cost must be computed in the form of :code:`x + state_cost`, :code:`x * state_cost`, :code:`didppy.max(x, state_cost)`,
 /// or :code:`didppy.min(x, state_cost)` where, :code:`state_cost` is either of :meth:`IntExpr.state_cost()` and :meth:`FloatExpr.state_cost()`,
@@ -46,6 +44,9 @@ use std::rc::Rc;
 ///     Primal bound.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
+/// initial_solution: list of Transition or None, default: None
+///     Initial feasible solution.
+///     If :code:`None`, CABS is is performed to find an initial feasible solution.
 /// initial_beam_size: int, default: 1
 ///     Initial beam size.
 /// keep_all_layers: bool, default: False
@@ -127,7 +128,7 @@ pub struct LnbsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<Ordered
 impl LnbsPy {
     #[new]
     #[pyo3(
-        text_signature = "(model, time_limit, f_operator=didppy.FOperator.Plus, primal_bound=None, quiet=False, seed=2023, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, has_negative_cost=false, use_cost_weight=false, no_bandit=false, no_transition_mutex=false, cabs_initial_beam_size=None, cabs_max_beam_size=None)"
+        text_signature = "(model, time_limit, f_operator=didppy.FOperator.Plus, primal_bound=None, quiet=False, initial_solution=None, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, seed=2023, has_negative_cost=false, use_cost_weight=false, no_bandit=false, no_transition_mutex=false, cabs_initial_beam_size=None, cabs_max_beam_size=None)"
     )]
     #[pyo3(signature = (
         model,
@@ -135,6 +136,7 @@ impl LnbsPy {
         f_operator = FOperator::Plus,
         primal_bound = None,
         quiet = false,
+        initial_solution = None,
         initial_beam_size = 1,
         keep_all_layers = false,
         max_beam_size = None,
@@ -153,6 +155,7 @@ impl LnbsPy {
         f_operator: FOperator,
         primal_bound: Option<&PyAny>,
         quiet: bool,
+        initial_solution: Option<Vec<TransitionPy>>,
         initial_beam_size: usize,
         keep_all_layers: bool,
         max_beam_size: Option<usize>,
@@ -170,6 +173,8 @@ impl LnbsPy {
 
         let f_evaluator_type = FEvaluatorType::from(f_operator);
         let cabs_initial_beam_size = cabs_initial_beam_size.unwrap_or(initial_beam_size);
+        let transitions = initial_solution
+            .map(|transitions| transitions.into_iter().map(Transition::from).collect());
 
         if model.float_cost() {
             let primal_bound = if let Some(primal_bound) = primal_bound {
@@ -209,6 +214,7 @@ impl LnbsPy {
             };
             let solver = create_dual_bound_lnbs::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
+                transitions,
                 parameters,
                 cabs_parameters,
                 f_evaluator_type,
@@ -250,6 +256,7 @@ impl LnbsPy {
             };
             let solver = create_dual_bound_lnbs::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
+                transitions,
                 parameters,
                 cabs_parameters,
                 f_evaluator_type,

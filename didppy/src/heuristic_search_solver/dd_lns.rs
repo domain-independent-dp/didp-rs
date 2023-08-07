@@ -1,6 +1,6 @@
 use super::f_operator::FOperator;
 use super::wrapped_solver::{SolutionPy, WrappedSolver};
-use crate::model::ModelPy;
+use crate::model::{ModelPy, TransitionPy};
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{
@@ -13,7 +13,6 @@ use std::rc::Rc;
 /// Large Neighborhood Search with Decision Diagrams (DD-LNS) solver.
 ///
 /// This performs LNS by constructing restricted multi-valued decision diagrams (MDD).
-/// It first performs CABS to find an initial feasible solution and then performs DD-LNS to improve the solution.
 ///
 /// To apply this solver, the cost must be computed in the form of :code:`x + state_cost`, :code:`x * state_cost`, :code:`didppy.max(x, state_cost)`,
 /// or :code:`didppy.min(x, state_cost)` where, :code:`state_cost` is either of :meth:`IntExpr.state_cost()` and :meth:`FloatExpr.state_cost()`,
@@ -41,6 +40,9 @@ use std::rc::Rc;
 ///     Time limit.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
+/// initial_solution: list of Transition or None, default: None
+///     Initial feasible solution.
+///     If :code:`None`, CABS is is performed to find an initial feasible solution.
 /// beam_size: int, default: 1000
 ///     Beam size.
 /// keep_probability: float, default: 0.1
@@ -112,7 +114,7 @@ pub struct DdLnsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<Ordere
 impl DdLnsPy {
     #[new]
     #[pyo3(
-        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, beam_size=1000, keep_probability=0.1, keep_all_layers=False, seed=2023, cabs_initial_beam_size=None, cabs_max_beam_size=None)"
+        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, initial_solution=None, beam_size=1000, keep_probability=0.1, keep_all_layers=False, seed=2023, cabs_initial_beam_size=None, cabs_max_beam_size=None)"
     )]
     #[pyo3(signature = (
         model,
@@ -120,6 +122,7 @@ impl DdLnsPy {
         primal_bound = None,
         time_limit = None,
         quiet = false,
+        initial_solution = None,
         beam_size = 1000,
         keep_probability = 0.1,
         keep_all_layers = false,
@@ -134,6 +137,7 @@ impl DdLnsPy {
         primal_bound: Option<&PyAny>,
         time_limit: Option<f64>,
         quiet: bool,
+        initial_solution: Option<Vec<TransitionPy>>,
         beam_size: usize,
         keep_probability: f64,
         keep_all_layers: bool,
@@ -146,6 +150,8 @@ impl DdLnsPy {
         }
 
         let f_evaluator_type = FEvaluatorType::from(f_operator);
+        let transitions = initial_solution
+            .map(|transitions| transitions.into_iter().map(Transition::from).collect());
 
         if model.float_cost() {
             let primal_bound = if let Some(primal_bound) = primal_bound {
@@ -181,6 +187,7 @@ impl DdLnsPy {
             };
             let solver = create_dual_bound_dd_lns::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
+                transitions,
                 parameters,
                 cabs_parameters,
                 f_evaluator_type,
@@ -218,6 +225,7 @@ impl DdLnsPy {
             };
             let solver = create_dual_bound_dd_lns::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
+                transitions,
                 parameters,
                 cabs_parameters,
                 f_evaluator_type,

@@ -1,8 +1,9 @@
 use super::beam_search::BeamSearchParameters;
 use super::data_structure::{
-    exceed_bound, BfsNode, HashableSignatureVariables, StateInRegistry, SuccessorGenerator,
-    TransitionMutex, TransitionWithId,
+    exceed_bound, BfsNode, HashableSignatureVariables, StateInRegistry, TransitionMutex,
+    TransitionWithId,
 };
+use super::neighborhood_search::NeighborhoodSearchInput;
 use super::rollout::get_trace;
 use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::{print_primal_bound, update_bound_if_better, TimeKeeper};
@@ -15,7 +16,6 @@ use std::cmp;
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
-use std::marker::PhantomData;
 use std::ops::Deref;
 use std::rc::Rc;
 use std::str;
@@ -49,7 +49,6 @@ pub struct LnbsParameters<T> {
 ///
 /// Type parameter `B` is a type of a function that performs beam search.
 /// The function takes a `SearchInput` and `BeamSearchParameters` and returns a `Solution`.
-/// Type parameter `G` is a type of a function that generates a root node given a state and its cost.
 ///
 /// `parameters.parameters.time_limit` is required in this solver.
 ///
@@ -64,10 +63,11 @@ pub struct LnbsParameters<T> {
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::{Parameters, Search, Solution};
 /// use dypdl_heuristic_search::search_algorithm::{
-///     beam_search, BeamSearchParameters, FNode, Lnbs, LnbsParameters, SearchInput,
-///     SuccessorGenerator, TransitionWithId,
+///     beam_search, BeamSearchParameters, FNode, Lnbs, LnbsParameters, NeighborhoodSearchInput,
+///     SearchInput, SuccessorGenerator, TransitionMutex, TransitionWithId,
 /// };
 /// use std::rc::Rc;
+/// use std::marker::PhantomData;
 ///
 /// let mut model = Model::default();
 /// let variable = model.add_integer_variable("variable", 0).unwrap();
@@ -80,12 +80,12 @@ pub struct LnbsParameters<T> {
 /// model.add_forward_transition(increment.clone()).unwrap();
 /// let model = Rc::new(model);
 ///
-/// let state = model.target.clone();
-/// let cost = 0;
 /// let h_evaluator = |_: &_| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
-/// let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
+/// let successor_generator = SuccessorGenerator::<TransitionWithId>::from_model(
+///     model.clone(), false,
+/// );
 /// let t_model = model.clone();
 /// let transition_evaluator = move |node: &FNode<_, _>, transition, primal_bound| {
 ///     node.generate_successor_node(
@@ -100,7 +100,7 @@ pub struct LnbsParameters<T> {
 /// let beam_search = move |input: &SearchInput<_, _>, parameters| {
 ///     beam_search(input, &transition_evaluator, base_cost_evaluator, parameters)
 /// };
-/// let root_generator = |state, cost| {
+/// let node_generator = |state, cost| {
 ///     FNode::generate_root_node(
 ///         state,
 ///         cost,
@@ -132,7 +132,23 @@ pub struct LnbsParameters<T> {
 ///     ..Default::default()
 /// };
 ///
-/// let mut solver = Lnbs::new(generator, beam_search, root_generator, solution, parameters);
+/// let transition_mutex = TransitionMutex::new(
+///     successor_generator.transitions
+///     .iter()
+///     .chain(successor_generator.forced_transitions.iter())
+///     .map(|t| t.as_ref().clone())
+///     .collect()
+/// );
+///
+/// let input = NeighborhoodSearchInput {
+///     root_cost: 0,
+///     node_generator,
+///     successor_generator,
+///     solution,
+///     phantom: PhantomData::default(),
+/// };
+///
+/// let mut solver = Lnbs::new(input, beam_search, transition_mutex, parameters);
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
@@ -159,11 +175,15 @@ pub struct Lnbs<
     V: TransitionInterface + Clone + Default,
     D: Deref<Target = TransitionWithId<V>> + Clone,
     R: Deref<Target = Model> + Clone,
-    K: Hash + Eq + Clone + Debug,
+    K: Hash
+        + Eq
+        + Clone
+        + Debug
+        + Deref<Target = HashableSignatureVariables>
+        + From<HashableSignatureVariables>,
 {
-    generator: SuccessorGenerator<TransitionWithId<V>, D, R>,
+    input: NeighborhoodSearchInput<T, N, G, StateInRegistry<K>, TransitionWithId<V>, D, R>,
     beam_search: B,
-    root_generator: G,
     max_beam_size: Option<usize>,
     has_negative_cost: bool,
     use_cost_weight: bool,
@@ -184,9 +204,7 @@ pub struct Lnbs<
     depth_exhausted: Vec<bool>,
     rng: Pcg64Mcg,
     time_keeper: TimeKeeper,
-    solution: Solution<T, TransitionWithId<V>>,
     first_call: bool,
-    phantom: PhantomData<(D, R, K)>,
 }
 
 impl<T, N, B, G, V, D, R, K> Lnbs<T, N, B, G, V, D, R, K>
@@ -200,6 +218,7 @@ where
     ) -> Solution<T, TransitionWithId<V>>,
     G: Fn(StateInRegistry<K>, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
     D: Deref<Target = TransitionWithId<V>> + From<TransitionWithId<V>> + Clone,
     R: Deref<Target = Model> + Clone,
     K: Hash
@@ -211,10 +230,9 @@ where
 {
     /// Create a new LNBS solver.
     pub fn new(
-        generator: SuccessorGenerator<TransitionWithId<V>, D, R>,
+        input: NeighborhoodSearchInput<T, N, G, StateInRegistry<K>, TransitionWithId<V>, D, R>,
         beam_search: B,
-        root_generator: G,
-        solution: Solution<T, TransitionWithId<V>>,
+        transition_mutex: TransitionMutex,
         parameters: LnbsParameters<T>,
     ) -> Lnbs<T, N, B, G, V, D, R, K> {
         let time_limit = parameters
@@ -223,9 +241,8 @@ where
             .time_limit
             .unwrap();
         let mut time_keeper = TimeKeeper::with_time_limit(time_limit);
-        let transition_mutex = TransitionMutex::new(&generator.model, generator.backward);
 
-        let max_depth = solution.transitions.len();
+        let max_depth = input.solution.transitions.len();
 
         let (depth_arms, reward_mean, time_mean, trials, depth_exhausted) = if max_depth > 0 {
             let log = (usize::BITS - 1) - max_depth.leading_zeros();
@@ -258,9 +275,8 @@ where
         time_keeper.stop();
 
         Lnbs {
-            generator,
+            input,
             beam_search,
-            root_generator,
             max_beam_size: parameters.max_beam_size,
             has_negative_cost: parameters.has_negative_cost,
             use_cost_weight: parameters.use_cost_weight,
@@ -281,39 +297,41 @@ where
             depth_exhausted,
             rng: Pcg64Mcg::seed_from_u64(parameters.seed),
             time_keeper,
-            solution,
             first_call: true,
-            phantom: PhantomData::default(),
         }
     }
 
     //// Search for the next solution, returning the solution using `TransitionWithId`.
     pub fn search_inner(&mut self) -> (Solution<T, TransitionWithId<V>>, bool) {
-        if self.solution.is_terminated() || self.solution.cost.is_none() {
-            return (self.solution.clone(), true);
+        if self.input.solution.is_terminated() || self.input.solution.cost.is_none() {
+            return (self.input.solution.clone(), true);
         }
 
         self.time_keeper.start();
 
         if self.first_call {
             self.first_call = false;
+
             self.time_keeper.stop();
 
-            return (self.solution.clone(), false);
+            return (
+                self.input.solution.clone(),
+                self.input.solution.cost.is_none(),
+            );
         }
 
         let (states, costs): (Vec<_>, Vec<_>) = get_trace(
-            &self.generator.model.target,
-            T::zero(),
-            &self.solution.transitions,
-            &self.generator.model,
+            &self.input.successor_generator.model.target,
+            self.input.root_cost,
+            &self.input.solution.transitions,
+            &self.input.successor_generator.model,
         )
         .unzip();
 
         let last = self.depth_arms.last_mut().unwrap();
 
-        if *last > self.solution.transitions.len() {
-            *last = self.solution.transitions.len();
+        if *last > self.input.solution.transitions.len() {
+            *last = self.input.solution.transitions.len();
         };
 
         loop {
@@ -322,7 +340,7 @@ where
             if result.is_none() {
                 self.time_keeper.stop();
 
-                return (self.solution.clone(), true);
+                return (self.input.solution.clone(), true);
             }
 
             let (arm, depth) = result.unwrap();
@@ -339,26 +357,31 @@ where
                 continue;
             }
 
+            let model = &self.input.successor_generator.model;
+
             let (start, beam_size) = result.unwrap();
 
-            let prefix = &self.solution.transitions[..start];
+            let prefix = &self.input.solution.transitions[..start];
             let prefix_cost = if start == 0 {
-                T::zero()
+                self.input.root_cost
             } else {
                 costs[start - 1]
             };
             let target = StateInRegistry::from(if start == 0 {
-                self.generator.model.target.clone()
+                model.target.clone()
             } else {
                 states[start - 1].clone()
             });
-            let node = (self.root_generator)(target, prefix_cost);
-            let suffix = &self.solution.transitions[start + depth..];
+            let node = (self.input.node_generator)(target, prefix_cost);
+            let suffix = &self.input.solution.transitions[start + depth..];
             let generator = if self.no_transition_mutex {
-                self.generator.clone()
+                self.input.successor_generator.clone()
             } else {
-                self.transition_mutex
-                    .filter_successor_generator(&self.generator, prefix, suffix)
+                self.transition_mutex.filter_successor_generator(
+                    &self.input.successor_generator,
+                    prefix,
+                    suffix,
+                )
             };
             let input = SearchInput::<N, TransitionWithId<V>, D, R> {
                 node,
@@ -370,7 +393,7 @@ where
                 beam_size,
                 keep_all_layers: self.keep_all_layers,
                 parameters: Parameters {
-                    primal_bound: self.solution.cost,
+                    primal_bound: self.input.solution.cost,
                     get_all_solutions: false,
                     quiet: true,
                     time_limit: self.time_keeper.remaining_time_limit(),
@@ -380,10 +403,10 @@ where
 
             let solution = (self.beam_search)(&input, parameters);
 
-            self.solution.expanded += solution.expanded;
-            self.solution.generated += solution.generated;
+            self.input.solution.expanded += solution.expanded;
+            self.input.solution.generated += solution.generated;
 
-            let len = self.solution.transitions.len();
+            let len = self.input.solution.transitions.len();
 
             let exhausted = solution.is_optimal || solution.is_infeasible;
             let (next_beam_size, done) = if let Some(max_beam_size) = self.max_beam_size {
@@ -399,7 +422,7 @@ where
                 .insert((start, depth), (next_beam_size, done));
 
             if let Some(cost) = solution.cost {
-                if !exceed_bound(&self.generator.model, cost, self.solution.cost) {
+                if !exceed_bound(model, cost, self.input.solution.cost) {
                     self.neighborhood_beam_size = FxHashMap::from_iter(
                         self.neighborhood_beam_size
                             .drain()
@@ -408,73 +431,68 @@ where
 
                     self.depth_exhausted.iter_mut().for_each(|x| *x = false);
 
-                    if Some(cost) == self.solution.best_bound {
-                        self.solution.is_optimal = true;
+                    if Some(cost) == self.input.solution.best_bound {
+                        self.input.solution.is_optimal = true;
                     }
 
                     if depth == len && solution.is_optimal {
-                        self.solution.is_optimal = true;
-                        self.solution.best_bound = solution.cost;
+                        self.input.solution.is_optimal = true;
+                        self.input.solution.best_bound = solution.cost;
                     }
 
                     let mut transitions = prefix.to_vec();
                     transitions.extend(solution.transitions.into_iter());
-                    self.solution.transitions = transitions;
+                    self.input.solution.transitions = transitions;
 
-                    let current_cost = self.solution.cost.unwrap();
+                    let current_cost = self.input.solution.cost.unwrap();
                     let reward = (cost - current_cost).to_continuous().abs()
                         / current_cost.to_continuous().abs();
                     let time = (self.time_keeper.elapsed_time() - time_start) / self.time_limit;
                     self.update_bandit(arm, reward, time);
 
-                    self.solution.cost = Some(cost);
-                    self.solution.time = self.time_keeper.elapsed_time();
+                    self.input.solution.cost = Some(cost);
+                    self.input.solution.time = self.time_keeper.elapsed_time();
 
                     if !self.quiet {
                         println!(
                             "A new primal bound is found with depth: {}, #beam: {}",
                             depth, beam_size
                         );
-                        print_primal_bound(&self.solution);
+                        print_primal_bound(&self.input.solution);
                     }
 
                     self.time_keeper.stop();
 
-                    return (self.solution.clone(), self.solution.is_optimal);
+                    return (self.input.solution.clone(), self.input.solution.is_optimal);
                 }
             }
 
             if start == 0 && depth == len {
                 if let Some(bound) = solution.best_bound {
-                    update_bound_if_better(
-                        &mut self.solution,
-                        bound,
-                        &self.generator.model,
-                        self.quiet,
-                    );
+                    update_bound_if_better(&mut self.input.solution, bound, model, self.quiet);
                 }
             }
 
             if exhausted && depth == len {
-                self.solution.is_optimal = self.solution.cost.is_some();
-                self.solution.is_infeasible = self.solution.cost.is_none();
-                self.solution.time = self.time_keeper.elapsed_time();
+                self.input.solution.is_optimal = self.input.solution.cost.is_some();
+                self.input.solution.is_infeasible = self.input.solution.cost.is_none();
+                self.input.solution.time = self.time_keeper.elapsed_time();
 
-                if self.solution.is_optimal {
-                    self.solution.best_bound = self.solution.cost;
+                if self.input.solution.is_optimal {
+                    self.input.solution.best_bound = self.input.solution.cost;
                 }
 
                 self.time_keeper.stop();
 
-                return (self.solution.clone(), true);
+                return (self.input.solution.clone(), true);
             }
 
             if solution.time_out {
-                self.solution.time = self.time_keeper.elapsed_time();
+                self.input.solution.time = self.time_keeper.elapsed_time();
 
                 self.time_keeper.stop();
 
-                return (self.solution.clone(), true);
+                return (self.input.solution.clone(), true);
             }
 
             let time = (self.time_keeper.elapsed_time() - time_start) / self.time_limit;
@@ -558,8 +576,8 @@ where
     }
 
     fn select_start(&mut self, costs: &[T], depth: usize) -> Option<(usize, usize)> {
-        let search_non_positive =
-            self.has_negative_cost || self.generator.model.reduce_function == ReduceFunction::Max;
+        let search_non_positive = self.has_negative_cost
+            || self.input.successor_generator.model.reduce_function == ReduceFunction::Max;
 
         let (weights, starts): (Vec<_>, Vec<_>) = std::iter::once(T::zero())
             .chain(costs.iter().copied())
@@ -590,11 +608,7 @@ where
             .map(|v| v.to_continuous())
             .collect::<Vec<_>>();
 
-        if self.generator.model.reduce_function == ReduceFunction::Max {
-            weights.iter_mut().for_each(|v| *v = 1.0 / *v);
-        };
-
-        if self.use_cost_weight {
+        if !search_non_positive && self.use_cost_weight {
             weights
                 .iter_mut()
                 .zip(starts.iter())
@@ -618,7 +632,7 @@ where
     ) -> Solution<T, TransitionWithId<V>>,
     G: Fn(StateInRegistry<K>, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
-    Transition: From<TransitionWithId<V>>,
+    Transition: From<V>,
     D: Deref<Target = TransitionWithId<V>> + From<TransitionWithId<V>> + Clone,
     R: Deref<Target = Model> + Clone,
     K: Hash
@@ -638,7 +652,7 @@ where
             transitions: solution
                 .transitions
                 .into_iter()
-                .map(dypdl::Transition::from)
+                .map(|t| dypdl::Transition::from(t.transition))
                 .collect(),
             expanded: solution.expanded,
             generated: solution.generated,

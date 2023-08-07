@@ -185,6 +185,7 @@ where
     };
     Ok(create_dual_bound_lnbs(
         Rc::new(model),
+        None,
         lnbs_parameters,
         cabs_parameters,
         f_evaluator_type,

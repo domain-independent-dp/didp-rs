@@ -23,6 +23,7 @@ where
         yaml_rust::Yaml::Null => {
             return Ok(create_dual_bound_dd_lns(
                 Rc::new(model),
+                None,
                 DdLnsParameters::default(),
                 CabsParameters::default(),
                 FEvaluatorType::Plus,
@@ -145,6 +146,7 @@ where
     };
     Ok(create_dual_bound_dd_lns(
         Rc::new(model),
+        None,
         dd_lns_parameters,
         cabs_parameters,
         f_evaluator_type,

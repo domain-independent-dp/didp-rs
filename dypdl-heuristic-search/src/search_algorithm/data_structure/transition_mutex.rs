@@ -118,21 +118,29 @@ fn get_required_elements(transition: &Transition) -> RequiredElements {
 ///
 /// let mut transition = Transition::new("remove 0");
 /// transition.add_effect(variable, variable.remove(0)).unwrap();
-/// model.add_forward_transition(transition).unwrap();
+/// model.add_forward_transition(transition.clone()).unwrap();
 ///
 /// let mut transition = Transition::new("remove 1");
 /// transition.add_effect(variable, variable.remove(1)).unwrap();
-/// model.add_forward_forced_transition(transition).unwrap();
+/// model.add_forward_forced_transition(transition.clone()).unwrap();
 ///
 /// let mut transition = Transition::new("require 0");
 /// transition.add_precondition(variable.contains(0));
-/// model.add_forward_forced_transition(transition).unwrap();
+/// model.add_forward_forced_transition(transition.clone()).unwrap();
 ///
 /// let mut transition = Transition::new("require 1");
 /// transition.add_precondition(variable.contains(1));
 /// model.add_forward_transition(transition).unwrap();
 ///
-/// let mutex = TransitionMutex::new(&model, false);
+/// let model = Rc::new(model);
+/// let generator = SuccessorGenerator::<TransitionWithId>::from_model(model, false);
+/// let transitions = generator
+///     .transitions
+///     .iter()
+///     .chain(generator.forced_transitions.iter())
+///     .map(|t| t.as_ref().clone())
+///     .collect::<Vec<_>>();
+/// let mutex = TransitionMutex::new(transitions);
 ///
 /// assert_eq!(mutex.get_forbidden_before(false, 0), &[]);
 /// assert_eq!(mutex.get_forbidden_before(true, 0), &[]);
@@ -144,8 +152,6 @@ fn get_required_elements(transition: &Transition) -> RequiredElements {
 /// assert_eq!(mutex.get_forbidden_after(true, 1), &[]);
 /// assert_eq!(mutex.get_forbidden_after(false, 1), &[]);
 ///
-/// let model = Rc::new(model);
-/// let generator = SuccessorGenerator::<TransitionWithId>::from_model(model, false);
 /// let remove_0 = generator.transitions[0].clone();
 /// let require_1 = generator.transitions[1].clone();
 /// let prefix = &[(*remove_0).clone()];
@@ -188,13 +194,14 @@ impl TransitionMutex {
     }
 
     /// Create a successor generator filtering forbidden transitions by the given prefix ans suffix.
-    pub fn filter_successor_generator<T: TransitionInterface, U, R>(
+    pub fn filter_successor_generator<T, U, R>(
         &self,
         generator: &SuccessorGenerator<TransitionWithId<T>, U, R>,
         prefix: &[TransitionWithId<T>],
         suffix: &[TransitionWithId<T>],
     ) -> SuccessorGenerator<TransitionWithId<T>, U, R>
     where
+        T: TransitionInterface,
         U: Deref<Target = TransitionWithId<T>> + Clone + From<TransitionWithId<T>>,
         R: Deref<Target = Model> + Clone,
     {
@@ -247,36 +254,38 @@ impl TransitionMutex {
         )
     }
 
-    /// Create a new transition mutex object.
-    pub fn new(model: &Model, backward: bool) -> Self {
+    /// Create a new transition mutex from the given transitions.
+    pub fn new<T>(transitions: Vec<TransitionWithId<T>>) -> Self
+    where
+        T: TransitionInterface + Clone,
+        Transition: From<T>,
+    {
+        let len = transitions
+            .iter()
+            .filter_map(|t| if !t.forced { Some(t.id) } else { None })
+            .max()
+            .map_or(0, |id_max| id_max + 1);
+        let forced_len = transitions
+            .iter()
+            .filter_map(|t| if t.forced { Some(t.id) } else { None })
+            .max()
+            .map_or(0, |id_max| id_max + 1);
+
         let mut achievers = FxHashMap::default();
         let mut removers = FxHashMap::default();
         let mut arbitrary_affected = FxHashSet::default();
         let mut positively_conditioned = FxHashMap::default();
         let mut negatively_conditioned = FxHashMap::default();
 
-        let forced_transitions = if backward {
-            &model.backward_forced_transitions
-        } else {
-            &model.forward_forced_transitions
-        };
-        let transitions = if backward {
-            &model.backward_transitions
-        } else {
-            &model.forward_transitions
-        };
-
-        for ((id, t), forced) in forced_transitions
-            .iter()
-            .enumerate()
-            .zip(std::iter::repeat(true))
-            .chain(transitions.iter().enumerate().zip(std::iter::repeat(false)))
-        {
-            let affected = get_affected_elements(t);
+        for t in transitions {
+            let id = t.id;
+            let forced = t.forced;
+            let transition = Transition::from(t.transition);
+            let affected = get_affected_elements(&transition);
             extend_element_transitions_map(&mut achievers, &affected.achieved, forced, id);
             extend_element_transitions_map(&mut removers, &affected.removed, forced, id);
             arbitrary_affected.extend(affected.arbitrary.into_iter());
-            let required = get_required_elements(t);
+            let required = get_required_elements(&transition);
             extend_element_transitions_map(
                 &mut positively_conditioned,
                 &required.positively,
@@ -291,10 +300,10 @@ impl TransitionMutex {
             );
         }
 
-        let mut forbidden_before = vec![FxHashSet::default(); transitions.len()];
-        let mut forced_forbidden_before = vec![FxHashSet::default(); forced_transitions.len()];
-        let mut forbidden_after = vec![FxHashSet::default(); transitions.len()];
-        let mut forced_forbidden_after = vec![FxHashSet::default(); forced_transitions.len()];
+        let mut forbidden_before = vec![FxHashSet::default(); len];
+        let mut forced_forbidden_before = vec![FxHashSet::default(); forced_len];
+        let mut forbidden_after = vec![FxHashSet::default(); len];
+        let mut forced_forbidden_after = vec![FxHashSet::default(); forced_len];
 
         // For each transition that positively requires an element.
         for ((var_id, element), operator_ids) in positively_conditioned {
@@ -535,68 +544,24 @@ mod tests {
     #[test]
     #[should_panic]
     fn get_forbidden_before_with_no_transitions() {
-        let model = Model::default();
-        let constraints = TransitionMutex::new(&model, false);
-        constraints.get_forbidden_before(false, 0);
-    }
-
-    #[test]
-    #[should_panic]
-    fn get_forbidden_before_with_no_forward_transitions() {
-        let model = Model {
-            backward_transitions: vec![Transition::default()],
-            ..Default::default()
-        };
-        let constraints = TransitionMutex::new(&model, false);
-        constraints.get_forbidden_before(false, 0);
-    }
-
-    #[test]
-    #[should_panic]
-    fn get_forbidden_before_with_no_backward_transitions() {
-        let model = Model {
-            forward_transitions: vec![Transition::default()],
-            ..Default::default()
-        };
-        let constraints = TransitionMutex::new(&model, true);
+        let constraints = TransitionMutex::new(Vec::<TransitionWithId>::default());
         constraints.get_forbidden_before(false, 0);
     }
 
     #[test]
     #[should_panic]
     fn get_forbidden_after_with_no_transitions() {
-        let model = Model::default();
-        let constraints = TransitionMutex::new(&model, false);
+        let constraints = TransitionMutex::new(Vec::<TransitionWithId>::default());
         constraints.get_forbidden_after(false, 0);
     }
 
     #[test]
-    #[should_panic]
-    fn get_forbidden_after_with_no_forward_transitions() {
-        let model = Model {
-            backward_transitions: vec![Transition::default()],
-            ..Default::default()
-        };
-        let constraints = TransitionMutex::new(&model, false);
-        constraints.get_forbidden_after(false, 0);
-    }
-
-    #[test]
-    #[should_panic]
-    fn get_forbidden_after_with_no_backward_transitions() {
-        let model = Model {
-            forward_transitions: vec![Transition::default()],
-            ..Default::default()
-        };
-        let constraints = TransitionMutex::new(&model, true);
-        constraints.get_forbidden_after(false, 0);
-    }
-
-    #[test]
-    fn transition_constraints_with_forward_transitions() {
-        let model = Model {
-            forward_forced_transitions: vec![
-                Transition {
+    fn new() {
+        let transitions = vec![
+            TransitionWithId {
+                id: 0,
+                forced: true,
+                transition: Transition {
                     effect: Effect {
                         set_effects: vec![
                             (
@@ -624,7 +589,11 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                Transition {
+            },
+            TransitionWithId {
+                id: 1,
+                forced: true,
+                transition: Transition {
                     preconditions: vec![
                         GroundedCondition {
                             condition: Condition::Set(Box::new(SetCondition::IsIn(
@@ -668,9 +637,11 @@ mod tests {
                     },
                     ..Default::default()
                 },
-            ],
-            forward_transitions: vec![
-                Transition {
+            },
+            TransitionWithId {
+                id: 0,
+                forced: false,
+                transition: Transition {
                     effect: Effect {
                         set_effects: vec![
                             (
@@ -708,7 +679,11 @@ mod tests {
                     },
                     ..Default::default()
                 },
-                Transition {
+            },
+            TransitionWithId {
+                id: 1,
+                forced: false,
+                transition: Transition {
                     preconditions: vec![GroundedCondition {
                         condition: Condition::Not(Box::new(Condition::Set(Box::new(
                             SetCondition::IsIn(
@@ -745,197 +720,20 @@ mod tests {
                     },
                     ..Default::default()
                 },
-            ],
-            ..Default::default()
-        };
-        let constraints = TransitionMutex::new(&model, false);
-        assert_eq!(constraints.get_forbidden_before(true, 0), &[]);
+            },
+        ];
+        let mutex = TransitionMutex::new(transitions);
+        assert_eq!(mutex.get_forbidden_before(true, 0), &[]);
+        assert_eq!(mutex.get_forbidden_before(true, 1), &[(true, 0), (true, 1)]);
+        assert_eq!(mutex.get_forbidden_before(false, 0), &[]);
         assert_eq!(
-            constraints.get_forbidden_before(true, 1),
-            &[(true, 0), (true, 1)]
-        );
-        assert_eq!(constraints.get_forbidden_before(false, 0), &[]);
-        assert_eq!(
-            constraints.get_forbidden_before(false, 1),
+            mutex.get_forbidden_before(false, 1),
             &[(false, 0), (false, 1)]
         );
-        assert_eq!(constraints.get_forbidden_after(true, 0), &[(true, 1)]);
-        assert_eq!(constraints.get_forbidden_after(false, 0), &[(false, 1)]);
-        assert_eq!(constraints.get_forbidden_after(true, 1), &[(true, 1)]);
-        assert_eq!(constraints.get_forbidden_after(false, 1), &[(false, 1)]);
-    }
-
-    #[test]
-    fn transition_constraints_with_backward_transitions() {
-        let model = Model {
-            backward_forced_transitions: vec![
-                Transition {
-                    effect: Effect {
-                        set_effects: vec![
-                            (
-                                0,
-                                SetExpression::SetElementOperation(
-                                    SetElementOperator::Remove,
-                                    ElementExpression::Constant(1),
-                                    Box::new(SetExpression::Reference(
-                                        ReferenceExpression::Variable(0),
-                                    )),
-                                ),
-                            ),
-                            (
-                                1,
-                                SetExpression::SetElementOperation(
-                                    SetElementOperator::Add,
-                                    ElementExpression::Constant(1),
-                                    Box::new(SetExpression::Reference(
-                                        ReferenceExpression::Variable(1),
-                                    )),
-                                ),
-                            ),
-                        ],
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                Transition {
-                    preconditions: vec![
-                        GroundedCondition {
-                            condition: Condition::Set(Box::new(SetCondition::IsIn(
-                                ElementExpression::Constant(1),
-                                SetExpression::Reference(ReferenceExpression::Variable(0)),
-                            ))),
-                            ..Default::default()
-                        },
-                        GroundedCondition {
-                            condition: Condition::Set(Box::new(SetCondition::IsIn(
-                                ElementExpression::Constant(2),
-                                SetExpression::Reference(ReferenceExpression::Variable(2)),
-                            ))),
-                            ..Default::default()
-                        },
-                    ],
-                    effect: Effect {
-                        set_effects: vec![
-                            (
-                                0,
-                                SetExpression::SetElementOperation(
-                                    SetElementOperator::Remove,
-                                    ElementExpression::Constant(1),
-                                    Box::new(SetExpression::Reference(
-                                        ReferenceExpression::Variable(0),
-                                    )),
-                                ),
-                            ),
-                            (
-                                2,
-                                SetExpression::SetElementOperation(
-                                    SetElementOperator::Remove,
-                                    ElementExpression::Constant(2),
-                                    Box::new(SetExpression::Reference(
-                                        ReferenceExpression::Variable(2),
-                                    )),
-                                ),
-                            ),
-                        ],
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-            ],
-            backward_transitions: vec![
-                Transition {
-                    effect: Effect {
-                        set_effects: vec![
-                            (
-                                1,
-                                SetExpression::SetElementOperation(
-                                    SetElementOperator::Add,
-                                    ElementExpression::Constant(2),
-                                    Box::new(SetExpression::Reference(
-                                        ReferenceExpression::Variable(1),
-                                    )),
-                                ),
-                            ),
-                            (
-                                0,
-                                SetExpression::SetElementOperation(
-                                    SetElementOperator::Remove,
-                                    ElementExpression::Constant(2),
-                                    Box::new(SetExpression::Reference(
-                                        ReferenceExpression::Variable(0),
-                                    )),
-                                ),
-                            ),
-                            (
-                                2,
-                                SetExpression::SetElementOperation(
-                                    SetElementOperator::Remove,
-                                    ElementExpression::Constant(2),
-                                    Box::new(SetExpression::Reference(
-                                        ReferenceExpression::Variable(2),
-                                    )),
-                                ),
-                            ),
-                        ],
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-                Transition {
-                    preconditions: vec![GroundedCondition {
-                        condition: Condition::Not(Box::new(Condition::Set(Box::new(
-                            SetCondition::IsIn(
-                                ElementExpression::Constant(2),
-                                SetExpression::Reference(ReferenceExpression::Variable(1)),
-                            ),
-                        )))),
-                        ..Default::default()
-                    }],
-                    effect: Effect {
-                        set_effects: vec![
-                            (
-                                1,
-                                SetExpression::SetElementOperation(
-                                    SetElementOperator::Add,
-                                    ElementExpression::Constant(2),
-                                    Box::new(SetExpression::Reference(
-                                        ReferenceExpression::Variable(1),
-                                    )),
-                                ),
-                            ),
-                            (
-                                2,
-                                SetExpression::SetElementOperation(
-                                    SetElementOperator::Remove,
-                                    ElementExpression::Variable(0),
-                                    Box::new(SetExpression::Reference(
-                                        ReferenceExpression::Variable(2),
-                                    )),
-                                ),
-                            ),
-                        ],
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        };
-        let constraints = TransitionMutex::new(&model, true);
-        assert_eq!(constraints.get_forbidden_before(true, 0), &[]);
-        assert_eq!(
-            constraints.get_forbidden_before(true, 1),
-            &[(true, 0), (true, 1)]
-        );
-        assert_eq!(constraints.get_forbidden_before(false, 0), &[]);
-        assert_eq!(
-            constraints.get_forbidden_before(false, 1),
-            &[(false, 0), (false, 1)]
-        );
-        assert_eq!(constraints.get_forbidden_after(true, 0), &[(true, 1)]);
-        assert_eq!(constraints.get_forbidden_after(false, 0), &[(false, 1)]);
-        assert_eq!(constraints.get_forbidden_after(true, 1), &[(true, 1)]);
-        assert_eq!(constraints.get_forbidden_after(false, 1), &[(false, 1)]);
+        assert_eq!(mutex.get_forbidden_after(true, 0), &[(true, 1)]);
+        assert_eq!(mutex.get_forbidden_after(false, 0), &[(false, 1)]);
+        assert_eq!(mutex.get_forbidden_after(true, 1), &[(true, 1)]);
+        assert_eq!(mutex.get_forbidden_after(false, 1), &[(false, 1)]);
     }
 
     #[test]
@@ -945,9 +743,15 @@ mod tests {
             forward_forced_transitions: vec![Transition::default()],
             ..Default::default()
         });
-        let constraints = TransitionMutex::new(&model, false);
         let expected = SuccessorGenerator::<TransitionWithId>::from_model(model, false);
-        let generator = constraints.filter_successor_generator(&expected, &[], &[]);
+        let transitions = expected
+            .transitions
+            .iter()
+            .chain(expected.forced_transitions.iter())
+            .map(|t| t.as_ref().clone())
+            .collect::<Vec<_>>();
+        let mutex = TransitionMutex::new(transitions);
+        let generator = mutex.filter_successor_generator(&expected, &[], &[]);
         assert_eq!(generator, expected);
     }
 
@@ -958,9 +762,15 @@ mod tests {
             forward_forced_transitions: vec![Transition::default()],
             ..Default::default()
         });
-        let constraints = TransitionMutex::new(&model, false);
         let expected = SuccessorGenerator::<TransitionWithId>::from_model(model, false);
-        let generator = constraints.filter_successor_generator(
+        let transitions = expected
+            .transitions
+            .iter()
+            .chain(expected.forced_transitions.iter())
+            .map(|t| t.as_ref().clone())
+            .collect::<Vec<_>>();
+        let mutex = TransitionMutex::new(transitions);
+        let generator = mutex.filter_successor_generator(
             &expected,
             &[],
             &[
@@ -1028,9 +838,15 @@ mod tests {
             }],
             ..Default::default()
         });
-        let constraints = TransitionMutex::new(&model, false);
         let expected = SuccessorGenerator::<TransitionWithId>::from_model(model, false);
-        let generator = constraints.filter_successor_generator(&expected, &[], &[]);
+        let transitions = expected
+            .transitions
+            .iter()
+            .chain(expected.forced_transitions.iter())
+            .map(|t| t.as_ref().clone())
+            .collect::<Vec<_>>();
+        let mutex = TransitionMutex::new(transitions);
+        let generator = mutex.filter_successor_generator(&expected, &[], &[]);
         assert_eq!(generator, expected);
     }
 
@@ -1083,8 +899,14 @@ mod tests {
             forward_forced_transitions: vec![t2.clone(), Transition::default()],
             ..Default::default()
         });
-        let constraints = TransitionMutex::new(&model, false);
         let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
+        let transitions = generator
+            .transitions
+            .iter()
+            .chain(generator.forced_transitions.iter())
+            .map(|t| t.as_ref().clone())
+            .collect::<Vec<_>>();
+        let mutex = TransitionMutex::new(transitions);
         let t1 = TransitionWithId {
             id: 0,
             forced: false,
@@ -1095,7 +917,7 @@ mod tests {
             forced: true,
             transition: t2,
         };
-        let generator = constraints.filter_successor_generator(&generator, &[t1, t2], &[]);
+        let generator = mutex.filter_successor_generator(&generator, &[t1, t2], &[]);
         let expected = SuccessorGenerator {
             forced_transitions: vec![Rc::new(TransitionWithId {
                 id: 1,
@@ -1162,8 +984,14 @@ mod tests {
             forward_forced_transitions: vec![t2.clone(), Transition::default()],
             ..Default::default()
         });
-        let constraints = TransitionMutex::new(&model, false);
         let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
+        let transitions = generator
+            .transitions
+            .iter()
+            .chain(generator.forced_transitions.iter())
+            .map(|t| t.as_ref().clone())
+            .collect::<Vec<_>>();
+        let mutex = TransitionMutex::new(transitions);
         let t1 = TransitionWithId {
             id: 0,
             forced: false,
@@ -1174,7 +1002,7 @@ mod tests {
             forced: true,
             transition: t2,
         };
-        let generator = constraints.filter_successor_generator(&generator, &[], &[t1, t2]);
+        let generator = mutex.filter_successor_generator(&generator, &[], &[t1, t2]);
         let expected = SuccessorGenerator {
             forced_transitions: vec![Rc::new(TransitionWithId {
                 id: 1,
@@ -1191,6 +1019,7 @@ mod tests {
         };
         assert_eq!(generator, expected);
     }
+
     #[test]
     fn filter_successor_generator_with_constraints_and_prefix_and_suffix() {
         let t1 = Transition {
@@ -1240,8 +1069,14 @@ mod tests {
             forward_forced_transitions: vec![t2.clone(), Transition::default()],
             ..Default::default()
         });
-        let constraints = TransitionMutex::new(&model, false);
         let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
+        let transitions = generator
+            .transitions
+            .iter()
+            .chain(generator.forced_transitions.iter())
+            .map(|t| t.as_ref().clone())
+            .collect::<Vec<_>>();
+        let mutex = TransitionMutex::new(transitions);
         let t1 = TransitionWithId {
             id: 0,
             forced: false,
@@ -1252,7 +1087,7 @@ mod tests {
             forced: true,
             transition: t2,
         };
-        let generator = constraints.filter_successor_generator(&generator, &[t1], &[t2]);
+        let generator = mutex.filter_successor_generator(&generator, &[t1], &[t2]);
         let expected = SuccessorGenerator {
             forced_transitions: vec![Rc::new(TransitionWithId {
                 id: 1,

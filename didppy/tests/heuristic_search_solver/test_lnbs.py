@@ -73,3 +73,27 @@ def test_search_next():
 
     assert solution.cost == 1
     assert model.validate_forward(solution.transitions, solution.cost, quiet=True)
+
+
+def test_hot_start():
+    model = dp.Model()
+    var = model.add_int_var(target=1)
+    model.add_base_case([var == 0])
+    t = dp.Transition(
+        name="decrement",
+        cost=dp.IntExpr.state_cost() + 1,
+        effects=[(var, var - 1)],
+    )
+    model.add_transition(t)
+    t = dp.Transition(
+        name="expensive decrement",
+        cost=dp.IntExpr.state_cost() + 2,
+        effects=[(var, var - 1)],
+    )
+    model.add_transition(t)
+    model.add_dual_bound(0)
+    solver = dp.LNBS(model, time_limit=1800, initial_solution=[t])
+    solution = solver.search()
+
+    assert solution.cost == 1
+    assert model.validate_forward(solution.transitions, solution.cost, quiet=True)
