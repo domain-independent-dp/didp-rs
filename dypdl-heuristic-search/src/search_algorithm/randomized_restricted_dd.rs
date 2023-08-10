@@ -349,7 +349,7 @@ fn restrict<T, N, V>(
     }
 
     let (keep, candidates) = beam.split_at_mut(frontier);
-    candidates.sort();
+    candidates.sort_by(|a, b| b.cmp(a));
     let len = cmp::max(keep.len(), beam_size);
     beam.truncate(len)
 }
