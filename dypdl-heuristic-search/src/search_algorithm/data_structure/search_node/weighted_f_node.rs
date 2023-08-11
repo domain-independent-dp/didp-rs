@@ -479,6 +479,13 @@ where
             .as_ref()
             .map_or_else(Vec::new, |transitions| transitions.transitions())
     }
+
+    #[inline]
+    fn last(&self) -> Option<&V> {
+        self.transitions
+            .as_ref()
+            .map(|transitions| transitions.last())
+    }
 }
 
 impl<T, U, V> BfsNode<T, V> for WeightedFNode<T, U, V>
@@ -532,6 +539,7 @@ mod tests {
         assert_eq!(node.cost(&model), 1);
         assert_eq!(node.bound(&model), Some(2));
         assert!(!node.is_closed());
+        assert_eq!(node.last(), None);
         assert_eq!(node.transitions(), vec![]);
     }
 
@@ -562,6 +570,7 @@ mod tests {
         assert_eq!(node.cost(&model), 1);
         assert_eq!(node.bound(&model), Some(2));
         assert!(!node.is_closed());
+        assert_eq!(node.last(), None);
         assert_eq!(node.transitions(), vec![]);
     }
 
@@ -703,6 +712,7 @@ mod tests {
         assert_eq!(successor.cost(&model), 1);
         assert_eq!(successor.bound(&model), Some(2));
         assert!(!successor.is_closed());
+        assert_eq!(successor.last(), Some(&transition));
         assert_eq!(successor.transitions(), vec![transition]);
     }
 
@@ -756,6 +766,7 @@ mod tests {
         assert_eq!(successor.cost(&model), 1);
         assert_eq!(successor.bound(&model), Some(2));
         assert!(!successor.is_closed());
+        assert_eq!(successor.last(), Some(&transition));
         assert_eq!(successor.transitions(), vec![transition]);
     }
 
@@ -995,6 +1006,7 @@ mod tests {
         assert_eq!(successor.cost(&model), 1);
         assert_eq!(successor.bound(&model), Some(2));
         assert!(!successor.is_closed());
+        assert_eq!(successor.last(), Some(&transition));
         assert_eq!(successor.transitions(), vec![transition],);
         assert!(generated);
         assert!(!node.is_closed());
@@ -1054,6 +1066,7 @@ mod tests {
         assert_eq!(successor.cost(&model), 1);
         assert_eq!(successor.bound(&model), Some(2));
         assert!(!successor.is_closed());
+        assert_eq!(successor.last(), Some(&transition));
         assert_eq!(successor.transitions(), vec![transition],);
         assert!(generated);
         assert!(!node.is_closed());
@@ -1162,6 +1175,7 @@ mod tests {
         assert_eq!(successor.cost(&model), 0);
         assert_eq!(successor.bound(&model), Some(1));
         assert!(!successor.is_closed());
+        assert_eq!(successor.last(), Some(&transition));
         assert_eq!(successor.transitions(), vec![transition]);
         assert!(!generated);
         assert!(node.is_closed());
@@ -1221,6 +1235,7 @@ mod tests {
         assert_eq!(successor.cost(&model), 1);
         assert_eq!(successor.bound(&model), Some(1));
         assert!(!successor.is_closed());
+        assert_eq!(successor.last(), Some(&transition));
         assert_eq!(successor.transitions(), vec![transition]);
         assert!(!generated);
         assert!(node.is_closed());

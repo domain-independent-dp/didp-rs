@@ -3,7 +3,7 @@ use std::ops::Deref;
 
 use dypdl::{variable_type::Numeric, Transition, TransitionInterface};
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct TransitionWithId<T = Transition>
 where
     T: TransitionInterface,
@@ -96,7 +96,7 @@ where
             })
             .collect();
 
-        SuccessorGenerator { forced_transitions, transitions, backward, model }
+        SuccessorGenerator::new(forced_transitions, transitions, backward, model)
     }
 }
 

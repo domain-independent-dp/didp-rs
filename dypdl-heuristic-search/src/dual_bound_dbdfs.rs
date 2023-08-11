@@ -17,7 +17,7 @@ use std::str;
 /// # References
 ///
 /// Ryo Kuroiwa and J. Christopher Beck. "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
-/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 ///
 /// J. Christopher Beck. "Discrepancy-Bounded Depth First Search,"
 /// Second International Workshop on Integration of AI and OR Technologies in Constraint Programming for Combinatorial Optimization Problems (CPAIOR), 2000.

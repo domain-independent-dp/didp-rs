@@ -35,7 +35,7 @@ pub struct CabsParameters<T> {
 /// # References
 ///
 /// Ryo Kuroiwa and J. Christopher Beck. "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
-/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 ///
 /// Weixiong Zhang. "Complete Anytime Beam Search,"
 /// Proceedings of the 15th National Conference on Artificial Intelligence/Innovative Applications of Artificial Intelligence (AAAI/IAAI), pp. 425-430, 1998.
@@ -173,7 +173,7 @@ where
         }
     }
 
-    //// Search for the next solution, returning the solution using `TransitionWithCustomCost`.
+    //// Search for the next solution, returning the solution without converting it into `Transition`.
     pub fn search_inner(&mut self) -> (Solution<T, V>, bool) {
         self.time_keeper.start();
         let model = &self.input.generator.model;

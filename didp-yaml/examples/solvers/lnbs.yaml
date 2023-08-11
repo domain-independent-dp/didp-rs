@@ -1,0 +1,3 @@
+solver: dual_bound_lnbs
+config:
+  time_limit: 1800

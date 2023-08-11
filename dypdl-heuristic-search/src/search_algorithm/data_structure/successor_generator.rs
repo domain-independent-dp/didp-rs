@@ -123,6 +123,16 @@ where
     U: Deref<Target = T> + Clone,
     R: Deref<Target = dypdl::Model>,
 {
+    /// Returns a new successor generator
+    pub fn new(forced_transitions: Vec<U>, transitions: Vec<U>, backward: bool, model: R) -> Self {
+        SuccessorGenerator {
+            forced_transitions,
+            transitions,
+            backward,
+            model,
+        }
+    }
+
     /// Returns a vector of applicable transitions.
     ///
     /// `result` is used as a buffer to avoid memory allocation.
@@ -186,12 +196,7 @@ where
         };
         let transitions = transitions.iter().cloned().map(U::from).collect();
 
-        SuccessorGenerator {
-            forced_transitions,
-            transitions,
-            backward,
-            model,
-        }
+        SuccessorGenerator::new(forced_transitions, transitions, backward, model)
     }
 }
 

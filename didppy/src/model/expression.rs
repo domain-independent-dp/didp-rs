@@ -149,7 +149,6 @@ impl From<ElementUnion> for ElementExpression {
 /// >>> (expr >= 3).eval(state, model)
 /// True
 #[pyclass(name = "ElementExpr")]
-#[pyo3(text_signature = "(value)")]
 #[derive(Debug, PartialEq, Clone)]
 pub struct ElementExprPy(ElementExpression);
 
@@ -168,6 +167,7 @@ impl From<ElementExpression> for ElementExprPy {
 #[pymethods]
 impl ElementExprPy {
     #[new]
+    #[pyo3(text_signature = "(value)")]
     fn new_py(value: Element) -> Self {
         Self(ElementExpression::from(value))
     }
@@ -574,6 +574,11 @@ impl From<SetUnion> for SetExpression {
 ///
 /// Note that :func:`didppy.max` and :func:`didppy.min` should be used instead of :func:`~built_in.max` and :func:`~built_in.min` as comparison operators are overloaded.
 ///
+/// Parameters
+/// ----------
+/// value : SetConst
+///     A set constant from which a constant expression is created.
+///
 /// Examples
 /// --------
 /// >>> import didppy as dp
@@ -604,7 +609,6 @@ impl From<SetUnion> for SetExpression {
 /// >>> (expr >= const).eval(state, model)
 /// False
 #[pyclass(name = "SetExpr")]
-#[pyo3(text_signature = "(value)")]
 #[derive(Debug, PartialEq, Clone)]
 pub struct SetExprPy(SetExpression);
 
@@ -623,6 +627,7 @@ impl From<SetExpression> for SetExprPy {
 #[pymethods]
 impl SetExprPy {
     #[new]
+    #[pyo3(text_signature = "(value)")]
     fn new_py(value: SetConstPy) -> Self {
         Self::from(SetExpression::from(value))
     }
@@ -2376,7 +2381,6 @@ impl From<CostExpression> for IntOrFloatExpr {
 /// >>> (expr >= 3).eval(state, model)
 /// True
 #[pyclass(name = "IntExpr")]
-#[pyo3(text_signature = "(value)")]
 #[derive(Debug, PartialEq, Clone)]
 pub struct IntExprPy(IntegerExpression);
 
@@ -2395,6 +2399,7 @@ impl From<IntegerExpression> for IntExprPy {
 #[pymethods]
 impl IntExprPy {
     #[new]
+    #[pyo3(text_signature = "(value)")]
     fn new_py(value: Integer) -> Self {
         Self(IntegerExpression::from(value))
     }
@@ -3259,6 +3264,7 @@ impl From<ContinuousExpression> for FloatExprPy {
 
 #[pymethods]
 impl FloatExprPy {
+    #[pyo3(text_signature = "(value)")]
     #[new]
     fn new_py(value: Continuous) -> Self {
         Self(ContinuousExpression::from(value))
@@ -3415,7 +3421,7 @@ impl FloatExprPy {
     ///
     /// Raises
     /// ------
-    /// PaniceError
+    /// PanicException
     ///     If the expression is not valid.
     ///
     /// Examples
