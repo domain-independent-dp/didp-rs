@@ -93,12 +93,7 @@ where
             })
             .collect();
 
-        SuccessorGenerator {
-            forced_transitions,
-            transitions,
-            backward,
-            model,
-        }
+        SuccessorGenerator::new(forced_transitions, transitions, backward, model)
     }
 }
 

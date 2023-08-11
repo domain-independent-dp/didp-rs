@@ -1,38 +1,28 @@
-use super::data_structure::{exceed_bound, Beam, BfsNode, StateRegistry};
+use super::beam_search::BeamSearchParameters;
+use super::data_structure::{exceed_bound, BfsNode, StateRegistry, TransitionWithId};
 use super::rollout::get_solution_cost_and_suffix;
-use super::search::{Parameters, SearchInput, Solution};
-use super::util::TimeKeeper;
+use super::search::{SearchInput, Solution};
+use super::util;
 use dypdl::{variable_type, TransitionInterface};
+use rand::prelude::*;
+use rand_pcg::Pcg64Mcg;
+use std::cmp;
 use std::fmt::Display;
 use std::mem;
 use std::rc::Rc;
 
-/// Parameters for beam search.
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub struct BeamSearchParameters<T> {
-    /// Beam size, the number of nodes to keep at each layer.
-    pub beam_size: usize,
-    /// Keep nodes in all layers for duplicate detection.
-    ///
-    /// Beam search searches layer by layer, where the i th layer contains states that can be reached with i transitions.
-    /// By default, beam search only keeps states in the current layer to check for duplicates.
-    /// If `keep_all_layers` is `true`, beam search keeps states in all layers to check for duplicates.
-    pub keep_all_layers: bool,
-    /// Common parameters.
-    pub parameters: Parameters<T>,
+/// Parameters for constructing a randomized restricted DD.
+#[derive(Debug, PartialEq, Clone, Copy, Default)]
+pub struct RandomizedRestrictedDDParameters<'a, T, V: TransitionInterface> {
+    /// Probability to keep a non-best node.
+    pub keep_probability: f64,
+    /// Best solution.
+    pub best_solution: Option<&'a [TransitionWithId<V>]>,
+    /// Parameters for beam search.
+    pub beam_search_parameters: BeamSearchParameters<T>,
 }
 
-impl<T: Default> Default for BeamSearchParameters<T> {
-    fn default() -> Self {
-        Self {
-            beam_size: 1,
-            keep_all_layers: false,
-            parameters: Parameters::default(),
-        }
-    }
-}
-
-/// Performs beam search.
+/// Constructs a randomized restricted decision diagram (DD).
 ///
 /// This function uses forward search based on the shortest path problem.
 /// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
@@ -41,10 +31,15 @@ impl<T: Default> Default for BeamSearchParameters<T> {
 /// It keeps the best `beam_size` nodes at each layer.
 ///
 /// Type parameter `N` is a node type that implements `BfsNode`.
-/// Type parameter `E` is a type of a function that evaluates a transition and generate a successor node.
+/// Type parameter `E` is a type of a function that evaluates a transition and insert a successor node into a state registry.
 /// The last argument of the function is the primal bound of the solution cost.
 /// Type parameter `B` is a type of a function that combines the g-value (the cost to a state) and the base cost.
 /// It should be the same function as the cost expression, e.g., `cost + base_cost` for `cost + w`.
+///
+/// # References
+///
+/// Xavier Gillard and Pierre Schaus. "Large Neighborhood Search with Decision Diagrams,"
+/// Proceedings of the 31st International Joint Conference on Artificial Intelligence (IJCAI), 2022.
 ///
 /// # Examples
 ///
@@ -52,7 +47,8 @@ impl<T: Default> Default for BeamSearchParameters<T> {
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::Search;
 /// use dypdl_heuristic_search::search_algorithm::{
-///     beam_search, BeamSearchParameters, FNode, SearchInput, SuccessorGenerator,
+///     FNode, SearchInput, randomized_restricted_dd, RandomizedRestrictedDDParameters,
+///     SuccessorGenerator, TransitionWithId,
 /// };
 /// use std::rc::Rc;
 ///
@@ -72,7 +68,7 @@ impl<T: Default> Default for BeamSearchParameters<T> {
 /// let h_evaluator = |_: &_| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
-/// let node = FNode::generate_root_node(
+/// let node = FNode::<_, TransitionWithId>::generate_root_node(
 ///     state,
 ///     cost,
 ///     &model,
@@ -80,62 +76,69 @@ impl<T: Default> Default for BeamSearchParameters<T> {
 ///     &f_evaluator,
 ///     primal_bound,
 /// );
-/// let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
-/// let input = SearchInput {
+/// let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
+/// let input = SearchInput::<_, TransitionWithId> {
 ///     node,
 ///     generator,
 ///     solution_suffix: &[],
 /// };
-/// let transition_evaluator = move |node: &FNode<_>, transition, primal_bound| {
-///     node.generate_successor_node(
-///         transition,
-///         &model,
-///         &h_evaluator,
-///         &f_evaluator,
-///         primal_bound,
-///     )
-/// };
+/// let transition_evaluator =
+///     move |node: &FNode<_, TransitionWithId>, transition, registry: &mut _, primal_bound| {
+///         node.insert_successor_node(
+///             transition,
+///             registry,
+///             &h_evaluator,
+///             &f_evaluator,
+///             primal_bound,
+///         )
+///     };
 /// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-/// let parameters = BeamSearchParameters::default();
-/// let solution = beam_search(
-///     &input, transition_evaluator, base_cost_evaluator, parameters,
+/// let parameters = RandomizedRestrictedDDParameters::default();
+/// let mut rng = rand_pcg::Pcg64Mcg::new(0);
+/// let solution = randomized_restricted_dd(
+///     &input, transition_evaluator, base_cost_evaluator, parameters, &mut rng,
 /// );
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions.len(), 1);
 /// assert_eq!(Transition::from(solution.transitions[0].clone()), increment);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub fn beam_search<'a, T, N, E, B, V>(
-    input: &'a SearchInput<'a, N, V>,
+pub fn randomized_restricted_dd<'a, T, N, E, B, V>(
+    input: &'a SearchInput<'a, N, TransitionWithId<V>>,
     transition_evaluator: E,
     base_cost_evaluator: B,
-    parameters: BeamSearchParameters<T>,
-) -> Solution<T, V>
+    parameters: RandomizedRestrictedDDParameters<'a, T, V>,
+    rng: &mut Pcg64Mcg,
+) -> Solution<T, TransitionWithId<V>>
 where
     T: variable_type::Numeric + Ord + Display,
-    N: BfsNode<T, V> + Clone,
-    E: Fn(&N, Rc<V>, Option<T>) -> Option<N>,
+    N: BfsNode<T, TransitionWithId<V>> + Clone,
+    E: Fn(
+        &N,
+        Rc<TransitionWithId<V>>,
+        &mut StateRegistry<T, N>,
+        Option<T>,
+    ) -> Option<(Rc<N>, bool)>,
     B: Fn(T, T) -> T,
     V: TransitionInterface + Clone + Default,
 {
     let time_keeper = parameters
+        .beam_search_parameters
         .parameters
         .time_limit
-        .map_or_else(TimeKeeper::default, TimeKeeper::with_time_limit);
-    let quiet = parameters.parameters.quiet;
-    let mut primal_bound = parameters.parameters.primal_bound;
+        .map_or_else(util::TimeKeeper::default, util::TimeKeeper::with_time_limit);
+    let quiet = parameters.beam_search_parameters.parameters.quiet;
+    let mut primal_bound = parameters.beam_search_parameters.parameters.primal_bound;
+    let beam_size = parameters.beam_search_parameters.beam_size;
+    let keep_all_layers = parameters.beam_search_parameters.keep_all_layers;
 
     let model = &input.generator.model;
     let generator = &input.generator;
     let suffix = input.solution_suffix;
-    let mut current_beam = Beam::<_, _>::new(parameters.beam_size);
-    let mut next_beam = Beam::<_, _, _>::new(parameters.beam_size);
+    let mut current_beam = Vec::<Rc<N>>::with_capacity(beam_size);
+    let mut next_beam = Vec::with_capacity(beam_size);
     let mut registry = StateRegistry::new(model.clone());
-    let capacity = parameters
-        .parameters
-        .initial_registry_capacity
-        .unwrap_or_else(|| current_beam.capacity());
-    registry.reserve(capacity);
+    registry.reserve(current_beam.capacity());
 
     let node = if let Some(node) = input.node.clone() {
         node
@@ -146,9 +149,11 @@ where
         };
     };
 
-    current_beam.insert(&mut registry, node);
+    let (node, _) = registry.insert(node).unwrap();
 
-    if !parameters.keep_all_layers {
+    current_beam.push(node);
+
+    if !keep_all_layers {
         registry.clear();
     }
 
@@ -163,7 +168,7 @@ where
         let mut layer_dual_bound = None;
         let previously_pruned = pruned;
 
-        for node in current_beam.drain() {
+        for node in current_beam.drain(..) {
             if let Some(dual_bound) = node.bound(model) {
                 if exceed_bound(model, dual_bound, primal_bound) {
                     continue;
@@ -219,18 +224,16 @@ where
             expanded += 1;
 
             for transition in generator.applicable_transitions(node.state()) {
-                if let Some(successor) = transition_evaluator(&node, transition, primal_bound) {
+                if let Some((successor, new_generated)) =
+                    transition_evaluator(&node, transition, &mut registry, primal_bound)
+                {
                     if let Some(bound) = successor.bound(model) {
                         if !exceed_bound(model, bound, layer_dual_bound) {
                             layer_dual_bound = Some(bound);
                         }
                     }
 
-                    let (new_generated, beam_pruning) = next_beam.insert(&mut registry, successor);
-
-                    if !pruned && beam_pruning {
-                        pruned = true;
-                    }
+                    next_beam.push(successor);
 
                     if new_generated {
                         generated += 1;
@@ -278,9 +281,28 @@ where
             };
         }
 
+        next_beam.retain(|node| !node.is_closed());
+
+        if next_beam.len() > beam_size {
+            let best_transition = parameters
+                .best_solution
+                .and_then(|solution| solution.get(layer_index));
+            restrict(
+                &mut next_beam,
+                best_transition,
+                beam_size,
+                parameters.keep_probability,
+                rng,
+            );
+
+            if !pruned {
+                pruned = true;
+            }
+        }
+
         mem::swap(&mut current_beam, &mut next_beam);
 
-        if !parameters.keep_all_layers {
+        if !keep_all_layers {
             registry.clear();
         }
 
@@ -288,25 +310,46 @@ where
     }
 
     Solution {
-        is_infeasible: !pruned,
-        best_bound: if pruned { best_dual_bound } else { None },
         expanded,
         generated,
+        is_infeasible: !pruned,
         time: time_keeper.elapsed_time(),
         ..Default::default()
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use dypdl::Integer;
+fn restrict<T, N, V>(
+    beam: &mut Vec<Rc<N>>,
+    best_transition: Option<&TransitionWithId<V>>,
+    beam_size: usize,
+    keep_probability: f64,
+    rng: &mut Pcg64Mcg,
+) where
+    T: variable_type::Numeric + Ord + Display,
+    N: BfsNode<T, TransitionWithId<V>> + Clone,
+    V: TransitionInterface + Clone + Default,
+{
+    let mut frontier = 0;
+    let size = beam.len();
 
-    #[test]
-    fn parameters_default() {
-        let parameters = BeamSearchParameters::<Integer>::default();
-        assert_eq!(parameters.beam_size, 1);
-        assert!(!parameters.keep_all_layers);
-        assert_eq!(parameters.parameters, Parameters::default());
+    for k in 0..size {
+        let node = &beam[k];
+
+        let must_keep =
+            if let (Some(transition), Some(best_transition)) = (&node.last(), &best_transition) {
+                transition.id == best_transition.id
+            } else {
+                false
+            };
+
+        if must_keep || rng.gen::<f64>() < keep_probability {
+            beam.swap(frontier, k);
+            frontier += 1;
+        }
     }
+
+    let (keep, candidates) = beam.split_at_mut(frontier);
+    candidates.sort_by(|a, b| b.cmp(a));
+    let len = cmp::max(keep.len(), beam_size);
+    beam.truncate(len)
 }

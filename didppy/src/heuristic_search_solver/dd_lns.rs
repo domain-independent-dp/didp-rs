@@ -1,20 +1,28 @@
 use super::f_operator::FOperator;
 use super::wrapped_solver::{SolutionPy, WrappedSolver};
-use crate::model::ModelPy;
+use crate::model::{ModelPy, TransitionPy};
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
-use dypdl_heuristic_search::{create_dual_bound_dfbb, FEvaluatorType, Parameters, Search};
+use dypdl_heuristic_search::{
+    create_dual_bound_dd_lns, BeamSearchParameters, CabsParameters, DdLnsParameters,
+    FEvaluatorType, Parameters, Search,
+};
 use pyo3::prelude::*;
 use std::rc::Rc;
 
-/// Depth-first branch-and-bound (DFBB) solver.
+/// Large Neighborhood Search with Decision Diagrams (DD-LNS) solver.
 ///
-/// This performs DFBB using the dual bound as the heuristic function.
+/// This performs LNS by constructing restricted multi-valued decision diagrams (MDD).
 ///
 /// To apply this solver, the cost must be computed in the form of :code:`x + state_cost`, :code:`x * state_cost`, :code:`didppy.max(x, state_cost)`,
 /// or :code:`didppy.min(x, state_cost)` where, :code:`state_cost` is either of :meth:`IntExpr.state_cost()` and :meth:`FloatExpr.state_cost()`,
 /// and :code:`x` is a value independent of :code:`state_cost`.
 /// Otherwise, it cannot compute the cost correctly and may not produce the optimal solution.
+/// if :code:`x` can be negative, please set :code:`has_negative_cost` to :code:`True`.
+///
+/// DD-LNS searches layer by layer, where the i th layer contains states that can be reached with i transitions.
+/// By default, this solver only keeps states in the current layer to check for duplicates.
+/// If :code:`keep_all_layers` is :code:`True`, DD-LNS keeps states in all layers to check for duplicates.
 ///
 /// Parameters
 /// ----------
@@ -30,32 +38,40 @@ use std::rc::Rc;
 ///     Primal bound.
 /// time_limit: int, float, or None, default: None
 ///     Time limit.
-/// get_all_solutions: bool, default: False
-///     Return a solution if it is not improving when :code:`search_next()` is called.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
-/// initial_registry_capacity: int, default: 1000000
-///     Initial size of the data structure storing all generated states.
-/// bfs_tie_breaking: bool, default: False
-///     Visit child nodes in the order of the f-values.
+/// initial_solution: list of Transition or None, default: None
+///     Initial feasible solution.
+///     If :code:`None`, CABS is is performed to find an initial feasible solution.
+/// beam_size: int, default: 1000
+///     Beam size.
+/// keep_probability: float, default: 0.1
+///     Probability to keep a non-best state.
+/// keep_all_layers: bool, default: False
+///     Keep all layers of the search graph for duplicate detection in memory.
+/// seed: int, default: 2023
+///     Random seed.
+/// cabs_initial_beam_size: int, default: 1
+///     Initial beam size for CABS to find an initial feasible solution.
+/// cabs_max_beam_size: int or None, default: None
+///     Maximum beam size for CABS to find an initial feasible solution.
+///     If :code:`None`, the beam size is kept increased until a feasible solution is found.
 ///
 /// Raises
 /// ------
 /// TypeError
 ///     If :code:`primal_bound` is :code:`float` and :code:`model` is int cost.
-/// OverflowError
-///     If :code:`initial_registry_capacity` is negative.
 /// PanicException
-///     If :code:`time_limit` is negative.
+///     If :code:`time_limit` is negative or CABS raises an exception when finding an initial solution.
 ///
 /// References
 /// ----------
-/// Ryo Kuroiwa and J. Christopher Beck.
-/// "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
-/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
+///
+/// Xavier Gillard and Pierre Schaus. "Large Neighborhood Search with Decision Diagrams,"
+/// Proceedings of the 31st International Joint Conference on Artificial Intelligence (IJCAI), pp. 4754-4760, 2022.
 ///
 /// Examples
-/// -------
+/// --------
 /// Example with :code:`+` operator.
 ///
 /// >>> import didppy as dp
@@ -69,7 +85,7 @@ use std::rc::Rc;
 /// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
-/// >>> solver = dp.DFBB(model, quiet=True)
+/// >>> solver = dp.DDLNS(model, quiet=True)
 /// >>> solution = solver.search()
 /// >>> print(solution.cost)
 /// 1
@@ -87,27 +103,32 @@ use std::rc::Rc;
 /// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
-/// >>> solver = dp.DFBB(model, f_operator=dp.FOperator.Max, quiet=True)
+/// >>> solver = dp.DDLNS(model, f_operator=dp.FOperator.Max, quiet=True)
 /// >>> solution = solver.search()
 /// >>> print(solution.cost)
 /// 2
-#[pyclass(unsendable, name = "DFBB")]
-pub struct DfbbPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
+#[pyclass(unsendable, name = "DDLNS")]
+pub struct DdLnsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
 #[pymethods]
-impl DfbbPy {
+impl DdLnsPy {
     #[new]
     #[pyo3(
-        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000)"
+        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, initial_solution=None, beam_size=1000, keep_probability=0.1, keep_all_layers=False, seed=2023, cabs_initial_beam_size=None, cabs_max_beam_size=None)"
     )]
     #[pyo3(signature = (
         model,
         f_operator = FOperator::Plus,
         primal_bound = None,
         time_limit = None,
-        get_all_solutions = false,
         quiet = false,
-        initial_registry_capacity = 1000000,
+        initial_solution = None,
+        beam_size = 1000,
+        keep_probability = 0.1,
+        keep_all_layers = false,
+        seed = 2023,
+        cabs_initial_beam_size = 1,
+        cabs_max_beam_size = None,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -115,15 +136,22 @@ impl DfbbPy {
         f_operator: FOperator,
         primal_bound: Option<&PyAny>,
         time_limit: Option<f64>,
-        get_all_solutions: bool,
         quiet: bool,
-        initial_registry_capacity: usize,
-    ) -> PyResult<DfbbPy> {
+        initial_solution: Option<Vec<TransitionPy>>,
+        beam_size: usize,
+        keep_probability: f64,
+        keep_all_layers: bool,
+        seed: u64,
+        cabs_initial_beam_size: usize,
+        cabs_max_beam_size: Option<usize>,
+    ) -> PyResult<DdLnsPy> {
         if !quiet {
-            println!("Solver: DFBB from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+            println!("Solver: DDLNS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
         }
 
         let f_evaluator_type = FEvaluatorType::from(f_operator);
+        let transitions = initial_solution
+            .map(|transitions| transitions.into_iter().map(Transition::from).collect());
 
         if model.float_cost() {
             let primal_bound = if let Some(primal_bound) = primal_bound {
@@ -133,38 +161,76 @@ impl DfbbPy {
             } else {
                 None
             };
-            let parameters = Parameters::<OrderedContinuous> {
+            let base_parameters = Parameters::<OrderedContinuous> {
                 primal_bound,
                 time_limit,
-                get_all_solutions,
+                get_all_solutions: false,
                 quiet,
-                initial_registry_capacity: Some(initial_registry_capacity),
+                initial_registry_capacity: None,
             };
-            let solver = create_dual_bound_dfbb::<OrderedContinuous>(
+            let parameters = DdLnsParameters {
+                keep_probability,
+                seed,
+                beam_search_parameters: BeamSearchParameters {
+                    beam_size,
+                    keep_all_layers,
+                    parameters: base_parameters,
+                },
+            };
+            let cabs_parameters = CabsParameters {
+                max_beam_size: cabs_max_beam_size,
+                beam_search_parameters: BeamSearchParameters {
+                    beam_size: cabs_initial_beam_size,
+                    keep_all_layers,
+                    parameters: base_parameters,
+                },
+            };
+            let solver = create_dual_bound_dd_lns::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
+                transitions,
                 parameters,
+                cabs_parameters,
                 f_evaluator_type,
             );
-            Ok(DfbbPy(WrappedSolver::Float(solver)))
+            Ok(DdLnsPy(WrappedSolver::Float(solver)))
         } else {
             let primal_bound = if let Some(primal_bound) = primal_bound {
                 Some(primal_bound.extract::<Integer>()?)
             } else {
                 None
             };
-            let parameters = Parameters::<Integer> {
+            let base_parameters = Parameters::<Integer> {
                 primal_bound,
                 time_limit,
-                get_all_solutions,
+                get_all_solutions: false,
                 quiet,
-                initial_registry_capacity: Some(initial_registry_capacity),
+                initial_registry_capacity: None,
             };
-            let solver = create_dual_bound_dfbb::<Integer>(
+            let parameters = DdLnsParameters {
+                keep_probability,
+                seed,
+                beam_search_parameters: BeamSearchParameters {
+                    beam_size,
+                    keep_all_layers,
+                    parameters: base_parameters,
+                },
+            };
+            let cabs_parameters = CabsParameters {
+                max_beam_size: cabs_max_beam_size,
+                beam_search_parameters: BeamSearchParameters {
+                    beam_size: cabs_initial_beam_size,
+                    keep_all_layers,
+                    parameters: base_parameters,
+                },
+            };
+            let solver = create_dual_bound_dd_lns::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
+                transitions,
                 parameters,
+                cabs_parameters,
                 f_evaluator_type,
             );
-            Ok(DfbbPy(WrappedSolver::Int(solver)))
+            Ok(DdLnsPy(WrappedSolver::Int(solver)))
         }
     }
 
@@ -195,7 +261,7 @@ impl DfbbPy {
     /// ... )
     /// >>> model.add_transition(t)
     /// >>> model.add_dual_bound(x)
-    /// >>> solver = dp.DFBB(model, quiet=True)
+    /// >>> solver = dp.DDLNS(model, quiet=True)
     /// >>> solution = solver.search()
     /// >>> solution.cost
     /// 1
@@ -233,7 +299,7 @@ impl DfbbPy {
     /// ... )
     /// >>> model.add_transition(t)
     /// >>> model.add_dual_bound(x)
-    /// >>> solver = dp.DFBB(model, quiet=True)
+    /// >>> solver = dp.DDLNS(model, quiet=True)
     /// >>> solution, terminated = solver.search_next()
     /// >>> solution.cost
     /// 1

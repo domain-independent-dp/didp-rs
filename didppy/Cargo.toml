@@ -1,6 +1,6 @@
 [package]
 name = "didppy"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2021"
 rust-version = "1.64"
 description = "Python interface for Dynamic Programming Description Language (DyPDL) and DyPDL solvers."
@@ -15,12 +15,12 @@ name = "didppy"
 crate-type = ["cdylib"]
 
 [dependencies]
-dypdl = { path = "../dypdl", version = "0.4.0" }
-dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.4.0" }
+dypdl = { path = "../dypdl", version = "0.5.0" }
+dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.5.0" }
 rustc-hash = "1.1"
 
 [dependencies.pyo3]
-version = "0.18"
+version = "0.19"
 
 [features]
 extension-module = ["pyo3/extension-module"]
@@ -28,4 +28,4 @@ abi3 = ["pyo3/abi3-py37"]
 default = ["extension-module", "abi3"]
 
 [build-dependencies]
-pyo3-build-config = "0.18"
+pyo3-build-config = "0.19"

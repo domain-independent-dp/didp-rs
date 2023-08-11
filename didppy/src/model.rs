@@ -334,7 +334,6 @@ impl IntoPy<Py<PyAny>> for FloatTableUnion {
 /// >>> model.target_state[var]
 /// 5
 #[pyclass(name = "Model")]
-#[pyo3(text_signature = "(maximize=False, float_cost=False)")]
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct ModelPy(Model);
 
@@ -360,6 +359,7 @@ impl ModelPy {
 #[pymethods]
 impl ModelPy {
     #[new]
+    #[pyo3(text_signature = "(maximize=False, float_cost=False)")]
     #[pyo3(signature = (maximize = false, float_cost = false))]
     fn new_py(maximize: bool, float_cost: bool) -> ModelPy {
         let mut model = ModelPy(if float_cost {

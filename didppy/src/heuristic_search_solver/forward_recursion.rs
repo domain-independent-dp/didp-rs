@@ -29,7 +29,6 @@ use std::rc::Rc;
 /// OverflowError
 ///     If :code:`initial_registry_capacity` is negative.
 #[pyclass(unsendable, name = "ForwardRecursion")]
-#[pyo3(text_signature = "(model, time_limit=None, quiet=False, initial_registry_capacity=1000000)")]
 pub struct ForwardRecursionPy(
     WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>,
 );
@@ -37,6 +36,9 @@ pub struct ForwardRecursionPy(
 #[pymethods]
 impl ForwardRecursionPy {
     #[new]
+    #[pyo3(
+        text_signature = "(model, time_limit=None, quiet=False, initial_registry_capacity=1000000)"
+    )]
     #[pyo3(signature = (
         model,
         time_limit = None,

@@ -1,32 +1,39 @@
 use super::f_operator::FOperator;
 use super::wrapped_solver::{SolutionPy, WrappedSolver};
-use crate::model::ModelPy;
+use crate::model::{ModelPy, TransitionPy};
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{
-    create_dual_bound_cabs, BeamSearchParameters, CabsParameters, FEvaluatorType, Parameters,
-    Search,
+    create_dual_bound_lnbs, BeamSearchParameters, CabsParameters, FEvaluatorType, LnbsParameters,
+    Parameters, Search,
 };
 use pyo3::prelude::*;
 use std::rc::Rc;
 
-/// Complete Anytime Beam Search (CABS) solver.
+/// Large Neighborhood Beam Search (LNBS) solver.
 ///
-/// This performs CABS using the dual bound as the heuristic function.
+/// This performs LNBS using the dual bound as the heuristic function.
+/// LNBS is complete, i.e., eventually finds the optimal solution, but is designed to find a good solution rather than proving the optimality.
+/// If you want to prove the optimality, :class:`didppy.CABS` or :class:`didppy.CAASDy` might be better.
+/// LNBS typically performs well in routing and scheduling problems, where solution costs are diverse.
 ///
 /// To apply this solver, the cost must be computed in the form of :code:`x + state_cost`, :code:`x * state_cost`, :code:`didppy.max(x, state_cost)`,
 /// or :code:`didppy.min(x, state_cost)` where, :code:`state_cost` is either of :meth:`IntExpr.state_cost()` and :meth:`FloatExpr.state_cost()`,
 /// and :code:`x` is a value independent of :code:`state_cost`.
 /// Otherwise, it cannot compute the cost correctly and may not produce the optimal solution.
+/// if :code:`x` can be negative, please set :code:`has_negative_cost` to :code:`True`.
 ///
-/// CABS searches layer by layer, where the i th layer contains states that can be reached with i transitions.
+/// LNBS searches layer by layer, where the i th layer contains states that can be reached with i transitions.
 /// By default, this solver only keeps states in the current layer to check for duplicates.
-/// If :code:`keep_all_layers` is :code:`True`, CABS keeps states in all layers to check for duplicates.
+/// If :code:`keep_all_layers` is :code:`True`, LNBS keeps states in all layers to check for duplicates.
 ///
 /// Parameters
 /// ----------
 /// model: Model
 ///     DyPDL model to solve.
+/// time_limit: int or float
+///     Time limit.
+///     This is required for LNBS.
 /// f_operator: FOperator, default: FOperator.Plus
 ///     Operator to combine a g-value and the dual bound to compute the f-value.
 ///     If the cost is computed by :code:`+`, this should be :attr:`~FOperator.Plus`.
@@ -35,34 +42,47 @@ use std::rc::Rc;
 ///     If the cost is computed by :code:`min`, this should be :attr:`~FOperator.Min`.
 /// primal_bound: int, float, or None, default: None
 ///     Primal bound.
-/// time_limit: int, float, or None, default: None
-///     Time limit.
 /// quiet: bool, default: False
 ///     Suppress the log output or not.
+/// initial_solution: list of Transition or None, default: None
+///     Initial feasible solution.
+///     If :code:`None`, CABS is is performed to find an initial feasible solution.
 /// initial_beam_size: int, default: 1
 ///     Initial beam size.
 /// keep_all_layers: bool, default: False
 ///     Keep all layers of the search graph for duplicate detection in memory.
 /// max_beam_size: int or None, default: None
 ///     Maximum beam size.
-///     If `None`, the beam size is kept increased until proving optimality or infeasibility or reaching the time limit.
+///     If :code:`None`, the beam size is kept increased until a partial state space is exhausted.
+/// seed: int, default: 2023
+///     Random seed.
+/// has_negative_cost: bool, default: False
+///     Whether the cost of a transition can be negative.
+/// use_cost_weight: bool, default: False
+///     Use weighted sampling biased by costs to select a start of a partial path.
+///     This is not activated when :code:`has_negative_cost` is :code:`True`.
+/// no_bandit: bool, default: False
+///     Do not use bandit-based sampling to select the depth of a partial path.
+/// no_transition_mutex: bool, default: False
+///     Do not remove transitions conflicting with a suffix from a partial state space.
+/// cabs_initial_beam_size: int or None, default: None
+///     Initial beam size for CABS to find an initial feasible solution.
+/// cabs_max_beam_size: int or None, default: None
+///     Maximum beam size for CABS to find an initial feasible solution.
+///     If :code:`None`, the beam size is kept increased until a feasible solution is found.
 ///
 /// Raises
 /// ------
 /// TypeError
 ///     If :code:`primal_bound` is :code:`float` and :code:`model` is int cost.
 /// PanicException
-///     If :code:`time_limit` is negative.
+///     If :code:`time_limit` is negative or CABS raises an exception when finding an initial solution.
 ///
 /// References
 /// ----------
-/// Ryo Kuroiwa and J. Christopher Beck.
-/// "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
-/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 ///
-/// Weixiong Zhang.
-/// "Complete Anytime Beam Search,"
-/// Proceedings of the 15th National Conference on Artificial Intelligence/Innovative Applications of Artificial Intelligence (AAAI/IAAI), pp. 425-430, 1998.
+/// Ryo Kuroiwa and J. Christopher Beck. "Large Neighborhood Beam Search for Domain-Independent Dynamic Programming,"
+/// Proceedings of the 29th International Conference on Principles and Practice of Constraint Programming (CP), 2023.
 ///
 /// Examples
 /// --------
@@ -79,7 +99,7 @@ use std::rc::Rc;
 /// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
-/// >>> solver = dp.CABS(model, quiet=True)
+/// >>> solver = dp.LNBS(model, time_limit=1800, quiet=True)
 /// >>> solution = solver.search()
 /// >>> print(solution.cost)
 /// 1
@@ -97,45 +117,64 @@ use std::rc::Rc;
 /// ... )
 /// >>> model.add_transition(t)
 /// >>> model.add_dual_bound(x)
-/// >>> solver = dp.CABS(model, f_operator=dp.FOperator.Max, quiet=True)
+/// >>> solver = dp.LNBS(model, time_limit=1800, f_operator=dp.FOperator.Max, quiet=True)
 /// >>> solution = solver.search()
 /// >>> print(solution.cost)
 /// 2
-#[pyclass(unsendable, name = "CABS")]
-pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
+#[pyclass(unsendable, name = "LNBS")]
+pub struct LnbsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
 #[pymethods]
-impl CabsPy {
+impl LnbsPy {
     #[new]
     #[pyo3(
-        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, initial_beam_size=1, keep_all_layers=False, max_beam_size=None)"
+        text_signature = "(model, time_limit, f_operator=didppy.FOperator.Plus, primal_bound=None, quiet=False, initial_solution=None, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, seed=2023, has_negative_cost=false, use_cost_weight=false, no_bandit=false, no_transition_mutex=false, cabs_initial_beam_size=None, cabs_max_beam_size=None)"
     )]
     #[pyo3(signature = (
         model,
+        time_limit,
         f_operator = FOperator::Plus,
         primal_bound = None,
-        time_limit = None,
         quiet = false,
+        initial_solution = None,
         initial_beam_size = 1,
         keep_all_layers = false,
         max_beam_size = None,
+        seed = 2023,
+        has_negative_cost = false,
+        use_cost_weight = false,
+        no_bandit = false,
+        no_transition_mutex = false,
+        cabs_initial_beam_size = None,
+        cabs_max_beam_size = None,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         model: &ModelPy,
+        time_limit: f64,
         f_operator: FOperator,
         primal_bound: Option<&PyAny>,
-        time_limit: Option<f64>,
         quiet: bool,
+        initial_solution: Option<Vec<TransitionPy>>,
         initial_beam_size: usize,
         keep_all_layers: bool,
         max_beam_size: Option<usize>,
-    ) -> PyResult<CabsPy> {
+        seed: u64,
+        has_negative_cost: bool,
+        use_cost_weight: bool,
+        no_bandit: bool,
+        no_transition_mutex: bool,
+        cabs_initial_beam_size: Option<usize>,
+        cabs_max_beam_size: Option<usize>,
+    ) -> PyResult<LnbsPy> {
         if !quiet {
-            println!("Solver: CABS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
+            println!("Solver: LNBS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
         }
 
         let f_evaluator_type = FEvaluatorType::from(f_operator);
+        let cabs_initial_beam_size = cabs_initial_beam_size.unwrap_or(initial_beam_size);
+        let transitions = initial_solution
+            .map(|transitions| transitions.into_iter().map(Transition::from).collect());
 
         if model.float_cost() {
             let primal_bound = if let Some(primal_bound) = primal_bound {
@@ -145,52 +184,84 @@ impl CabsPy {
             } else {
                 None
             };
-            let parameters = CabsParameters {
+            let base_parameters = Parameters::<OrderedContinuous> {
+                primal_bound,
+                time_limit: Some(time_limit),
+                get_all_solutions: false,
+                quiet,
+                initial_registry_capacity: None,
+            };
+            let parameters = LnbsParameters {
                 max_beam_size,
+                seed,
+                has_negative_cost,
+                use_cost_weight,
+                no_bandit,
+                no_transition_mutex,
                 beam_search_parameters: BeamSearchParameters {
                     beam_size: initial_beam_size,
                     keep_all_layers,
-                    parameters: Parameters::<OrderedContinuous> {
-                        primal_bound,
-                        time_limit,
-                        get_all_solutions: false,
-                        quiet,
-                        initial_registry_capacity: None,
-                    },
+                    parameters: base_parameters,
                 },
             };
-            let solver = create_dual_bound_cabs::<OrderedContinuous>(
+            let cabs_parameters = CabsParameters {
+                max_beam_size: cabs_max_beam_size,
+                beam_search_parameters: BeamSearchParameters {
+                    beam_size: cabs_initial_beam_size,
+                    keep_all_layers,
+                    parameters: base_parameters,
+                },
+            };
+            let solver = create_dual_bound_lnbs::<OrderedContinuous>(
                 Rc::new(model.inner_as_ref().clone()),
+                transitions,
                 parameters,
+                cabs_parameters,
                 f_evaluator_type,
             );
-            Ok(CabsPy(WrappedSolver::Float(solver)))
+            Ok(LnbsPy(WrappedSolver::Float(solver)))
         } else {
             let primal_bound = if let Some(primal_bound) = primal_bound {
                 Some(primal_bound.extract::<Integer>()?)
             } else {
                 None
             };
-            let parameters = CabsParameters {
+            let base_parameters = Parameters::<Integer> {
+                primal_bound,
+                time_limit: Some(time_limit),
+                get_all_solutions: false,
+                quiet,
+                initial_registry_capacity: None,
+            };
+            let parameters = LnbsParameters {
                 max_beam_size,
+                seed,
+                has_negative_cost,
+                use_cost_weight,
+                no_bandit,
+                no_transition_mutex,
                 beam_search_parameters: BeamSearchParameters {
                     beam_size: initial_beam_size,
                     keep_all_layers,
-                    parameters: Parameters::<Integer> {
-                        primal_bound,
-                        time_limit,
-                        get_all_solutions: false,
-                        quiet,
-                        initial_registry_capacity: None,
-                    },
+                    parameters: base_parameters,
                 },
             };
-            let solver = create_dual_bound_cabs::<Integer>(
+            let cabs_parameters = CabsParameters {
+                max_beam_size: cabs_max_beam_size,
+                beam_search_parameters: BeamSearchParameters {
+                    beam_size: cabs_initial_beam_size,
+                    keep_all_layers,
+                    parameters: base_parameters,
+                },
+            };
+            let solver = create_dual_bound_lnbs::<Integer>(
                 Rc::new(model.inner_as_ref().clone()),
+                transitions,
                 parameters,
+                cabs_parameters,
                 f_evaluator_type,
             );
-            Ok(CabsPy(WrappedSolver::Int(solver)))
+            Ok(LnbsPy(WrappedSolver::Int(solver)))
         }
     }
 
@@ -221,7 +292,7 @@ impl CabsPy {
     /// ... )
     /// >>> model.add_transition(t)
     /// >>> model.add_dual_bound(x)
-    /// >>> solver = dp.CABS(model, quiet=True)
+    /// >>> solver = dp.LNBS(model, time_limit=1800, quiet=True)
     /// >>> solution = solver.search()
     /// >>> solution.cost
     /// 1
@@ -259,7 +330,7 @@ impl CabsPy {
     /// ... )
     /// >>> model.add_transition(t)
     /// >>> model.add_dual_bound(x)
-    /// >>> solver = dp.CABS(model, quiet=True)
+    /// >>> solver = dp.LNBS(model, time_limit=1800, quiet=True)
     /// >>> solution, terminated = solver.search_next()
     /// >>> solution.cost
     /// 1
