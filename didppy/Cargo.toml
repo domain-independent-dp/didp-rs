@@ -12,7 +12,7 @@ repository = "https://github.com/domain-independent-dp/didp-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
 name = "didppy"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
 
 [dependencies]
 dypdl = { path = "../dypdl", version = "0.5.0" }

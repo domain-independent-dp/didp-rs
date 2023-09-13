@@ -3,7 +3,8 @@ use pyo3::prelude::*;
 mod heuristic_search_solver;
 mod model;
 
-pub use model::ModelPy;
+pub use heuristic_search_solver::{FOperator, SolutionPy};
+pub use model::{ModelPy, TransitionPy};
 
 /// DIDPPy -- DyPDL interface for Python
 #[pymodule]
