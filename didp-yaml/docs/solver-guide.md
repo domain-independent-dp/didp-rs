@@ -89,6 +89,8 @@ config:
     f: <+|*|max|min>
     initial_beam_size: <int>
     keep_all_layers: <bool>
+    threads: <int>
+    parallel_type: <hd|hd-sync|sm>
 ```
 
 - `f`: either of `+`, `*`, `max`, and `min`. If `+`/`*`/`max`/`min`, `f(s)`, the priority of a state `S` is computed as `h(S) + g(S)`/`h(S) * G(S)`/`max{h(S), g(S)}`/`min{h(S), g(S)}`, where `h(S)` is the h-value of `S` and `g(S)` is the cost to reach `S` from the target state.
@@ -97,6 +99,10 @@ config:
   - default: `1`
 - `keep_all_layers`: if keep all states in all layers for duplicate detection. If `false`, only states in the current layer are kept. Here, the i th layer contains states that can be reached with i transitions. `keep_all_layers: true` is recommended if one state can belong to multiple layers.
   - default: `false`
+- `threads`: the number[$] of threads.
+  - default: `1`
+- `parallel_type`: the method for parallelization. `hd` is HDBS2, `hd-sync` is HDBS1, and `sm` is SMBS. `hd` is recommended.
+  - default: `hd`
 
 Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
 

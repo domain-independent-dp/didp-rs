@@ -134,7 +134,7 @@ where
             ))
             .into())
         }
-        None => 1,
+        None => 0,
     };
 
     if threads > 1 {
