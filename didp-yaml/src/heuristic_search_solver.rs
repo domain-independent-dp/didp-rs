@@ -7,7 +7,9 @@ mod dual_bound_breadth_first_search;
 mod dual_bound_cabs;
 mod dual_bound_cbfs;
 mod dual_bound_dbdfs;
+mod dual_bound_dd_lns;
 mod dual_bound_dfbb;
+mod dual_bound_lnbs;
 mod dual_bound_weighted_astar;
 mod expression_beam_search;
 mod forward_recursion;
@@ -43,6 +45,7 @@ where
     match solver_name {
         "caasdy" => caasdy::load_from_yaml(model, config),
         "dual_bound_cabs" => dual_bound_cabs::load_from_yaml(model, config),
+        "dual_bound_lnbs" => dual_bound_lnbs::load_from_yaml(model, config),
         "dual_bound_dfbb" => dual_bound_dfbb::load_from_yaml(model, config),
         "dual_bound_cbfs" => dual_bound_cbfs::load_from_yaml(model, config),
         "dual_bound_acps" => dual_bound_acps::load_from_yaml(model, config),
@@ -52,6 +55,7 @@ where
         "dual_bound_breadth_first_search" => {
             dual_bound_breadth_first_search::load_from_yaml(model, config)
         }
+        "dual_bound_dd_lns" => dual_bound_dd_lns::load_from_yaml(model, config),
         "dual_bound_weighted_astar" => dual_bound_weighted_astar::load_from_yaml(model, config),
         "expression_beam_search" => expression_beam_search::load_from_yaml(model, config),
         _ => Err(util::YamlContentErr::new(format!("No such solver: {}", solver_name)).into()),

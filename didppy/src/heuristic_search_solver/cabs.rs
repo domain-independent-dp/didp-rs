@@ -36,28 +36,29 @@ use std::sync::Arc;
 ///     If the cost is computed by :code:`*`, this should be :attr:`~FOperator.Product`.
 ///     If the cost is computed by :code:`max`, this should be :attr:`~FOperator.Max`.
 ///     If the cost is computed by :code:`min`, this should be :attr:`~FOperator.Min`.
+/// primal_bound: int, float, or None, default: None
+///     Primal bound.
+/// time_limit: int, float, or None, default: None
+///     Time limit.
+/// quiet: bool, default: False
+///     Suppress the log output or not.
 /// initial_beam_size: int, default: 1
 ///     Initial beam size.
 /// keep_all_layers: bool, default: False
 ///     Keep all layers of the search graph for duplicate detection in memory.
 /// max_beam_size: int or None, default: None
 ///     Maximum beam size.
-/// primal_bound: int, float, or None, default: None
-///     Primal bound.
+///     If `None`, the beam size is kept increased until proving optimality or infeasibility or reaching the time limit.
 /// threads: int, default 1
 ///     Number of threads.
 /// parallelization_method: BeamParallelizationMethod, default: BeamParallelizationMethod.HD
 ///     How to parallelize the search.
 ///     When `threads` is 1, this parameter is ignored.
-/// time_limit: int, float, or None, default: None
-///     Time limit.
-/// quiet: bool, default: False
-///     Suppress the log output or not.
 ///
 /// Raises
 /// ------
 /// TypeError
-///     If :code:`primal_bound` is :code:`float` and :code:`model` is float cost.
+///     If :code:`primal_bound` is :code:`float` and :code:`model` is int cost.
 /// PanicException
 ///     If :code:`time_limit` is negative.
 ///
@@ -65,7 +66,7 @@ use std::sync::Arc;
 /// ----------
 /// Ryo Kuroiwa and J. Christopher Beck.
 /// "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
-/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 ///
 /// Weixiong Zhang.
 /// "Complete Anytime Beam Search,"
@@ -109,38 +110,38 @@ use std::sync::Arc;
 /// >>> print(solution.cost)
 /// 2
 #[pyclass(unsendable, name = "CABS")]
-#[pyo3(
-    text_signature = "(model, f_operator=0, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, primal_bound=None, threads=1, parallelization_method=0,t  time_limit=None, quiet=False)"
-)]
 pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
 #[pymethods]
 impl CabsPy {
     #[new]
+    #[pyo3(
+        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, thread1, parallelization_method=BeamParallelizationMethod.HD)"
+    )]
     #[pyo3(signature = (
         model,
         f_operator = FOperator::Plus,
+        primal_bound = None,
+        time_limit = None,
+        quiet = false,
         initial_beam_size = 1,
         keep_all_layers = false,
         max_beam_size = None,
-        primal_bound = None,
         threads = 1,
         parallelization_method = BeamParallelizationMethod::HD,
-        time_limit = None,
-        quiet = false
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         model: &ModelPy,
         f_operator: FOperator,
+        primal_bound: Option<&PyAny>,
+        time_limit: Option<f64>,
+        quiet: bool,
         initial_beam_size: usize,
         keep_all_layers: bool,
         max_beam_size: Option<usize>,
-        primal_bound: Option<&PyAny>,
         threads: usize,
         parallelization_method: BeamParallelizationMethod,
-        time_limit: Option<f64>,
-        quiet: bool,
     ) -> PyResult<CabsPy> {
         if !quiet {
             println!("Solver: CABS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));

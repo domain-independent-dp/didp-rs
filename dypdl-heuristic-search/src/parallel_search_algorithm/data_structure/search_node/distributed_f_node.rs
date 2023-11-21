@@ -574,6 +574,13 @@ where
             .as_ref()
             .map_or_else(Vec::new, |transitions| transitions.transitions())
     }
+
+    #[inline]
+    fn last(&self) -> Option<&V> {
+        self.transitions
+            .as_ref()
+            .map(|transitions| transitions.last())
+    }
 }
 
 impl<T, V> BfsNode<T, V> for DistributedFNode<T, V>

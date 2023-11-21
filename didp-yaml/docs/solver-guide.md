@@ -9,15 +9,17 @@ We recommend using [`dual_bound_cabs`](#dual_bound_cabs) with the default parame
 
 |solver|supported cost expressions|supported reduce|other restrictions|exact|anytime|
 |-|-|-|-|-|-|
+|[forward_recursion](#forward_recursion)|any|`min`, `max`|acyclic state space|yes|no|
 |[caasdy](#caasdy)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||yes|no|
 |[dual_bound_cabs](#dual_bound_cabs)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||yes|yes|
+|[dual_bound_lnbs](#dual_bound_lnbs)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||yes|yes|
 |[dual_bound_dfbb](#dual_bound_dfbb)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||yes|yes|
 |[dual_bound_cbfs](#dual_bound_cbfs)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||yes|yes|
 |[dual_bound_acps](#dual_bound_acps)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||yes|yes|
 |[dual_bound_apps](#dual_bound_apps)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||yes|yes|
 |[dual_bound_dbdfs](#dual_bound_dbdfs)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||yes|yes|
 |[dual_bound_breadth_first_search](#dual_bound_breadth_first_search)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||yes|yes|
-|[forward_recursion](#forward_recursion)|any|`min`, `max`|acyclic state space|yes|no|
+|[dual_bound_dd_lns](#dual_bound_dd_lns)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||yes|yes|
 |[dual_bound_weighted_astar](#dual_bound_weighted_astar)|`(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, `(min <numeric_expression> cost)`|`min`, `max`||no|no|
 
 ## Common Config
@@ -46,6 +48,17 @@ dump_to: <filename>
   - default: `false`
 - `dump_to`: the file to dump feasible solutions and the time they are obtained. Unless `get_all_solutions: true`, only improving solutions are reported.
   - default: `null`
+
+## forward_recursion
+
+It computes the objective value using recursion while memoizing encountered states.
+This is a naive dynamic programming algorithm.
+
+If other algorithms are applicable, they can be more efficient.
+
+```yaml
+solver: forward_recursion
+```
 
 ## caasdy
 
@@ -89,6 +102,7 @@ config:
     f: <+|*|max|min>
     initial_beam_size: <int>
     keep_all_layers: <bool>
+    max_beam_size: <int>
     threads: <int>
     parallel_type: <hd|hd-sync|sm>
 ```
@@ -99,6 +113,8 @@ config:
   - default: `1`
 - `keep_all_layers`: if keep all states in all layers for duplicate detection. If `false`, only states in the current layer are kept. Here, the i th layer contains states that can be reached with i transitions. `keep_all_layers: true` is recommended if one state can belong to multiple layers.
   - default: `false`
+- `max_beam_size`: the maximum beam size. If `None`, it keep increasing the beam size until proving the optimality or infeasibility or reaching the time limit.
+  - default: `None`
 - `threads`: the number[$] of threads.
   - default: `1`
 - `parallel_type`: the method for parallelization. `hd` is HDBS2, `hd-sync` is HDBS1, and `sm` is SMBS. `hd` is recommended.
@@ -107,6 +123,57 @@ config:
 Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
 
 Weixiong Zhang. “Complete Anytime Beam Search,” Proceedings of the 15th National Conference on Artificial Intelligence/Innovative Applications of Artificial Intelligence (AAAI/IAAI), pp. 425-430, 1998.
+
+## dual_bound_lnbs
+
+Large Neighborhood Beam Search (LNBS).
+
+It improves a solution by finding a partial path using beam search. It first performs CABS to find an initial feasible solution and then performs LNBS to improve the solution.
+
+It uses the dual bound defined in a model as a heuristic function (h-value).
+
+The cost expressions should be in the form of `(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, or `(min <numeric expression> cost)`.  If `<numeric expression>` can be negative, please set `has_negative_cost` to `true`.
+
+```yaml
+solver: dual_bound_lnbs
+config:
+    f: <+|*|max|min>
+    initial_beam_size: <int>
+    keep_all_layers: <bool>
+    max_beam_size: <int>
+    seed: <int>
+    has_negative_cost: <bool>
+    use_cost_weight: <bool>
+    no_bandit: <bool>
+    no_transition_mutex: <bool>
+    cabs_initial_beam_size: <int>
+    cabs_max_beam_size: <int>
+```
+
+- `f`: either of `+`, `*`, `max`, and `min`. If `+`/`*`/`max`/`min`, `f(s)`, the priority of a state `S` is computed as `h(S) + g(S)`/`h(S) * G(S)`/`max{h(S), g(S)}`/`min{h(S), g(S)}`, where `h(S)` is the h-value of `S` and `g(S)` is the cost to reach `S` from the target state.
+  - default: `+`
+- `initial_beam_size`: the initial beam size.
+  - default: `1`
+- `keep_all_layers`: if keep all states in all layers for duplicate detection. If `false`, only states in the current layer are kept. Here, the i th layer contains states that can be reached with i transitions. `keep_all_layers: true` is recommended if one state can belong to multiple layers.
+  - default: `false`
+- `max_beam_size`: the maximum beam size. If `None`, it keep increasing the beam size until proving the optimality or infeasibility or reaching the time limit.
+  - default: `None`
+- `seed`: random seed.
+  - default: `2023`
+- `has_negative_cost`: whether the cost of a transition can be negative.
+  - default: `false`
+- `use_cost_weight`: use weighted sampling biased by costs to select a start of a partial path. This is not activated when `has_negative_cost` is `true`.
+  - default: `false`
+- `no_bandit`: do not use bandit-based sampling to select the depth of a partial path.
+  - default: `false`
+- `no_transition_mutex`: do not remove transitions conflicting with a suffix from a partial state space.
+  - default: `false`
+- `cabs_initial_beam_size`: the initial beam size for CABS to find an initial feasible solution.
+  - default: `1`
+- `cabs_max_beam_size`: the maximum beam size for CABS to find an initial feasible solution. If `None`, it keep increasing the beam size until finding a feasible solution, proving infeasibility, or reaching the time limit.
+  - default: `None`
+
+Ryo Kuroiwa and J. Christopher Beck. “Large Neighborhood Beam Search for Domain-Independent Dynamic Programming,” Proceedings of the 29th International Conference on Principles and Practice of Constraint Programming (CP), 2023.
 
 ## dual_bound_dfbb
 
@@ -277,16 +344,44 @@ config:
 - `keep_all_layers`: if keep all states in all layers for duplicate detection. If `false`, only states in the current layer are kept. Here, the i th layer contains states that can be reached with i transitions. `keep_all_layers: true` is recommended if one state can belong to multiple layers.
   - default: `false`
 
-## forward_recursion
+## dual_bound_dd_lns
 
-It computes the objective value using recursion while memoizing encountered states.
-This is a naive dynamic programming algorithm.
+Large Neighborhood Search with Decision Diagrams (DD-LNS).
 
-If other algorithms are applicable, they can be more efficient.
+This performs LNS by constructing restricted multi-valued decision diagrams (MDD). It first performs CABS to find an initial feasible solution and then performs DD-LNS to improve the solution.
+
+It uses the dual bound defined in a model as a heuristic function (h-value).
+
+The cost expressions should be in the form of `(+ <numeric expression> cost)`, `(* <numeric expression> cost)`, `(max <numeric expression> cost)`, or `(min <numeric expression> cost)`.
 
 ```yaml
-solver: forward_recursion
+solver: dual_bound_dd_lns
+config:
+    f: <+|*|max|min>
+    beam_size: <int>
+    keep_probability: <float>
+    keep_all_layers: <bool>
+    seed: <int>
+    cabs_initial_beam_size: <int>
+    cabs_max_beam_size: <int>
 ```
+
+- `f`: either of `+`, `*`, `max`, and `min`. If `+`/`*`/`max`/`min`, `f(s)`, the priority of a state `S` is computed as `h(S) + g(S)`/`h(S) * G(S)`/`max{h(S), g(S)}`/`min{h(S), g(S)}`, where `h(S)` is the h-value of `S` and `g(S)` is the cost to reach `S` from the target state.
+  - default: `+`
+- `beam_size`: the beam size.
+  - default: `1000`
+- `keep_probability`: probability to keep a non-best state.
+  - default: `0.1`
+- `keep_all_layers`: if keep all states in all layers for duplicate detection. If `false`, only states in the current layer are kept. Here, the i th layer contains states that can be reached with i transitions. `keep_all_layers: true` is recommended if one state can belong to multiple layers.
+  - default: `false`
+- `seed`: random seed.
+  - default: `2023`
+- `cabs_initial_beam_size`: the initial beam size for CABS to find an initial feasible solution.
+  - default: `1`
+- `cabs_max_beam_size`: the maximum beam size for CABS to find an initial feasible solution. If `None`, it keep increasing the beam size until finding a feasible solution, proving infeasibility, or reaching the time limit.
+  - default: `None`
+
+Xavier Gillard and Pierre Schaus. “Large Neighborhood Search with Decision Diagrams,” Proceedings of the 31st International Joint Conference on Artificial Intelligence (IJCAI), 2022.
 
 ## dual_bound_weighted_astar
 

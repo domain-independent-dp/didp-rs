@@ -359,6 +359,13 @@ where
             .as_ref()
             .map_or_else(Vec::default, |transitions| transitions.transitions())
     }
+
+    #[inline]
+    fn last(&self) -> Option<&V> {
+        self.transitions
+            .as_ref()
+            .map(|transitions| transitions.last())
+    }
 }
 
 impl<T, V> BfsNode<T, V, Arc<HashableSignatureVariables>> for SendableCostNode<T, V>

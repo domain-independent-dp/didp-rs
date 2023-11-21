@@ -40,7 +40,7 @@ use std::rc::Rc;
 /// Raises
 /// ------
 /// TypeError
-///     If the type of :code:`primal_bound` and the cost type of :code:`model` are different.
+///     If :code:`primal_bound` is :code:`float` and :code:`model` is int cost.
 /// OverflowError
 ///     If :code:`initial_registry_capacity` is negative.
 /// PanicException
@@ -50,7 +50,7 @@ use std::rc::Rc;
 /// ----------
 /// Ryo Kuroiwa and J. Christopher Beck.
 /// "Domain-Independent Dynamic Programming: Generic State Space Search for Combinatorial Optimization,"
-/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 236-244, 2023.
 ///
 /// Stephen Edelkamp, Shahid Jabbar, Alberto Lluch Lafuente.
 /// "Cost-Algebraic Heuristic Search,"
@@ -98,14 +98,14 @@ use std::rc::Rc;
 /// >>> print(solution.cost)
 /// 2
 #[pyclass(unsendable, name = "CAASDy")]
-#[pyo3(
-    text_signature = "(model, f_operator=0, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000)"
-)]
 pub struct CaasdyPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<OrderedContinuous>>>);
 
 #[pymethods]
 impl CaasdyPy {
     #[new]
+    #[pyo3(
+        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000)"
+    )]
     #[pyo3(signature = (
         model,
         f_operator = FOperator::Plus,

@@ -227,7 +227,7 @@ impl<T> TableInterface<T> for TableData<T> {
                 let id = self.tables_1d.len();
                 self.tables_1d.push(table::Table1D::new(v));
                 e.insert(id);
-                Ok(Table1DHandle(id, PhantomData::default()))
+                Ok(Table1DHandle(id, PhantomData))
             }
             Entry::Occupied(e) => Err(ModelErr::new(format!(
                 "1D table `{}` already exists",
@@ -267,7 +267,7 @@ impl<T> TableInterface<T> for TableData<T> {
                 let id = self.tables_2d.len();
                 self.tables_2d.push(table::Table2D::new(v));
                 e.insert(id);
-                Ok(Table2DHandle(id, PhantomData::default()))
+                Ok(Table2DHandle(id, PhantomData))
             }
             Entry::Occupied(e) => Err(ModelErr::new(format!(
                 "2D table `{}` already exists",
@@ -317,7 +317,7 @@ impl<T> TableInterface<T> for TableData<T> {
                 let id = self.tables_3d.len();
                 self.tables_3d.push(table::Table3D::new(v));
                 e.insert(id);
-                Ok(Table3DHandle(id, PhantomData::default()))
+                Ok(Table3DHandle(id, PhantomData))
             }
             Entry::Occupied(e) => Err(ModelErr::new(format!(
                 "3D table `{}` already exists",
@@ -370,7 +370,7 @@ impl<T> TableInterface<T> for TableData<T> {
                 let id = self.tables.len();
                 self.tables.push(table::Table::new(map, default));
                 e.insert(id);
-                Ok(TableHandle(id, PhantomData::default()))
+                Ok(TableHandle(id, PhantomData))
             }
             Entry::Occupied(e) => Err(ModelErr::new(format!("table `{}` already exists", e.key()))),
         }

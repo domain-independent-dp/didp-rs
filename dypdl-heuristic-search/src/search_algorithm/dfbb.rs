@@ -7,7 +7,7 @@ use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
 
-/// Depth-First Branch-and-Bound which expands child nodes in the best-first order (DFBBBFS).
+/// Depth-First Branch-and-Bound (DFBB).
 ///
 /// This solver uses forward search based on the shortest path problem.
 /// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
@@ -24,7 +24,7 @@ use std::rc::Rc;
 /// # References
 ///
 /// Ryo Kuroiwa and J. Christopher Beck. "Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,"
-/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+/// Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 ///
 /// # Examples
 ///
