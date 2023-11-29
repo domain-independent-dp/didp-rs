@@ -1,14 +1,17 @@
+use super::beam_parallelization_method::BeamParallelizationMethod;
 use super::f_operator::FOperator;
 use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::ModelPy;
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{
-    create_dual_bound_cabs, BeamSearchParameters, CabsParameters, FEvaluatorType, Parameters,
-    Search,
+    create_dual_bound_cabs, create_dual_bound_hd_cabs, create_dual_bound_hd_sync_cabs,
+    create_dual_bound_shared_memory_cabs, BeamSearchParameters, CabsParameters, FEvaluatorType,
+    Parameters, Search,
 };
 use pyo3::prelude::*;
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// Complete Anytime Beam Search (CABS) solver.
 ///
@@ -46,6 +49,11 @@ use std::rc::Rc;
 /// max_beam_size: int or None, default: None
 ///     Maximum beam size.
 ///     If `None`, the beam size is kept increased until proving optimality or infeasibility or reaching the time limit.
+/// threads: int, default 1
+///     Number of threads.
+/// parallelization_method: BeamParallelizationMethod, default: BeamParallelizationMethod.HD
+///     How to parallelize the search.
+///     When `threads` is 1, this parameter is ignored.
 ///
 /// Raises
 /// ------
@@ -108,7 +116,7 @@ pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<Ordered
 impl CabsPy {
     #[new]
     #[pyo3(
-        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, initial_beam_size=1, keep_all_layers=False, max_beam_size=None)"
+        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, thread1, parallelization_method=BeamParallelizationMethod.HD)"
     )]
     #[pyo3(signature = (
         model,
@@ -119,6 +127,8 @@ impl CabsPy {
         initial_beam_size = 1,
         keep_all_layers = false,
         max_beam_size = None,
+        threads = 1,
+        parallelization_method = BeamParallelizationMethod::HD,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -130,6 +140,8 @@ impl CabsPy {
         initial_beam_size: usize,
         keep_all_layers: bool,
         max_beam_size: Option<usize>,
+        threads: usize,
+        parallelization_method: BeamParallelizationMethod,
     ) -> PyResult<CabsPy> {
         if !quiet {
             println!("Solver: CABS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
@@ -159,11 +171,41 @@ impl CabsPy {
                     },
                 },
             };
-            let solver = create_dual_bound_cabs::<OrderedContinuous>(
-                Rc::new(model.inner_as_ref().clone()),
-                parameters,
-                f_evaluator_type,
-            );
+            let solver = if threads > 1 {
+                let model = Arc::new(model.inner_as_ref().clone());
+                match parallelization_method {
+                    BeamParallelizationMethod::HD => {
+                        create_dual_bound_hd_cabs::<OrderedContinuous>(
+                            model,
+                            parameters,
+                            f_evaluator_type,
+                            threads,
+                        )
+                    }
+                    BeamParallelizationMethod::HDSync => {
+                        create_dual_bound_hd_sync_cabs::<OrderedContinuous>(
+                            model,
+                            parameters,
+                            f_evaluator_type,
+                            threads,
+                        )
+                    }
+                    BeamParallelizationMethod::SharedMemory => {
+                        create_dual_bound_shared_memory_cabs::<OrderedContinuous>(
+                            model,
+                            parameters,
+                            f_evaluator_type,
+                            threads,
+                        )
+                    }
+                }
+            } else {
+                create_dual_bound_cabs::<OrderedContinuous>(
+                    Rc::new(model.inner_as_ref().clone()),
+                    parameters,
+                    f_evaluator_type,
+                )
+            };
             Ok(CabsPy(WrappedSolver::Float(solver)))
         } else {
             let primal_bound = if let Some(primal_bound) = primal_bound {
@@ -185,11 +227,37 @@ impl CabsPy {
                     },
                 },
             };
-            let solver = create_dual_bound_cabs::<Integer>(
-                Rc::new(model.inner_as_ref().clone()),
-                parameters,
-                f_evaluator_type,
-            );
+            let solver = if threads > 1 {
+                let model = Arc::new(model.inner_as_ref().clone());
+                match parallelization_method {
+                    BeamParallelizationMethod::HD => create_dual_bound_hd_cabs::<Integer>(
+                        model,
+                        parameters,
+                        f_evaluator_type,
+                        threads,
+                    ),
+                    BeamParallelizationMethod::HDSync => create_dual_bound_hd_sync_cabs::<Integer>(
+                        model,
+                        parameters,
+                        f_evaluator_type,
+                        threads,
+                    ),
+                    BeamParallelizationMethod::SharedMemory => {
+                        create_dual_bound_shared_memory_cabs::<Integer>(
+                            model,
+                            parameters,
+                            f_evaluator_type,
+                            threads,
+                        )
+                    }
+                }
+            } else {
+                create_dual_bound_cabs::<Integer>(
+                    Rc::new(model.inner_as_ref().clone()),
+                    parameters,
+                    f_evaluator_type,
+                )
+            };
             Ok(CabsPy(WrappedSolver::Int(solver)))
         }
     }

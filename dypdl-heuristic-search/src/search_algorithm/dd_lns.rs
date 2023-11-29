@@ -313,7 +313,7 @@ where
                     }
 
                     let mut transitions = prefix.to_vec();
-                    transitions.extend(solution.transitions.into_iter());
+                    transitions.extend(solution.transitions);
                     self.input.solution.transitions = transitions;
 
                     self.input.solution.cost = Some(cost);

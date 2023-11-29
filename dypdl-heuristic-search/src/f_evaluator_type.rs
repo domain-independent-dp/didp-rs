@@ -2,9 +2,10 @@ use dypdl::variable_type;
 use std::cmp;
 
 /// How to combine the g-value and the h-value to compute the f-value.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Default)]
 pub enum FEvaluatorType {
     /// f = g + h.
+    #[default]
     Plus,
     /// f = max(g, h).
     Max,
@@ -14,12 +15,6 @@ pub enum FEvaluatorType {
     Product,
     /// f = h.
     Overwrite,
-}
-
-impl Default for FEvaluatorType {
-    fn default() -> Self {
-        FEvaluatorType::Plus
-    }
 }
 
 impl FEvaluatorType {

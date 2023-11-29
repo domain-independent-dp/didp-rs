@@ -20,7 +20,7 @@ dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.5.0"
 rustc-hash = "1.1"
 
 [dependencies.pyo3]
-version = "0.19"
+version = "0.20"
 
 [features]
 extension-module = ["pyo3/extension-module"]
@@ -28,4 +28,4 @@ abi3 = ["pyo3/abi3-py37"]
 default = ["extension-module", "abi3"]
 
 [build-dependencies]
-pyo3-build-config = "0.19"
+pyo3-build-config = "0.20"

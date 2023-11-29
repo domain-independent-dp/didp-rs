@@ -103,6 +103,8 @@ config:
     initial_beam_size: <int>
     keep_all_layers: <bool>
     max_beam_size: <int>
+    threads: <int>
+    parallel_type: <hd|hd-sync|sm>
 ```
 
 - `f`: either of `+`, `*`, `max`, and `min`. If `+`/`*`/`max`/`min`, `f(s)`, the priority of a state `S` is computed as `h(S) + g(S)`/`h(S) * G(S)`/`max{h(S), g(S)}`/`min{h(S), g(S)}`, where `h(S)` is the h-value of `S` and `g(S)` is the cost to reach `S` from the target state.
@@ -113,6 +115,10 @@ config:
   - default: `false`
 - `max_beam_size`: the maximum beam size. If `None`, it keep increasing the beam size until proving the optimality or infeasibility or reaching the time limit.
   - default: `None`
+- `threads`: the number[$] of threads.
+  - default: `1`
+- `parallel_type`: the method for parallelization. `hd` is HDBS2, `hd-sync` is HDBS1, and `sm` is SMBS. `hd` is recommended.
+  - default: `hd`
 
 Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
 

@@ -441,7 +441,7 @@ where
                     }
 
                     let mut transitions = prefix.to_vec();
-                    transitions.extend(solution.transitions.into_iter());
+                    transitions.extend(solution.transitions);
                     self.input.solution.transitions = transitions;
 
                     let current_cost = self.input.solution.cost.unwrap();

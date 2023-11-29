@@ -362,7 +362,7 @@ impl TransitionMutex {
         let forbidden_before = forbidden_before
             .into_iter()
             .map(|x| {
-                let mut v = Vec::from_iter(x.into_iter());
+                let mut v = Vec::from_iter(x);
                 v.sort();
                 v
             })
@@ -370,7 +370,7 @@ impl TransitionMutex {
         let forced_forbidden_before = forced_forbidden_before
             .into_iter()
             .map(|x| {
-                let mut v = Vec::from_iter(x.into_iter());
+                let mut v = Vec::from_iter(x);
                 v.sort();
                 v
             })
@@ -378,7 +378,7 @@ impl TransitionMutex {
         let forbidden_after = forbidden_after
             .into_iter()
             .map(|x| {
-                let mut v = Vec::from_iter(x.into_iter());
+                let mut v = Vec::from_iter(x);
                 v.sort();
                 v
             })
@@ -386,7 +386,7 @@ impl TransitionMutex {
         let forced_forbidden_after = forced_forbidden_after
             .into_iter()
             .map(|x| {
-                let mut v = Vec::from_iter(x.into_iter());
+                let mut v = Vec::from_iter(x);
                 v.sort();
                 v
             })
