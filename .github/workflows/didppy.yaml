@@ -200,8 +200,9 @@ jobs:
           options: -v ${{ github.workspace }}:/io -w /io
           run: |
             apk add py3-pip
-            pip3 install -U pip
-            pip3 install didppy --no-index --find-links /io/dist/ --force-reinstall
+            python3 -m venv /venv
+            . /venv/bin/activate
+            pip install didppy --no-index --find-links /io/dist/ --force-reinstall
             pip install pytest
             pytest -v
       - name: Upload wheels
@@ -239,9 +240,10 @@ jobs:
           githubToken: ${{ github.token }}
           install: |
             apk add py3-pip
-            pip3 install -U pip
           run: |
-            pip3 install didppy --no-index --find-links dist/ --force-reinstall
+            python3 -m venv /venv
+            . /venv/bin/activate
+            pip install didppy --no-index --find-links dist/ --force-reinstall
             pip install pytest
             pytest -v
       - name: Upload wheels

@@ -1,6 +1,10 @@
+use super::state_registry::StateInRegistry;
 use dypdl::variable_type::{Continuous, Element, Integer, OrderedContinuous, Set, Vector};
 use dypdl::ResourceVariables;
 use ordered_float::OrderedFloat;
+use std::fmt::Debug;
+use std::hash::Hash;
+use std::ops::Deref;
 
 /// Signature variables that can be hashed.
 ///
@@ -178,6 +182,18 @@ impl From<dypdl::State> for StateWithHashableSignatureVariables {
     fn from(state: dypdl::State) -> StateWithHashableSignatureVariables {
         StateWithHashableSignatureVariables {
             signature_variables: HashableSignatureVariables::from(state.signature_variables),
+            resource_variables: state.resource_variables,
+        }
+    }
+}
+
+impl<K> From<StateInRegistry<K>> for StateWithHashableSignatureVariables
+where
+    K: Hash + Eq + Clone + Debug + Deref<Target = HashableSignatureVariables>,
+{
+    fn from(state: StateInRegistry<K>) -> StateWithHashableSignatureVariables {
+        StateWithHashableSignatureVariables {
+            signature_variables: state.signature_variables.deref().clone(),
             resource_variables: state.resource_variables,
         }
     }
