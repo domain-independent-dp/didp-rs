@@ -54,6 +54,7 @@ fn didppy(_: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<heuristic_search_solver::FOperator>()?;
     m.add_class::<heuristic_search_solver::CaasdyPy>()?;
     m.add_class::<heuristic_search_solver::CabsPy>()?;
+    m.add_class::<heuristic_search_solver::BeamParallelizationMethod>()?;
     m.add_class::<heuristic_search_solver::DfbbPy>()?;
     m.add_class::<heuristic_search_solver::CbfsPy>()?;
     m.add_class::<heuristic_search_solver::ExpressionBeamSearchPy>()?;

@@ -133,9 +133,7 @@ where
         };
 
         // Consider the given transitions in TransitionMutex
-        let transitions = generator_transitions
-            .chain(transitions.into_iter())
-            .collect();
+        let transitions = generator_transitions.chain(transitions).collect();
 
         (Some(solution), TransitionMutex::new(transitions))
     } else {
@@ -189,7 +187,7 @@ where
                     parameters,
                 )
             };
-            let mut cabs = Cabs::new(input, beam_search.clone(), cabs_parameters);
+            let mut cabs = Cabs::<_, _, _, _>::new(input, beam_search.clone(), cabs_parameters);
             let (solution, _) = cabs.search_inner();
             solution
         });
@@ -258,7 +256,7 @@ where
                     parameters,
                 )
             };
-            let mut cabs = Cabs::new(input, beam_search.clone(), cabs_parameters);
+            let mut cabs = Cabs::<_, _, _, _>::new(input, beam_search.clone(), cabs_parameters);
             let (solution, _) = cabs.search_inner();
             solution
         });

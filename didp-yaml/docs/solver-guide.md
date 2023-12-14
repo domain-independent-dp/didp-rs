@@ -80,7 +80,7 @@ config:
 - `initial_registry_capacity`: the initial capacity of the data structure storing all generated states.
   - default: `1000000`
 
-Ryo Kuroiwa and J. Christopher Beck. “Domain-Independent Dynamic Programming: Generic State Space Search for Combinatorial Optimization,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+Ryo Kuroiwa and J. Christopher Beck. “Domain-Independent Dynamic Programming: Generic State Space Search for Combinatorial Optimization,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 236-244, 2023.
 
 Stephen Edelkamp, Shahid Jabbar, Alberto Lluch Lafuente. “Cost-Algebraic Heuristic Search,” Proceedings of the 20th National Conference on Artificial Intelligence (AAAI), pp. 1362-1367, 2005.
 
@@ -103,6 +103,8 @@ config:
     initial_beam_size: <int>
     keep_all_layers: <bool>
     max_beam_size: <int>
+    threads: <int>
+    parallel_type: <hdbs2|hdbs1|sbs>
 ```
 
 - `f`: either of `+`, `*`, `max`, and `min`. If `+`/`*`/`max`/`min`, `f(s)`, the priority of a state `S` is computed as `h(S) + g(S)`/`h(S) * G(S)`/`max{h(S), g(S)}`/`min{h(S), g(S)}`, where `h(S)` is the h-value of `S` and `g(S)` is the cost to reach `S` from the target state.
@@ -113,8 +115,14 @@ config:
   - default: `false`
 - `max_beam_size`: the maximum beam size. If `None`, it keep increasing the beam size until proving the optimality or infeasibility or reaching the time limit.
   - default: `None`
+- `threads`: the number[$] of threads.
+  - default: `1`
+- `parallel_type`: the method for parallelization. `hdbs2` is HDBS2, `hdbs1` is HDBS1, and `sbs` is SBS. `hdbs2` is recommended.
+  - default: `hdbs2`
 
-Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
+
+Ryo Kuroiwa and J. Christopher Beck. “Parallel Beam Search Algorithms for Domain-Independent Dynamic Programming,” Proceedings of the 38th Annual AAAI Conference on Artificial Intelligence (AAAI), 2024.
 
 Weixiong Zhang. “Complete Anytime Beam Search,” Proceedings of the 15th National Conference on Artificial Intelligence/Innovative Applications of Artificial Intelligence (AAAI/IAAI), pp. 425-430, 1998.
 
@@ -142,6 +150,8 @@ config:
     no_transition_mutex: <bool>
     cabs_initial_beam_size: <int>
     cabs_max_beam_size: <int>
+    threads: <int>
+    parallel_type: <hdbs2|hdbs1|sbs>
 ```
 
 - `f`: either of `+`, `*`, `max`, and `min`. If `+`/`*`/`max`/`min`, `f(s)`, the priority of a state `S` is computed as `h(S) + g(S)`/`h(S) * G(S)`/`max{h(S), g(S)}`/`min{h(S), g(S)}`, where `h(S)` is the h-value of `S` and `g(S)` is the cost to reach `S` from the target state.
@@ -166,8 +176,14 @@ config:
   - default: `1`
 - `cabs_max_beam_size`: the maximum beam size for CABS to find an initial feasible solution. If `None`, it keep increasing the beam size until finding a feasible solution, proving infeasibility, or reaching the time limit.
   - default: `None`
+- `threads`: the number[$] of threads.
+  - default: `1`
+- `parallel_type`: the method for parallelization. `hdbs2` is HDBS2, `hdbs1` is HDBS1, and `sbs` is SBS. `hdbs2` is recommended.
+  - default: `hdbs2`
 
-Ryo Kuroiwa and J. Christopher Beck. “Large Neighborhood Beam Search for Domain-Independent Dynamic Programming,” Proceedings of the 29th International Conference on Principles and Practice of Constraint Programming (CP), 2023.
+Ryo Kuroiwa and J. Christopher Beck. “Large Neighborhood Beam Search for Domain-Independent Dynamic Programming,” Proceedings of the 29th International Conference on Principles and Practice of Constraint Programming (CP), pp. 23:1-23:22, 2023.
+
+Ryo Kuroiwa and J. Christopher Beck. “Parallel Beam Search Algorithms for Domain-Independent Dynamic Programming,” Proceedings of the 38th Annual AAAI Conference on Artificial Intelligence (AAAI), 2024.
 
 ## dual_bound_dfbb
 
@@ -192,7 +208,7 @@ config:
 - `bfs_tie_breaking`: if sort successor states according to their f-values.
   - default: `false`
 
-Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 
 ## dual_bound_cbfs
 
@@ -214,7 +230,7 @@ config:
 - `initial_registry_capacity`: the initial capacity of the data structure storing all generated states.
   - default: `1000000`
 
-Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 
 Gio K. Kao, Edward C. Sewell, and Sheldom H. Jacobson. “A Branch, Bound and Remember Algorithm for the 1|r_i|Σt_i scheduling problem,” Journal of Scheduling, vol. 12(2), pp. 163-175, 2009.
 
@@ -250,7 +266,7 @@ config:
 - `reset`: if reset the beam size to `init` when a new improving solution is found.
   - default: `false`
 
-Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 
 Sataya Gautam Vadlamudi, Piyush Gaurav, Sandip Aine, and Partha Pratim Chakrabarti. “Anytime Column Search,” Proceedings of AI 2012: Advances in Artificial Intelligence, pp. 254-255, 2012.
 
@@ -286,7 +302,7 @@ config:
 - `reset`: if reset the beam size to `init` when a new improving solution is found.
   - default: `false`
 
-Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 
 Sataya Gautam Vadlamudi, Sandip Aine, Partha Pratim Chakrabarti. “Anytime Pack Search,” Natural Computing, vol. 15(3), pp. 395-414, 2016.
 
@@ -313,7 +329,7 @@ config:
 - `width`: the width of discrepancy to search.
   - default: `1`
 
-Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), 2023.
+Ryo Kuroiwa and J. Christopher Beck. “Solving Domain-Independent Dynamic Programming with Anytime Heuristic Search,” Proceedings of the 33rd International Conference on Automated Planning and Scheduling (ICAPS), pp. 245-253, 2023.
 
 ## dual_bound_breadth_first_search
 
@@ -375,7 +391,7 @@ config:
 - `cabs_max_beam_size`: the maximum beam size for CABS to find an initial feasible solution. If `None`, it keep increasing the beam size until finding a feasible solution, proving infeasibility, or reaching the time limit.
   - default: `None`
 
-Xavier Gillard and Pierre Schaus. “Large Neighborhood Search with Decision Diagrams,” Proceedings of the 31st International Joint Conference on Artificial Intelligence (IJCAI), 2022.
+Xavier Gillard and Pierre Schaus. “Large Neighborhood Search with Decision Diagrams,” Proceedings of the 31st International Joint Conference on Artificial Intelligence (IJCAI), pp. 4754-4760, 2022.
 
 ## dual_bound_weighted_astar
 

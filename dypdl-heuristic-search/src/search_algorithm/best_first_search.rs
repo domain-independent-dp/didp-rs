@@ -171,7 +171,7 @@ where
             registry,
             time_keeper,
             solution,
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         }
     }
 }

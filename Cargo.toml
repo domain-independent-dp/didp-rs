@@ -1,11 +1,6 @@
 [workspace]
-
-members = [
-    "dypdl",
-    "didp-yaml",
-    "dypdl-heuristic-search",
-    "didppy",
-]
+members = ["dypdl", "didp-yaml", "dypdl-heuristic-search", "didppy"]
+resolver = "2"
 
 [profile.release]
 lto = true

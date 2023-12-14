@@ -1,14 +1,17 @@
+use super::beam_parallelization_method::BeamParallelizationMethod;
 use super::f_operator::FOperator;
 use super::wrapped_solver::{SolutionPy, WrappedSolver};
 use crate::model::{ModelPy, TransitionPy};
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{
-    create_dual_bound_lnbs, BeamSearchParameters, CabsParameters, FEvaluatorType, LnbsParameters,
+    create_dual_bound_lnbs, create_dual_bound_lnhdbs1, create_dual_bound_lnhdbs2,
+    create_dual_bound_lnsbs, BeamSearchParameters, CabsParameters, FEvaluatorType, LnbsParameters,
     Parameters, Search,
 };
 use pyo3::prelude::*;
 use std::rc::Rc;
+use std::sync::Arc;
 
 /// Large Neighborhood Beam Search (LNBS) solver.
 ///
@@ -70,6 +73,11 @@ use std::rc::Rc;
 /// cabs_max_beam_size: int or None, default: None
 ///     Maximum beam size for CABS to find an initial feasible solution.
 ///     If :code:`None`, the beam size is kept increased until a feasible solution is found.
+/// threads: int, default 1
+///     Number of threads.
+/// parallelization_method: BeamParallelizationMethod, default: BeamParallelizationMethod.Hdbs2
+///     How to parallelize the search.
+///     When `threads` is 1, this parameter is ignored.
 ///
 /// Raises
 /// ------
@@ -82,7 +90,10 @@ use std::rc::Rc;
 /// ----------
 ///
 /// Ryo Kuroiwa and J. Christopher Beck. "Large Neighborhood Beam Search for Domain-Independent Dynamic Programming,"
-/// Proceedings of the 29th International Conference on Principles and Practice of Constraint Programming (CP), 2023.
+/// Proceedings of the 29th International Conference on Principles and Practice of Constraint Programming (CP), pp. 23:1-23:22, 2023.
+///
+/// Ryo Kuroiwa and J. Christopher Beck. "Parallel Beam Search Algorithms for Domain-Independent Dynamic Programming,"
+/// Proceedings of the 38th Annual AAAI Conference on Artificial Intelligence (AAAI), 2024.
 ///
 /// Examples
 /// --------
@@ -128,7 +139,7 @@ pub struct LnbsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<Ordered
 impl LnbsPy {
     #[new]
     #[pyo3(
-        text_signature = "(model, time_limit, f_operator=didppy.FOperator.Plus, primal_bound=None, quiet=False, initial_solution=None, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, seed=2023, has_negative_cost=false, use_cost_weight=false, no_bandit=false, no_transition_mutex=false, cabs_initial_beam_size=None, cabs_max_beam_size=None)"
+        text_signature = "(model, time_limit, f_operator=didppy.FOperator.Plus, primal_bound=None, quiet=False, initial_solution=None, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, seed=2023, has_negative_cost=false, use_cost_weight=false, no_bandit=false, no_transition_mutex=false, cabs_initial_beam_size=None, cabs_max_beam_size=None, threads=1, parallelization_method=BeamParallelizationMethod.Hdbs2)"
     )]
     #[pyo3(signature = (
         model,
@@ -147,6 +158,8 @@ impl LnbsPy {
         no_transition_mutex = false,
         cabs_initial_beam_size = None,
         cabs_max_beam_size = None,
+        threads = 1,
+        parallelization_method = BeamParallelizationMethod::Hdbs2,
     ))]
     #[allow(clippy::too_many_arguments)]
     fn new(
@@ -166,6 +179,8 @@ impl LnbsPy {
         no_transition_mutex: bool,
         cabs_initial_beam_size: Option<usize>,
         cabs_max_beam_size: Option<usize>,
+        threads: usize,
+        parallelization_method: BeamParallelizationMethod,
     ) -> PyResult<LnbsPy> {
         if !quiet {
             println!("Solver: LNBS from DIDPPy v{}", env!("CARGO_PKG_VERSION"));
@@ -212,13 +227,47 @@ impl LnbsPy {
                     parameters: base_parameters,
                 },
             };
-            let solver = create_dual_bound_lnbs::<OrderedContinuous>(
-                Rc::new(model.inner_as_ref().clone()),
-                transitions,
-                parameters,
-                cabs_parameters,
-                f_evaluator_type,
-            );
+            let solver = if threads > 1 {
+                let model = Arc::new(model.inner_as_ref().clone());
+                match parallelization_method {
+                    BeamParallelizationMethod::Hdbs2 => {
+                        create_dual_bound_lnhdbs2::<OrderedContinuous>(
+                            model,
+                            transitions,
+                            parameters,
+                            cabs_parameters,
+                            f_evaluator_type,
+                            threads,
+                        )
+                    }
+                    BeamParallelizationMethod::Hdbs1 => {
+                        create_dual_bound_lnhdbs1::<OrderedContinuous>(
+                            model,
+                            transitions,
+                            parameters,
+                            cabs_parameters,
+                            f_evaluator_type,
+                            threads,
+                        )
+                    }
+                    BeamParallelizationMethod::Sbs => create_dual_bound_lnsbs::<OrderedContinuous>(
+                        model,
+                        transitions,
+                        parameters,
+                        cabs_parameters,
+                        f_evaluator_type,
+                        threads,
+                    ),
+                }
+            } else {
+                create_dual_bound_lnbs::<OrderedContinuous>(
+                    Rc::new(model.inner_as_ref().clone()),
+                    transitions,
+                    parameters,
+                    cabs_parameters,
+                    f_evaluator_type,
+                )
+            };
             Ok(LnbsPy(WrappedSolver::Float(solver)))
         } else {
             let primal_bound = if let Some(primal_bound) = primal_bound {
@@ -254,13 +303,43 @@ impl LnbsPy {
                     parameters: base_parameters,
                 },
             };
-            let solver = create_dual_bound_lnbs::<Integer>(
-                Rc::new(model.inner_as_ref().clone()),
-                transitions,
-                parameters,
-                cabs_parameters,
-                f_evaluator_type,
-            );
+            let solver = if threads > 1 {
+                let model = Arc::new(model.inner_as_ref().clone());
+                match parallelization_method {
+                    BeamParallelizationMethod::Hdbs2 => create_dual_bound_lnhdbs2::<Integer>(
+                        model,
+                        transitions,
+                        parameters,
+                        cabs_parameters,
+                        f_evaluator_type,
+                        threads,
+                    ),
+                    BeamParallelizationMethod::Hdbs1 => create_dual_bound_lnhdbs1::<Integer>(
+                        model,
+                        transitions,
+                        parameters,
+                        cabs_parameters,
+                        f_evaluator_type,
+                        threads,
+                    ),
+                    BeamParallelizationMethod::Sbs => create_dual_bound_lnsbs::<Integer>(
+                        model,
+                        transitions,
+                        parameters,
+                        cabs_parameters,
+                        f_evaluator_type,
+                        threads,
+                    ),
+                }
+            } else {
+                create_dual_bound_lnbs::<Integer>(
+                    Rc::new(model.inner_as_ref().clone()),
+                    transitions,
+                    parameters,
+                    cabs_parameters,
+                    f_evaluator_type,
+                )
+            };
             Ok(LnbsPy(WrappedSolver::Int(solver)))
         }
     }

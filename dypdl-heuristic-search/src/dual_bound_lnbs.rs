@@ -29,7 +29,7 @@ use std::str;
 /// # References
 ///
 /// Ryo Kuroiwa and J. Christopher Beck. "Large Neighborhood Beam Search for Domain-Independent Dynamic Programming,"
-/// Proceedings of the 29th International Conference on Principles and Practice of Constraint Programming (CP), 2023.
+/// Proceedings of the 29th International Conference on Principles and Practice of Constraint Programming (CP), pp. 23:1-23:22, 2023.
 ///
 /// # Examples
 ///
@@ -143,9 +143,7 @@ where
             ..Default::default()
         };
 
-        let transitions = generator_transitions
-            .chain(transitions.into_iter())
-            .collect();
+        let transitions = generator_transitions.chain(transitions).collect();
 
         (Some(solution), TransitionMutex::new(transitions))
     } else {
@@ -198,7 +196,7 @@ where
                 generator: generator.clone(),
                 solution_suffix: &[],
             };
-            let mut cabs = Cabs::new(input, beam_search.clone(), cabs_parameters);
+            let mut cabs = Cabs::<_, _, _, _>::new(input, beam_search.clone(), cabs_parameters);
             let (solution, _) = cabs.search_inner();
             solution
         });
@@ -248,7 +246,7 @@ where
                 generator: generator.clone(),
                 solution_suffix: &[],
             };
-            let mut cabs = Cabs::new(input, beam_search.clone(), cabs_parameters);
+            let mut cabs = Cabs::<_, _, _, _>::new(input, beam_search.clone(), cabs_parameters);
             let (solution, _) = cabs.search_inner();
             solution
         });
