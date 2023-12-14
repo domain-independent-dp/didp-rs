@@ -32,11 +32,10 @@ Here, `domain.yaml` is the domain file for the problem, `problem.yaml` is the pr
 There are some examples in [`examples`](https://github.com/domain-independent-dp/didp-rs/tree/main/didp-yaml/examples). For example, you can test the CABS solver on TSPTW, CVRP, SALBP-1, bin packing, MOSP, and graph clear.
 
 ```bash
-didp-yaml tsptw/tsptw-domain.yaml tsptw/tsptw-Dumas-n20w20.001.yaml solvers/cabs.yaml
-didp-yaml cvrp/cvrp-domain.yaml cvrp/cvrp-E-n13-k4.yaml solvers/cabs.yaml
-didp-yaml salbp-1/salbp-1-domain.yaml salbp-1/salbp-1-small-1.yaml solvers/cabs.yaml
-didp-yaml bin-packing/bin-packing-domain.yaml bin-packing/bin-packing-Falkenauer_T_t60_00.yaml solvers/cabs.yaml
-didp-yaml mosp/mosp-domain.yaml mosp/mosp-GP1.yaml solvers/cabs.yaml
-didp-yaml graph-clear/graph-clear-domain.yaml graph-clear/graph-clear-planar20-1.yaml solvers/cabs.yaml
+didp-yaml tsptw/tsptw-domain.yaml tsptw/tsptw-problem.yaml solvers/cabs.yaml
+didp-yaml cvrp/cvrp-domain.yaml cvrp/cvrp-problem.yaml solvers/cabs.yaml
+didp-yaml salbp-1/salbp-1-domain.yaml salbp-1/salbp-1-problem.yaml solvers/cabs.yaml
+didp-yaml bin-packing/bin-packing-domain.yaml bin-packing/bin-packing-problem.yaml solvers/cabs.yaml
+didp-yaml mosp/mosp-domain.yaml mosp/mosp-problem.yaml solvers/cabs.yaml
+didp-yaml graph-clear/graph-clear-domain.yaml graph-clear/graph-clear-problem.yaml solvers/cabs.yaml
 ```
-

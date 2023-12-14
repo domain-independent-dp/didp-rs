@@ -1,14 +1,14 @@
+use crate::search_algorithm::data_structure::HashableSignatureVariables;
+
 use super::f_evaluator_type::FEvaluatorType;
-use super::parallel_search_algorithm::{
-    hd_beam_search, CostNodeMessage, DistributedCostNode, DistributedFNode, FNodeMessage,
-};
+use super::parallel_search_algorithm::{shared_beam_search, SendableCostNode, SendableFNode};
 use super::search_algorithm::{Cabs, CabsParameters, Search, SearchInput, SuccessorGenerator};
 use dypdl::{variable_type, Transition};
 use std::fmt;
 use std::str;
 use std::sync::Arc;
 
-/// Creates a Hash Distributed Complete Anytime Beam Search (HDCABS) solver using the dual bound as a heuristic function.
+/// Creates a Complete Anytime Shared Beam Search (CASBS) solver using the dual bound as a heuristic function.
 ///
 /// It iterates beam search with exponentially increasing beam width.
 /// `beam_size` specifies the initial beam width.
@@ -18,12 +18,17 @@ use std::sync::Arc;
 /// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
 /// `f_evaluator_type` must be specified appropriately according to the cost expressions.
 ///
+/// # References
+///
+/// Ryo Kuroiwa and J. Christopher Beck. "Parallel Beam Search Algorithms for Domain-Independent Dynamic Programming,"
+/// Proceedings of the 38th Annual AAAI Conference on Artificial Intelligence (AAAI), 2024.
+///
 /// # Examples
 ///
 /// ```
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::{
-///     CabsParameters, create_dual_bound_hd_cabs, FEvaluatorType,
+///     CabsParameters, create_dual_bound_casbs, FEvaluatorType,
 /// };
 /// use std::sync::Arc;
 ///
@@ -43,13 +48,13 @@ use std::sync::Arc;
 /// let f_evaluator_type = FEvaluatorType::Plus;
 ///
 /// let threads = 1;
-/// let mut solver = create_dual_bound_hd_cabs(model, parameters, f_evaluator_type, threads);
+/// let mut solver = create_dual_bound_casbs(model, parameters, f_evaluator_type, threads);
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub fn create_dual_bound_hd_cabs<T>(
+pub fn create_dual_bound_casbs<T>(
     model: Arc<dypdl::Model>,
     parameters: CabsParameters<T>,
     f_evaluator_type: FEvaluatorType,
@@ -69,13 +74,12 @@ where
         FEvaluatorType::Min => T::max_value(),
         FEvaluatorType::Overwrite => T::zero(),
     };
-    let print_statistics = !parameters.beam_search_parameters.parameters.quiet;
 
     if model.has_dual_bounds() {
         let h_model = model.clone();
         let h_evaluator = move |state: &_| h_model.eval_dual_bound(state);
         let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
-        let node = FNodeMessage::generate_root_node(
+        let node = SendableFNode::generate_root_node(
             model.target.clone(),
             cost,
             &model,
@@ -88,8 +92,8 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &DistributedFNode<_>, transition, primal_bound| {
-            node.generate_sendable_successor_node(
+        let transition_evaluator = move |node: &SendableFNode<_>, transition, primal_bound| {
+            node.generate_successor_node(
                 transition,
                 &model,
                 &h_evaluator,
@@ -98,68 +102,52 @@ where
             )
         };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
-            let (solution, statistics) = hd_beam_search(
+            shared_beam_search(
                 input,
                 &transition_evaluator,
                 base_cost_evaluator,
                 parameters,
                 threads,
             )
-            .unwrap();
-
-            if print_statistics {
-                println!(
-                    "Searched with beam size: {}, threads: {}, kept: {}, sent: {}",
-                    parameters.beam_size,
-                    threads,
-                    statistics.kept.iter().sum::<usize>(),
-                    statistics.sent.iter().sum::<usize>(),
-                );
-            }
-
-            solution
+            .unwrap()
         };
-        Box::new(Cabs::<_, FNodeMessage<_>, _, _, _, Arc<_>>::new(
-            input,
-            beam_search,
-            parameters,
-        ))
+        Box::new(Cabs::<
+            _,
+            SendableFNode<_>,
+            _,
+            _,
+            _,
+            _,
+            Arc<HashableSignatureVariables>,
+        >::new(input, beam_search, parameters))
     } else {
-        let node = CostNodeMessage::generate_root_node(model.target.clone(), cost, &model);
+        let node = SendableCostNode::generate_root_node(model.target.clone(), cost, &model);
         let input = SearchInput {
             node: Some(node),
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &DistributedCostNode<_>, transition, _| {
-            node.generate_sendable_successor_node(transition, &model)
+        let transition_evaluator = move |node: &SendableCostNode<_>, transition, _| {
+            node.generate_successor_node(transition, &model)
         };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
-            let (solution, statistics) = hd_beam_search(
+            shared_beam_search(
                 input,
                 &transition_evaluator,
                 base_cost_evaluator,
                 parameters,
                 threads,
             )
-            .unwrap();
-
-            if print_statistics {
-                println!(
-                    "Searched with beam size: {}, threads: {}, kept: {}, sent: {}",
-                    parameters.beam_size,
-                    threads,
-                    statistics.kept.iter().sum::<usize>(),
-                    statistics.sent.iter().sum::<usize>(),
-                );
-            }
-
-            solution
+            .unwrap()
         };
-        Box::new(Cabs::<_, CostNodeMessage<_>, _, _, _, Arc<_>>::new(
-            input,
-            beam_search,
-            parameters,
-        ))
+        Box::new(Cabs::<
+            _,
+            SendableCostNode<_>,
+            _,
+            _,
+            _,
+            _,
+            Arc<HashableSignatureVariables>,
+        >::new(input, beam_search, parameters))
     }
 }

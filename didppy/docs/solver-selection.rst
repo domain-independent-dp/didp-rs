@@ -10,6 +10,7 @@ It has the following advantages:
 * Anytime: it usually finds a feasible solution quickly and improves the solution quality over time.
 * Complete: it is guaranteed to find an optimal solution or prove the infeasibility of the model given sufficient time.
 * Memory efficient: it consumes less memory compared to other solvers.
+* Multi-threading: it can be run in parallel using multiple threads.
 
 However, it has the following disadvantages:
 
@@ -22,7 +23,7 @@ Time to Prove Optimality
 
 :class:`~didppy.CABS` is sometimes slow to prove the optimality.
 This does not mean that :class:`~didppy.CABS` is slow to find an optimal solution; it just takes time to prove the optimality of the found solution.
-If you want to prove the optimality as fast as possible, :class:`~didppy.CAASDy` might be a choice.
+If you want to prove the optimality as fast as possible using a single thread, :class:`~didppy.CAASDy` might be a choice.
 One disadvantage of :class:`~didppy.CAASDy` is that it is not an anytime solver: it does not find any solution until it proves the optimality.
 If you want to use anytime solvers, consider :class:`~didppy.ACPS` and :class:`~didppy.APPS`.
 However, these alternatives consume more memory than :class:`didppy.CABS`, so if the memory limit is a concern, they may not be a good choice.

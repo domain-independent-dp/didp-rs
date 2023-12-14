@@ -1,6 +1,6 @@
 [package]
 name = "dypdl-heuristic-search"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 rust-version = "1.64"
 description = "Heuristic search solvers for Dynamic Programming Description Language (DyPDL)."
@@ -13,7 +13,7 @@ repository = "https://github.com/domain-independent-dp/didp-rs"
 
 [dependencies]
 ordered-float = "3.9"
-dypdl = { path = "../dypdl", version = "0.5.0" }
+dypdl = { path = "../dypdl", version = "0.6.0" }
 rustc-hash = "1.1"
 dashmap = "5.5"
 rayon = "1.8"

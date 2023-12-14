@@ -1,4 +1,4 @@
-//// Statistics of hash distributed search.
+/// Statistics of hash distributed search.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HdSearchStatistics {
     /// Number of nodes expanded by each thread.

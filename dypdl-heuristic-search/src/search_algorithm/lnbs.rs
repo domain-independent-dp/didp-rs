@@ -1,7 +1,6 @@
 use super::beam_search::BeamSearchParameters;
 use super::data_structure::{
-    exceed_bound, BfsNode, HashableSignatureVariables, StateInRegistry, TransitionMutex,
-    TransitionWithId,
+    exceed_bound, HashableSignatureVariables, StateInRegistry, TransitionMutex, TransitionWithId,
 };
 use super::neighborhood_search::NeighborhoodSearchInput;
 use super::rollout::get_trace;
@@ -166,7 +165,6 @@ pub struct Lnbs<
 > where
     T: variable_type::Numeric + Display,
     <T as str::FromStr>::Err: Debug,
-    N: BfsNode<T, TransitionWithId<V>, K>,
     B: Fn(
         &SearchInput<N, TransitionWithId<V>, D, R>,
         BeamSearchParameters<T>,
@@ -211,7 +209,6 @@ impl<T, N, B, G, V, D, R, K> Lnbs<T, N, B, G, V, D, R, K>
 where
     T: variable_type::Numeric + Ord + Display,
     <T as str::FromStr>::Err: Debug,
-    N: BfsNode<T, TransitionWithId<V>, K> + Clone,
     B: Fn(
         &SearchInput<N, TransitionWithId<V>, D, R>,
         BeamSearchParameters<T>,
@@ -625,7 +622,6 @@ impl<T, N, B, G, V, D, R, K> Search<T> for Lnbs<T, N, B, G, V, D, R, K>
 where
     T: variable_type::Numeric + Ord + Display,
     <T as str::FromStr>::Err: Debug,
-    N: BfsNode<T, TransitionWithId<V>, K> + Clone,
     B: Fn(
         &SearchInput<N, TransitionWithId<V>, D, R>,
         BeamSearchParameters<T>,
