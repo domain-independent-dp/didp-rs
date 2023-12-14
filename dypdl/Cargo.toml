@@ -2,7 +2,7 @@
 name = "dypdl"
 version = "0.6.0"
 edition = "2021"
-rust-version = "1.64"
+rust-version = "1.65"
 description = "Libarary for Dynamic Programming Description Language (DyPDL)."
 license = "MIT OR Apache-2.0"
 authors = ["Ryo Kuroiwa <ryo.kuroiwa@mail.utoronto.ca>"]
