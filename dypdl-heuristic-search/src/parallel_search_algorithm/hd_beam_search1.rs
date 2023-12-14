@@ -15,7 +15,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::{cmp, iter, mem, thread};
 
-/// Performs hash distributed beam search with layer synchronization.
+/// Performs hash distributed beam search 1 (HDBS1).
 ///
 /// This function uses forward search based on the shortest path problem.
 /// It only works with problems where the cost expressions are in the form of `cost + w`, `cost * w`, `max(cost, w)`, or `min(cost, w)`
@@ -29,6 +29,12 @@ use std::{cmp, iter, mem, thread};
 /// Type parameter `B` is a type of a function that combines the g-value (the cost to a state) and the base cost.
 /// It should be the same function as the cost expression, e.g., `cost + base_cost` for `cost + w`.
 ///
+///
+/// # References
+///
+/// Ryo Kuroiwa and J. Christopher Beck. "Parallel Beam Search Algorithms for Domain-Independent Dynamic Programming,"
+/// Proceedings of the 38th Annual AAAI Conference on Artificial Intelligence (AAAI), 2024.
+///
 /// # Panics
 ///
 /// If it fails to create a thread pool or reserve memory for the state registry.
@@ -39,7 +45,7 @@ use std::{cmp, iter, mem, thread};
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::Search;
 /// use dypdl_heuristic_search::parallel_search_algorithm::{
-///     DistributedFNode, FNodeMessage, hd_sync_beam_search,
+///     DistributedFNode, FNodeMessage, hd_beam_search1,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::{
 ///     BeamSearchParameters, SearchInput, SuccessorGenerator,
@@ -91,7 +97,7 @@ use std::{cmp, iter, mem, thread};
 /// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
 /// let parameters = BeamSearchParameters::default();
 /// let threads = 1;
-/// let (solution, _) = hd_sync_beam_search(
+/// let (solution, _) = hd_beam_search1(
 ///     &input, transition_evaluator, base_cost_evaluator, parameters, threads,
 /// ).unwrap();
 /// assert_eq!(solution.cost, Some(1));
@@ -99,7 +105,7 @@ use std::{cmp, iter, mem, thread};
 /// assert_eq!(Transition::from(solution.transitions[0].clone()), increment);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub fn hd_sync_beam_search<'a, T, N, M, E, B, V>(
+pub fn hd_beam_search1<'a, T, N, M, E, B, V>(
     input: &'a SearchInput<'a, M, V, Arc<V>, Arc<Model>>,
     transition_evaluator: E,
     base_cost_evaluator: B,

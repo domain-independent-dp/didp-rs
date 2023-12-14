@@ -119,3 +119,4 @@ Solver Configurations
    :toctree: _autosummary
 
    didppy.FOperator
+   didppy.BeamParallelizationMethod

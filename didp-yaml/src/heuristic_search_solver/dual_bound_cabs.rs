@@ -2,9 +2,8 @@ use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
 use dypdl_heuristic_search::{
-    create_dual_bound_cabs, create_dual_bound_hd_cabs, create_dual_bound_hd_sync_cabs,
-    create_dual_bound_shared_memory_cabs, BeamSearchParameters, CabsParameters, FEvaluatorType,
-    Search,
+    create_dual_bound_cabs, create_dual_bound_cahdbs1, create_dual_bound_cahdbs2,
+    create_dual_bound_casbs, BeamSearchParameters, CabsParameters, FEvaluatorType, Search,
 };
 use std::error::Error;
 use std::fmt;
@@ -116,9 +115,9 @@ where
     };
     let parallel_type = match map.get(&yaml_rust::Yaml::from_str("parallel_type")) {
         Some(yaml_rust::Yaml::String(value)) => match value.as_str() {
-            "hd" => 0,
-            "hd-sync" => 1,
-            "sm" => 2,
+            "hdbs2" => 0,
+            "hdbs1" => 1,
+            "sbs" => 2,
             _ => {
                 return Err(util::YamlContentErr::new(format!(
                     "unexpected value for `parallel_type`: `{}`",
@@ -139,19 +138,19 @@ where
 
     if threads > 1 {
         match parallel_type {
-            0 => Ok(create_dual_bound_hd_cabs(
+            0 => Ok(create_dual_bound_cahdbs2(
                 Arc::new(model),
                 parameters,
                 f_evaluator_type,
                 threads,
             )),
-            1 => Ok(create_dual_bound_hd_sync_cabs(
+            1 => Ok(create_dual_bound_cahdbs1(
                 Arc::new(model),
                 parameters,
                 f_evaluator_type,
                 threads,
             )),
-            2 => Ok(create_dual_bound_shared_memory_cabs(
+            2 => Ok(create_dual_bound_casbs(
                 Arc::new(model),
                 parameters,
                 f_evaluator_type,

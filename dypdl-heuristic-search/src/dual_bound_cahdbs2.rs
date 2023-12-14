@@ -1,6 +1,6 @@
 use super::f_evaluator_type::FEvaluatorType;
 use super::parallel_search_algorithm::{
-    hd_sync_beam_search, CostNodeMessage, DistributedCostNode, DistributedFNode, FNodeMessage,
+    hd_beam_search2, CostNodeMessage, DistributedCostNode, DistributedFNode, FNodeMessage,
 };
 use super::search_algorithm::{Cabs, CabsParameters, Search, SearchInput, SuccessorGenerator};
 use dypdl::{variable_type, Transition};
@@ -8,7 +8,7 @@ use std::fmt;
 use std::str;
 use std::sync::Arc;
 
-/// Creates a Hash Distributed Complete Anytime Beam Search with layer synchronization (HDCABSSync) solver using the dual bound as a heuristic function.
+/// Creates a Complete Anytime Hash Distributed Beam Search 2 (HDCABS2) solver using the dual bound as a heuristic function.
 ///
 /// It iterates beam search with exponentially increasing beam width.
 /// `beam_size` specifies the initial beam width.
@@ -18,12 +18,17 @@ use std::sync::Arc;
 /// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
 /// `f_evaluator_type` must be specified appropriately according to the cost expressions.
 ///
+/// # References
+///
+/// Ryo Kuroiwa and J. Christopher Beck. "Parallel Beam Search Algorithms for Domain-Independent Dynamic Programming,"
+/// Proceedings of the 38th Annual AAAI Conference on Artificial Intelligence (AAAI), 2024.
+///
 /// # Examples
 ///
 /// ```
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::{
-///     CabsParameters, create_dual_bound_hd_sync_cabs, FEvaluatorType,
+///     CabsParameters, create_dual_bound_cahdbs2, FEvaluatorType,
 /// };
 /// use std::sync::Arc;
 ///
@@ -43,13 +48,13 @@ use std::sync::Arc;
 /// let f_evaluator_type = FEvaluatorType::Plus;
 ///
 /// let threads = 1;
-/// let mut solver = create_dual_bound_hd_sync_cabs(model, parameters, f_evaluator_type, threads);
+/// let mut solver = create_dual_bound_cahdbs2(model, parameters, f_evaluator_type, threads);
 /// let solution = solver.search().unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions, vec![increment]);
 /// assert!(!solution.is_infeasible);
 /// ```
-pub fn create_dual_bound_hd_sync_cabs<T>(
+pub fn create_dual_bound_cahdbs2<T>(
     model: Arc<dypdl::Model>,
     parameters: CabsParameters<T>,
     f_evaluator_type: FEvaluatorType,
@@ -98,7 +103,7 @@ where
             )
         };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
-            let (solution, statistics) = hd_sync_beam_search(
+            let (solution, statistics) = hd_beam_search2(
                 input,
                 &transition_evaluator,
                 base_cost_evaluator,
@@ -135,7 +140,7 @@ where
             node.generate_sendable_successor_node(transition, &model)
         };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
-            let (solution, statistics) = hd_sync_beam_search(
+            let (solution, statistics) = hd_beam_search2(
                 input,
                 &transition_evaluator,
                 base_cost_evaluator,

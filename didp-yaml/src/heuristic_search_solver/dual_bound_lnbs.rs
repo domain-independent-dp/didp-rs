@@ -2,20 +2,21 @@ use super::solver_parameters;
 use crate::util;
 use dypdl::variable_type::Numeric;
 use dypdl_heuristic_search::{
-    create_dual_bound_lnbs, BeamSearchParameters, CabsParameters, FEvaluatorType, LnbsParameters,
+    create_dual_bound_lnbs, create_dual_bound_lnhdbs1, create_dual_bound_lnhdbs2,
+    create_dual_bound_lnsbs, BeamSearchParameters, CabsParameters, FEvaluatorType, LnbsParameters,
     Search,
 };
 use std::error::Error;
-use std::fmt;
 use std::rc::Rc;
-use std::str;
+use std::sync::Arc;
+use std::{fmt, str};
 
 pub fn load_from_yaml<T>(
     model: dypdl::Model,
     config: &yaml_rust::Yaml,
 ) -> Result<Box<dyn Search<T>>, Box<dyn Error>>
 where
-    T: Numeric + Ord + fmt::Display + 'static,
+    T: Numeric + Ord + fmt::Display + Send + Sync + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
     let map = match config {
@@ -183,11 +184,79 @@ where
             keep_all_layers,
         },
     };
-    Ok(create_dual_bound_lnbs(
-        Rc::new(model),
-        None,
-        lnbs_parameters,
-        cabs_parameters,
-        f_evaluator_type,
-    ))
+    let threads = match map.get(&yaml_rust::Yaml::from_str("threads")) {
+        Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
+        Some(value) => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected Integer for `threads`, but found `{:?}`",
+                value
+            ))
+            .into())
+        }
+        None => 1,
+    };
+    let parallel_type = match map.get(&yaml_rust::Yaml::from_str("parallel_type")) {
+        Some(yaml_rust::Yaml::String(value)) => match value.as_str() {
+            "hdbs2" => 0,
+            "hdbs1" => 1,
+            "sbs" => 2,
+            _ => {
+                return Err(util::YamlContentErr::new(format!(
+                    "unexpected value for `parallel_type`: `{}`",
+                    value
+                ))
+                .into())
+            }
+        },
+        Some(value) => {
+            return Err(util::YamlContentErr::new(format!(
+                "expected String for `parallel_type`, but found `{:?}`",
+                value
+            ))
+            .into())
+        }
+        None => 0,
+    };
+
+    if threads > 1 {
+        match parallel_type {
+            0 => Ok(create_dual_bound_lnhdbs2(
+                Arc::new(model),
+                None,
+                lnbs_parameters,
+                cabs_parameters,
+                f_evaluator_type,
+                threads,
+            )),
+            1 => Ok(create_dual_bound_lnhdbs1(
+                Arc::new(model),
+                None,
+                lnbs_parameters,
+                cabs_parameters,
+                f_evaluator_type,
+                threads,
+            )),
+            2 => Ok(create_dual_bound_lnsbs(
+                Arc::new(model),
+                None,
+                lnbs_parameters,
+                cabs_parameters,
+                f_evaluator_type,
+                threads,
+            )),
+            _ => Err(util::YamlContentErr::new(format!(
+                "unexpected value for `parallel_type`: `{}`",
+                parallel_type
+            ))
+            .into()),
+        }
+    } else {
+        Ok(create_dual_bound_lnbs(
+            Rc::new(model),
+            None,
+            lnbs_parameters,
+            cabs_parameters,
+            f_evaluator_type,
+        ))
+    }
 }
