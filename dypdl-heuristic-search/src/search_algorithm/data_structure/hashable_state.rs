@@ -287,6 +287,7 @@ mod tests {
     use dypdl::variable_type::Set;
     use dypdl::StateInterface;
     use dypdl::{expression::*, TableRegistry};
+    use std::rc::Rc;
 
     #[test]
     fn hashable_signature_variables() {
@@ -870,6 +871,64 @@ mod tests {
         };
         let state = StateWithHashableSignatureVariables::from(dypdl::State {
             signature_variables: signature_variables.clone(),
+            resource_variables: resource_variables.clone(),
+        });
+        assert_eq!(
+            state.signature_variables.set_variables,
+            signature_variables.set_variables
+        );
+        assert_eq!(
+            state.signature_variables.vector_variables,
+            signature_variables.vector_variables
+        );
+        assert_eq!(
+            state.signature_variables.element_variables,
+            signature_variables.element_variables
+        );
+        assert_eq!(
+            state.signature_variables.integer_variables,
+            signature_variables.integer_variables
+        );
+        assert_eq!(
+            state.signature_variables.continuous_variables,
+            vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)]
+        );
+        assert_eq!(
+            state.resource_variables.element_variables,
+            resource_variables.element_variables
+        );
+        assert_eq!(
+            state.resource_variables.integer_variables,
+            resource_variables.integer_variables
+        );
+        assert_eq!(
+            state.resource_variables.continuous_variables,
+            resource_variables.continuous_variables
+        );
+    }
+
+    #[test]
+    fn state_with_hashable_signature_variable_from_state_in_registry() {
+        let mut set1 = Set::with_capacity(3);
+        set1.insert(0);
+        set1.insert(2);
+        let mut set2 = Set::with_capacity(3);
+        set2.insert(0);
+        set2.insert(1);
+        let signature_variables = HashableSignatureVariables {
+            set_variables: vec![set1, set2],
+            vector_variables: vec![vec![0, 2], vec![1, 2]],
+            element_variables: vec![1, 2],
+            integer_variables: vec![1, 2, 3],
+            continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
+        };
+        let resource_variables = dypdl::ResourceVariables {
+            element_variables: vec![],
+            integer_variables: vec![4, 5, 6],
+            continuous_variables: vec![4.0, 5.0, 6.0],
+        };
+        let state = StateWithHashableSignatureVariables::from(StateInRegistry {
+            signature_variables: Rc::new(signature_variables.clone()),
             resource_variables: resource_variables.clone(),
         });
         assert_eq!(

@@ -6,7 +6,7 @@ use std::cmp::max;
 /// # References
 ///
 /// Friedmann Mattern. "Algorithms for Distributed Termination Detection,"
-/// Distributed Computing, vol. 2, pp 161-175, 1987
+/// Distributed Computing, vol. 2, pp. 161-175, 1987.
 pub struct TerminationDetector {
     id: usize,
     clock: usize,
