@@ -1,7 +1,7 @@
 use super::data_structure::{exceed_bound, BfsNode, StateRegistry, SuccessorGenerator};
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, Search, SearchInput, Solution};
-use super::util::{print_dual_bound, update_solution, TimeKeeper};
+use super::util::{print_dual_bound, update_bound_if_better, update_solution, TimeKeeper};
 use dypdl::{variable_type, Transition, TransitionInterface};
 use std::error::Error;
 use std::fmt;
@@ -132,6 +132,7 @@ where
     open: Vec<(Rc<N>, usize)>,
     next_open: Vec<(Rc<N>, usize)>,
     registry: StateRegistry<T, N>,
+    next_dual_bound: Option<T>,
     time_keeper: TimeKeeper,
     solution: Solution<T>,
 }
@@ -204,6 +205,7 @@ where
             discrepancy_limit,
             open,
             next_open,
+            next_dual_bound: None,
             registry,
             time_keeper,
             solution,
@@ -226,6 +228,17 @@ where
 
         while !self.open.is_empty() || !self.next_open.is_empty() {
             if self.open.is_empty() {
+                if let Some(bound) = self.next_dual_bound {
+                    if exceed_bound(model, bound, self.primal_bound) {
+                        self.next_open.clear();
+                        break;
+                    } else {
+                        self.solution.time = self.time_keeper.elapsed_time();
+                        update_bound_if_better(&mut self.solution, bound, model, self.quiet);
+                        self.next_dual_bound = None;
+                    }
+                }
+
                 mem::swap(&mut self.open, &mut self.next_open);
                 self.discrepancy_limit += self.width;
 
@@ -311,6 +324,12 @@ where
                 if discrepancy < self.discrepancy_limit {
                     self.open.append(&mut successors);
                 } else {
+                    if let Some(bound) = successors.last().and_then(|(node, _)| node.bound(model)) {
+                        if !exceed_bound(model, bound, self.next_dual_bound) {
+                            self.next_dual_bound = Some(bound);
+                        }
+                    }
+
                     self.next_open.append(&mut successors);
                 }
 

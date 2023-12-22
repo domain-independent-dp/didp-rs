@@ -1,7 +1,7 @@
 use super::data_structure::{exceed_bound, BfsNode, StateRegistry};
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, Search, SearchInput, Solution};
-use super::util::{print_dual_bound, update_solution, TimeKeeper};
+use super::util::{print_dual_bound, update_bound_if_better, update_solution, TimeKeeper};
 use super::SuccessorGenerator;
 use dypdl::{variable_type, Transition, TransitionInterface};
 use std::collections;
@@ -195,6 +195,7 @@ where
         let suffix = self.suffix;
         let mut i = 0;
         let mut no_node = true;
+        let mut dual_bound_candidate = None;
 
         loop {
             if let Some(node) = self.open[i].pop() {
@@ -267,9 +268,27 @@ where
                 }
             }
 
+            if N::ordered_by_bound() {
+                if let Some(bound) = self.open[i].peek().map(|node| node.bound(model).unwrap()) {
+                    if !exceed_bound(model, bound, dual_bound_candidate) {
+                        dual_bound_candidate = Some(bound);
+                    }
+                }
+            }
+
             if no_node && i + 1 == self.open.len() {
                 break;
             } else if i + 1 == self.open.len() {
+                if let Some(dual_bound) = dual_bound_candidate {
+                    if exceed_bound(model, dual_bound, self.primal_bound) {
+                        break;
+                    } else {
+                        self.solution.time = self.time_keeper.elapsed_time();
+                        update_bound_if_better(&mut self.solution, dual_bound, model, self.quiet);
+                        dual_bound_candidate = None;
+                    }
+                }
+
                 i = 0;
                 no_node = true;
             } else {
