@@ -179,6 +179,17 @@ where
             solution,
         }
     }
+
+    fn backtrack(n_siblings: &mut Vec<usize>, depth_dual_bounds: &mut Vec<Option<T>>) {
+        while let Some(n) = n_siblings.pop() {
+            if n == 0 {
+                depth_dual_bounds.pop();
+            } else {
+                n_siblings.push(n - 1);
+                break;
+            }
+        }
+    }
 }
 
 impl<'a, T, N, E, B, V> Search<T> for Dfbb<'a, T, N, E, B, V>
@@ -196,12 +207,14 @@ where
 
         while let Some(node) = self.open.pop() {
             if node.is_closed() {
+                Self::backtrack(&mut self.n_siblings, &mut self.depth_dual_bounds);
                 continue;
             }
             node.close();
 
             if let Some(dual_bound) = node.bound(model) {
                 if exceed_bound(model, dual_bound, self.primal_bound) {
+                    Self::backtrack(&mut self.n_siblings, &mut self.depth_dual_bounds);
                     continue;
                 }
             }
@@ -209,6 +222,8 @@ where
             if let Some((cost, suffix)) =
                 get_solution_cost_and_suffix(model, &*node, self.suffix, &self.base_cost_evaluator)
             {
+                Self::backtrack(&mut self.n_siblings, &mut self.depth_dual_bounds);
+
                 if !exceed_bound(model, cost, self.primal_bound) {
                     self.primal_bound = Some(cost);
                     let time = self.time_keeper.elapsed_time();
@@ -256,15 +271,7 @@ where
             successors.sort();
 
             if successors.is_empty() {
-                // Backtrack.
-                while let Some(n) = self.n_siblings.pop() {
-                    if n == 0 {
-                        self.depth_dual_bounds.pop();
-                    } else {
-                        self.n_siblings.push(n - 1);
-                        break;
-                    }
-                }
+                Self::backtrack(&mut self.n_siblings, &mut self.depth_dual_bounds);
             } else {
                 self.n_siblings.push(successors.len() - 1);
                 self.depth_dual_bounds.push(None);
