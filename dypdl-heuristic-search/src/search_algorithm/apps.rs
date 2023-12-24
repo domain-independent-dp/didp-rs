@@ -1,7 +1,7 @@
 use super::acps::ProgressiveSearchParameters;
 use super::data_structure::{exceed_bound, BfsNode, StateRegistry, SuccessorGenerator};
 use super::rollout::get_solution_cost_and_suffix;
-use super::util::{print_dual_bound, update_solution, TimeKeeper};
+use super::util::{print_dual_bound, update_bound_if_better, update_solution, TimeKeeper};
 use super::{Parameters, Search, SearchInput, Solution};
 use dypdl::{variable_type, Transition, TransitionInterface};
 use std::collections;
@@ -248,6 +248,24 @@ where
                         self.width = self.progressive_parameters.init;
                     } else {
                         self.width = self.progressive_parameters.increase_width(self.width);
+                    }
+
+                    if N::ordered_by_bound() {
+                        if let Some(bound) =
+                            self.suspend.peek().map(|node| node.bound(model).unwrap())
+                        {
+                            if exceed_bound(model, bound, self.primal_bound) {
+                                self.suspend.clear();
+                            } else {
+                                self.solution.time = self.time_keeper.elapsed_time();
+                                update_bound_if_better(
+                                    &mut self.solution,
+                                    bound,
+                                    model,
+                                    self.quiet,
+                                );
+                            }
+                        }
                     }
 
                     while self.open.len() < self.width {

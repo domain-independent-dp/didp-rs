@@ -1,7 +1,7 @@
 use super::data_structure::{exceed_bound, BfsNode, StateRegistry, SuccessorGenerator};
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, Search, SearchInput, Solution};
-use super::util::{print_dual_bound, update_solution, TimeKeeper};
+use super::util::{print_dual_bound, update_bound_if_better, update_solution, TimeKeeper};
 use dypdl::{variable_type, Transition, TransitionInterface};
 use std::cmp;
 use std::collections;
@@ -151,6 +151,7 @@ where
     node_index: usize,
     no_node: bool,
     goal_found: bool,
+    dual_bound_candidate: Option<T>,
     time_keeper: TimeKeeper,
     solution: Solution<T>,
 }
@@ -219,6 +220,7 @@ where
             node_index: 0,
             no_node: true,
             goal_found: false,
+            dual_bound_candidate: None,
             time_keeper,
             solution,
         }
@@ -324,9 +326,21 @@ where
                 self.node_index += 1;
             }
 
+            if N::ordered_by_bound() {
+                if let Some(bound) = self.open[self.layer_index]
+                    .peek()
+                    .map(|node| node.bound(model).unwrap())
+                {
+                    if !exceed_bound(model, bound, self.dual_bound_candidate) {
+                        self.dual_bound_candidate = Some(bound);
+                    }
+                }
+            }
+
             self.node_index = 0;
 
             if self.goal_found {
+                self.dual_bound_candidate = None;
                 self.layer_index = 0;
                 self.no_node = true;
                 self.goal_found = false;
@@ -339,6 +353,16 @@ where
             } else if self.layer_index + 1 == self.open.len() {
                 if self.no_node {
                     break;
+                }
+
+                if let Some(dual_bound) = self.dual_bound_candidate {
+                    if exceed_bound(model, dual_bound, self.primal_bound) {
+                        break;
+                    } else {
+                        self.solution.time = self.time_keeper.elapsed_time();
+                        update_bound_if_better(&mut self.solution, dual_bound, model, self.quiet);
+                        self.dual_bound_candidate = None;
+                    }
                 }
 
                 self.layer_index = 0;
