@@ -1,6 +1,6 @@
 [package]
 name = "didppy"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 rust-version = "1.65"
 description = "Python interface for Dynamic Programming Description Language (DyPDL) and DyPDL solvers."
@@ -15,8 +15,8 @@ name = "didppy"
 crate-type = ["cdylib"]
 
 [dependencies]
-dypdl = { path = "../dypdl", version = "0.6.0" }
-dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.6.0" }
+dypdl = { path = "../dypdl", version = "0.6.1" }
+dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.6.1" }
 rustc-hash = "1.1"
 
 [dependencies.pyo3]

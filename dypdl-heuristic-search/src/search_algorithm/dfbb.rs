@@ -1,7 +1,7 @@
 use super::data_structure::{exceed_bound, BfsNode, StateRegistry, SuccessorGenerator};
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, Search, SearchInput, Solution};
-use super::util::{self, print_dual_bound, update_solution};
+use super::util::{self, print_dual_bound, update_bound_if_better, update_solution};
 use dypdl::{variable_type, Transition, TransitionInterface};
 use std::error::Error;
 use std::fmt;
@@ -105,6 +105,8 @@ where
     quiet: bool,
     open: Vec<Rc<N>>,
     registry: StateRegistry<T, N>,
+    depth_dual_bounds: Vec<Option<T>>,
+    n_siblings: Vec<usize>,
     time_keeper: util::TimeKeeper,
     solution: Solution<T>,
 }
@@ -139,12 +141,16 @@ where
             registry.reserve(capacity);
         }
 
+        let mut depth_dual_bounds = Vec::default();
+        let mut n_siblings = Vec::default();
         let mut solution = Solution::default();
 
         if let Some(node) = input.node {
             let (node, _) = registry.insert(node).unwrap();
             solution.best_bound = node.bound(&input.generator.model);
             open.push(node);
+            depth_dual_bounds.push(None);
+            n_siblings.push(0);
             solution.generated += 1;
 
             if !quiet {
@@ -167,8 +173,21 @@ where
             quiet,
             open,
             registry,
+            depth_dual_bounds,
+            n_siblings,
             time_keeper,
             solution,
+        }
+    }
+
+    fn backtrack(n_siblings: &mut Vec<usize>, depth_dual_bounds: &mut Vec<Option<T>>) {
+        while let Some(n) = n_siblings.pop() {
+            if n == 0 {
+                depth_dual_bounds.pop();
+            } else {
+                n_siblings.push(n - 1);
+                break;
+            }
         }
     }
 }
@@ -188,12 +207,14 @@ where
 
         while let Some(node) = self.open.pop() {
             if node.is_closed() {
+                Self::backtrack(&mut self.n_siblings, &mut self.depth_dual_bounds);
                 continue;
             }
             node.close();
 
             if let Some(dual_bound) = node.bound(model) {
                 if exceed_bound(model, dual_bound, self.primal_bound) {
+                    Self::backtrack(&mut self.n_siblings, &mut self.depth_dual_bounds);
                     continue;
                 }
             }
@@ -201,6 +222,8 @@ where
             if let Some((cost, suffix)) =
                 get_solution_cost_and_suffix(model, &*node, self.suffix, &self.base_cost_evaluator)
             {
+                Self::backtrack(&mut self.n_siblings, &mut self.depth_dual_bounds);
+
                 if !exceed_bound(model, cost, self.primal_bound) {
                     self.primal_bound = Some(cost);
                     let time = self.time_keeper.elapsed_time();
@@ -246,7 +269,54 @@ where
             }
 
             successors.sort();
+
+            if successors.is_empty() {
+                Self::backtrack(&mut self.n_siblings, &mut self.depth_dual_bounds);
+            } else {
+                self.n_siblings.push(successors.len() - 1);
+                self.depth_dual_bounds.push(None);
+            }
+
             self.open.append(&mut successors);
+
+            if N::ordered_by_bound() {
+                let open_len = self.open.len();
+
+                if open_len > 0 {
+                    let bound = self.open[open_len - 1].bound(model).unwrap();
+                    let depth = self.depth_dual_bounds.len() - 1;
+                    let bound_up_to_depth = if depth < 1 {
+                        None
+                    } else {
+                        self.depth_dual_bounds[depth - 1]
+                    };
+                    let dual_bound = if !exceed_bound(model, bound, bound_up_to_depth) {
+                        bound
+                    } else {
+                        bound_up_to_depth.unwrap()
+                    };
+                    self.solution.time = self.time_keeper.elapsed_time();
+
+                    if exceed_bound(model, dual_bound, self.primal_bound) {
+                        self.open.clear();
+                        break;
+                    }
+
+                    update_bound_if_better(&mut self.solution, dual_bound, model, self.quiet);
+
+                    if self.n_siblings[depth] == 0 {
+                        self.depth_dual_bounds[depth] = bound_up_to_depth;
+                    } else {
+                        let bound = self.open[open_len - 2].bound(model).unwrap();
+
+                        if !exceed_bound(model, bound, bound_up_to_depth) {
+                            self.depth_dual_bounds[depth] = Some(bound);
+                        } else {
+                            self.depth_dual_bounds[depth] = bound_up_to_depth;
+                        }
+                    }
+                }
+            }
         }
 
         self.solution.is_infeasible = self.solution.cost.is_none();
