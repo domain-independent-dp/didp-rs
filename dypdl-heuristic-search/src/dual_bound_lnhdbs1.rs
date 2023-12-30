@@ -1,10 +1,8 @@
 use super::f_evaluator_type::FEvaluatorType;
-use super::parallel_search_algorithm::{
-    hd_beam_search2, CostNodeMessage, DistributedCostNode, DistributedFNode, FNodeMessage,
-};
+use super::parallel_search_algorithm::{hd_beam_search2, CostNodeMessage, FNodeMessage};
 use super::search_algorithm::{
-    rollout, Cabs, CabsParameters, Lnbs, LnbsParameters, NeighborhoodSearchInput, Search,
-    SearchInput, StateInRegistry, SuccessorGenerator, TransitionMutex, TransitionWithId,
+    rollout, Cabs, CabsParameters, CostNode, FNode, Lnbs, LnbsParameters, NeighborhoodSearchInput,
+    Search, SearchInput, StateInRegistry, SuccessorGenerator, TransitionMutex, TransitionWithId,
 };
 use super::Solution;
 use dypdl::variable_type;
@@ -180,16 +178,15 @@ where
         let h_evaluator = move |state: &_| h_model.eval_dual_bound(state);
         let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
         let t_model = model.clone();
-        let transition_evaluator =
-            move |node: &DistributedFNode<_, _>, transition, primal_bound| {
-                node.generate_sendable_successor_node(
-                    transition,
-                    &t_model,
-                    &h_evaluator,
-                    &f_evaluator,
-                    primal_bound,
-                )
-            };
+        let transition_evaluator = move |node: &FNode<_, _, _, _, _>, transition, primal_bound| {
+            node.generate_sendable_successor_node(
+                transition,
+                &t_model,
+                &h_evaluator,
+                &f_evaluator,
+                primal_bound,
+            )
+        };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
             let (solution, _) = hd_beam_search2(
                 input,
@@ -247,7 +244,7 @@ where
         let node_generator =
             move |state, cost| Some(CostNodeMessage::generate_root_node(state, cost, &g_model));
         let t_model = model.clone();
-        let transition_evaluator = move |node: &DistributedCostNode<_, _>, transition, _| {
+        let transition_evaluator = move |node: &CostNode<_, _, _, _, _>, transition, _| {
             node.generate_sendable_successor_node(transition, &t_model)
         };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {

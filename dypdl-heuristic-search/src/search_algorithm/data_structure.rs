@@ -21,7 +21,7 @@ pub use search_node::{
 pub use state_registry::{StateInRegistry, StateInformation, StateRegistry};
 pub use successor_generator::{ApplicableTransitions, SuccessorGenerator};
 pub use transition::{TransitionWithCustomCost, TransitionWithId};
-pub use transition_chain::{GetTransitions, RcChain, TransitionChain};
+pub use transition_chain::{CreateTransitionChain, GetTransitions, RcChain};
 pub use transition_id_chain::GetTransitionIds;
 pub use transition_mutex::TransitionMutex;
 pub use util::exceed_bound;

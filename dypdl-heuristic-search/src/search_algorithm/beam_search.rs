@@ -128,8 +128,8 @@ where
     let model = &input.generator.model;
     let generator = &input.generator;
     let suffix = input.solution_suffix;
-    let mut current_beam = Beam::<_, _>::new(parameters.beam_size);
-    let mut next_beam = Beam::<_, _, _>::new(parameters.beam_size);
+    let mut current_beam = Beam::new(parameters.beam_size);
+    let mut next_beam = Beam::new(parameters.beam_size);
     let mut registry = StateRegistry::new(model.clone());
     let capacity = parameters
         .parameters

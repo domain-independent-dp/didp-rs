@@ -167,7 +167,7 @@ where
 ///
 /// let h_evaluator = |_: &StateInRegistry| Some(0);
 /// let f_evaluator = |g, h, _: &StateInRegistry| g + h;
-/// let node = FNode::generate_root_node(
+/// let node = FNode::<_>::generate_root_node(
 ///     model.target.clone(), 0, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
 /// let node = node.generate_successor_node(
@@ -640,7 +640,7 @@ mod tests {
 
         let h_evaluator = |_: &StateInRegistry| Some(0);
         let f_evaluator = |g, h, _: &StateInRegistry| g + h;
-        let node = FNode::generate_root_node(
+        let node = FNode::<_>::generate_root_node(
             model.target.clone(),
             0,
             &model,
@@ -685,7 +685,7 @@ mod tests {
 
         let h_evaluator = |_: &StateInRegistry| Some(0);
         let f_evaluator = |g, h, _: &StateInRegistry| g + h;
-        let node = FNode::generate_root_node(
+        let node = FNode::<_>::generate_root_node(
             model.target.clone(),
             0,
             &model,

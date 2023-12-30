@@ -7,8 +7,8 @@ mod hd_search_statistics;
 mod shared_beam_search;
 
 pub use data_structure::{
-    ConcurrentStateRegistry, CostNodeMessage, DistributedCostNode, DistributedFNode, FNodeMessage,
-    SearchNodeMessage, SendableCostNode, SendableFNode,
+    ConcurrentStateRegistry, CostNodeMessage, FNodeMessage, SearchNodeMessage, SendableCostNode,
+    SendableFNode,
 };
 pub use hd_beam_search1::hd_beam_search1;
 pub use hd_beam_search2::hd_beam_search2;

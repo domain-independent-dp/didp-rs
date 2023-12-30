@@ -1,7 +1,7 @@
 use super::super::arc_chain::ArcChain;
 use super::super::concurrent_state_registry::ConcurrentStateRegistry;
 use crate::search_algorithm::data_structure::{
-    GetTransitions, HashableSignatureVariables, StateInformation, TransitionChain,
+    CreateTransitionChain, GetTransitions, HashableSignatureVariables, StateInformation,
 };
 use crate::search_algorithm::{BfsNode, StateInRegistry};
 use dypdl::variable_type::Numeric;
@@ -364,7 +364,7 @@ where
     fn last(&self) -> Option<&V> {
         self.transitions
             .as_ref()
-            .map(|transitions| transitions.last())
+            .and_then(|transitions| transitions.last())
     }
 }
 

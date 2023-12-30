@@ -10,7 +10,6 @@ use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use dypdl::{variable_type, Model, TransitionInterface};
 use std::error::Error;
 use std::fmt::Display;
-use std::rc::Rc;
 use std::sync::Arc;
 use std::{cmp, mem, thread};
 
@@ -43,10 +42,10 @@ use std::{cmp, mem, thread};
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::Search;
 /// use dypdl_heuristic_search::parallel_search_algorithm::{
-///     DistributedFNode, FNodeMessage, hd_beam_search2,
+///     FNodeMessage, hd_beam_search2,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::{
-///     BeamSearchParameters, SearchInput, SuccessorGenerator,
+///     BeamSearchParameters, FNode, SearchInput, SuccessorGenerator,
 /// };
 /// use std::sync::Arc;
 ///
@@ -83,7 +82,7 @@ use std::{cmp, mem, thread};
 ///     solution_suffix: &[],
 /// };
 /// let transition_evaluator =
-///     move |node: &DistributedFNode<_>, transition, primal_bound| {
+///     move |node: &FNode<_, _, _, _, _>, transition, primal_bound| {
 ///         node.generate_sendable_successor_node(
 ///             transition,
 ///             &model,
@@ -320,9 +319,9 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
     let model = &input.generator.model;
     let generator = &input.generator;
     let suffix = input.solution_suffix;
-    let mut current_beam = Beam::<_, N, Rc<_>, _>::new(parameters.beam_size);
-    let mut next_beam = Beam::<_, _, Rc<_>, _>::new(parameters.beam_size);
-    let mut registry = StateRegistry::<_, N, _, _, _>::new(model.clone());
+    let mut current_beam = Beam::new(parameters.beam_size);
+    let mut next_beam = Beam::new(parameters.beam_size);
+    let mut registry = StateRegistry::new(model.clone());
     let capacity = parameters
         .parameters
         .initial_registry_capacity
