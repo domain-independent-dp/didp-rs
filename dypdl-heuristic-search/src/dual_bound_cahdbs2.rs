@@ -1,8 +1,8 @@
 use super::f_evaluator_type::FEvaluatorType;
-use super::parallel_search_algorithm::{
-    hd_beam_search2, CostNodeMessage, DistributedCostNode, DistributedFNode, FNodeMessage,
+use super::parallel_search_algorithm::{hd_beam_search2, CostNodeMessage, FNodeMessage};
+use super::search_algorithm::{
+    Cabs, CabsParameters, CostNode, FNode, Search, SearchInput, SuccessorGenerator,
 };
-use super::search_algorithm::{Cabs, CabsParameters, Search, SearchInput, SuccessorGenerator};
 use dypdl::{variable_type, Transition};
 use std::fmt;
 use std::str;
@@ -93,7 +93,7 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &DistributedFNode<_>, transition, primal_bound| {
+        let transition_evaluator = move |node: &FNode<_, _, _, _, _>, transition, primal_bound| {
             node.generate_sendable_successor_node(
                 transition,
                 &model,
@@ -136,7 +136,7 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &DistributedCostNode<_>, transition, _| {
+        let transition_evaluator = move |node: &CostNode<_, _, _, _, _>, transition, _| {
             node.generate_sendable_successor_node(transition, &model)
         };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {

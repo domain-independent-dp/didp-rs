@@ -10,8 +10,7 @@ mod termination_detector;
 pub use concurrent_state_registry::ConcurrentStateRegistry;
 pub use hd_node_channel::HdNodeChannel;
 pub use search_node::{
-    CostNodeMessage, DistributedCostNode, DistributedFNode, FNodeMessage, SearchNodeMessage,
-    SendableCostNode, SendableFNode,
+    CostNodeMessage, FNodeMessage, SearchNodeMessage, SendableCostNode, SendableFNode,
 };
 pub use sendable_successor_iterator::SendableSuccessorIterator;
 pub use termination_detector::TerminationDetector;

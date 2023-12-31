@@ -1,10 +1,9 @@
 //! A module for beam.
 
 use super::hashable_state::HashableSignatureVariables;
-use super::state_registry::{StateInRegistry, StateInformation, StateRegistry};
+use super::state_registry::{StateInformation, StateRegistry};
 use core::ops::Deref;
 use dypdl::variable_type::Numeric;
-use dypdl::StateInterface;
 use std::cmp::Reverse;
 use std::collections;
 use std::fmt::Debug;
@@ -122,30 +121,26 @@ where
 /// assert_eq!(iter.next(), None);
 /// ```
 #[derive(Debug, Clone)]
-pub struct Beam<T, I, V = Rc<I>, K = Rc<HashableSignatureVariables>>
+pub struct Beam<T, I>
 where
     T: Numeric,
-    I: StateInformation<T, K>,
-    V: Deref<Target = I> + From<I> + Clone + Ord,
-    K: Hash + Eq + Clone + Debug,
+    I: StateInformation<T>,
 {
     /// Capacity of the beam, or the beam size.
     pub capacity: usize,
     size: usize,
-    queue: collections::BinaryHeap<Reverse<V>>,
-    phantom: std::marker::PhantomData<(T, I, K)>,
+    queue: collections::BinaryHeap<Reverse<Rc<I>>>,
+    phantom: std::marker::PhantomData<T>,
 }
 
-impl<T, I, V, K> Beam<T, I, V, K>
+impl<T, I> Beam<T, I>
 where
     T: Numeric,
-    I: StateInformation<T, K> + Ord,
-    V: Deref<Target = I> + From<I> + Clone + Ord,
-    K: Hash + Eq + Clone + Debug,
+    I: StateInformation<T> + Ord,
 {
     /// Creates a new beam with a given capacity.
     #[inline]
-    pub fn new(capacity: usize) -> Beam<T, I, V, K> {
+    pub fn new(capacity: usize) -> Beam<T, I> {
         Beam {
             capacity,
             size: 0,
@@ -155,7 +150,7 @@ where
     }
 
     /// Removes a node having the lowest priority from the beam.
-    pub fn pop(&mut self) -> Option<V> {
+    pub fn pop(&mut self) -> Option<Rc<I>> {
         self.queue.pop().map(|node| {
             node.0.close();
             self.size -= 1;
@@ -187,7 +182,7 @@ where
 
     /// Removes nodes from the beam, returning all removed nodes as an iterator.
     #[inline]
-    pub fn drain(&mut self) -> BeamDrain<'_, T, I, V, K> {
+    pub fn drain(&mut self) -> BeamDrain<'_, T, I> {
         self.size = 0;
         BeamDrain {
             queue_iter: self.queue.drain(),
@@ -199,14 +194,9 @@ where
     ///
     /// The first returned value represents if a new search node (not an update version of an existing node) is generated.
     /// The second returned value represents if the pruning due to the beam size happened.
-    pub fn insert<R>(
-        &mut self,
-        registry: &mut StateRegistry<T, I, V, K, R>,
-        node: I,
-    ) -> (bool, bool)
+    pub fn insert<R>(&mut self, registry: &mut StateRegistry<T, I, R>, node: I) -> (bool, bool)
     where
         R: Deref<Target = dypdl::Model>,
-        StateInRegistry<K>: StateInterface,
     {
         if self.size < self.capacity || self.queue.peek().map_or(true, |peek| node > *peek.0) {
             let mut generated = false;
@@ -244,6 +234,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::super::hashable_state::HashableSignatureVariables;
+    use super::super::state_registry::StateInRegistry;
     use super::*;
     use dypdl::Model;
     use std::cell::Cell;
@@ -335,7 +326,7 @@ mod tests {
     fn normal_beam_is_empty() {
         let model = Rc::new(dypdl::Model::default());
         let mut registry = StateRegistry::new(model);
-        let mut beam = Beam::<_, _, Rc<_>>::new(2);
+        let mut beam = Beam::<_, _>::new(2);
         assert!(beam.is_empty());
         let state = StateInRegistry::default();
         let cost = 0;
