@@ -385,7 +385,12 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
             let mut sent_all = false;
             let mut expanded_all = false;
             let mut received_all = 0;
-            let mut iter = current_beam.drain();
+
+            let mut iter = if parameters.keep_all_layers {
+                current_beam.close_and_drain()
+            } else {
+                current_beam.drain()
+            };
 
             while !sent_all || received_all < threads - 1 {
                 if opened < threads - 1 {

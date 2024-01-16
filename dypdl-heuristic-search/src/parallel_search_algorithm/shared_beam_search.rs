@@ -175,6 +175,8 @@ where
 
         let goal = thread_pool.install(|| {
             nodes_with_goal_information.par_extend(beam.par_drain(..).filter_map(|node| {
+                node.close();
+
                 if let Some((cost, suffix)) =
                     get_solution_cost_and_suffix(model, &*node, suffix, &base_cost_evaluator)
                 {

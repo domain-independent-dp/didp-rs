@@ -11,6 +11,11 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::rc::Rc;
 
+enum BeamDrainInner<'a, V> {
+    QueueIter(collections::binary_heap::Drain<'a, Reverse<V>>),
+    VecIter(std::vec::Drain<'a, V>),
+}
+
 /// An draining iterator for `Beam`
 pub struct BeamDrain<'a, T, I, V = Rc<I>, K = Rc<HashableSignatureVariables>>
 where
@@ -19,7 +24,7 @@ where
     K: Hash + Eq + Clone + Debug,
     V: Ord + Deref<Target = I>,
 {
-    queue_iter: collections::binary_heap::Drain<'a, Reverse<V>>,
+    iter: BeamDrainInner<'a, V>,
     phantom: std::marker::PhantomData<(T, I, K)>,
 }
 
@@ -33,9 +38,12 @@ where
     type Item = V;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.queue_iter.next() {
-            Some(node) if node.0.is_closed() => self.next(),
-            node => node.map(|node| node.0),
+        match &mut self.iter {
+            BeamDrainInner::QueueIter(iter) => match iter.next() {
+                Some(node) if node.0.is_closed() => self.next(),
+                node => node.map(|node| node.0),
+            },
+            BeamDrainInner::VecIter(iter) => iter.next(),
         }
     }
 }
@@ -133,6 +141,7 @@ where
     pub capacity: usize,
     size: usize,
     queue: collections::BinaryHeap<Reverse<V>>,
+    tmp_vec_for_drain: Vec<V>,
     phantom: std::marker::PhantomData<(T, I, K)>,
 }
 
@@ -150,6 +159,7 @@ where
             capacity,
             size: 0,
             queue: collections::BinaryHeap::with_capacity(capacity),
+            tmp_vec_for_drain: Vec::default(),
             phantom: std::marker::PhantomData,
         }
     }
@@ -186,11 +196,34 @@ where
     }
 
     /// Removes nodes from the beam, returning all removed nodes as an iterator.
+    /// This method does not close the removed nodes.
     #[inline]
     pub fn drain(&mut self) -> BeamDrain<'_, T, I, V, K> {
         self.size = 0;
         BeamDrain {
-            queue_iter: self.queue.drain(),
+            iter: BeamDrainInner::QueueIter(self.queue.drain()),
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// Removes nodes from the beam and closes all of them, returning all removed nodes as an iterator.
+    #[inline]
+    pub fn close_and_drain(&mut self) -> BeamDrain<'_, T, I, V, K> {
+        self.tmp_vec_for_drain.reserve(self.size);
+        self.size = 0;
+
+        self.tmp_vec_for_drain
+            .extend(self.queue.drain().filter_map(|node| {
+                if !node.0.is_closed() {
+                    node.0.close();
+                    Some(node.0)
+                } else {
+                    None
+                }
+            }));
+
+        BeamDrain {
+            iter: BeamDrainInner::VecIter(self.tmp_vec_for_drain.drain(..)),
             phantom: std::marker::PhantomData,
         }
     }
@@ -530,6 +563,94 @@ mod tests {
         );
         assert_eq!(node.cost(&model), 0);
         assert!(!node.is_closed());
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn normal_beam_close_and_drain() {
+        let model = Rc::new(dypdl::Model::default());
+        let mut registry = StateRegistry::<i32, MockInBeam>::new(model.clone());
+        let mut beam = Beam::new(1);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![1, 2, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 1;
+        let h = -1;
+        let f = -2;
+        let node = MockInBeam {
+            state,
+            cost,
+            h,
+            f,
+            closed: Cell::new(false),
+        };
+        let (generated, beam_pruning) = beam.insert(&mut registry, node);
+        assert!(generated);
+        assert!(!beam_pruning);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![1, 2, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 0;
+        let h = -1;
+        let f = -1;
+        let node = MockInBeam {
+            state,
+            cost,
+            h,
+            f,
+            closed: Cell::new(false),
+        };
+        let (generated, beam_pruning) = beam.insert(&mut registry, node);
+        assert!(!generated);
+        assert!(!beam_pruning);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![2, 3, 4],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 0;
+        let h = -2;
+        let f = -2;
+        let node = MockInBeam {
+            state,
+            cost,
+            h,
+            f,
+            closed: Cell::new(false),
+        };
+        let (generated, beam_pruning) = beam.insert(&mut registry, node);
+        assert!(!generated);
+        assert!(beam_pruning);
+
+        let mut iter = beam.close_and_drain();
+        let peek = iter.next();
+        assert!(peek.is_some());
+        let node = peek.unwrap();
+        assert_eq!(
+            node.state,
+            StateInRegistry {
+                signature_variables: Rc::new(HashableSignatureVariables {
+                    integer_variables: vec![1, 2, 3],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        assert_eq!(node.cost(&model), 0);
+        assert!(node.is_closed());
         assert_eq!(iter.next(), None);
     }
 }

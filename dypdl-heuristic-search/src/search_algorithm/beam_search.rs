@@ -163,7 +163,13 @@ where
         let mut layer_dual_bound = None;
         let previously_pruned = pruned;
 
-        for node in current_beam.drain() {
+        let drain = if parameters.keep_all_layers {
+            current_beam.close_and_drain()
+        } else {
+            current_beam.drain()
+        };
+
+        for node in drain {
             if let Some(dual_bound) = node.bound(model) {
                 if exceed_bound(model, dual_bound, primal_bound) {
                     continue;
