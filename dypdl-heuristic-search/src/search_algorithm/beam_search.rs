@@ -107,15 +107,15 @@ impl<T: Default> Default for BeamSearchParameters<T> {
 /// ```
 pub fn beam_search<'a, T, N, E, B, V>(
     input: &'a SearchInput<'a, N, V>,
-    transition_evaluator: E,
-    base_cost_evaluator: B,
+    mut transition_evaluator: E,
+    mut base_cost_evaluator: B,
     parameters: BeamSearchParameters<T>,
 ) -> Solution<T, V>
 where
     T: variable_type::Numeric + Ord + Display,
     N: BfsNode<T, V> + Clone,
-    E: Fn(&N, Rc<V>, Option<T>) -> Option<N>,
-    B: Fn(T, T) -> T,
+    E: FnMut(&N, Rc<V>, Option<T>) -> Option<N>,
+    B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
 {
     let time_keeper = parameters
@@ -171,7 +171,7 @@ where
             }
 
             if let Some((cost, suffix)) =
-                get_solution_cost_and_suffix(model, &*node, suffix, &base_cost_evaluator)
+                get_solution_cost_and_suffix(model, &*node, suffix, &mut base_cost_evaluator)
             {
                 if !exceed_bound(model, cost, primal_bound) {
                     primal_bound = Some(cost);

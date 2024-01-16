@@ -115,8 +115,8 @@ pub struct Dbdfs<'a, T, N, E, B, V = Transition>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,
-    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
-    B: Fn(T, T) -> T,
+    E: FnMut(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
 {
@@ -141,8 +141,8 @@ impl<'a, T, N, E, B, V> Dbdfs<'a, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,
-    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
-    B: Fn(T, T) -> T,
+    E: FnMut(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
 {
@@ -217,8 +217,8 @@ impl<'a, T, N, E, B, V> Search<T> for Dbdfs<'a, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,
-    E: Fn(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
-    B: Fn(T, T) -> T,
+    E: FnMut(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
 {
@@ -265,9 +265,12 @@ where
                 }
             }
 
-            if let Some((cost, suffix)) =
-                get_solution_cost_and_suffix(model, &*node, self.suffix, &self.base_cost_evaluator)
-            {
+            if let Some((cost, suffix)) = get_solution_cost_and_suffix(
+                model,
+                &*node,
+                self.suffix,
+                &mut self.base_cost_evaluator,
+            ) {
                 if !exceed_bound(model, cost, self.primal_bound) {
                     self.primal_bound = Some(cost);
                     let time = self.time_keeper.elapsed_time();

@@ -105,21 +105,21 @@ pub struct RandomizedRestrictedDDParameters<'a, T, V: TransitionInterface> {
 /// ```
 pub fn randomized_restricted_dd<'a, T, N, E, B, V>(
     input: &'a SearchInput<'a, N, TransitionWithId<V>>,
-    transition_evaluator: E,
-    base_cost_evaluator: B,
+    mut transition_evaluator: E,
+    mut base_cost_evaluator: B,
     parameters: RandomizedRestrictedDDParameters<'a, T, V>,
     rng: &mut Pcg64Mcg,
 ) -> Solution<T, TransitionWithId<V>>
 where
     T: variable_type::Numeric + Ord + Display,
     N: BfsNode<T, TransitionWithId<V>> + Clone,
-    E: Fn(
+    E: FnMut(
         &N,
         Rc<TransitionWithId<V>>,
         &mut StateRegistry<T, N>,
         Option<T>,
     ) -> Option<(Rc<N>, bool)>,
-    B: Fn(T, T) -> T,
+    B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
 {
     let time_keeper = parameters
@@ -176,7 +176,7 @@ where
             }
 
             if let Some((cost, suffix)) =
-                get_solution_cost_and_suffix(model, &*node, suffix, &base_cost_evaluator)
+                get_solution_cost_and_suffix(model, &*node, suffix, &mut base_cost_evaluator)
             {
                 if !exceed_bound(model, cost, primal_bound) {
                     primal_bound = Some(cost);

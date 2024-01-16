@@ -165,11 +165,11 @@ pub struct Lnbs<
 > where
     T: variable_type::Numeric + Display,
     <T as str::FromStr>::Err: Debug,
-    B: Fn(
+    B: FnMut(
         &SearchInput<N, TransitionWithId<V>, D, R>,
         BeamSearchParameters<T>,
     ) -> Solution<T, TransitionWithId<V>>,
-    G: Fn(StateInRegistry<K>, T) -> Option<N>,
+    G: FnMut(StateInRegistry<K>, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
     D: Deref<Target = TransitionWithId<V>> + Clone,
     R: Deref<Target = Model> + Clone,
@@ -209,11 +209,11 @@ impl<T, N, B, G, V, D, R, K> Lnbs<T, N, B, G, V, D, R, K>
 where
     T: variable_type::Numeric + Ord + Display,
     <T as str::FromStr>::Err: Debug,
-    B: Fn(
+    B: FnMut(
         &SearchInput<N, TransitionWithId<V>, D, R>,
         BeamSearchParameters<T>,
     ) -> Solution<T, TransitionWithId<V>>,
-    G: Fn(StateInRegistry<K>, T) -> Option<N>,
+    G: FnMut(StateInRegistry<K>, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
     D: Deref<Target = TransitionWithId<V>> + From<TransitionWithId<V>> + Clone,
@@ -622,11 +622,11 @@ impl<T, N, B, G, V, D, R, K> Search<T> for Lnbs<T, N, B, G, V, D, R, K>
 where
     T: variable_type::Numeric + Ord + Display,
     <T as str::FromStr>::Err: Debug,
-    B: Fn(
+    B: FnMut(
         &SearchInput<N, TransitionWithId<V>, D, R>,
         BeamSearchParameters<T>,
     ) -> Solution<T, TransitionWithId<V>>,
-    G: Fn(StateInRegistry<K>, T) -> Option<N>,
+    G: FnMut(StateInRegistry<K>, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
     D: Deref<Target = TransitionWithId<V>> + From<TransitionWithId<V>> + Clone,

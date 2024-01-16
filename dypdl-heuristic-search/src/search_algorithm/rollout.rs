@@ -74,14 +74,14 @@ pub fn rollout<'a, S, U, T, B>(
     state: &S,
     cost: U,
     transitions: &'a [T],
-    base_cost_evaluator: B,
+    mut base_cost_evaluator: B,
     model: &Model,
 ) -> Option<RolloutResult<'a, S, U, T>>
 where
     S: StateInterface + From<State>,
     U: Numeric + Ord,
     T: TransitionInterface,
-    B: Fn(U, U) -> U,
+    B: FnMut(U, U) -> U,
 {
     if let Some(base_cost) = model.eval_base_cost(state) {
         return Some(RolloutResult {
@@ -193,7 +193,7 @@ where
     N: StateInformation<U, K>,
     T: TransitionInterface,
     U: Numeric + Ord,
-    B: Fn(U, U) -> U,
+    B: FnMut(U, U) -> U,
     K: Hash + Eq + Clone + Debug,
     StateInRegistry<K>: StateInterface + From<State>,
 {
