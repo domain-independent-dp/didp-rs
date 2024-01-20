@@ -317,18 +317,23 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
     let mut expanded = 0;
     let mut pruned = false;
     let mut best_dual_bound = None;
+    let mut removed_dual_bound = None;
     let mut layer_index = 0;
 
     loop {
         let mut incumbent = None;
-        let previously_pruned = pruned;
-        let mut layer_dual_bound = None;
+        let mut layer_dual_bound = removed_dual_bound;
 
         {
             let mut expanded_all = false;
             let mut sent_all = false;
             let mut received_all = 0;
-            let mut iter = current_beam.drain();
+
+            let mut iter = if parameters.keep_all_layers {
+                current_beam.close_and_drain()
+            } else {
+                current_beam.drain()
+            };
 
             while !sent_all || received_all < threads - 1 {
                 if !expanded_all {
@@ -358,10 +363,6 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                             continue;
                         }
 
-                        if pruned && incumbent.is_some() {
-                            continue;
-                        }
-
                         expanded += 1;
 
                         for transition in generator.applicable_transitions(node.state()) {
@@ -373,21 +374,34 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                                 if sent_to == id {
                                     kept += 1;
                                     let successor = N::from(successor);
+                                    let successor_bound = successor.bound(model);
+                                    let status = next_beam.insert(&mut registry, successor);
 
-                                    if let Some(bound) = successor.bound(model) {
-                                        if !exceed_bound(model, bound, layer_dual_bound) {
-                                            layer_dual_bound = Some(bound);
-                                        }
-                                    }
-
-                                    let (new_generated, beam_pruning) =
-                                        next_beam.insert(&mut registry, successor);
-
-                                    if !pruned && beam_pruning {
+                                    if !pruned && (status.is_pruned || status.removed.is_some()) {
                                         pruned = true;
                                     }
 
-                                    if new_generated {
+                                    if let Some(bound) = successor_bound {
+                                        if !exceed_bound(model, bound, layer_dual_bound) {
+                                            layer_dual_bound = Some(bound);
+                                        }
+
+                                        if status.is_pruned
+                                            && !exceed_bound(model, bound, removed_dual_bound)
+                                        {
+                                            removed_dual_bound = Some(bound);
+                                        }
+                                    }
+
+                                    if let Some(bound) =
+                                        status.removed.and_then(|removed| removed.bound(model))
+                                    {
+                                        if !exceed_bound(model, bound, removed_dual_bound) {
+                                            removed_dual_bound = Some(bound);
+                                        }
+                                    }
+
+                                    if status.is_newly_registered {
                                         generated += 1;
                                     }
                                 } else {
@@ -416,21 +430,32 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                     while let Ok(node) = channels.node_rx.try_recv() {
                         if let Some(node) = node {
                             let node = N::from(node);
+                            let node_bound = node.bound(model);
+                            let status = next_beam.insert(&mut registry, node);
 
-                            if let Some(bound) = node.bound(model) {
-                                if !exceed_bound(model, bound, layer_dual_bound) {
-                                    layer_dual_bound = Some(bound);
-                                }
-                            }
-
-                            let (new_generated, beam_pruning) =
-                                next_beam.insert(&mut registry, node);
-
-                            if !pruned && beam_pruning {
+                            if !pruned && (status.is_pruned || status.removed.is_some()) {
                                 pruned = true;
                             }
 
-                            if new_generated {
+                            if let Some(bound) = node_bound {
+                                if !exceed_bound(model, bound, layer_dual_bound) {
+                                    layer_dual_bound = Some(bound);
+                                }
+
+                                if status.is_pruned
+                                    && !exceed_bound(model, bound, removed_dual_bound)
+                                {
+                                    removed_dual_bound = Some(bound);
+                                }
+                            }
+
+                            if let Some(bound) = status.removed.and_then(|node| node.bound(model)) {
+                                if !exceed_bound(model, bound, removed_dual_bound) {
+                                    removed_dual_bound = Some(bound);
+                                }
+                            }
+
+                            if status.is_newly_registered {
                                 generated += 1;
                             }
                         } else {
@@ -515,7 +540,7 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                     }
                 }
 
-                if let (false, Some(value)) = (previously_pruned, layer_dual_bound) {
+                if let Some(value) = layer_dual_bound {
                     if exceed_bound(model, value, cost) {
                         best_dual_bound = cost
                     } else if best_dual_bound

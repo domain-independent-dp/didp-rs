@@ -156,14 +156,20 @@ where
     let mut generated = 1;
     let mut pruned = false;
     let mut best_dual_bound = None;
+    let mut removed_dual_bound = None;
     let mut layer_index = 0;
 
     while !current_beam.is_empty() {
         let mut incumbent = None;
-        let mut layer_dual_bound = None;
-        let previously_pruned = pruned;
+        let mut layer_dual_bound = removed_dual_bound;
 
-        for node in current_beam.drain() {
+        let iter = if parameters.keep_all_layers {
+            current_beam.close_and_drain()
+        } else {
+            current_beam.drain()
+        };
+
+        for node in iter {
             if let Some(dual_bound) = node.bound(model) {
                 if exceed_bound(model, dual_bound, primal_bound) {
                     continue;
@@ -212,27 +218,34 @@ where
                 return solution;
             }
 
-            if pruned && incumbent.is_some() {
-                continue;
-            }
-
             expanded += 1;
 
             for transition in generator.applicable_transitions(node.state()) {
                 if let Some(successor) = transition_evaluator(&node, transition, primal_bound) {
-                    if let Some(bound) = successor.bound(model) {
-                        if !exceed_bound(model, bound, layer_dual_bound) {
-                            layer_dual_bound = Some(bound);
-                        }
-                    }
+                    let successor_bound = successor.bound(model);
+                    let status = next_beam.insert(&mut registry, successor);
 
-                    let (new_generated, beam_pruning) = next_beam.insert(&mut registry, successor);
-
-                    if !pruned && beam_pruning {
+                    if !pruned && (status.is_pruned || status.removed.is_some()) {
                         pruned = true;
                     }
 
-                    if new_generated {
+                    if let Some(bound) = successor_bound {
+                        if !exceed_bound(model, bound, layer_dual_bound) {
+                            layer_dual_bound = Some(bound);
+                        }
+
+                        if status.is_pruned && !exceed_bound(model, bound, removed_dual_bound) {
+                            removed_dual_bound = Some(bound);
+                        }
+                    }
+
+                    if let Some(bound) = status.removed.and_then(|removed| removed.bound(model)) {
+                        if !exceed_bound(model, bound, removed_dual_bound) {
+                            removed_dual_bound = Some(bound);
+                        }
+                    }
+
+                    if status.is_newly_registered {
                         generated += 1;
                     }
                 }
@@ -248,7 +261,7 @@ where
             );
         }
 
-        if let (false, Some(value)) = (previously_pruned, layer_dual_bound) {
+        if let Some(value) = layer_dual_bound {
             if exceed_bound(model, value, primal_bound) {
                 best_dual_bound = primal_bound;
             } else if best_dual_bound.map_or(true, |bound| !exceed_bound(model, bound, Some(value)))

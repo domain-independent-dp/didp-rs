@@ -349,6 +349,7 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
 
     let mut pruned = false;
     let mut best_dual_bound = None;
+    let mut removed_dual_bound = None;
     let mut layer_dual_bound = None;
     let mut time_out = time_keeper
         .as_ref()
@@ -376,15 +377,19 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
         let mut goal_id = if cost.is_some() { Some(id) } else { None };
 
         {
-            let previously_pruned = pruned;
             let mut previous_layer_dual_bound = layer_dual_bound;
-            layer_dual_bound = None;
+            layer_dual_bound = removed_dual_bound;
 
             let mut opened = 0;
             let mut sent_all = false;
             let mut expanded_all = false;
             let mut received_all = 0;
-            let mut iter = current_beam.drain();
+
+            let mut iter = if parameters.keep_all_layers {
+                current_beam.close_and_drain()
+            } else {
+                current_beam.drain()
+            };
 
             while !sent_all || received_all < threads - 1 {
                 if opened < threads - 1 {
@@ -405,7 +410,7 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
                             }
                         }
 
-                        if opened == threads - 1 && !previously_pruned {
+                        if opened == threads - 1 {
                             if let Some(value) = previous_layer_dual_bound {
                                 if exceed_bound(model, value, primal_bound) {
                                     best_dual_bound = primal_bound;
@@ -459,7 +464,7 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
                             continue;
                         }
 
-                        if (pruned && goal_id.is_some()) || time_out {
+                        if time_out {
                             continue;
                         }
 
@@ -474,21 +479,34 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
                                 if sent_to == id {
                                     kept += 1;
                                     let successor = N::from(successor);
+                                    let successor_bound = successor.bound(model);
+                                    let status = next_beam.insert(&mut registry, successor);
 
-                                    if let Some(bound) = successor.bound(model) {
-                                        if !exceed_bound(model, bound, layer_dual_bound) {
-                                            layer_dual_bound = Some(bound);
-                                        }
-                                    }
-
-                                    let (new_generated, beam_pruning) =
-                                        next_beam.insert(&mut registry, successor);
-
-                                    if !pruned && beam_pruning {
+                                    if !pruned && (status.is_pruned || status.removed.is_some()) {
                                         pruned = true;
                                     }
 
-                                    if new_generated {
+                                    if let Some(bound) = successor_bound {
+                                        if !exceed_bound(model, bound, layer_dual_bound) {
+                                            layer_dual_bound = Some(bound);
+                                        }
+
+                                        if status.is_pruned
+                                            && !exceed_bound(model, bound, removed_dual_bound)
+                                        {
+                                            removed_dual_bound = Some(bound);
+                                        }
+                                    }
+
+                                    if let Some(bound) =
+                                        status.removed.and_then(|node| node.bound(model))
+                                    {
+                                        if !exceed_bound(model, bound, removed_dual_bound) {
+                                            removed_dual_bound = Some(bound);
+                                        }
+                                    }
+
+                                    if status.is_newly_registered {
                                         generated += 1;
                                     }
                                 } else {
@@ -519,21 +537,34 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
                     while let Ok(node) = channels.node_rx.try_recv() {
                         if let Some(node) = node {
                             let node = N::from(node);
+                            let node_bound = node.bound(model);
+                            let status = next_beam.insert(&mut registry, node);
 
-                            if let Some(bound) = node.bound(model) {
-                                if !exceed_bound(model, bound, layer_dual_bound) {
-                                    layer_dual_bound = Some(bound);
-                                }
-                            }
-
-                            let (new_generated, beam_pruning) =
-                                next_beam.insert(&mut registry, node);
-
-                            if !pruned && beam_pruning {
+                            if !pruned && (status.is_pruned || status.removed.is_some()) {
                                 pruned = true;
                             }
 
-                            if new_generated {
+                            if let Some(bound) = node_bound {
+                                if !exceed_bound(model, bound, layer_dual_bound) {
+                                    layer_dual_bound = Some(bound);
+                                }
+
+                                if status.is_pruned
+                                    && !exceed_bound(model, bound, removed_dual_bound)
+                                {
+                                    removed_dual_bound = Some(bound);
+                                }
+                            }
+
+                            if let Some(bound) =
+                                status.removed.and_then(|removed| removed.bound(model))
+                            {
+                                if !exceed_bound(model, bound, removed_dual_bound) {
+                                    removed_dual_bound = Some(bound);
+                                }
+                            }
+
+                            if status.is_newly_registered {
                                 generated += 1;
                             }
                         } else {

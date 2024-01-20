@@ -11,7 +11,7 @@ mod transition_id_chain;
 mod transition_mutex;
 mod util;
 
-pub use beam::{Beam, BeamDrain};
+pub use beam::{Beam, BeamDrain, BeamInsertionStatus};
 pub use hashable_state::{
     HashableSignatureVariables, HashableState, StateWithHashableSignatureVariables,
 };
