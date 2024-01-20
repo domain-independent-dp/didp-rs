@@ -738,6 +738,9 @@ impl ModelPy {
     ///
     /// Adds an element resource variable to the model.
     ///
+    /// Intuitively, with :code:`less_is_better=True`/:code:`less_is_better=False`, if everything else is the same, a state having a smaller/greater value is better.
+    /// Formally, if the values of non-resource variables are the same, a state having equal or better resource variable values must lead to an equal or better solution that has equal or fewer transitions than the other.
+    ///
     /// Parameters
     /// ----------
     /// object_type: ObjectType
@@ -1006,7 +1009,10 @@ impl ModelPy {
 
     /// add_int_resource_var(target, less_is_better, name)
     ///
-    /// Adds an integer variable to the model.
+    /// Adds an integer resource variable to the model.
+    ///
+    /// Intuitively, with :code:`less_is_better=True`/:code:`less_is_better=False`, if everything else is the same, a state having a smaller/greater value is better.
+    /// Formally, if the values of non-resource variables are the same, a state having equal or better resource variable values must lead to an equal or better solution that has equal or fewer transitions than the other.
     ///
     /// Parameters
     /// ----------
@@ -1176,7 +1182,10 @@ impl ModelPy {
 
     /// add_float_resource_var(target, less_is_better, name)
     ///
-    /// Adds a continuous variable to the model.
+    /// Adds a continuous resource variable to the model.
+    ///
+    /// Intuitively, with :code:`less_is_better=True`/:code:`less_is_better=False`, if everything else is the same, a state having a smaller/greater value is better.
+    /// Formally, if the values of non-resource variables are the same, a state having equal or better resource variable values must lead to an equal or better solution that has equal or fewer transitions than the other.
     ///
     /// Parameters
     /// ----------

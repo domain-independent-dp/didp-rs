@@ -138,7 +138,8 @@ If `type` is `set` or `element`, defining `object` is required, whose value is t
 
 If `type` is `element`, `integer`, or `continuous`, the key `preference` can be used.
 The value for `preference`  is either of `less` or `more`.
-With `less`/`more`, if evrerything else is the same, a state having a smaller/greater value of that variable is better.
+Intuitively, with `less`/`more`, if everything else is the same, a state having a smaller/greater value of that variable is better.
+Formally, if the values of non-resource variables are the same, a state having equal or better resource variable values must lead to an equal or better solution that has equal or fewer transitions than the other.
 
 #### Example
 
@@ -147,7 +148,7 @@ state_variables:
     - name: unvisited
       type: set
       object: customer
-    - name: locaiton
+    - name: location
       type: element
       object: customer
     - name: time
