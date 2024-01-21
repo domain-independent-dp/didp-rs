@@ -414,6 +414,9 @@ impl ElementVarPy {
 
 /// Element resource variable.
 ///
+/// Intuitively, with :code:`less_is_better=True`/:code:`less_is_better=False`, if everything else is the same, a state having a smaller/greater value is better.
+/// Formally, if the values of non-resource variables are the same, a state having equal or better resource variable values must lead to an equal or better solution that has equal or fewer transitions than the other.
+///
 /// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`/`, :code:`//`, :code:`%`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int` is applied, a new :class:`ElementExpr` is returned.
 ///
 /// If a comparison operator (:code:`<`, :code:`<=`, :code:`==`, :code:`!=`, :code:`>`, :code:`>=`) with an :class:`ElementExpr`, :class:`ElementVar`, :class:`ElementResourceVar`, or :class:`int` is applied, a :class:`Condition` is returned.
@@ -2908,6 +2911,9 @@ impl IntVarPy {
 
 /// Integer resource variable.
 ///
+/// Intuitively, with :code:`less_is_better=True`/:code:`less_is_better=False`, if everything else is the same, a state having a smaller/greater value is better.
+/// Formally, if the values of non-resource variables are the same, a state having equal or better resource variable values must lead to an equal or better solution that has equal or fewer transitions than the other.
+///
 /// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`//`, :code:`%`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, or :class:`int` is applied, a new :class:`IntExpr` is returned.
 /// For division (`/`) and power (`**`), a :class:`FloatExpr` is returned.
 /// If an arithmetic operator with an :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, or :class:`float` is applied, a :class:`FloatExpr` is returned.
@@ -3676,6 +3682,9 @@ impl FloatVarPy {
 }
 
 /// Continuous resource variable.
+///
+/// Intuitively, with :code:`less_is_better=True`/:code:`less_is_better=False`, if everything else is the same, a state having a smaller/greater value is better.
+/// Formally, if the values of non-resource variables are the same, a state having equal or better resource variable values must lead to an equal or better solution that has equal or fewer transitions than the other.
 ///
 /// If an arithmetic operator (:code:`+`, :code:`-`, :code:`*`, :code:`/`, :code:`//`, :code:`%`, :code:`**`) with an :class:`IntExpr`, :class:`IntVar`, :class:`IntResourceVar`, :class:`FloatExpr`, :class:`FloatVar`, :class:`FloatResourceVar`, :class:`int`, or :class:`float` is applied, a new :class:`FloatExpr` is returned.
 /// If :func:`abs` is applied, a new :class:`FloatExpr` is returned.
