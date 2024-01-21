@@ -17,7 +17,7 @@ pub struct NeighborhoodSearchInput<
     R = Rc<dypdl::Model>,
 > where
     T: Numeric,
-    G: Fn(S, T) -> Option<N>,
+    G: FnMut(S, T) -> Option<N>,
     S: StateInterface,
     V: TransitionInterface,
     D: Deref<Target = V> + Clone,

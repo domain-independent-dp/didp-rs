@@ -1,50 +1,49 @@
 //! A module for beam.
 
-use super::hashable_state::HashableSignatureVariables;
-use super::state_registry::{StateInRegistry, StateInformation, StateRegistry};
+use super::state_registry::{StateInformation, StateRegistry};
 use core::ops::Deref;
 use dypdl::variable_type::Numeric;
-use dypdl::StateInterface;
 use std::cmp::Reverse;
 use std::collections;
 use std::fmt::Debug;
-use std::hash::Hash;
 use std::rc::Rc;
 
-/// An draining iterator for `Beam`
-pub struct BeamDrain<'a, T, I, V = Rc<I>, K = Rc<HashableSignatureVariables>>
-where
-    T: Numeric,
-    I: StateInformation<T, K>,
-    K: Hash + Eq + Clone + Debug,
-    V: Ord + Deref<Target = I>,
-{
-    queue_iter: collections::binary_heap::Drain<'a, Reverse<V>>,
-    phantom: std::marker::PhantomData<(T, I, K)>,
+enum BeamDrainInner<'a, V> {
+    QueueIter(collections::binary_heap::Drain<'a, Reverse<V>>),
+    VecIter(std::vec::Drain<'a, V>),
 }
 
-impl<'a, T, I, V, K> Iterator for BeamDrain<'a, T, I, V, K>
+/// An draining iterator for `Beam`
+pub struct BeamDrain<'a, T, I>
 where
     T: Numeric,
-    I: StateInformation<T, K>,
-    K: Hash + Eq + Clone + Debug,
-    V: Ord + Deref<Target = I>,
+    I: StateInformation<T>,
 {
-    type Item = V;
+    iter: BeamDrainInner<'a, Rc<I>>,
+    phantom: std::marker::PhantomData<T>,
+}
+
+impl<'a, T, I> Iterator for BeamDrain<'a, T, I>
+where
+    T: Numeric,
+    I: StateInformation<T>,
+{
+    type Item = Rc<I>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.queue_iter.next() {
-            Some(node) if node.0.is_closed() => self.next(),
-            node => node.map(|node| node.0),
+        match &mut self.iter {
+            BeamDrainInner::QueueIter(iter) => match iter.next() {
+                Some(node) if node.0.is_closed() => self.next(),
+                node => node.map(|node| node.0),
+            },
+            BeamDrainInner::VecIter(iter) => iter.next(),
         }
     }
 }
 
 /// Beam for beam search.
 ///
-/// It only keeps the best `capacity` nodes that maximizes the f-value and h-value.
-/// Nodes must be ordered by f-values and h-values, implementing Ord trait.
-/// If you want to keep the best nodes that minimizes the f- and h-value, use negative values.
+/// It only keeps the best `capacity` nodes according to `Ord`.
 ///
 /// # Examples
 ///
@@ -94,24 +93,33 @@ where
 /// let successor = node.generate_successor_node(
 ///     increment, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
-/// let (generated, pruned) = beam.insert(&mut registry, successor);
-/// assert!(generated);
-/// assert!(!pruned);
+/// let status = beam.insert(&mut registry, successor);
+/// assert!(status.is_inserted);
+/// assert!(status.is_newly_registered);
+/// assert!(!status.is_pruned);
+/// assert_eq!(status.dominated, None);
+/// assert_eq!(status.removed, None);
 ///
 /// let successor = node.generate_successor_node(
 ///     decrement, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
-/// let (generated, pruned) = beam.insert(&mut registry, successor);
-/// assert!(!generated);
-/// assert!(pruned);
+/// let status = beam.insert(&mut registry, successor);
+/// assert!(!status.is_inserted);
+/// assert!(!status.is_newly_registered);
+/// assert!(status.is_pruned);
+/// assert_eq!(status.dominated, None);
+/// assert_eq!(status.removed, None);
 ///
 /// let successor = node.generate_successor_node(
 ///     produce.clone(), &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
 /// let state = successor.state().clone();
-/// let (generated, pruned) = beam.insert(&mut registry, successor);
-/// assert!(!generated);
-/// assert!(!pruned);
+/// let status = beam.insert(&mut registry, successor);
+/// assert!(status.is_inserted);
+/// assert!(!status.is_newly_registered);
+/// assert!(!status.is_pruned);
+/// assert!(status.dominated.is_some());
+/// assert_eq!(status.removed, None);
 ///
 /// let mut iter = beam.drain();
 /// let node: Rc<FNode<_>> = iter.next().unwrap();
@@ -122,40 +130,53 @@ where
 /// assert_eq!(iter.next(), None);
 /// ```
 #[derive(Debug, Clone)]
-pub struct Beam<T, I, V = Rc<I>, K = Rc<HashableSignatureVariables>>
+pub struct Beam<T, I>
 where
     T: Numeric,
-    I: StateInformation<T, K>,
-    V: Deref<Target = I> + From<I> + Clone + Ord,
-    K: Hash + Eq + Clone + Debug,
+    I: StateInformation<T>,
 {
     /// Capacity of the beam, or the beam size.
     pub capacity: usize,
     size: usize,
-    queue: collections::BinaryHeap<Reverse<V>>,
-    phantom: std::marker::PhantomData<(T, I, K)>,
+    queue: collections::BinaryHeap<Reverse<Rc<I>>>,
+    tmp_vec_for_drain: Vec<Rc<I>>,
+    phantom: std::marker::PhantomData<T>,
 }
 
-impl<T, I, V, K> Beam<T, I, V, K>
+/// Result of insertion to beam.
+#[derive(Debug, Clone)]
+pub struct BeamInsertionStatus<I> {
+    /// The given node is inserted into the beam.
+    pub is_inserted: bool,
+    /// The given node is newly registered to the state registry.
+    pub is_newly_registered: bool,
+    /// The given node is not inserted into the beam due to the beam width.
+    pub is_pruned: bool,
+    /// A node dominated by the given node.
+    pub dominated: Option<Rc<I>>,
+    /// A node removed from the beam.
+    pub removed: Option<Rc<I>>,
+}
+
+impl<T, I> Beam<T, I>
 where
     T: Numeric,
-    I: StateInformation<T, K> + Ord,
-    V: Deref<Target = I> + From<I> + Clone + Ord,
-    K: Hash + Eq + Clone + Debug,
+    I: StateInformation<T> + Ord,
 {
     /// Creates a new beam with a given capacity.
     #[inline]
-    pub fn new(capacity: usize) -> Beam<T, I, V, K> {
+    pub fn new(capacity: usize) -> Beam<T, I> {
         Beam {
             capacity,
             size: 0,
             queue: collections::BinaryHeap::with_capacity(capacity),
+            tmp_vec_for_drain: Vec::default(),
             phantom: std::marker::PhantomData,
         }
     }
 
     /// Removes a node having the lowest priority from the beam.
-    pub fn pop(&mut self) -> Option<V> {
+    pub fn pop(&mut self) -> Option<Rc<I>> {
         self.queue.pop().map(|node| {
             node.0.close();
             self.size -= 1;
@@ -187,63 +208,90 @@ where
 
     /// Removes nodes from the beam, returning all removed nodes as an iterator.
     #[inline]
-    pub fn drain(&mut self) -> BeamDrain<'_, T, I, V, K> {
+    pub fn drain(&mut self) -> BeamDrain<'_, T, I> {
         self.size = 0;
         BeamDrain {
-            queue_iter: self.queue.drain(),
+            iter: BeamDrainInner::QueueIter(self.queue.drain()),
             phantom: std::marker::PhantomData,
         }
     }
 
-    /// Insert a node if it is not dominated and its h- and f-value are sufficiently large to be top `capacity` nodes.
-    ///
-    /// The first returned value represents if a new search node (not an update version of an existing node) is generated.
-    /// The second returned value represents if the pruning due to the beam size happened.
+    /// Removes nodes from the beam and closes all of them, returning all removed nodes as an iterator.
+    #[inline]
+    pub fn close_and_drain(&mut self) -> BeamDrain<'_, T, I> {
+        self.tmp_vec_for_drain.reserve(self.size);
+        self.size = 0;
+
+        self.tmp_vec_for_drain
+            .extend(self.queue.drain().filter_map(|node| {
+                if !node.0.is_closed() {
+                    node.0.close();
+                    Some(node.0)
+                } else {
+                    None
+                }
+            }));
+
+        BeamDrain {
+            iter: BeamDrainInner::VecIter(self.tmp_vec_for_drain.drain(..)),
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// Insert a node if it is not dominated and its priority is sufficiently large to be top `capacity` nodes.
     pub fn insert<R>(
         &mut self,
-        registry: &mut StateRegistry<T, I, V, K, R>,
+        registry: &mut StateRegistry<T, I, R>,
         node: I,
-    ) -> (bool, bool)
+    ) -> BeamInsertionStatus<I>
     where
         R: Deref<Target = dypdl::Model>,
-        StateInRegistry<K>: StateInterface,
     {
-        if self.size < self.capacity || self.queue.peek().map_or(true, |peek| node > *peek.0) {
-            let mut generated = false;
-            let mut beam_pruning = false;
+        let mut result = BeamInsertionStatus {
+            is_inserted: false,
+            is_newly_registered: false,
+            is_pruned: false,
+            dominated: None,
+            removed: None,
+        };
 
+        if self.size < self.capacity || self.queue.peek().map_or(true, |peek| node > *peek.0) {
             if let Some((node, dominated)) = registry.insert(node) {
                 if let Some(dominated) = dominated {
                     if !dominated.is_closed() {
                         dominated.close();
                         self.size -= 1;
                         self.clean_garbage();
+                        result.dominated = Some(dominated);
                     }
                 } else {
-                    generated = true;
+                    result.is_newly_registered = true;
                 }
 
                 if self.size == self.capacity {
-                    self.pop();
-                    beam_pruning = true;
+                    result.removed = self.pop();
                 }
 
                 if self.size < self.capacity {
                     self.queue.push(Reverse(node));
                     self.size += 1;
+                    result.is_inserted = true;
+                } else {
+                    result.is_pruned = true;
                 }
             }
-
-            (generated, beam_pruning)
         } else {
-            (false, true)
+            result.is_pruned = true;
         }
+
+        result
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::super::hashable_state::HashableSignatureVariables;
+    use super::super::state_registry::StateInRegistry;
     use super::*;
     use dypdl::Model;
     use std::cell::Cell;
@@ -309,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    fn normal_beam_capacity() {
+    fn beam_capacity() {
         let model = Rc::new(dypdl::Model::default());
         let mut registry = StateRegistry::new(model);
         let mut beam = Beam::<_, _>::new(2);
@@ -325,17 +373,20 @@ mod tests {
             f,
             closed: Cell::new(false),
         };
-        let (generated, beam_pruning) = beam.insert(&mut registry, node);
-        assert!(generated);
-        assert!(!beam_pruning);
+        let status = beam.insert(&mut registry, node);
+        assert!(status.is_inserted);
+        assert!(status.is_newly_registered);
+        assert!(!status.is_pruned);
+        assert_eq!(status.dominated, None);
+        assert_eq!(status.removed, None);
         assert_eq!(beam.capacity(), 2);
     }
 
     #[test]
-    fn normal_beam_is_empty() {
+    fn beam_is_empty() {
         let model = Rc::new(dypdl::Model::default());
         let mut registry = StateRegistry::new(model);
-        let mut beam = Beam::<_, _, Rc<_>>::new(2);
+        let mut beam = Beam::<_, _>::new(2);
         assert!(beam.is_empty());
         let state = StateInRegistry::default();
         let cost = 0;
@@ -348,20 +399,47 @@ mod tests {
             f,
             closed: Cell::new(false),
         };
-        let (generated, beam_pruning) = beam.insert(&mut registry, node);
-        assert!(generated);
-        assert!(!beam_pruning);
+        let status = beam.insert(&mut registry, node);
+        assert!(status.is_inserted);
+        assert!(status.is_newly_registered);
+        assert!(!status.is_pruned);
+        assert_eq!(status.dominated, None);
+        assert_eq!(status.removed, None);
         assert!(!beam.is_empty());
     }
 
     #[test]
-    fn normal_beam_pop() {
+    fn beam_pop() {
         let model = Rc::new(dypdl::Model::default());
         let mut registry = StateRegistry::<i32, MockInBeam>::new(model.clone());
         let mut beam = Beam::new(1);
 
         let peek = beam.pop();
         assert_eq!(peek, None);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![3, 1, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 2;
+        let h = -1;
+        let f = -3;
+        let node = MockInBeam {
+            state,
+            cost,
+            h,
+            f,
+            closed: Cell::new(false),
+        };
+        let status = beam.insert(&mut registry, node);
+        assert!(status.is_inserted);
+        assert!(status.is_newly_registered);
+        assert!(!status.is_pruned);
+        assert_eq!(status.dominated, None);
+        assert_eq!(status.removed, None);
 
         let state = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
@@ -380,9 +458,27 @@ mod tests {
             f,
             closed: Cell::new(false),
         };
-        let (generated, beam_pruning) = beam.insert(&mut registry, node);
-        assert!(generated);
-        assert!(!beam_pruning);
+        let status = beam.insert(&mut registry, node);
+
+        let expected_state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![3, 1, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert!(status.is_inserted);
+        assert!(status.is_newly_registered);
+        assert!(!status.is_pruned);
+        assert_eq!(status.dominated, None);
+        assert!(status.removed.is_some());
+        let removed = status.removed.unwrap();
+        assert_eq!(removed.cost, 2);
+        assert_eq!(removed.h, -1);
+        assert_eq!(removed.f, -3);
+        assert_eq!(removed.state, expected_state);
+        assert_eq!(removed.closed, Cell::new(true));
 
         let state = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
@@ -401,9 +497,27 @@ mod tests {
             f,
             closed: Cell::new(false),
         };
-        let (generated, beam_pruning) = beam.insert(&mut registry, node);
-        assert!(!generated);
-        assert!(!beam_pruning);
+        let status = beam.insert(&mut registry, node);
+
+        let expected_state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![1, 2, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert!(status.is_inserted);
+        assert!(!status.is_newly_registered);
+        assert!(!status.is_pruned);
+        assert!(status.dominated.is_some());
+        let dominated = status.dominated.unwrap();
+        assert_eq!(dominated.cost, 1);
+        assert_eq!(dominated.h, -1);
+        assert_eq!(dominated.f, -2);
+        assert_eq!(dominated.state, expected_state);
+        assert_eq!(dominated.closed, Cell::new(true));
+        assert_eq!(status.removed, None);
 
         let state = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
@@ -422,9 +536,13 @@ mod tests {
             f,
             closed: Cell::new(false),
         };
-        let (generated, beam_pruning) = beam.insert(&mut registry, node);
-        assert!(!generated);
-        assert!(beam_pruning);
+
+        let status = beam.insert(&mut registry, node);
+        assert!(!status.is_inserted);
+        assert!(!status.is_newly_registered);
+        assert!(status.is_pruned);
+        assert_eq!(status.dominated, None);
+        assert_eq!(status.removed, None);
 
         let peek = beam.pop();
         assert!(peek.is_some());
@@ -446,10 +564,34 @@ mod tests {
     }
 
     #[test]
-    fn normal_beam_drain() {
+    fn beam_drain() {
         let model = Rc::new(dypdl::Model::default());
         let mut registry = StateRegistry::<i32, MockInBeam>::new(model.clone());
         let mut beam = Beam::new(1);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![3, 1, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 2;
+        let h = -1;
+        let f = -3;
+        let node = MockInBeam {
+            state,
+            cost,
+            h,
+            f,
+            closed: Cell::new(false),
+        };
+        let status = beam.insert(&mut registry, node);
+        assert!(status.is_inserted);
+        assert!(status.is_newly_registered);
+        assert!(!status.is_pruned);
+        assert_eq!(status.dominated, None);
+        assert_eq!(status.removed, None);
 
         let state = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
@@ -468,9 +610,27 @@ mod tests {
             f,
             closed: Cell::new(false),
         };
-        let (generated, beam_pruning) = beam.insert(&mut registry, node);
-        assert!(generated);
-        assert!(!beam_pruning);
+        let status = beam.insert(&mut registry, node);
+
+        let expected_state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![3, 1, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert!(status.is_inserted);
+        assert!(status.is_newly_registered);
+        assert!(!status.is_pruned);
+        assert_eq!(status.dominated, None);
+        assert!(status.removed.is_some());
+        let removed = status.removed.unwrap();
+        assert_eq!(removed.cost, 2);
+        assert_eq!(removed.h, -1);
+        assert_eq!(removed.f, -3);
+        assert_eq!(removed.state, expected_state);
+        assert_eq!(removed.closed, Cell::new(true));
 
         let state = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
@@ -489,9 +649,27 @@ mod tests {
             f,
             closed: Cell::new(false),
         };
-        let (generated, beam_pruning) = beam.insert(&mut registry, node);
-        assert!(!generated);
-        assert!(!beam_pruning);
+        let status = beam.insert(&mut registry, node);
+
+        let expected_state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![1, 2, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert!(status.is_inserted);
+        assert!(!status.is_newly_registered);
+        assert!(!status.is_pruned);
+        assert!(status.dominated.is_some());
+        let dominated = status.dominated.unwrap();
+        assert_eq!(dominated.cost, 1);
+        assert_eq!(dominated.h, -1);
+        assert_eq!(dominated.f, -2);
+        assert_eq!(dominated.state, expected_state);
+        assert_eq!(dominated.closed, Cell::new(true));
+        assert_eq!(status.removed, None);
 
         let state = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
@@ -510,9 +688,12 @@ mod tests {
             f,
             closed: Cell::new(false),
         };
-        let (generated, beam_pruning) = beam.insert(&mut registry, node);
-        assert!(!generated);
-        assert!(beam_pruning);
+        let status = beam.insert(&mut registry, node);
+        assert!(!status.is_inserted);
+        assert!(!status.is_newly_registered);
+        assert!(status.is_pruned);
+        assert_eq!(status.dominated, None);
+        assert_eq!(status.removed, None);
 
         let mut iter = beam.drain();
         let peek = iter.next();
@@ -530,6 +711,157 @@ mod tests {
         );
         assert_eq!(node.cost(&model), 0);
         assert!(!node.is_closed());
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn beam_close_and_drain() {
+        let model = Rc::new(dypdl::Model::default());
+        let mut registry = StateRegistry::<i32, MockInBeam>::new(model.clone());
+        let mut beam = Beam::new(1);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![3, 1, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 2;
+        let h = -1;
+        let f = -3;
+        let node = MockInBeam {
+            state,
+            cost,
+            h,
+            f,
+            closed: Cell::new(false),
+        };
+        let status = beam.insert(&mut registry, node);
+        assert!(status.is_inserted);
+        assert!(status.is_newly_registered);
+        assert!(!status.is_pruned);
+        assert_eq!(status.dominated, None);
+        assert_eq!(status.removed, None);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![1, 2, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 1;
+        let h = -1;
+        let f = -2;
+        let node = MockInBeam {
+            state,
+            cost,
+            h,
+            f,
+            closed: Cell::new(false),
+        };
+        let status = beam.insert(&mut registry, node);
+
+        let expected_state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![3, 1, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert!(status.is_inserted);
+        assert!(status.is_newly_registered);
+        assert!(!status.is_pruned);
+        assert_eq!(status.dominated, None);
+        assert!(status.removed.is_some());
+        let removed = status.removed.unwrap();
+        assert_eq!(removed.cost, 2);
+        assert_eq!(removed.h, -1);
+        assert_eq!(removed.f, -3);
+        assert_eq!(removed.state, expected_state);
+        assert_eq!(removed.closed, Cell::new(true));
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![1, 2, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 0;
+        let h = -1;
+        let f = -1;
+        let node = MockInBeam {
+            state,
+            cost,
+            h,
+            f,
+            closed: Cell::new(false),
+        };
+        let status = beam.insert(&mut registry, node);
+
+        let expected_state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![1, 2, 3],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert!(status.is_inserted);
+        assert!(!status.is_newly_registered);
+        assert!(!status.is_pruned);
+        assert!(status.dominated.is_some());
+        let dominated = status.dominated.unwrap();
+        assert_eq!(dominated.cost, 1);
+        assert_eq!(dominated.h, -1);
+        assert_eq!(dominated.f, -2);
+        assert_eq!(dominated.state, expected_state);
+        assert_eq!(dominated.closed, Cell::new(true));
+        assert_eq!(status.removed, None);
+
+        let state = StateInRegistry {
+            signature_variables: Rc::new(HashableSignatureVariables {
+                integer_variables: vec![2, 3, 4],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let cost = 0;
+        let h = -2;
+        let f = -2;
+        let node = MockInBeam {
+            state,
+            cost,
+            h,
+            f,
+            closed: Cell::new(false),
+        };
+        let status = beam.insert(&mut registry, node);
+        assert!(!status.is_inserted);
+        assert!(!status.is_newly_registered);
+        assert!(status.is_pruned);
+        assert_eq!(status.dominated, None);
+        assert_eq!(status.removed, None);
+
+        let mut iter = beam.close_and_drain();
+        let peek = iter.next();
+        assert!(peek.is_some());
+        let node = peek.unwrap();
+        assert_eq!(
+            node.state,
+            StateInRegistry {
+                signature_variables: Rc::new(HashableSignatureVariables {
+                    integer_variables: vec![1, 2, 3],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        assert_eq!(node.cost(&model), 0);
+        assert!(node.is_closed());
         assert_eq!(iter.next(), None);
     }
 }

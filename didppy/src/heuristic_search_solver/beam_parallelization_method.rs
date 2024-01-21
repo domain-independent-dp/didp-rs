@@ -7,6 +7,11 @@ use pyo3::prelude::*;
 /// :attr:`~BeamParallelizationMethod.Hdbs1`: Use HDBS1.
 ///
 /// :attr:`~BeamParallelizationMethod.Sbs`: Use SBS.
+/// 
+/// References
+/// ----------
+/// Ryo Kuroiwa and J. Christopher Beck. "Parallel Beam Search Algorithms for Domain-Independent Dynamic Programming,"
+/// Proceedings of the 38th Annual AAAI Conference on Artificial Intelligence (AAAI), 2024.
 #[pyclass(name = "BeamParallelizationMethod")]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum BeamParallelizationMethod {

@@ -144,14 +144,14 @@ pub struct DdLns<T, N, E, B, G, V = Transition>
 where
     T: variable_type::Numeric + Ord + Display,
     N: BfsNode<T, TransitionWithId<V>>,
-    E: Fn(
+    E: FnMut(
         &N,
         Rc<TransitionWithId<V>>,
         &mut StateRegistry<T, N>,
         Option<T>,
     ) -> Option<(Rc<N>, bool)>,
-    B: Fn(T, T) -> T,
-    G: Fn(StateInRegistry, T) -> Option<N>,
+    B: FnMut(T, T) -> T,
+    G: FnMut(StateInRegistry, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
 {
     input: NeighborhoodSearchInput<T, N, G, StateInRegistry, TransitionWithId<V>>,
@@ -171,14 +171,14 @@ impl<T, N, E, B, G, V> DdLns<T, N, E, B, G, V>
 where
     T: variable_type::Numeric + Ord + Display,
     N: BfsNode<T, TransitionWithId<V>> + Clone,
-    E: Fn(
+    E: FnMut(
         &N,
         Rc<TransitionWithId<V>>,
         &mut StateRegistry<T, N>,
         Option<T>,
     ) -> Option<(Rc<N>, bool)>,
-    B: Fn(T, T) -> T,
-    G: Fn(StateInRegistry, T) -> Option<N>,
+    B: FnMut(T, T) -> T,
+    G: FnMut(StateInRegistry, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
 {
@@ -286,8 +286,8 @@ where
 
             let solution = randomized_restricted_dd(
                 &input,
-                &self.transition_evaluator,
-                &self.base_cost_evaluator,
+                &mut self.transition_evaluator,
+                &mut self.base_cost_evaluator,
                 parameters,
                 &mut self.rng,
             );
@@ -367,14 +367,14 @@ impl<T, N, E, B, G, V> Search<T> for DdLns<T, N, E, B, G, V>
 where
     T: variable_type::Numeric + Ord + Display,
     N: BfsNode<T, TransitionWithId<V>> + Clone,
-    E: Fn(
+    E: FnMut(
         &N,
         Rc<TransitionWithId<V>>,
         &mut StateRegistry<T, N>,
         Option<T>,
     ) -> Option<(Rc<N>, bool)>,
-    B: Fn(T, T) -> T,
-    G: Fn(StateInRegistry, T) -> Option<N>,
+    B: FnMut(T, T) -> T,
+    G: FnMut(StateInRegistry, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
 {

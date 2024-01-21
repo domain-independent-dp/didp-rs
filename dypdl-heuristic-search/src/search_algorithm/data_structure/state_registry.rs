@@ -247,31 +247,26 @@ where
 /// registry.clear();
 /// assert_eq!(registry.get(node.state(), node.cost(&model)), None);
 /// ```
-pub struct StateRegistry<T, I, V = Rc<I>, K = Rc<HashableSignatureVariables>, R = Rc<dypdl::Model>>
+pub struct StateRegistry<T, I, R = Rc<dypdl::Model>>
 where
     T: Numeric,
-    I: StateInformation<T, K>,
-    V: Deref<Target = I> + From<I> + Clone,
-    K: Hash + Eq + Clone + Debug,
+    I: StateInformation<T>,
     R: Deref<Target = dypdl::Model>,
 {
-    registry: FxHashMap<K, Vec<V>>,
+    registry: FxHashMap<Rc<HashableSignatureVariables>, Vec<Rc<I>>>,
     model: R,
     phantom: std::marker::PhantomData<T>,
 }
 
-impl<T, I, V, K, R> StateRegistry<T, I, V, K, R>
+impl<T, I, R> StateRegistry<T, I, R>
 where
     T: Numeric,
-    I: StateInformation<T, K>,
-    V: Deref<Target = I> + From<I> + Clone,
-    K: Hash + Eq + Clone + Debug,
+    I: StateInformation<T>,
     R: Deref<Target = dypdl::Model>,
-    StateInRegistry<K>: dypdl::StateInterface,
 {
     /// Creates a new state registry.
     #[inline]
-    pub fn new(model: R) -> StateRegistry<T, I, V, K, R> {
+    pub fn new(model: R) -> StateRegistry<T, I, R> {
         StateRegistry {
             registry: FxHashMap::default(),
             model,
@@ -299,12 +294,14 @@ where
 
     /// Clears the registry and returns all information.
     #[inline]
-    pub fn drain(&mut self) -> collections::hash_map::Drain<K, Vec<V>> {
+    pub fn drain(
+        &mut self,
+    ) -> collections::hash_map::Drain<Rc<HashableSignatureVariables>, Vec<Rc<I>>> {
         self.registry.drain()
     }
 
     /// Gets the information of a state that dominates the given state.
-    pub fn get(&self, state: &StateInRegistry<K>, cost: T) -> Option<&V> {
+    pub fn get(&self, state: &StateInRegistry, cost: T) -> Option<&Rc<I>> {
         if let Some(v) = self.registry.get(&state.signature_variables) {
             for other in v {
                 let result = self.model.state_metadata.dominance(state, other.state());
@@ -325,7 +322,7 @@ where
     }
 
     /// Removes states from the registry with given signature variables.
-    pub fn remove(&mut self, state: &K) -> Option<Vec<V>> {
+    pub fn remove(&mut self, state: &Rc<HashableSignatureVariables>) -> Option<Vec<Rc<I>>> {
         self.registry.remove(state)
     }
 
@@ -341,12 +338,12 @@ where
     /// If the given state is not dominated, returns the created information and the information of a dominated state if it exists.
     pub fn insert_with<F>(
         &mut self,
-        mut state: StateInRegistry<K>,
+        mut state: StateInRegistry,
         cost: T,
         constructor: F,
-    ) -> Option<(V, Option<V>)>
+    ) -> Option<(Rc<I>, Option<Rc<I>>)>
     where
-        F: FnOnce(StateInRegistry<K>, T, Option<&I>) -> Option<I>,
+        F: FnOnce(StateInRegistry, T, Option<&I>) -> Option<I>,
     {
         let entry = self.registry.entry(state.signature_variables.clone());
         match entry {
@@ -376,9 +373,9 @@ where
                             if let Some(information) = match result.unwrap() {
                                 // if the same state is saved, reuse some information
                                 Ordering::Equal => {
-                                    constructor(state, cost, Some(&*other)).map(V::from)
+                                    constructor(state, cost, Some(&*other)).map(Rc::new)
                                 }
-                                _ => constructor(state, cost, None).map(V::from),
+                                _ => constructor(state, cost, None).map(Rc::new),
                             } {
                                 let mut tmp = information.clone();
                                 mem::swap(other, &mut tmp);
@@ -390,7 +387,7 @@ where
                         _ => {}
                     }
                 }
-                if let Some(information) = constructor(state, cost, None).map(V::from) {
+                if let Some(information) = constructor(state, cost, None).map(Rc::new) {
                     v.push(information.clone());
                     Some((information, None))
                 } else {
@@ -398,7 +395,7 @@ where
                 }
             }
             collections::hash_map::Entry::Vacant(entry) => {
-                if let Some(information) = constructor(state, cost, None).map(V::from) {
+                if let Some(information) = constructor(state, cost, None).map(Rc::new) {
                     entry.insert(vec![information.clone()]);
                     Some((information, None))
                 } else {
@@ -411,7 +408,7 @@ where
     /// Inserts state information.
     ///
     /// If the given state is not dominated, returns a pointer to the information and the information of a dominated state if it exists.
-    pub fn insert(&mut self, mut information: I) -> Option<(V, Option<V>)> {
+    pub fn insert(&mut self, mut information: I) -> Option<(Rc<I>, Option<Rc<I>>)> {
         let entry = self
             .registry
             .entry(information.state().signature_variables.clone());
@@ -444,7 +441,7 @@ where
                                         <= other.cost(&self.model)) =>
                         {
                             // dominating
-                            let information = V::from(information);
+                            let information = Rc::new(information);
                             let mut tmp = information.clone();
                             mem::swap(other, &mut tmp);
                             return Some((information, Some(tmp)));
@@ -456,7 +453,7 @@ where
             }
             collections::hash_map::Entry::Vacant(entry) => entry.insert(Vec::with_capacity(1)),
         };
-        let information = V::from(information);
+        let information = Rc::new(information);
         v.push(information.clone());
         Some((information, None))
     }

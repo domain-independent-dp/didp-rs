@@ -115,7 +115,7 @@ pub struct Cabs<
 > where
     T: variable_type::Numeric + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
-    B: Fn(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
+    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
     D: Deref<Target = V> + Clone,
@@ -138,7 +138,7 @@ impl<'a, T, N, B, V, D, R, K> Cabs<'a, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
-    B: Fn(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
+    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
     D: Deref<Target = V> + Clone,
@@ -272,7 +272,7 @@ impl<'a, T, N, B, V, D, R, K> Search<T> for Cabs<'a, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display + Ord,
     <T as str::FromStr>::Err: fmt::Debug,
-    B: Fn(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
+    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
     D: Deref<Target = V> + Clone,

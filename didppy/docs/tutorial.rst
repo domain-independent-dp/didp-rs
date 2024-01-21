@@ -336,7 +336,7 @@ Resource Variables
 ~~~~~~~~~~~~~~~~~~
 
 Consider two states :math:`(U, i, t)` and :math:`(U, i, t')` with :math:`t \leq t'`, which share the set of unvisited customers and the current location.
-In TSPTW, smaller :math:`t` is always better, so :math:`(U, i, t)` leads to a better solution than :math:`(U, i, t')`.
+In TSPTW, smaller :math:`t` is always better, so :math:`(U, i, t)` leads to an equal or better solution than :math:`(U, i, t')`.
 Therefore, we can introduce the following inequality:
 
 .. math::
@@ -363,6 +363,10 @@ There are three types of resource variables in DIDPPy:
 * :class:`~didppy.IntResourceVar`
 * :class:`~didppy.FloatResourceVar`
 * :class:`~didppy.ElementResourceVar`
+
+We have explained that :math:`(U, i, t)` dominates :math:`(U, i, t')` if :math:`t` is less than or equal to :math:`t'` since :math:`(U, i, t)` leads to an equal or better solution.
+In general, there is another requirement to define :math:`t` as a resource variable: :math:`(U, i, t)` must lead to an equal or better solution that has equal or fewer transitions than :math:`(U, i, t')`.
+In our DP model, since all solutions visit all customers and the depot, they have the same length, so we do not need to care about it.
 
 State Constraints
 ~~~~~~~~~~~~~~~~~

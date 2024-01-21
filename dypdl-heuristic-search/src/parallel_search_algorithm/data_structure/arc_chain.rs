@@ -1,4 +1,4 @@
-use crate::search_algorithm::data_structure::TransitionChain;
+use crate::search_algorithm::data_structure::{CreateTransitionChain, GetTransitions};
 use dypdl::{Transition, TransitionInterface};
 use std::sync::Arc;
 
@@ -13,7 +13,7 @@ where
     last: Arc<T>,
 }
 
-impl<T> TransitionChain<T, Arc<T>, Arc<Self>> for ArcChain<T>
+impl<T> CreateTransitionChain<Arc<T>, Arc<Self>> for ArcChain<T>
 where
     T: TransitionInterface + Clone,
     Transition: From<T>,
@@ -21,13 +21,28 @@ where
     fn new(parent: Option<Arc<Self>>, last: Arc<T>) -> Self {
         Self { parent, last }
     }
+}
 
-    fn last(&self) -> &T {
-        &self.last
+impl<T> GetTransitions<T> for ArcChain<T>
+where
+    T: TransitionInterface + Clone,
+    Transition: From<T>,
+{
+    fn transitions(&self) -> Vec<T> {
+        let mut result = vec![(*self.last).clone()];
+        let mut parent = &self.parent;
+
+        while let Some(current) = parent {
+            result.push((*current.last).clone());
+            parent = &current.parent;
+        }
+
+        result.reverse();
+        result
     }
 
-    fn parent(&self) -> Option<&Arc<Self>> {
-        self.parent.as_ref()
+    fn last(&self) -> Option<&T> {
+        Some(&self.last)
     }
 }
 
@@ -42,8 +57,8 @@ mod tests {
             ..Default::default()
         });
         let chain = ArcChain::new(None, op1.clone());
-        assert_eq!(chain.parent(), None);
-        assert_eq!(chain.last(), &*op1);
+        assert_eq!(chain.parent, None);
+        assert_eq!(chain.last(), Some(&*op1));
     }
 
     #[test]
@@ -58,8 +73,8 @@ mod tests {
             ..Default::default()
         });
         let chain2 = ArcChain::new(Some(chain1.clone()), op2.clone());
-        assert_eq!(chain2.parent(), Some(&chain1));
-        assert_eq!(chain2.last(), &*op2);
+        assert_eq!(chain2.parent, Some(chain1));
+        assert_eq!(chain2.last(), Some(&*op2));
     }
 
     #[test]

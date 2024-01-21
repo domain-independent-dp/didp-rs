@@ -157,6 +157,7 @@ where
         let node = CustomFNode::generate_root_node(
             self.model.target.clone(),
             T::zero(),
+            &self.model,
             U::zero(),
             &h_evaluator,
             &f_evaluator,

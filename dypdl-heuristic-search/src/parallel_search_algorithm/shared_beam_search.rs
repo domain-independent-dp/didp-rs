@@ -157,6 +157,8 @@ where
         registry.clear();
     }
 
+    let mut removed_dual_bound = None;
+
     let mut successors = Vec::with_capacity(beam_size);
     let mut non_dominated_successors = Vec::with_capacity(beam_size);
     let mut nodes_with_goal_information = Vec::with_capacity(beam_size);
@@ -175,6 +177,8 @@ where
 
         let goal = thread_pool.install(|| {
             nodes_with_goal_information.par_extend(beam.par_drain(..).filter_map(|node| {
+                node.close();
+
                 if let Some((cost, suffix)) =
                     get_solution_cost_and_suffix(model, &*node, suffix, &base_cost_evaluator)
                 {
@@ -290,20 +294,29 @@ where
                 if non_dominated_successors.len() > beam_size {
                     non_dominated_successors.par_sort_unstable_by(|a, b| b.cmp(a));
 
-                    if !pruned {
-                        if let (true, Some(value)) = (
-                            N::ordered_by_bound(),
-                            non_dominated_successors
-                                .first()
-                                .and_then(|node| node.bound(model)),
-                        ) {
-                            if best_dual_bound
-                                .map_or(true, |bound| !exceed_bound(model, bound, Some(value)))
-                            {
-                                best_dual_bound = Some(value);
+                    if N::ordered_by_bound() {
+                        if let Some(mut bound) = non_dominated_successors[0].bound(model) {
+                            if exceed_bound(model, bound, removed_dual_bound) {
+                                bound = removed_dual_bound.unwrap();
+                            }
+
+                            if exceed_bound(model, bound, primal_bound) {
+                                best_dual_bound = primal_bound;
+                            } else if best_dual_bound.map_or(true, |best_bound| {
+                                !exceed_bound(model, best_bound, Some(bound))
+                            }) {
+                                best_dual_bound = Some(bound);
                             }
                         }
 
+                        if let Some(bound) = non_dominated_successors[beam_size].bound(model) {
+                            if !exceed_bound(model, bound, removed_dual_bound) {
+                                removed_dual_bound = Some(bound);
+                            }
+                        }
+                    }
+
+                    if !pruned {
                         pruned = true;
                     }
 
