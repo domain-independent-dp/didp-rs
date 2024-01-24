@@ -153,6 +153,10 @@ where
     ) -> Self {
         let priority = if model.reduce_function == ReduceFunction::Max {
             cost
+        } else if cost == T::min_value() {
+            T::max_value()
+        } else if cost == T::max_value() {
+            T::min_value()
         } else {
             -cost
         };
