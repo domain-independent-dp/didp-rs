@@ -480,15 +480,27 @@ macro_rules! impl_add_effect {
                 $U: From<V>,
             {
                 let expression = <$U>::from(expression);
-                for (i, _) in &self.effect.$x {
+                let mut index = None;
+                for (j, (i, _)) in self.effect.$x.iter().enumerate() {
                     if *i == v.id() {
                         return Err(ModelErr::new(format!(
                             "the transition already has an effect on variable id {}",
                             *i
                         )));
                     }
+
+                    if *i > v.id() {
+                        index = Some(j);
+                        break;
+                    }
                 }
-                self.effect.$x.push((v.id(), expression));
+
+                if let Some(index) = index {
+                    self.effect.$x.insert(index, (v.id(), expression));
+                } else {
+                    self.effect.$x.push((v.id(), expression));
+                }
+
                 Ok(())
             }
         }
@@ -1160,20 +1172,57 @@ mod tests {
         let v2 = metadata.add_set_variable(String::from("v2"), ob);
         assert!(v2.is_ok());
         let v2 = v2.unwrap();
+        let v3 = metadata.add_set_variable(String::from("v3"), ob);
+        assert!(v3.is_ok());
+        let v3 = v3.unwrap();
+        let v4 = metadata.add_set_variable(String::from("v4"), ob);
+        assert!(v4.is_ok());
+        let v4 = v4.unwrap();
 
         let mut transition = Transition::default();
-        let result = transition.add_effect(v1, Set::with_capacity(10));
+        let mut effect = Set::with_capacity(10);
+        effect.insert(1);
+        let result = transition.add_effect(v3, effect);
         assert!(result.is_ok());
         assert_eq!(
             transition,
             Transition {
                 effect: Effect {
                     set_effects: vec![(
-                        v1.id(),
-                        SetExpression::Reference(ReferenceExpression::Constant(
-                            Set::with_capacity(10)
-                        ))
+                        v3.id(),
+                        SetExpression::Reference(ReferenceExpression::Constant({
+                            let mut set = Set::with_capacity(10);
+                            set.insert(1);
+                            set
+                        }))
                     )],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        let result = transition.add_effect(v1, Set::with_capacity(10));
+        assert!(result.is_ok());
+        assert_eq!(
+            transition,
+            Transition {
+                effect: Effect {
+                    set_effects: vec![
+                        (
+                            v1.id(),
+                            SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10)
+                            ))
+                        ),
+                        (
+                            v3.id(),
+                            SetExpression::Reference(ReferenceExpression::Constant({
+                                let mut set = Set::with_capacity(10);
+                                set.insert(1);
+                                set
+                            }))
+                        )
+                    ],
                     ..Default::default()
                 },
                 ..Default::default()
@@ -1195,7 +1244,50 @@ mod tests {
                         (
                             v2.id(),
                             SetExpression::Reference(ReferenceExpression::Variable(v1.id()))
+                        ),
+                        (
+                            v3.id(),
+                            SetExpression::Reference(ReferenceExpression::Constant({
+                                let mut set = Set::with_capacity(10);
+                                set.insert(1);
+                                set
+                            }))
                         )
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        let result = transition.add_effect(v4, v2);
+        assert!(result.is_ok());
+        assert_eq!(
+            transition,
+            Transition {
+                effect: Effect {
+                    set_effects: vec![
+                        (
+                            v1.id(),
+                            SetExpression::Reference(ReferenceExpression::Constant(
+                                Set::with_capacity(10)
+                            ))
+                        ),
+                        (
+                            v2.id(),
+                            SetExpression::Reference(ReferenceExpression::Variable(v1.id()))
+                        ),
+                        (
+                            v3.id(),
+                            SetExpression::Reference(ReferenceExpression::Constant({
+                                let mut set = Set::with_capacity(10);
+                                set.insert(1);
+                                set
+                            }))
+                        ),
+                        (
+                            v4.id(),
+                            SetExpression::Reference(ReferenceExpression::Variable(v2.id()))
+                        ),
                     ],
                     ..Default::default()
                 },
@@ -1233,8 +1325,32 @@ mod tests {
         let v2 = metadata.add_vector_variable(String::from("v2"), ob);
         assert!(v2.is_ok());
         let v2 = v2.unwrap();
+        let v3 = metadata.add_vector_variable(String::from("v3"), ob);
+        assert!(v3.is_ok());
+        let v3 = v3.unwrap();
+        let v4 = metadata.add_vector_variable(String::from("v4"), ob);
+        assert!(v4.is_ok());
+        let v4 = v4.unwrap();
 
         let mut transition = Transition::default();
+        let result = transition.add_effect(
+            v3,
+            VectorExpression::Reference(ReferenceExpression::Constant(vec![])),
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            transition,
+            Transition {
+                effect: Effect {
+                    vector_effects: vec![(
+                        v3.id(),
+                        VectorExpression::Reference(ReferenceExpression::Constant(vec![]))
+                    )],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
         let result = transition.add_effect(
             v1,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2])),
@@ -1244,10 +1360,16 @@ mod tests {
             transition,
             Transition {
                 effect: Effect {
-                    vector_effects: vec![(
-                        v1.id(),
-                        VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2]))
-                    )],
+                    vector_effects: vec![
+                        (
+                            v1.id(),
+                            VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2]))
+                        ),
+                        (
+                            v3.id(),
+                            VectorExpression::Reference(ReferenceExpression::Constant(vec![]))
+                        )
+                    ],
                     ..Default::default()
                 },
                 ..Default::default()
@@ -1270,7 +1392,43 @@ mod tests {
                         (
                             v2.id(),
                             VectorExpression::Reference(ReferenceExpression::Variable(v1.id()))
+                        ),
+                        (
+                            v3.id(),
+                            VectorExpression::Reference(ReferenceExpression::Constant(vec![]))
                         )
+                    ],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        let result = transition.add_effect(
+            v4,
+            VectorExpression::Reference(ReferenceExpression::Variable(v2.id())),
+        );
+        assert!(result.is_ok());
+        assert_eq!(
+            transition,
+            Transition {
+                effect: Effect {
+                    vector_effects: vec![
+                        (
+                            v1.id(),
+                            VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2]))
+                        ),
+                        (
+                            v2.id(),
+                            VectorExpression::Reference(ReferenceExpression::Variable(v1.id()))
+                        ),
+                        (
+                            v3.id(),
+                            VectorExpression::Reference(ReferenceExpression::Constant(vec![]))
+                        ),
+                        (
+                            v4.id(),
+                            VectorExpression::Reference(ReferenceExpression::Variable(v2.id()))
+                        ),
                     ],
                     ..Default::default()
                 },

@@ -123,14 +123,25 @@ impl TransitionPy {
     }
 
     fn set_effect<T: Clone>(var_id: usize, new_effect: T, effects: &mut Vec<(usize, T)>) {
-        for (id, effect) in effects.iter_mut() {
+        let mut index = None;
+
+        for (i, (id, effect)) in effects.iter_mut().enumerate() {
             if *id == var_id {
                 *effect = new_effect;
                 return;
             }
+
+            if *id > var_id {
+                index = Some(i);
+                break;
+            }
         }
 
-        effects.push((var_id, new_effect));
+        if let Some(index) = index {
+            effects.insert(index, (var_id, new_effect));
+        } else {
+            effects.push((var_id, new_effect));
+        }
     }
 }
 
