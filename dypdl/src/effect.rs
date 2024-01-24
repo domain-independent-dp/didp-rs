@@ -4,8 +4,10 @@ use crate::expression;
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct Effect {
     /// Pairs of the index of a set variable and a set expression.
+    /// Must be sorted by the indices of the set variables.
     pub set_effects: Vec<(usize, expression::SetExpression)>,
     /// Pairs of the index of a vector variable and a vector expression.
+    /// Must be sorted by the indices of the vector variables.
     pub vector_effects: Vec<(usize, expression::VectorExpression)>,
     /// Pairs of the index of an element variable and an element expression.
     pub element_effects: Vec<(usize, expression::ElementExpression)>,

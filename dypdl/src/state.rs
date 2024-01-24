@@ -91,6 +91,8 @@ pub trait StateInterface: Sized {
 
     /// Returns the transitioned state by the effect.
     ///
+    /// Set and vector effects must be sorted by the indices of the variables.
+    ///
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
@@ -117,6 +119,7 @@ pub trait StateInterface: Sized {
 
         let len = self.get_number_of_vector_variables();
         let mut vector_variables = Vec::with_capacity(len);
+        let mut i = 0;
         for e in &effect.vector_effects {
             while i < e.0 {
                 vector_variables.push(self.get_vector_variable(i).clone());

@@ -215,6 +215,10 @@ fn load_effect_from_yaml(
             );
         }
     }
+
+    set_effects.sort_unstable_by(|(i0, _), (i1, _)| i0.cmp(i1));
+    vector_effects.sort_unstable_by(|(i0, _), (i1, _)| i0.cmp(i1));
+
     Ok(Effect {
         set_effects,
         vector_effects,
@@ -226,6 +230,7 @@ fn load_effect_from_yaml(
         continuous_resource_effects,
     })
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -235,8 +240,7 @@ mod tests {
     use dypdl::GroundedCondition;
     use rustc_hash::FxHashMap;
 
-    #[test]
-    fn load_transitions_from_yaml_ok() {
+    fn create_metadata() -> StateMetadata {
         let mut metadata = StateMetadata::default();
         let result = metadata.add_object_type(String::from("object"), 3);
         assert!(result.is_ok());
@@ -306,6 +310,10 @@ mod tests {
         let result = metadata.add_continuous_resource_variable(String::from("cr3"), false);
         assert!(result.is_ok());
 
+        metadata
+    }
+
+    fn create_registry() -> TableRegistry {
         let mut registry = TableRegistry::default();
         let result = registry.add_table_1d(String::from("f1"), vec![10, 20, 30]);
         assert!(result.is_ok());
@@ -313,6 +321,13 @@ mod tests {
             registry.add_table_2d(String::from("f2"), vec![vec![10, 20, 30], vec![40, 50, 60]]);
         assert!(result.is_ok());
 
+        registry
+    }
+
+    #[test]
+    fn load_transition_only_precondition_integer_from_yaml_ok() {
+        let metadata = create_metadata();
+        let registry = create_registry();
         let cost_type = CostType::Integer;
 
         let transition = r"
@@ -333,8 +348,13 @@ preconditions: [(>= (f2 0 1) 10)]
             ..Default::default()
         }];
         assert_eq!(transitions.unwrap(), (expected, false, false));
+    }
 
-        let cost_type_continuous = CostType::Continuous;
+    #[test]
+    fn load_transition_only_precondition_continuous_from_yaml_ok() {
+        let metadata = create_metadata();
+        let registry = create_registry();
+        let cost_type = CostType::Continuous;
 
         let transition = r"
 name: transition
@@ -345,8 +365,7 @@ preconditions: [(>= (f2 0 1) 10)]
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &registry, &cost_type_continuous);
+        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
@@ -355,6 +374,13 @@ preconditions: [(>= (f2 0 1) 10)]
             ..Default::default()
         }];
         assert_eq!(transitions.unwrap(), (expected, false, false));
+    }
+
+    #[test]
+    fn load_transition_integer_from_yaml_ok() {
+        let metadata = create_metadata();
+        let registry = create_registry();
+        let cost_type = CostType::Integer;
 
         let transition = r"
 name: transition
@@ -379,6 +405,13 @@ cost: 0
             ..Default::default()
         }];
         assert_eq!(transitions.unwrap(), (expected, false, false));
+    }
+
+    #[test]
+    fn load_transition_continuous_from_yaml_ok() {
+        let metadata = create_metadata();
+        let registry = create_registry();
+        let cost_type = CostType::Continuous;
 
         let transition = r"
 name: transition
@@ -391,8 +424,7 @@ cost: 0
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions =
-            load_transitions_from_yaml(transition, &metadata, &registry, &cost_type_continuous);
+        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
@@ -404,6 +436,13 @@ cost: 0
             ..Default::default()
         }];
         assert_eq!(transitions.unwrap(), (expected, false, false));
+    }
+
+    #[test]
+    fn load_transition_integer_string_from_yaml_ok() {
+        let metadata = create_metadata();
+        let registry = create_registry();
+        let cost_type = CostType::Integer;
 
         let transition = r"
 name: transition
@@ -428,6 +467,13 @@ cost: '0'
             ..Default::default()
         }];
         assert_eq!(transitions.unwrap(), (expected, false, false));
+    }
+
+    #[test]
+    fn load_transition_non_forced_from_yaml_ok() {
+        let metadata = create_metadata();
+        let registry = create_registry();
+        let cost_type = CostType::Integer;
 
         let transition = r"
 name: transition
@@ -453,6 +499,13 @@ forced: false
             ..Default::default()
         }];
         assert_eq!(transitions.unwrap(), (expected, false, false));
+    }
+
+    #[test]
+    fn load_transition_forced_from_yaml_ok() {
+        let metadata = create_metadata();
+        let registry = create_registry();
+        let cost_type = CostType::Integer;
 
         let transition = r"
 name: transition
@@ -478,6 +531,13 @@ forced: true
             ..Default::default()
         }];
         assert_eq!(transitions.unwrap(), (expected, true, false));
+    }
+
+    #[test]
+    fn load_transition_forward_forced_from_yaml_ok() {
+        let metadata = create_metadata();
+        let registry = create_registry();
+        let cost_type = CostType::Integer;
 
         let transition = r"
 name: transition
@@ -503,6 +563,13 @@ direction: forward
             ..Default::default()
         }];
         assert_eq!(transitions.unwrap(), (expected, false, false));
+    }
+
+    #[test]
+    fn load_transition_backward_from_yaml_ok() {
+        let metadata = create_metadata();
+        let registry = create_registry();
+        let cost_type = CostType::Integer;
 
         let transition = r"
 name: transition
@@ -528,6 +595,13 @@ direction: backward
             ..Default::default()
         }];
         assert_eq!(transitions.unwrap(), (expected, false, true));
+    }
+
+    #[test]
+    fn load_transition_multiple_effects_from_yaml_ok() {
+        let metadata = create_metadata();
+        let registry = create_registry();
+        let cost_type = CostType::Integer;
 
         let transition = r"
 name: transition
@@ -640,6 +714,251 @@ cost: (+ cost (f1 e))
                             ))),
                         ),
                     )],
+                    element_effects: vec![(0, ElementExpression::Constant(1))],
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    integer_resource_effects: vec![(0, IntegerExpression::Constant(2))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(IntegerExpression::Cost),
+                    Box::new(IntegerExpression::Constant(20)),
+                )),
+            },
+        ];
+        assert_eq!(transitions.unwrap(), (expected, false, false));
+    }
+
+    #[test]
+    fn load_transition_multiple_set_and_vector_effects_from_yaml_ok() {
+        let metadata = create_metadata();
+        let registry = create_registry();
+        let cost_type = CostType::Integer;
+
+        let transition = r"
+name: transition
+parameters:
+        - name: e
+          object: s0
+preconditions:
+        - (>= (f2 e0 e) 10)
+        - (!= e 2)
+effect:
+        e0: e
+        s1: (add e s0)
+        s3: (remove e s1)
+        s0: (add e s3)
+        s2: (add e s2)
+        p2: (push e p1)
+        p0: (push e p0)
+        p1: (push e p2)
+        i0: '1'
+        ir0: '2'
+cost: (+ cost (f1 e))
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        assert!(transitions.is_ok());
+        let expected = vec![
+            Transition {
+                name: String::from("transition"),
+                parameter_names: vec![String::from("e")],
+                parameter_values: vec![0],
+                elements_in_set_variable: vec![(0, 0)],
+                elements_in_vector_variable: Vec::new(),
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Ge,
+                        Box::new(IntegerExpression::Table(Box::new(
+                            NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(0),
+                            ),
+                        ))),
+                        Box::new(IntegerExpression::Constant(10)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![
+                        (
+                            0,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(0),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    3,
+                                ))),
+                            ),
+                        ),
+                        (
+                            1,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(0),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    0,
+                                ))),
+                            ),
+                        ),
+                        (
+                            2,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(0),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    2,
+                                ))),
+                            ),
+                        ),
+                        (
+                            3,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Remove,
+                                ElementExpression::Constant(0),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    1,
+                                ))),
+                            ),
+                        ),
+                    ],
+                    vector_effects: vec![
+                        (
+                            0,
+                            VectorExpression::Push(
+                                ElementExpression::Constant(0),
+                                Box::new(VectorExpression::Reference(
+                                    ReferenceExpression::Variable(0),
+                                )),
+                            ),
+                        ),
+                        (
+                            1,
+                            VectorExpression::Push(
+                                ElementExpression::Constant(0),
+                                Box::new(VectorExpression::Reference(
+                                    ReferenceExpression::Variable(2),
+                                )),
+                            ),
+                        ),
+                        (
+                            2,
+                            VectorExpression::Push(
+                                ElementExpression::Constant(0),
+                                Box::new(VectorExpression::Reference(
+                                    ReferenceExpression::Variable(1),
+                                )),
+                            ),
+                        ),
+                    ],
+                    element_effects: vec![(0, ElementExpression::Constant(0))],
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    integer_resource_effects: vec![(0, IntegerExpression::Constant(2))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(IntegerExpression::Cost),
+                    Box::new(IntegerExpression::Constant(10)),
+                )),
+            },
+            Transition {
+                name: String::from("transition"),
+                parameter_names: vec![String::from("e")],
+                parameter_values: vec![1],
+                elements_in_set_variable: vec![(0, 1)],
+                elements_in_vector_variable: Vec::new(),
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Ge,
+                        Box::new(IntegerExpression::Table(Box::new(
+                            NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(1),
+                            ),
+                        ))),
+                        Box::new(IntegerExpression::Constant(10)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![
+                        (
+                            0,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(1),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    3,
+                                ))),
+                            ),
+                        ),
+                        (
+                            1,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(1),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    0,
+                                ))),
+                            ),
+                        ),
+                        (
+                            2,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(1),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    2,
+                                ))),
+                            ),
+                        ),
+                        (
+                            3,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Remove,
+                                ElementExpression::Constant(1),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    1,
+                                ))),
+                            ),
+                        ),
+                    ],
+                    vector_effects: vec![
+                        (
+                            0,
+                            VectorExpression::Push(
+                                ElementExpression::Constant(1),
+                                Box::new(VectorExpression::Reference(
+                                    ReferenceExpression::Variable(0),
+                                )),
+                            ),
+                        ),
+                        (
+                            1,
+                            VectorExpression::Push(
+                                ElementExpression::Constant(1),
+                                Box::new(VectorExpression::Reference(
+                                    ReferenceExpression::Variable(2),
+                                )),
+                            ),
+                        ),
+                        (
+                            2,
+                            VectorExpression::Push(
+                                ElementExpression::Constant(1),
+                                Box::new(VectorExpression::Reference(
+                                    ReferenceExpression::Variable(1),
+                                )),
+                            ),
+                        ),
+                    ],
                     element_effects: vec![(0, ElementExpression::Constant(1))],
                     integer_effects: vec![(0, IntegerExpression::Constant(1))],
                     integer_resource_effects: vec![(0, IntegerExpression::Constant(2))],
