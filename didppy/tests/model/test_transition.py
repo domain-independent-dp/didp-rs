@@ -1,5 +1,6 @@
-import didppy as dp
 import pytest
+
+import didppy as dp
 
 
 class TestTransition:
@@ -9,12 +10,18 @@ class TestTransition:
     element_resource_var = model.add_element_resource_var(
         object_type=obj, target=2, less_is_better=True
     )
-    set_var = model.add_set_var(object_type=obj, target=[0, 1])
+    set_var1 = model.add_set_var(object_type=obj, target=[0, 1])
+    set_var2 = model.add_set_var(object_type=obj, target=[1, 2])
+    set_var3 = model.add_set_var(object_type=obj, target=[0])
+    set_var4 = model.add_set_var(object_type=obj, target=[])
     int_var = model.add_int_var(target=3)
     int_resource_var = model.add_int_resource_var(target=4, less_is_better=True)
     float_var = model.add_float_var(target=0.5)
     float_resource_var = model.add_float_resource_var(target=0.6, less_is_better=True)
-    set_const = model.create_set_const(object_type=obj, value=[1, 2])
+    set_const1 = model.create_set_const(object_type=obj, value=[1, 2])
+    set_const2 = model.create_set_const(object_type=obj, value=[2])
+    set_const3 = model.create_set_const(object_type=obj, value=[])
+    set_const4 = model.create_set_const(object_type=obj, value=[1])
 
     def test_default(self):
         state = self.model.target_state
@@ -25,7 +32,10 @@ class TestTransition:
         assert transition.preconditions == []
         assert transition[self.element_var].eval(state, self.model) == 1
         assert transition[self.element_resource_var].eval(state, self.model) == 2
-        assert transition[self.set_var].eval(state, self.model) == {0, 1}
+        assert transition[self.set_var1].eval(state, self.model) == {0, 1}
+        assert transition[self.set_var2].eval(state, self.model) == {1, 2}
+        assert transition[self.set_var3].eval(state, self.model) == {0}
+        assert transition[self.set_var4].eval(state, self.model) == set()
         assert transition[self.int_var].eval(state, self.model) == 3
         assert transition[self.int_resource_var].eval(state, self.model) == 4
         assert transition[self.float_var].eval(state, self.model) == 0.5
@@ -37,15 +47,29 @@ class TestTransition:
             [
                 (element_var, 2),
                 (element_resource_var, 3),
-                (set_var, set_const),
+                (set_var3, set_const3),
+                (set_var1, set_const1),
+                (set_var2, set_const2),
+                (set_var4, set_const4),
                 (int_var, 4),
                 (int_resource_var, 5),
                 (float_var, 0.6),
                 (float_resource_var, 0.7),
             ],
-            [set_var.contains(0), int_var < 0],
+            [set_var1.contains(0), int_var < 0],
             1,
-            [2, 3, {1, 2}, 4, 5, pytest.approx(0.6), pytest.approx(0.7)],
+            [
+                2,
+                3,
+                {1, 2},
+                {2},
+                set(),
+                {1},
+                4,
+                5,
+                pytest.approx(0.6),
+                pytest.approx(0.7),
+            ],
             2,
         ),
         (
@@ -53,15 +77,28 @@ class TestTransition:
             [
                 (element_var, dp.ElementExpr(2)),
                 (element_resource_var, dp.ElementExpr(3)),
-                (set_var, dp.SetExpr(set_const)),
+                (set_var1, dp.SetExpr(set_const1)),
+                (set_var4, dp.SetExpr(set_const4)),
+                (set_var3, dp.SetExpr(set_const3)),
                 (int_var, dp.IntExpr(4)),
                 (int_resource_var, dp.IntExpr(5)),
                 (float_var, dp.FloatExpr(0.6)),
                 (float_resource_var, dp.FloatExpr(0.7)),
             ],
-            [set_var.contains(0), int_var < 0],
+            [set_var1.contains(0), int_var < 0],
             1,
-            [2, 3, {1, 2}, 4, 5, pytest.approx(0.6), pytest.approx(0.7)],
+            [
+                2,
+                3,
+                {1, 2},
+                {1, 2},
+                set(),
+                {1},
+                4,
+                5,
+                pytest.approx(0.6),
+                pytest.approx(0.7),
+            ],
             2,
         ),
         (
@@ -69,15 +106,29 @@ class TestTransition:
             [
                 (element_var, element_var),
                 (element_resource_var, element_resource_var),
-                (set_var, set_var),
+                (set_var1, set_var2),
+                (set_var2, set_var1),
+                (set_var3, set_var4),
+                (set_var4, set_var3),
                 (int_var, int_var),
                 (int_resource_var, int_resource_var),
                 (float_var, float_var),
                 (float_resource_var, float_resource_var),
             ],
-            [set_var.contains(0), int_var < 0],
+            [set_var1.contains(0), int_var < 0],
             3,
-            [1, 2, {0, 1}, 3, 4, pytest.approx(0.5), pytest.approx(0.6)],
+            [
+                1,
+                2,
+                {1, 2},
+                {0, 1},
+                set(),
+                {0},
+                3,
+                4,
+                pytest.approx(0.5),
+                pytest.approx(0.6),
+            ],
             2,
         ),
         (
@@ -85,15 +136,26 @@ class TestTransition:
             [
                 (element_var, element_resource_var),
                 (element_resource_var, element_var),
-                (set_var, set_var),
+                (set_var1, set_var1),
                 (int_var, int_resource_var),
                 (int_resource_var, int_var),
                 (float_var, float_resource_var),
                 (float_resource_var, float_var),
             ],
-            [set_var.contains(0), int_var < 0],
+            [set_var1.contains(0), int_var < 0],
             4,
-            [2, 1, {0, 1}, 4, 3, pytest.approx(0.6), pytest.approx(0.5)],
+            [
+                2,
+                1,
+                {0, 1},
+                {1, 2},
+                {0},
+                set(),
+                4,
+                3,
+                pytest.approx(0.6),
+                pytest.approx(0.5),
+            ],
             2,
         ),
         (
@@ -101,15 +163,26 @@ class TestTransition:
             [
                 (element_var, 2),
                 (element_resource_var, 3),
-                (set_var, set_const),
+                (set_var1, set_const1),
                 (int_var, 4),
                 (int_resource_var, 5),
                 (float_var, 6),
                 (float_resource_var, 7),
             ],
-            [set_var.contains(0), int_var < 0],
+            [set_var1.contains(0), int_var < 0],
             1.5,
-            [2, 3, {1, 2}, 4, 5, pytest.approx(6.0), pytest.approx(7.0)],
+            [
+                2,
+                3,
+                {1, 2},
+                {1, 2},
+                {0},
+                set(),
+                4,
+                5,
+                pytest.approx(6.0),
+                pytest.approx(7.0),
+            ],
             2,
         ),
         (
@@ -117,15 +190,26 @@ class TestTransition:
             [
                 (element_var, 2),
                 (element_resource_var, 3),
-                (set_var, set_const),
+                (set_var1, set_const1),
                 (int_var, 4),
                 (int_resource_var, 5),
                 (float_var, int_var),
                 (float_resource_var, int_resource_var),
             ],
-            [set_var.contains(0), int_var < 0],
+            [set_var1.contains(0), int_var < 0],
             pytest.approx(0.5),
-            [2, 3, {1, 2}, 4, 5, pytest.approx(3.0), pytest.approx(4.0)],
+            [
+                2,
+                3,
+                {1, 2},
+                {1, 2},
+                {0},
+                set(),
+                4,
+                5,
+                pytest.approx(3.0),
+                pytest.approx(4.0),
+            ],
             2,
         ),
         (
@@ -133,15 +217,26 @@ class TestTransition:
             [
                 (element_var, 2),
                 (element_resource_var, 3),
-                (set_var, set_const),
+                (set_var1, set_const1),
                 (int_var, 4),
                 (int_resource_var, 5),
                 (float_var, int_resource_var),
                 (float_resource_var, int_var),
             ],
-            [set_var.contains(0), int_var < 0],
+            [set_var1.contains(0), int_var < 0],
             pytest.approx(0.6),
-            [2, 3, {1, 2}, 4, 5, pytest.approx(4.0), pytest.approx(3.0)],
+            [
+                2,
+                3,
+                {1, 2},
+                {1, 2},
+                {0},
+                set(),
+                4,
+                5,
+                pytest.approx(4.0),
+                pytest.approx(3.0),
+            ],
             2,
         ),
     ]
@@ -173,16 +268,19 @@ class TestTransition:
             transition[self.element_resource_var].eval(state, self.model)
             == expected_effects[1]
         )
-        assert transition[self.set_var].eval(state, self.model) == expected_effects[2]
-        assert transition[self.int_var].eval(state, self.model) == expected_effects[3]
+        assert transition[self.set_var1].eval(state, self.model) == expected_effects[2]
+        assert transition[self.set_var2].eval(state, self.model) == expected_effects[3]
+        assert transition[self.set_var3].eval(state, self.model) == expected_effects[4]
+        assert transition[self.set_var4].eval(state, self.model) == expected_effects[5]
+        assert transition[self.int_var].eval(state, self.model) == expected_effects[6]
         assert (
             transition[self.int_resource_var].eval(state, self.model)
-            == expected_effects[4]
+            == expected_effects[7]
         )
-        assert transition[self.float_var].eval(state, self.model) == expected_effects[5]
+        assert transition[self.float_var].eval(state, self.model) == expected_effects[8]
         assert (
             transition[self.float_resource_var].eval(state, self.model)
-            == expected_effects[6]
+            == expected_effects[9]
         )
         assert len(transition.preconditions) == expected_n_preconditions
 
@@ -266,8 +364,8 @@ class TestTransition:
         (element_resource_var, dp.ElementExpr(3), 3),
         (element_resource_var, element_var, 1),
         (element_resource_var, element_resource_var, 2),
-        (set_var, set_const, {1, 2}),
-        (set_var, set_var, {0, 1}),
+        (set_var1, set_const1, {1, 2}),
+        (set_var1, set_var1, {0, 1}),
         (int_var, 4, 4),
         (int_var, dp.IntExpr(4), 4),
         (int_var, int_var, 3),
@@ -302,6 +400,20 @@ class TestTransition:
 
         assert transition[var].eval(state, self.model) == expected
 
+    def test_set_multiple_set_effects(self):
+        state = self.model.target_state
+        transition = dp.Transition(name="test")
+        transition[self.set_var3] = self.set_var1
+        transition[self.set_var1] = self.set_var2
+        transition[self.set_var2] = self.set_var4
+        transition[self.set_var4] = self.set_var3
+        state = transition.apply(state, self.model)
+
+        assert state[self.set_var1] == {1, 2}
+        assert state[self.set_var2] == set()
+        assert state[self.set_var3] == {0, 1}
+        assert state[self.set_var4] == {0}
+
     @pytest.mark.parametrize("var, effect, expected", set_effect_cases)
     def test_overwrite_effect(self, var, effect, expected):
         state = self.model.target_state
@@ -310,7 +422,7 @@ class TestTransition:
             effects=[
                 (self.element_var, 0),
                 (self.element_resource_var, 0),
-                (self.set_var, self.set_const),
+                (self.set_var1, self.set_const1),
                 (self.int_var, 0),
                 (self.int_resource_var, 0),
                 (self.float_var, 0),
@@ -321,10 +433,32 @@ class TestTransition:
 
         assert transition[var].eval(state, self.model) == expected
 
+    def test_overwrite_multiple_set_effects(self):
+        state = self.model.target_state
+        transition = dp.Transition(
+            name="test",
+            effects=[
+                (self.element_var, 0),
+                (self.element_resource_var, 0),
+                (self.set_var1, self.set_const1),
+                (self.int_var, 0),
+                (self.int_resource_var, 0),
+                (self.float_var, 0),
+                (self.float_resource_var, 0),
+            ],
+        )
+        transition[self.set_var2] = self.set_var4
+        transition[self.set_var1] = self.set_var2
+        transition[self.set_var3] = self.set_var1
+
+        assert transition[self.set_var2].eval(state, self.model) == set()
+        assert transition[self.set_var1].eval(state, self.model) == {1, 2}
+        assert transition[self.set_var3].eval(state, self.model) == {0, 1}
+
     set_effect_error_cases = [
         (element_var, -1),
         (element_resource_var, -1),
-        (set_var, {1, 2}),
+        (set_var1, {1, 2}),
         (int_var, 1.5),
         (int_resource_var, 1.5),
         (0, 0),
@@ -345,6 +479,20 @@ class TestTransition:
 
         assert transition[var].eval(state, self.model) == expected
 
+    def test_add_multiple_set_effects(self):
+        state = self.model.target_state
+        transition = dp.Transition(name="test")
+        transition.add_effect(self.set_var2, self.set_var4)
+        transition.add_effect(self.set_var1, self.set_var2)
+        transition.add_effect(self.set_var3, self.set_var1)
+        transition.add_effect(self.set_var4, self.set_var3)
+        state = transition.apply(state, self.model)
+
+        assert state[self.set_var1] == {1, 2}
+        assert state[self.set_var2] == set()
+        assert state[self.set_var3] == {0, 1}
+        assert state[self.set_var4] == {0}
+
     @pytest.mark.parametrize("var, effect, _", set_effect_cases)
     def test_add_effect_overwrite_error(self, var, effect, _):
         transition = dp.Transition(
@@ -352,7 +500,7 @@ class TestTransition:
             effects=[
                 (self.element_var, 0),
                 (self.element_resource_var, 0),
-                (self.set_var, self.set_const),
+                (self.set_var1, self.set_const1),
                 (self.int_var, 0),
                 (self.int_resource_var, 0),
                 (self.float_var, 0),
@@ -377,7 +525,7 @@ class TestTransition:
             preconditions=[
                 self.element_var >= 1,
                 self.element_resource_var >= 2,
-                self.set_var.contains(0),
+                self.set_var1.contains(0),
                 self.int_var >= 3,
                 self.int_resource_var >= 0.4,
                 self.float_var > 0.4,
@@ -387,7 +535,7 @@ class TestTransition:
 
         assert transition.is_applicable(state, self.model)
 
-        transition.add_precondition(self.set_var.contains(1))
+        transition.add_precondition(self.set_var1.contains(1))
 
         assert transition.is_applicable(state, self.model)
 
@@ -409,22 +557,47 @@ class TestTransition:
             [
                 (element_var, 2),
                 (element_resource_var, 3),
-                (set_var, set_const),
+                (set_var3, set_const3),
+                (set_var1, set_const1),
+                (set_var2, set_const2),
+                (set_var4, set_const4),
                 (int_var, 4),
                 (int_resource_var, 5),
                 (float_var, 0.6),
                 (float_resource_var, 0.7),
             ],
-            [2, 3, {1, 2}, 4, 5, pytest.approx(0.6), pytest.approx(0.7)],
+            [
+                2,
+                3,
+                {1, 2},
+                {2},
+                set(),
+                {1},
+                4,
+                5,
+                pytest.approx(0.6),
+                pytest.approx(0.7),
+            ],
         ),
         (
             [
                 (element_var, 2),
-                (set_var, set_const),
+                (set_var1, set_const1),
                 (int_var, 4),
                 (float_var, 0.6),
             ],
-            [2, 2, {1, 2}, 4, 4, pytest.approx(0.6), pytest.approx(0.6)],
+            [
+                2,
+                2,
+                {1, 2},
+                {1, 2},
+                {0},
+                set(),
+                4,
+                4,
+                pytest.approx(0.6),
+                pytest.approx(0.6),
+            ],
         ),
     ]
 
@@ -436,11 +609,14 @@ class TestTransition:
 
         assert state[self.element_var] == expected[0]
         assert state[self.element_resource_var] == expected[1]
-        assert state[self.set_var] == expected[2]
-        assert state[self.int_var] == expected[3]
-        assert state[self.int_resource_var] == expected[4]
-        assert state[self.float_var] == expected[5]
-        assert state[self.float_resource_var] == expected[6]
+        assert state[self.set_var1] == expected[2]
+        assert state[self.set_var2] == expected[3]
+        assert state[self.set_var3] == expected[4]
+        assert state[self.set_var4] == expected[5]
+        assert state[self.int_var] == expected[6]
+        assert state[self.int_resource_var] == expected[7]
+        assert state[self.float_var] == expected[8]
+        assert state[self.float_resource_var] == expected[9]
 
     def test_apply_error(self):
         state = self.model.target_state

@@ -40,16 +40,19 @@ where
 {
     fn new(
         state: StateInRegistry<Arc<HashableSignatureVariables>>,
-        priority: T,
-        parent: Option<&Self>,
-        transition: Option<Arc<V>>,
+        cost: T,
+        model: &Model,
+        transitions: Option<Arc<ArcChain<V>>>,
     ) -> Self {
-        let transitions = transition.map(|transition| {
-            Arc::new(ArcChain::new(
-                parent.and_then(|parent| parent.transitions.clone()),
-                transition,
-            ))
-        });
+        let priority = if model.reduce_function == ReduceFunction::Max {
+            cost
+        } else if cost == T::min_value() {
+            T::max_value()
+        } else if cost == T::max_value() {
+            T::min_value()
+        } else {
+            -cost
+        };
 
         SendableCostNode {
             state,
@@ -87,13 +90,8 @@ where
         StateInRegistry<Arc<HashableSignatureVariables>>: From<S>,
     {
         let state = StateInRegistry::from(state);
-        let priority = if model.reduce_function == ReduceFunction::Max {
-            cost
-        } else {
-            -cost
-        };
 
-        SendableCostNode::new(state, priority, None, None)
+        SendableCostNode::new(state, cost, model, None)
     }
 
     /// Generates a successor node given a transition and a DyPDL model.
@@ -139,18 +137,9 @@ where
         let cost = self.cost(model);
         let (state, cost) =
             model.generate_successor_state(&self.state, cost, transition.as_ref(), None)?;
-        let priority = if model.reduce_function == ReduceFunction::Max {
-            cost
-        } else {
-            -cost
-        };
+        let transitions = Arc::new(ArcChain::new(self.transitions.clone(), transition));
 
-        Some(SendableCostNode::new(
-            state,
-            priority,
-            Some(self),
-            Some(transition),
-        ))
+        Some(SendableCostNode::new(state, cost, model, Some(transitions)))
     }
 
     /// Generates a successor node given a transition and inserts it into a state registry.
@@ -213,18 +202,9 @@ where
             transition.as_ref(),
             None,
         )?;
-        let priority = if model.reduce_function == ReduceFunction::Max {
-            cost
-        } else {
-            -cost
-        };
-        let constructor = |state: _, _: T, _: Option<&SendableCostNode<T, V>>| {
-            Some(SendableCostNode::new(
-                state,
-                priority,
-                Some(self),
-                Some(transition),
-            ))
+        let transitions = Arc::new(ArcChain::new(self.transitions.clone(), transition));
+        let constructor = |state: _, cost: T, _: Option<&SendableCostNode<T, V>>| {
+            Some(SendableCostNode::new(state, cost, model, Some(transitions)))
         };
 
         if let Some((successor, dominated)) = registry.insert_with(state, cost, constructor) {
@@ -326,6 +306,10 @@ where
     fn cost(&self, model: &Model) -> T {
         if model.reduce_function == ReduceFunction::Max {
             self.priority
+        } else if self.priority == T::min_value() {
+            T::max_value()
+        } else if self.priority == T::max_value() {
+            T::min_value()
         } else {
             -self.priority
         }
@@ -409,6 +393,42 @@ mod tests {
     }
 
     #[test]
+    fn generate_root_node_min_cost_max() {
+        let mut model = dypdl::Model::default();
+        model.set_minimize();
+        let variable = model.add_integer_variable("variable", 0);
+        assert!(variable.is_ok());
+        let state = model.target.clone();
+        let mut expected_state = StateInRegistry::from(state.clone());
+        let mut node =
+            SendableCostNode::<_>::generate_root_node(state, Integer::max_value(), &model);
+        assert_eq!(node.state(), &expected_state);
+        assert_eq!(node.state_mut(), &mut expected_state);
+        assert_eq!(node.cost(&model), Integer::max_value());
+        assert_eq!(node.bound(&model), None);
+        assert!(!node.is_closed());
+        assert_eq!(node.transitions(), vec![]);
+    }
+
+    #[test]
+    fn generate_root_node_min_cost_min() {
+        let mut model = dypdl::Model::default();
+        model.set_minimize();
+        let variable = model.add_integer_variable("variable", 0);
+        assert!(variable.is_ok());
+        let state = model.target.clone();
+        let mut expected_state = StateInRegistry::from(state.clone());
+        let mut node =
+            SendableCostNode::<_>::generate_root_node(state, Integer::min_value(), &model);
+        assert_eq!(node.state(), &expected_state);
+        assert_eq!(node.state_mut(), &mut expected_state);
+        assert_eq!(node.cost(&model), Integer::min_value());
+        assert_eq!(node.bound(&model), None);
+        assert!(!node.is_closed());
+        assert_eq!(node.transitions(), vec![]);
+    }
+
+    #[test]
     fn generate_root_node_max() {
         let mut model = dypdl::Model::default();
         model.set_maximize();
@@ -420,6 +440,42 @@ mod tests {
         assert_eq!(node.state(), &expected_state);
         assert_eq!(node.state_mut(), &mut expected_state);
         assert_eq!(node.cost(&model), 1);
+        assert_eq!(node.bound(&model), None);
+        assert!(!node.is_closed());
+        assert_eq!(node.transitions(), vec![]);
+    }
+
+    #[test]
+    fn generate_root_node_max_cost_max() {
+        let mut model = dypdl::Model::default();
+        model.set_maximize();
+        let variable = model.add_integer_variable("variable", 0);
+        assert!(variable.is_ok());
+        let state = model.target.clone();
+        let mut expected_state = StateInRegistry::from(state.clone());
+        let mut node =
+            SendableCostNode::<_>::generate_root_node(state, Integer::max_value(), &model);
+        assert_eq!(node.state(), &expected_state);
+        assert_eq!(node.state_mut(), &mut expected_state);
+        assert_eq!(node.cost(&model), Integer::max_value());
+        assert_eq!(node.bound(&model), None);
+        assert!(!node.is_closed());
+        assert_eq!(node.transitions(), vec![]);
+    }
+
+    #[test]
+    fn generate_root_node_max_cost_min() {
+        let mut model = dypdl::Model::default();
+        model.set_maximize();
+        let variable = model.add_integer_variable("variable", 0);
+        assert!(variable.is_ok());
+        let state = model.target.clone();
+        let mut expected_state = StateInRegistry::from(state.clone());
+        let mut node =
+            SendableCostNode::<_>::generate_root_node(state, Integer::min_value(), &model);
+        assert_eq!(node.state(), &expected_state);
+        assert_eq!(node.state_mut(), &mut expected_state);
+        assert_eq!(node.cost(&model), Integer::min_value());
         assert_eq!(node.bound(&model), None);
         assert!(!node.is_closed());
         assert_eq!(node.transitions(), vec![]);

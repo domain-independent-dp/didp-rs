@@ -75,6 +75,10 @@ where
     fn cost(&self, model: &Model) -> T {
         if model.reduce_function == ReduceFunction::Max {
             self.priority
+        } else if self.priority == T::min_value() {
+            T::max_value()
+        } else if self.priority == T::max_value() {
+            T::min_value()
         } else {
             -self.priority
         }
@@ -153,6 +157,10 @@ where
     ) -> Self {
         let priority = if model.reduce_function == ReduceFunction::Max {
             cost
+        } else if cost == T::min_value() {
+            T::max_value()
+        } else if cost == T::max_value() {
+            T::min_value()
         } else {
             -cost
         };
@@ -381,6 +389,56 @@ mod tests {
     }
 
     #[test]
+    fn test_new_min_cost_max() {
+        let mut model = Model::default();
+        model.set_minimize();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+
+        let mut state = StateInRegistry::from(model.target.clone());
+        let cost = Integer::max_value();
+        let transition_chain = None;
+
+        let mut node = CostNode::<_>::new(state.clone(), cost, &model, transition_chain);
+        assert_eq!(node.priority, Integer::min_value());
+        assert_eq!(node.state(), &state);
+        assert_eq!(node.state_mut(), &mut state);
+        assert_eq!(node.cost(&model), Integer::max_value());
+        assert_eq!(node.bound(&model), None);
+        assert!(!node.is_closed());
+        assert_eq!(node.transitions(), vec![]);
+        assert_eq!(node.last(), None);
+        assert_eq!(node.transition_chain(), None);
+    }
+
+    #[test]
+    fn test_new_min_cost_min() {
+        let mut model = Model::default();
+        model.set_minimize();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+
+        let mut state = StateInRegistry::from(model.target.clone());
+        let cost = Integer::min_value();
+        let transition_chain = None;
+
+        let mut node = CostNode::<_>::new(state.clone(), cost, &model, transition_chain);
+        assert_eq!(node.priority, Integer::max_value());
+        assert_eq!(node.state(), &state);
+        assert_eq!(node.state_mut(), &mut state);
+        assert_eq!(node.cost(&model), Integer::min_value());
+        assert_eq!(node.bound(&model), None);
+        assert!(!node.is_closed());
+        assert_eq!(node.transitions(), vec![]);
+        assert_eq!(node.last(), None);
+        assert_eq!(node.transition_chain(), None);
+    }
+
+    #[test]
     fn test_new_max() {
         let mut model = Model::default();
         model.set_maximize();
@@ -398,6 +456,56 @@ mod tests {
         assert_eq!(node.state(), &state);
         assert_eq!(node.state_mut(), &mut state);
         assert_eq!(node.cost(&model), 10);
+        assert_eq!(node.bound(&model), None);
+        assert!(!node.is_closed());
+        assert_eq!(node.transitions(), vec![]);
+        assert_eq!(node.last(), None);
+        assert_eq!(node.transition_chain(), None);
+    }
+
+    #[test]
+    fn test_new_max_cost_max() {
+        let mut model = Model::default();
+        model.set_maximize();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+
+        let mut state = StateInRegistry::from(model.target.clone());
+        let cost = Integer::max_value();
+        let transition_chain = None;
+
+        let mut node = CostNode::<_>::new(state.clone(), cost, &model, transition_chain);
+        assert_eq!(node.priority, Integer::max_value());
+        assert_eq!(node.state(), &state);
+        assert_eq!(node.state_mut(), &mut state);
+        assert_eq!(node.cost(&model), Integer::max_value());
+        assert_eq!(node.bound(&model), None);
+        assert!(!node.is_closed());
+        assert_eq!(node.transitions(), vec![]);
+        assert_eq!(node.last(), None);
+        assert_eq!(node.transition_chain(), None);
+    }
+
+    #[test]
+    fn test_new_max_cost_min() {
+        let mut model = Model::default();
+        model.set_maximize();
+        let v1 = model.add_integer_resource_variable("v1", true, 0);
+        assert!(v1.is_ok());
+        let v2 = model.add_integer_resource_variable("v2", false, 0);
+        assert!(v2.is_ok());
+
+        let mut state = StateInRegistry::from(model.target.clone());
+        let cost = Integer::min_value();
+        let transition_chain = None;
+
+        let mut node = CostNode::<_>::new(state.clone(), cost, &model, transition_chain);
+        assert_eq!(node.priority, Integer::min_value());
+        assert_eq!(node.state(), &state);
+        assert_eq!(node.state_mut(), &mut state);
+        assert_eq!(node.cost(&model), Integer::min_value());
         assert_eq!(node.bound(&model), None);
         assert!(!node.is_closed());
         assert_eq!(node.transitions(), vec![]);

@@ -58,6 +58,10 @@ where
     ) -> Self {
         let priority = if model.reduce_function == ReduceFunction::Max {
             cost
+        } else if cost == T::min_value() {
+            T::max_value()
+        } else if cost == T::max_value() {
+            T::min_value()
         } else {
             -cost
         };
@@ -214,6 +218,90 @@ mod tests {
         assert_eq!(node.transitions(), vec![]);
         assert_eq!(node.last(), None);
         assert_eq!(node.transition_chain(), None);
+    }
+
+    #[test]
+    fn test_new_node_min() {
+        let mut model = dypdl::Model::default();
+        model.set_minimize();
+        let variable = model.add_integer_variable("variable", 0);
+        assert!(variable.is_ok());
+        let state = StateWithHashableSignatureVariables::from(model.target.clone());
+        let expected_state = state.clone();
+        let node = CostNodeMessage::<_>::new(state, 1, &model, None);
+        assert_eq!(node.state, expected_state);
+        assert_eq!(node.priority, -1);
+        assert_eq!(node.transitions, None);
+    }
+
+    #[test]
+    fn test_new_node_min_cost_max() {
+        let mut model = dypdl::Model::default();
+        model.set_minimize();
+        let variable = model.add_integer_variable("variable", 0);
+        assert!(variable.is_ok());
+        let state = StateWithHashableSignatureVariables::from(model.target.clone());
+        let expected_state = state.clone();
+        let node = CostNodeMessage::<_>::new(state, Integer::max_value(), &model, None);
+        assert_eq!(node.state, expected_state);
+        assert_eq!(node.priority, Integer::min_value());
+        assert_eq!(node.transitions, None);
+    }
+
+    #[test]
+    fn test_new_node_min_cost_min() {
+        let mut model = dypdl::Model::default();
+        model.set_minimize();
+        let variable = model.add_integer_variable("variable", 0);
+        assert!(variable.is_ok());
+        let state = StateWithHashableSignatureVariables::from(model.target.clone());
+        let expected_state = state.clone();
+        let node = CostNodeMessage::<_>::new(state, Integer::min_value(), &model, None);
+        assert_eq!(node.state, expected_state);
+        assert_eq!(node.priority, Integer::max_value());
+        assert_eq!(node.transitions, None);
+    }
+
+    #[test]
+    fn test_new_node_max() {
+        let mut model = dypdl::Model::default();
+        model.set_maximize();
+        let variable = model.add_integer_variable("variable", 0);
+        assert!(variable.is_ok());
+        let state = StateWithHashableSignatureVariables::from(model.target.clone());
+        let expected_state = state.clone();
+        let node = CostNodeMessage::<_>::new(state, 1, &model, None);
+        assert_eq!(node.state, expected_state);
+        assert_eq!(node.priority, 1);
+        assert_eq!(node.transitions, None);
+    }
+
+    #[test]
+    fn test_new_node_max_cost_max() {
+        let mut model = dypdl::Model::default();
+        model.set_maximize();
+        let variable = model.add_integer_variable("variable", 0);
+        assert!(variable.is_ok());
+        let state = StateWithHashableSignatureVariables::from(model.target.clone());
+        let expected_state = state.clone();
+        let node = CostNodeMessage::<_>::new(state, Integer::max_value(), &model, None);
+        assert_eq!(node.state, expected_state);
+        assert_eq!(node.priority, Integer::max_value());
+        assert_eq!(node.transitions, None);
+    }
+
+    #[test]
+    fn test_new_node_max_cost_min() {
+        let mut model = dypdl::Model::default();
+        model.set_maximize();
+        let variable = model.add_integer_variable("variable", 0);
+        assert!(variable.is_ok());
+        let state = StateWithHashableSignatureVariables::from(model.target.clone());
+        let expected_state = state.clone();
+        let node = CostNodeMessage::<_>::new(state, Integer::min_value(), &model, None);
+        assert_eq!(node.state, expected_state);
+        assert_eq!(node.priority, Integer::min_value());
+        assert_eq!(node.transitions, None);
     }
 
     #[test]
