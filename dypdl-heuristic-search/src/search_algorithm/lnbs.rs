@@ -6,7 +6,6 @@ use super::neighborhood_search::NeighborhoodSearchInput;
 use super::rollout::get_trace;
 use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::{print_primal_bound, update_bound_if_better, TimeKeeper};
-use dypdl::variable_type::OrderedContinuous;
 use dypdl::{variable_type, Model, ReduceFunction, Transition, TransitionInterface};
 use rand::distributions::WeightedIndex;
 use rand::prelude::*;
@@ -603,23 +602,46 @@ where
         }
 
         let weights = if not_cost_algebraic_minimization && self.use_cost_weight {
-            let weights = weights
-                .iter()
-                .map(|v| OrderedContinuous::from(v.to_continuous()));
-            let epsilon = OrderedContinuous::from(1.0);
-
             if self.input.successor_generator.model.reduce_function == ReduceFunction::Max {
-                let max_weight = weights.clone().max().unwrap() + epsilon;
-                weights
-                    .zip(starts.iter())
-                    .map(|(v, (_, beam_size))| (max_weight - v).into_inner() / *beam_size as f64)
-                    .collect()
+                let max_weight = weights.iter().copied().max().unwrap();
+
+                if let Some(second_max) = weights.iter().copied().filter(|v| *v < max_weight).max()
+                {
+                    weights
+                        .into_iter()
+                        .zip(starts.iter())
+                        .map(|(v, (_, beam_size))| {
+                            (max_weight - cmp::min(v, second_max)).to_continuous()
+                                / *beam_size as f64
+                        })
+                        .collect()
+                } else {
+                    weights
+                        .into_iter()
+                        .zip(starts.iter())
+                        .map(|(_, (_, beam_size))| 1.0 / *beam_size as f64)
+                        .collect()
+                }
             } else {
-                let min_weight = weights.clone().min().unwrap() - epsilon;
-                weights
-                    .zip(starts.iter())
-                    .map(|(v, (_, beam_size))| (v - min_weight).into_inner() / *beam_size as f64)
-                    .collect()
+                let min_weight = weights.iter().copied().min().unwrap();
+
+                if let Some(second_min) = weights.iter().copied().filter(|v| *v > min_weight).min()
+                {
+                    weights
+                        .into_iter()
+                        .zip(starts.iter())
+                        .map(|(v, (_, beam_size))| {
+                            (cmp::max(v, second_min) - min_weight).to_continuous()
+                                / *beam_size as f64
+                        })
+                        .collect()
+                } else {
+                    weights
+                        .into_iter()
+                        .zip(starts.iter())
+                        .map(|(_, (_, beam_size))| 1.0 / *beam_size as f64)
+                        .collect()
+                }
             }
         } else {
             let mut weights = weights
