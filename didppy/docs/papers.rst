@@ -9,4 +9,6 @@ DIDP Papers
     * This paper introduces Large Neighborhood Beam Search (LNBS).
 * Ryo Kuroiwa and J. Christopher Beck. `Parallel Beam Search Algorithms for Domain-Independent Dynamic Programming <https://tidel.mie.utoronto.ca/pubs/aaai24-parallel-camera-ready.pdf>`_. In Proceedings of the 38th Annual AAAI Conference on Artificial Intelligence (AAAI). 2024.
     * This paper parallelizes :class:`~didppy.CABS`.
+* Ryo Kuroiwa and J. Christopher Beck. `Domain-Independent Dynamic Programming <https://arxiv.org/pdf/2401.13883.pdf>`_. arXiv. 2024.
+    * This paper provides formal definitions of the modeling language and solvers for DIDP. It also introduces DIDP models for the orienteering problem with time windows and the multi-dimensional knapsack problem.
 
