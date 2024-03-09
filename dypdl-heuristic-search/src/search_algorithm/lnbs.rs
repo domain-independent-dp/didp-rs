@@ -298,7 +298,7 @@ where
         }
     }
 
-    //// Search for the next solution, returning the solution using `TransitionWithId`.
+    /// Search for the next solution, returning the solution using `TransitionWithId`.
     pub fn search_inner(&mut self) -> (Solution<T, TransitionWithId<V>>, bool) {
         if self.input.solution.is_terminated() || self.input.solution.cost.is_none() {
             return (self.input.solution.clone(), true);
@@ -443,7 +443,8 @@ where
 
                     let current_cost = self.input.solution.cost.unwrap();
                     let reward = (cost - current_cost).to_continuous().abs()
-                        / current_cost.to_continuous().abs();
+                        / cmp::max(cost.abs(), current_cost.abs()).to_continuous();
+                    let reward = if reward > 1.0 { 1.0 } else { reward };
                     let time = (self.time_keeper.elapsed_time() - time_start) / self.time_limit;
                     self.update_bandit(arm, reward, time);
 
@@ -573,7 +574,7 @@ where
     }
 
     fn select_start(&mut self, costs: &[T], depth: usize) -> Option<(usize, usize)> {
-        let search_non_positive = self.has_negative_cost
+        let not_cost_algebraic_minimization = self.has_negative_cost
             || self.input.successor_generator.model.reduce_function == ReduceFunction::Max;
 
         let (weights, starts): (Vec<_>, Vec<_>) = std::iter::once(T::zero())
@@ -586,9 +587,9 @@ where
                     .entry((start, depth))
                     .or_insert((self.initial_beam_size, false));
 
-                if entry.1 || (!search_non_positive && after <= before) {
+                if entry.1 || (!not_cost_algebraic_minimization && after <= before) {
                     None
-                } else if !search_non_positive && self.use_cost_weight {
+                } else if self.use_cost_weight {
                     Some((after - before, (start, entry.0)))
                 } else {
                     Some((T::one(), (start, entry.0)))
@@ -600,17 +601,63 @@ where
             return None;
         }
 
-        let mut weights = weights
-            .iter()
-            .map(|v| v.to_continuous())
-            .collect::<Vec<_>>();
+        let weights = if not_cost_algebraic_minimization && self.use_cost_weight {
+            if self.input.successor_generator.model.reduce_function == ReduceFunction::Max {
+                let max_weight = weights.iter().copied().max().unwrap();
 
-        if !search_non_positive && self.use_cost_weight {
+                if let Some(second_max) = weights.iter().copied().filter(|v| *v < max_weight).max()
+                {
+                    weights
+                        .into_iter()
+                        .zip(starts.iter())
+                        .map(|(v, (_, beam_size))| {
+                            (max_weight - cmp::min(v, second_max)).to_continuous()
+                                / *beam_size as f64
+                        })
+                        .collect()
+                } else {
+                    weights
+                        .into_iter()
+                        .zip(starts.iter())
+                        .map(|(_, (_, beam_size))| 1.0 / *beam_size as f64)
+                        .collect()
+                }
+            } else {
+                let min_weight = weights.iter().copied().min().unwrap();
+
+                if let Some(second_min) = weights.iter().copied().filter(|v| *v > min_weight).min()
+                {
+                    weights
+                        .into_iter()
+                        .zip(starts.iter())
+                        .map(|(v, (_, beam_size))| {
+                            (cmp::max(v, second_min) - min_weight).to_continuous()
+                                / *beam_size as f64
+                        })
+                        .collect()
+                } else {
+                    weights
+                        .into_iter()
+                        .zip(starts.iter())
+                        .map(|(_, (_, beam_size))| 1.0 / *beam_size as f64)
+                        .collect()
+                }
+            }
+        } else {
+            let mut weights = weights
+                .iter()
+                .map(|v| v.to_continuous())
+                .collect::<Vec<_>>();
+
+            if self.use_cost_weight {
+                weights
+                    .iter_mut()
+                    .zip(starts.iter())
+                    .for_each(|(v, (_, beam_size))| *v /= *beam_size as f64);
+            }
+
             weights
-                .iter_mut()
-                .zip(starts.iter())
-                .for_each(|(v, (_, beam_size))| *v /= *beam_size as f64);
-        }
+        };
 
         let dist = WeightedIndex::new(weights).unwrap();
 
