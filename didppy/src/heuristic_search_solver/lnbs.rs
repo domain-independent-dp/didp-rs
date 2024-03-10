@@ -18,7 +18,7 @@ use std::sync::Arc;
 /// This performs LNBS using the dual bound as the heuristic function.
 /// LNBS is complete, i.e., eventually finds the optimal solution, but is designed to find a good solution rather than proving the optimality.
 /// If you want to prove the optimality, :class:`didppy.CABS` or :class:`didppy.CAASDy` might be better.
-/// LNBS typically performs well in routing and scheduling problems, where solution costs are diverse.
+/// LNBS typically performs better when the dual bound functions are not tight.
 ///
 /// To apply this solver, the cost must be computed in the form of :code:`x + state_cost`, :code:`x * state_cost`, :code:`didppy.max(x, state_cost)`,
 /// or :code:`didppy.min(x, state_cost)` where, :code:`state_cost` is either of :meth:`IntExpr.state_cost()` and :meth:`FloatExpr.state_cost()`,
@@ -63,7 +63,6 @@ use std::sync::Arc;
 ///     Whether the cost of a transition can be negative.
 /// use_cost_weight: bool, default: False
 ///     Use weighted sampling biased by costs to select a start of a partial path.
-///     This is not activated when :code:`has_negative_cost` is :code:`True`.
 /// no_bandit: bool, default: False
 ///     Do not use bandit-based sampling to select the depth of a partial path.
 /// no_transition_mutex: bool, default: False

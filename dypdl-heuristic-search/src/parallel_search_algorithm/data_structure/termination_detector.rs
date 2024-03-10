@@ -41,7 +41,7 @@ impl TerminationDetector {
 
     /// Notifies that a message has been received.
     pub fn notify_received(&mut self, tstamp: usize) {
-        self.clock = max(tstamp, self.clock);
+        self.tmax = max(tstamp, self.tmax);
         self.count -= 1;
     }
 

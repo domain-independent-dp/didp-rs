@@ -1,6 +1,6 @@
 [package]
 name = "didp-yaml"
-version = "0.7.1"
+version = "0.7.2"
 edition = "2021"
 rust-version = "1.65"
 description = "YAML interface for Dynamic Programming Description Language (DyPDL) and DyPDL solvers."
@@ -12,8 +12,8 @@ repository = "https://github.com/domain-independent-dp/didp-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-dypdl = { path = "../dypdl", version = "0.7.1" }
-dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.7.1" }
+dypdl = { path = "../dypdl", version = "0.7.2" }
+dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.7.2" }
 rustc-hash = "1.1"
 yaml-rust = "0.4"
 linked-hash-map = "0.5"

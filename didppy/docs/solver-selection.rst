@@ -30,8 +30,9 @@ However, these alternatives consume more memory than :class:`didppy.CABS`, so if
 The experimental comparison of :class:`~didppy.CAASDy` and the anytime solvers is provided in :cite:t:`DIDPAnytime`.
 
 If the time to prove optimality is not very important, and you want to find a good solution quickly, :class:`~didppy.LNBS` may be also useful.
-It is slower than :class:`~didppy.CABS` to prove the optimality, but it tends to find a better solution quickly in routing and scheduling problems such as :ref:`TSPTW <tutorial:TSPTW>` and :ref:`talent scheduling <advanced-tutorials/forced-transitions:Talent Scheduling>`.
-In contrast, :class:`~didppy.CABS` is better in :ref:`MOSP <advanced-tutorials/general-cost:MOSP>` for example.
+It is slower than :class:`~didppy.CABS` to prove the optimality, but it tends to find a better solution quickly when the dual bound functions are not tight.
+For example, :class:`~didppy.LNBS` is better than :class:`~didppy.CABS` with the DIDP models for :ref:`TSPTW <tutorial:TSPTW>` and :ref:`talent scheduling <advanced-tutorials/forced-transitions:Talent Scheduling>`.
+In contrast, :class:`~didppy.CABS` is better with the DIDP model for :ref:`MOSP <advanced-tutorials/general-cost:MOSP>` for example.
 
 
 Layer-by-Layer Search

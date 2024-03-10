@@ -166,7 +166,7 @@ config:
   - default: `2023`
 - `has_negative_cost`: whether the cost of a transition can be negative.
   - default: `false`
-- `use_cost_weight`: use weighted sampling biased by costs to select a start of a partial path. This is not activated when `has_negative_cost` is `true`.
+- `use_cost_weight`: use weighted sampling biased by costs to select a start of a partial path.
   - default: `false`
 - `no_bandit`: do not use bandit-based sampling to select the depth of a partial path.
   - default: `false`
