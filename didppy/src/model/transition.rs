@@ -154,7 +154,7 @@ impl TransitionPy {
         name: &str,
         cost: Option<CostUnion>,
         preconditions: Option<Vec<ConditionPy>>,
-        effects: Option<Vec<(VarUnion, &PyAny)>>,
+        effects: Option<Vec<(VarUnion, Bound<'_, PyAny>)>>,
     ) -> PyResult<TransitionPy> {
         let mut transition = TransitionPy(Transition::new(name));
         if let Some(cost) = cost {
@@ -307,7 +307,7 @@ impl TransitionPy {
         }
     }
 
-    fn __setitem__(&mut self, var: VarUnion, expr: &PyAny) -> PyResult<()> {
+    fn __setitem__(&mut self, var: VarUnion, expr: Bound<'_, PyAny>) -> PyResult<()> {
         match var {
             VarUnion::Element(var) => {
                 let var = ElementVariable::from(var);
@@ -385,7 +385,7 @@ impl TransitionPy {
     /// >>> t[var].eval(model.target_state, model)
     /// 5
     #[pyo3(signature = (var, expr))]
-    fn add_effect(&mut self, var: VarUnion, expr: &PyAny) -> PyResult<()> {
+    fn add_effect(&mut self, var: VarUnion, expr: Bound<'_, PyAny>) -> PyResult<()> {
         let result = match var {
             VarUnion::Element(var) => {
                 let expr: ElementUnion = expr.extract()?;
@@ -542,7 +542,12 @@ impl TransitionPy {
     /// >>> t.eval_cost(1, model.target_state, model)
     /// 2
     #[pyo3(signature = (cost, state, model))]
-    fn eval_cost(&self, cost: &PyAny, state: &StatePy, model: &ModelPy) -> PyResult<IntOrFloat> {
+    fn eval_cost(
+        &self,
+        cost: Bound<'_, PyAny>,
+        state: &StatePy,
+        model: &ModelPy,
+    ) -> PyResult<IntOrFloat> {
         if model.float_cost() {
             let cost = cost.extract()?;
             Ok(IntOrFloat::Float(self.0.eval_cost(
@@ -635,7 +640,7 @@ mod tests {
             let v2 = VarUnion::Float(FloatVarPy::from(v2));
             let expr1 = IntExprPy::from(IntegerExpression::Constant(1)).into_py(py);
             let expr2 = FloatExprPy::from(ContinuousExpression::Constant(2.0)).into_py(py);
-            let effects = vec![(v1, expr1.as_ref(py)), (v2, expr2.as_ref(py))];
+            let effects = vec![(v1, expr1.into_bound(py)), (v2, expr2.into_bound(py))];
             TransitionPy::new_py("t", None, Some(preconditions), Some(effects))
         });
         assert!(result.is_ok());
@@ -685,7 +690,7 @@ mod tests {
             let expr1 = IntExprPy::from(IntegerExpression::Constant(1)).into_py(py);
             let v2 = VarUnion::Float(FloatVarPy::from(v2));
             let expr2 = FloatExprPy::from(ContinuousExpression::Constant(2.0)).into_py(py);
-            let effects = vec![(v1, expr1.as_ref(py)), (v2, expr2.as_ref(py))];
+            let effects = vec![(v1, expr1.into_bound(py)), (v2, expr2.into_bound(py))];
             TransitionPy::new_py("t", Some(cost), Some(preconditions), Some(effects))
         });
         assert!(result.is_ok());
@@ -728,7 +733,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v1 = VarUnion::Int(IntVarPy::from(v1));
             let expr1 = ElementExprPy::from(ElementExpression::Constant(1)).into_py(py);
-            let effects = vec![(v1, expr1.as_ref(py))];
+            let effects = vec![(v1, expr1.into_bound(py))];
             TransitionPy::new_py("t", None, Some(preconditions), Some(effects))
         });
         assert!(result.is_err());
@@ -799,7 +804,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Element(ElementVarPy::from(v));
             let expr = ElementExprPy::from(ElementExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -828,7 +833,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Element(ElementVarPy::from(v));
             let expr = IntExprPy::from(IntegerExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -853,7 +858,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Element(ElementVarPy::from(v));
             let expr = ElementExprPy::from(ElementExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -872,7 +877,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::ElementResource(ElementResourceVarPy::from(v));
             let expr = ElementExprPy::from(ElementExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -901,7 +906,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::ElementResource(ElementResourceVarPy::from(v));
             let expr = IntExprPy::from(IntegerExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -926,7 +931,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::ElementResource(ElementResourceVarPy::from(v));
             let expr = ElementExprPy::from(ElementExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -945,7 +950,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Set(SetVarPy::from(v));
             let expr = SetConstPy::from(Set::with_capacity(10)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -979,7 +984,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Set(SetVarPy::from(v));
             let expr = IntExprPy::from(IntegerExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -1007,7 +1012,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Set(SetVarPy::from(v));
             let expr = SetConstPy::from(Set::with_capacity(10)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -1023,7 +1028,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Int(IntVarPy::from(v));
             let expr = IntExprPy::from(IntegerExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -1049,7 +1054,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Int(IntVarPy::from(v));
             let expr = ElementExprPy::from(ElementExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -1071,7 +1076,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Int(IntVarPy::from(v));
             let expr = IntExprPy::from(IntegerExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -1087,7 +1092,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::IntResource(IntResourceVarPy::from(v));
             let expr = IntExprPy::from(IntegerExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -1113,7 +1118,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::IntResource(IntResourceVarPy::from(v));
             let expr = ElementExprPy::from(ElementExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -1135,7 +1140,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::IntResource(IntResourceVarPy::from(v));
             let expr = IntExprPy::from(IntegerExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -1151,7 +1156,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Float(FloatVarPy::from(v));
             let expr = FloatExprPy::from(ContinuousExpression::Constant(0.0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -1177,7 +1182,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Float(FloatVarPy::from(v));
             let expr = ElementExprPy::from(ElementExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -1199,7 +1204,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::Float(FloatVarPy::from(v));
             let expr = FloatExprPy::from(ContinuousExpression::Constant(0.0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -1215,7 +1220,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::FloatResource(FloatResourceVarPy::from(v));
             let expr = FloatExprPy::from(ContinuousExpression::Constant(0.0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -1244,7 +1249,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::FloatResource(FloatResourceVarPy::from(v));
             let expr = ElementExprPy::from(ElementExpression::Constant(0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -1266,7 +1271,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let v = VarUnion::FloatResource(FloatResourceVarPy::from(v));
             let expr = FloatExprPy::from(ContinuousExpression::Constant(0.0)).into_py(py);
-            transition.add_effect(v, expr.as_ref(py))
+            transition.add_effect(v, expr.into_bound(py))
         });
         assert!(result.is_err());
     }

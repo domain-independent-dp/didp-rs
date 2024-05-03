@@ -134,7 +134,7 @@ impl DdLnsPy {
     fn new(
         model: &ModelPy,
         f_operator: FOperator,
-        primal_bound: Option<&PyAny>,
+        primal_bound: Option<Bound<'_, PyAny>>,
         time_limit: Option<f64>,
         quiet: bool,
         initial_solution: Option<Vec<TransitionPy>>,

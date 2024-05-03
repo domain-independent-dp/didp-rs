@@ -3989,7 +3989,7 @@ pub fn float(x: IntUnion) -> FloatExprPy {
 /// 2
 #[pyfunction]
 #[pyo3(signature = (x, y))]
-pub fn max(x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
+pub fn max(x: Bound<'_, PyAny>, y: Bound<'_, PyAny>) -> PyResult<ExprUnion> {
     let result: (PyResult<IntUnion>, PyResult<IntUnion>) = (x.extract(), y.extract());
     if let (Ok(x), Ok(y)) = result {
         let x = IntegerExpression::from(x);
@@ -4048,7 +4048,7 @@ pub fn max(x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
 /// 1
 #[pyfunction]
 #[pyo3(signature = (x, y))]
-pub fn min(x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
+pub fn min(x: Bound<'_, PyAny>, y: Bound<'_, PyAny>) -> PyResult<ExprUnion> {
     let result: (PyResult<IntUnion>, PyResult<IntUnion>) = (x.extract(), y.extract());
     if let (Ok(x), Ok(y)) = result {
         let x = IntegerExpression::from(x);
@@ -4167,7 +4167,7 @@ impl ConditionPy {
     /// >>> expr.eval(model.target_state, model)
     /// 2
     #[pyo3(signature = (x, y))]
-    fn if_then_else(&self, x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
+    fn if_then_else(&self, x: Bound<'_, PyAny>, y: Bound<'_, PyAny>) -> PyResult<ExprUnion> {
         let result: (PyResult<IntUnion>, PyResult<IntUnion>) = (x.extract(), y.extract());
         if let (Ok(x), Ok(y)) = result {
             let x = IntegerExpression::from(x);
@@ -11077,7 +11077,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            max(x.as_ref(py), y.as_ref(py))
+            max(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11099,7 +11099,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            max(x.as_ref(py), y.as_ref(py))
+            max(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11121,7 +11121,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            max(x.as_ref(py), y.as_ref(py))
+            max(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11143,7 +11143,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            min(x.as_ref(py), y.as_ref(py))
+            min(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -11157,7 +11157,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            min(x.as_ref(py), y.as_ref(py))
+            min(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11179,7 +11179,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            min(x.as_ref(py), y.as_ref(py))
+            min(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11201,7 +11201,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            min(x.as_ref(py), y.as_ref(py))
+            min(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11223,7 +11223,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            min(x.as_ref(py), y.as_ref(py))
+            min(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -11286,7 +11286,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            condition.if_then_else(x.as_ref(py), y.as_ref(py))
+            condition.if_then_else(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11309,7 +11309,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            condition.if_then_else(x.as_ref(py), y.as_ref(py))
+            condition.if_then_else(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11332,7 +11332,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            condition.if_then_else(x.as_ref(py), y.as_ref(py))
+            condition.if_then_else(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11355,7 +11355,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            condition.if_then_else(x.as_ref(py), y.as_ref(py))
+            condition.if_then_else(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_err());
     }

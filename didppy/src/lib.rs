@@ -7,7 +7,7 @@ pub use model::ModelPy;
 
 /// DIDPPy -- DyPDL interface for Python
 #[pymodule]
-fn didppy(_: Python, m: &PyModule) -> PyResult<()> {
+fn didppy(_: Python, m: Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<model::ObjectTypePy>()?;
     m.add_class::<model::ModelPy>()?;
     m.add_class::<model::TransitionPy>()?;
@@ -45,11 +45,11 @@ fn didppy(_: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<model::FloatVarPy>()?;
     m.add_class::<model::FloatResourceVarPy>()?;
     m.add_class::<model::ConditionPy>()?;
-    m.add_function(wrap_pyfunction!(model::sqrt, m)?)?;
-    m.add_function(wrap_pyfunction!(model::log, m)?)?;
-    m.add_function(wrap_pyfunction!(model::float, m)?)?;
-    m.add_function(wrap_pyfunction!(model::max, m)?)?;
-    m.add_function(wrap_pyfunction!(model::min, m)?)?;
+    m.add_function(wrap_pyfunction!(model::sqrt, &m)?)?;
+    m.add_function(wrap_pyfunction!(model::log, &m)?)?;
+    m.add_function(wrap_pyfunction!(model::float, &m)?)?;
+    m.add_function(wrap_pyfunction!(model::max, &m)?)?;
+    m.add_function(wrap_pyfunction!(model::min, &m)?)?;
     m.add_class::<heuristic_search_solver::SolutionPy>()?;
     m.add_class::<heuristic_search_solver::FOperator>()?;
     m.add_class::<heuristic_search_solver::CaasdyPy>()?;

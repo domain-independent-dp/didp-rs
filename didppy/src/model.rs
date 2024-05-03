@@ -1389,7 +1389,7 @@ impl ModelPy {
     /// >>> model.get_target(var)
     /// 2
     #[pyo3(signature = (var, target))]
-    fn set_target(&mut self, var: VarUnion, target: &PyAny) -> PyResult<()> {
+    fn set_target(&mut self, var: VarUnion, target: Bound<'_, PyAny>) -> PyResult<()> {
         let result = match var {
             VarUnion::Element(var) => {
                 let target = target.extract()?;
@@ -1983,7 +1983,7 @@ impl ModelPy {
     fn validate_forward(
         &self,
         transitions: Vec<TransitionPy>,
-        cost: &PyAny,
+        cost: Bound<'_, PyAny>,
         quiet: bool,
     ) -> PyResult<bool> {
         let transitions = transitions
@@ -2698,7 +2698,7 @@ impl ModelPy {
     //     &mut self,
     //     table: TableUnion,
     //     index: TableIndexUnion,
-    //     value: &PyAny,
+    //     value: Bound<'_, PyAny>,
     // ) -> PyResult<()> {
     //     match table {
     //         TableUnion::Element(table) => {
@@ -2746,7 +2746,7 @@ impl ModelPy {
     // ///     If :code:`table` is a table of element constants and :code:`value` is negative.
     // ///     If :code:`table` is a table of set constants and a value in :code:`value` is negative.
     // #[pyo3(text_signature = "(table, value)")]
-    // fn set_default(&mut self, table: SetDefaultArgUnion, value: &PyAny) -> PyResult<()> {
+    // fn set_default(&mut self, table: SetDefaultArgUnion, value: Bound<'_, PyAny>) -> PyResult<()> {
     //     let result = match table {
     //         SetDefaultArgUnion::Element(table) => {
     //             let value: Element = value.extract()?;
@@ -2807,8 +2807,8 @@ impl ModelPy {
     // fn update_table(
     //     &mut self,
     //     table: TableUnion,
-    //     value: &PyAny,
-    //     default: Option<&PyAny>,
+    //     value: Bound<'_, PyAny>,
+    //     default: Option<Bound<'_, PyAny>>,
     // ) -> PyResult<()> {
     //     match table {
     //         TableUnion::Element(table) => {
@@ -3842,7 +3842,7 @@ mod tests {
         let v = v.unwrap();
         let result = Python::with_gil(|py| {
             let target = 1usize.into_py(py);
-            model.set_target(VarUnion::Element(v), target.as_ref(py))
+            model.set_target(VarUnion::Element(v), target.into_bound(py))
         });
         assert!(result.is_ok());
         let n = model.get_target(VarUnion::Element(v));
@@ -3865,7 +3865,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = 1.5f64.into_py(py);
-            model.set_target(VarUnion::Element(v), target.as_ref(py))
+            model.set_target(VarUnion::Element(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -3887,7 +3887,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = 1usize.into_py(py);
-            model.set_target(VarUnion::Element(v), target.as_ref(py))
+            model.set_target(VarUnion::Element(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -4035,7 +4035,7 @@ mod tests {
         let v = v.unwrap();
         let result = Python::with_gil(|py| {
             let target = 1usize.into_py(py);
-            model.set_target(VarUnion::ElementResource(v), target.as_ref(py))
+            model.set_target(VarUnion::ElementResource(v), target.into_bound(py))
         });
         assert!(result.is_ok());
         let n = model.get_target(VarUnion::ElementResource(v));
@@ -4058,7 +4058,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = 1.5f64.into_py(py);
-            model.set_target(VarUnion::ElementResource(v), target.as_ref(py))
+            model.set_target(VarUnion::ElementResource(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -4080,7 +4080,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = 1usize.into_py(py);
-            model.set_target(VarUnion::ElementResource(v), target.as_ref(py))
+            model.set_target(VarUnion::ElementResource(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -4533,7 +4533,7 @@ mod tests {
         let v = v.unwrap();
         let result = Python::with_gil(|py| {
             let target = vec![3usize, 4usize, 5usize].into_py(py);
-            model.set_target(VarUnion::Set(v), target.as_ref(py))
+            model.set_target(VarUnion::Set(v), target.into_bound(py))
         });
         assert!(result.is_ok());
         let target = model.get_target(VarUnion::Set(v));
@@ -4560,7 +4560,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = vec![3usize, 4usize, 5usize, 10usize].into_py(py);
-            model.set_target(VarUnion::Set(v), target.as_ref(py))
+            model.set_target(VarUnion::Set(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -4588,7 +4588,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_target(VarUnion::Set(v), target.as_ref(py))
+            model.set_target(VarUnion::Set(v), target.into_bound(py))
         });
         assert!(result.is_ok());
         let target = model.get_target(VarUnion::Set(v));
@@ -4623,7 +4623,7 @@ mod tests {
                 set
             }
             .into_py(py);
-            model.set_target(VarUnion::Set(v), target.as_ref(py))
+            model.set_target(VarUnion::Set(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -4651,7 +4651,7 @@ mod tests {
                 set
             })
             .into_py(py);
-            model.set_target(VarUnion::Set(v), target.as_ref(py))
+            model.set_target(VarUnion::Set(v), target.into_bound(py))
         });
         assert!(result.is_ok());
         let target = model.get_target(VarUnion::Set(v));
@@ -4678,7 +4678,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = 1usize.into_py(py);
-            model.set_target(VarUnion::Set(v), target.as_ref(py))
+            model.set_target(VarUnion::Set(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -4701,7 +4701,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = vec![3usize, 4usize, 5usize].into_py(py);
-            model.set_target(VarUnion::Set(v), target.as_ref(py))
+            model.set_target(VarUnion::Set(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -4810,7 +4810,7 @@ mod tests {
         let v = v.unwrap();
         let result = Python::with_gil(|py| {
             let target = 1i32.into_py(py);
-            model.set_target(VarUnion::Int(v), target.as_ref(py))
+            model.set_target(VarUnion::Int(v), target.into_bound(py))
         });
         assert!(result.is_ok());
         let target = model.get_target(VarUnion::Int(v));
@@ -4829,7 +4829,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = 1.5f64.into_py(py);
-            model.set_target(VarUnion::Int(v), target.as_ref(py))
+            model.set_target(VarUnion::Int(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -4847,7 +4847,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = 1i32.into_py(py);
-            model.set_target(VarUnion::Int(v), target.as_ref(py))
+            model.set_target(VarUnion::Int(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -4952,7 +4952,7 @@ mod tests {
         let v = v.unwrap();
         let result = Python::with_gil(|py| {
             let target = 1i32.into_py(py);
-            model.set_target(VarUnion::IntResource(v), target.as_ref(py))
+            model.set_target(VarUnion::IntResource(v), target.into_bound(py))
         });
         assert!(result.is_ok());
         let target = model.get_target(VarUnion::IntResource(v));
@@ -4971,7 +4971,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = 1.5f64.into_py(py);
-            model.set_target(VarUnion::IntResource(v), target.as_ref(py))
+            model.set_target(VarUnion::IntResource(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -4989,7 +4989,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = 1i32.into_py(py);
-            model.set_target(VarUnion::IntResource(v), target.as_ref(py))
+            model.set_target(VarUnion::IntResource(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5121,7 +5121,7 @@ mod tests {
         let v = v.unwrap();
         let result = Python::with_gil(|py| {
             let target = 1i32.into_py(py);
-            model.set_target(VarUnion::Float(v), target.as_ref(py))
+            model.set_target(VarUnion::Float(v), target.into_bound(py))
         });
         assert!(result.is_ok());
         let target = model.get_target(VarUnion::Float(v));
@@ -5140,7 +5140,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target: Py<PyAny> = (0, 1).into_py(py);
-            model.set_target(VarUnion::Float(v), target.as_ref(py))
+            model.set_target(VarUnion::Float(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5158,7 +5158,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = 1i32.into_py(py);
-            model.set_target(VarUnion::Float(v), target.as_ref(py))
+            model.set_target(VarUnion::Float(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5263,7 +5263,7 @@ mod tests {
         let v = v.unwrap();
         let result = Python::with_gil(|py| {
             let target = 1i32.into_py(py);
-            model.set_target(VarUnion::FloatResource(v), target.as_ref(py))
+            model.set_target(VarUnion::FloatResource(v), target.into_bound(py))
         });
         assert!(result.is_ok());
         let target = model.get_target(VarUnion::FloatResource(v));
@@ -5282,7 +5282,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target: Py<PyAny> = (0, 1).into_py(py);
-            model.set_target(VarUnion::FloatResource(v), target.as_ref(py))
+            model.set_target(VarUnion::FloatResource(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5300,7 +5300,7 @@ mod tests {
         let snapshot = model.clone();
         let result = Python::with_gil(|py| {
             let target = 1i32.into_py(py);
-            model.set_target(VarUnion::FloatResource(v), target.as_ref(py))
+            model.set_target(VarUnion::FloatResource(v), target.into_bound(py))
         });
         assert!(result.is_err());
         assert_eq!(model, snapshot);
@@ -5715,7 +5715,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -5733,7 +5733,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -5752,7 +5752,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -5772,7 +5772,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -5789,7 +5789,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![2usize].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -5806,7 +5806,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![1.5f64].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -5824,7 +5824,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2usize]].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -5843,7 +5843,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![2usize].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -5911,7 +5911,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -5929,7 +5929,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -5948,7 +5948,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -5968,7 +5968,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -5985,7 +5985,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2usize]].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -6002,7 +6002,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![1.5f64]].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6020,7 +6020,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2usize]]].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6039,7 +6039,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2usize]].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6107,7 +6107,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -6125,7 +6125,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6144,7 +6144,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6164,7 +6164,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6181,7 +6181,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2usize]]].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -6198,7 +6198,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6216,7 +6216,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2usize]].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6235,7 +6235,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2usize]]].into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6312,7 +6312,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -6338,7 +6338,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -6364,7 +6364,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -6390,7 +6390,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -6408,7 +6408,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6428,7 +6428,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Element(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Element(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6449,7 +6449,7 @@ mod tests {
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Element(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Element(t), value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -6470,7 +6470,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Element(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Element(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6493,7 +6493,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Element(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Element(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6518,8 +6518,8 @@ mod tests {
     //         let default = 3usize.into_py(py);
     //         model.update_table(
     //             TableUnion::Element(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_ok());
@@ -6542,7 +6542,7 @@ mod tests {
     //             map
     //         }
     //         .into_py(py);
-    //         model.update_table(TableUnion::Element(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Element(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -6568,8 +6568,8 @@ mod tests {
     //         let default = 1.5f64.into_py(py);
     //         model.update_table(
     //             TableUnion::Element(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -6596,8 +6596,8 @@ mod tests {
     //         let default = 1.5f64.into_py(py);
     //         model.update_table(
     //             TableUnion::Element(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -6619,8 +6619,8 @@ mod tests {
     //         let default = 3usize.into_py(py);
     //         model.update_table(
     //             TableUnion::Element(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -7252,7 +7252,7 @@ mod tests {
     //             set
     //         })
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -7273,7 +7273,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = 1usize.into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -7300,7 +7300,7 @@ mod tests {
     //             set
     //         })
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -7322,7 +7322,7 @@ mod tests {
     //     let index = TableIndexUnion::Table1D(0);
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1].into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -7344,7 +7344,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = vec![10].into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -7371,7 +7371,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -7398,7 +7398,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -7434,7 +7434,7 @@ mod tests {
     //         let table = table.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -7473,7 +7473,7 @@ mod tests {
     //         let table = 1usize.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -7512,7 +7512,7 @@ mod tests {
     //         let table = table.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -7552,7 +7552,7 @@ mod tests {
     //         let table = table.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -7582,7 +7582,7 @@ mod tests {
     //         let table = vec![vec![], vec![0, 1, 2]].into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -7622,7 +7622,7 @@ mod tests {
     //         let table = vec![0, 1, 2, 10].into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -7658,7 +7658,7 @@ mod tests {
     //         .into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -7706,7 +7706,7 @@ mod tests {
     //         .into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table1D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -8338,7 +8338,7 @@ mod tests {
     //             set
     //         })
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -8359,7 +8359,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = 1usize.into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -8386,7 +8386,7 @@ mod tests {
     //             set
     //         })
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -8408,7 +8408,7 @@ mod tests {
     //     let index = TableIndexUnion::Table2D((0, 0));
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1].into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -8430,7 +8430,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = vec![10].into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -8457,7 +8457,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -8484,7 +8484,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -8520,7 +8520,7 @@ mod tests {
     //         let table = table.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -8559,7 +8559,7 @@ mod tests {
     //         let table = 1usize.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -8598,7 +8598,7 @@ mod tests {
     //         let table = table.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -8638,7 +8638,7 @@ mod tests {
     //         let table = table.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -8668,7 +8668,7 @@ mod tests {
     //         let table = vec![vec![vec![], vec![0, 1, 2]]].into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -8708,7 +8708,7 @@ mod tests {
     //         let table = vec![vec![vec![0, 1, 2, 10]]].into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -8744,7 +8744,7 @@ mod tests {
     //         .into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -8792,7 +8792,7 @@ mod tests {
     //         .into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table2D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -9434,7 +9434,7 @@ mod tests {
     //             set
     //         })
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -9455,7 +9455,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = 1usize.into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -9482,7 +9482,7 @@ mod tests {
     //             set
     //         })
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -9504,7 +9504,7 @@ mod tests {
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1].into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -9526,7 +9526,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = vec![10].into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -9553,7 +9553,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -9580,7 +9580,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -9616,7 +9616,7 @@ mod tests {
     //         let table = table.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -9655,7 +9655,7 @@ mod tests {
     //         let table = 1usize.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -9694,7 +9694,7 @@ mod tests {
     //         let table = table.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -9734,7 +9734,7 @@ mod tests {
     //         let table = table.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -9764,7 +9764,7 @@ mod tests {
     //         let table = vec![vec![vec![vec![], vec![0, 1, 2]]]].into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -9804,7 +9804,7 @@ mod tests {
     //         let table = vec![vec![vec![vec![0, 1, 2, 10]]]].into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -9840,7 +9840,7 @@ mod tests {
     //         .into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -9888,7 +9888,7 @@ mod tests {
     //         .into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table3D(t1.clone())),
-    //             table.as_ref(py),
+    //             table.into_bound(py),
     //             None,
     //         )
     //     });
@@ -10881,7 +10881,7 @@ mod tests {
     //             set
     //         })
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(model.0.table_registry.set_tables.tables[t_id].get(&[0]), &{
@@ -10919,7 +10919,7 @@ mod tests {
     //             set
     //         })
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(
@@ -10960,7 +10960,7 @@ mod tests {
     //             set
     //         })
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(
@@ -11001,7 +11001,7 @@ mod tests {
     //             set
     //         })
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(
@@ -11034,7 +11034,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = 1usize.into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -11066,7 +11066,7 @@ mod tests {
     //             set
     //         })
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -11097,7 +11097,7 @@ mod tests {
     //     let index = TableIndexUnion::Table1D(0);
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1].into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(model.0.table_registry.set_tables.tables[t_id].get(&[0]), &{
@@ -11132,7 +11132,7 @@ mod tests {
     //     let index = TableIndexUnion::Table2D((0, 0));
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1].into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(
@@ -11170,7 +11170,7 @@ mod tests {
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1].into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(
@@ -11208,7 +11208,7 @@ mod tests {
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1].into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(
@@ -11243,7 +11243,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = vec![10].into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -11279,7 +11279,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(model.0.table_registry.set_tables.tables[t_id].get(&[0]), &{
@@ -11319,7 +11319,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(
@@ -11362,7 +11362,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(
@@ -11405,7 +11405,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     assert_eq!(
@@ -11445,7 +11445,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_table_item(TableUnion::Set(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Set(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -11473,7 +11473,7 @@ mod tests {
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = SetConstPy::from(Set::with_capacity(10)).into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Set(t), value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -11501,7 +11501,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = 1usize.into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Set(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -11531,7 +11531,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = SetConstPy::from(Set::with_capacity(10)).into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Set(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -11561,7 +11561,7 @@ mod tests {
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1].into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Set(t), value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -11591,7 +11591,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = vec![10].into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Set(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -11626,7 +11626,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Set(t), value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -11661,7 +11661,7 @@ mod tests {
     //             set
     //         }
     //         .into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Set(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Set(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -11707,8 +11707,8 @@ mod tests {
     //         let default = SetConstPy::from(Set::with_capacity(10)).into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
-    //             table.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             table.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_ok());
@@ -11764,8 +11764,8 @@ mod tests {
     //         let default = SetConstPy::from(Set::with_capacity(10)).into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
-    //             table.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             table.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -11799,8 +11799,8 @@ mod tests {
     //         let default = SetConstPy::from(Set::with_capacity(10)).into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
-    //             table.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             table.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -11848,8 +11848,8 @@ mod tests {
     //         let default = 1usize.into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
-    //             table.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             table.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -11898,8 +11898,8 @@ mod tests {
     //         let default = SetConstPy::from(Set::with_capacity(10)).into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
-    //             table.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             table.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -11945,8 +11945,8 @@ mod tests {
     //         let default = HashSet::<Element>::new().into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
-    //             table.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             table.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_ok());
@@ -12009,8 +12009,8 @@ mod tests {
     //         let default = HashSet::<Element>::new().into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
-    //             table.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             table.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -12062,8 +12062,8 @@ mod tests {
     //         .into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
-    //             table.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             table.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -12103,8 +12103,8 @@ mod tests {
     //         let default = Vec::<Element>::new().into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
-    //             table.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             table.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_ok());
@@ -12160,8 +12160,8 @@ mod tests {
     //         let default = Vec::<Element>::new().into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
-    //             table.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             table.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -12202,8 +12202,8 @@ mod tests {
     //         let default = vec![10].into_py(py);
     //         model.update_table(
     //             TableUnion::Set(SetTableUnion::Table(t1.clone())),
-    //             table.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             table.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -12272,7 +12272,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -12290,7 +12290,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12309,7 +12309,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12329,7 +12329,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12346,7 +12346,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![true].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -12363,7 +12363,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![1.5f64].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12381,7 +12381,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![true]].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12400,7 +12400,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![true].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12468,7 +12468,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -12486,7 +12486,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12505,7 +12505,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12525,7 +12525,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12542,7 +12542,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![true]].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -12559,7 +12559,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![1.5f64]].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12577,7 +12577,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![true]]].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12596,7 +12596,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![true]].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12664,7 +12664,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -12682,7 +12682,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12701,7 +12701,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12721,7 +12721,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12738,7 +12738,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![true]]].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -12755,7 +12755,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12773,7 +12773,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![true]].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12792,7 +12792,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![true]]].into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12869,7 +12869,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -12892,7 +12892,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -12915,7 +12915,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -12938,7 +12938,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -12956,7 +12956,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12976,7 +12976,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Bool(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Bool(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -12997,7 +12997,7 @@ mod tests {
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Bool(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Bool(t), value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -13018,7 +13018,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Bool(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Bool(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13041,7 +13041,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Bool(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Bool(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13066,8 +13066,8 @@ mod tests {
     //         let default = false.into_py(py);
     //         model.update_table(
     //             TableUnion::Bool(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_ok());
@@ -13090,7 +13090,7 @@ mod tests {
     //             map
     //         }
     //         .into_py(py);
-    //         model.update_table(TableUnion::Bool(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Bool(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13116,8 +13116,8 @@ mod tests {
     //         let default = 1.5f64.into_py(py);
     //         model.update_table(
     //             TableUnion::Bool(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -13144,8 +13144,8 @@ mod tests {
     //         let default = 1.5f64.into_py(py);
     //         model.update_table(
     //             TableUnion::Bool(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -13167,8 +13167,8 @@ mod tests {
     //         let default = false.into_py(py);
     //         model.update_table(
     //             TableUnion::Bool(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -13237,7 +13237,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -13255,7 +13255,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13274,7 +13274,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13294,7 +13294,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13311,7 +13311,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![2i32].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -13328,7 +13328,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![1.5f64].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13346,7 +13346,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2i32]].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13365,7 +13365,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![2i32].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13433,7 +13433,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -13451,7 +13451,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13470,7 +13470,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13490,7 +13490,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13507,7 +13507,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2i32]].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -13524,7 +13524,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![1.5f64]].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13542,7 +13542,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2i32]]].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13561,7 +13561,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2i32]].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13629,7 +13629,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -13647,7 +13647,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13666,7 +13666,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13686,7 +13686,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13703,7 +13703,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2i32]]].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -13720,7 +13720,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13738,7 +13738,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2i32]].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13757,7 +13757,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2i32]]].into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13834,7 +13834,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -13860,7 +13860,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -13886,7 +13886,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -13912,7 +13912,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -13930,7 +13930,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13950,7 +13950,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Int(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Int(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -13971,7 +13971,7 @@ mod tests {
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Int(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Int(t), value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -13992,7 +13992,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Int(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Int(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14015,7 +14015,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = 1.5f64.into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Int(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Int(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14040,8 +14040,8 @@ mod tests {
     //         let default = 3i32.into_py(py);
     //         model.update_table(
     //             TableUnion::Int(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_ok());
@@ -14064,7 +14064,7 @@ mod tests {
     //             map
     //         }
     //         .into_py(py);
-    //         model.update_table(TableUnion::Int(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Int(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14090,8 +14090,8 @@ mod tests {
     //         let default = 1.5f64.into_py(py);
     //         model.update_table(
     //             TableUnion::Int(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -14118,8 +14118,8 @@ mod tests {
     //         let default = 1.5f64.into_py(py);
     //         model.update_table(
     //             TableUnion::Int(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -14141,8 +14141,8 @@ mod tests {
     //         let default = 3i32.into_py(py);
     //         model.update_table(
     //             TableUnion::Int(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -14211,7 +14211,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -14229,7 +14229,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1.5f64].into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14248,7 +14248,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14268,7 +14268,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14285,7 +14285,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![2f64].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -14302,7 +14302,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![1.5f64]].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14320,7 +14320,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2f64]].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14339,7 +14339,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![2f64].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14407,7 +14407,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -14425,7 +14425,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1.5f64].into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14444,7 +14444,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14464,7 +14464,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14481,7 +14481,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2f64]].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -14498,7 +14498,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![1.5f64]]].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14516,7 +14516,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2f64]]].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14535,7 +14535,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2f64]].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14603,7 +14603,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -14621,7 +14621,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1.5f64].into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14640,7 +14640,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14660,7 +14660,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14677,7 +14677,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2f64]]].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_ok());
     // }
@@ -14694,7 +14694,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![vec![1.5f64]]]].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14712,7 +14712,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![2f64]].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14731,7 +14731,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value: Py<PyAny> = vec![vec![vec![2f64]]].into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14808,7 +14808,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table1D(0);
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -14834,7 +14834,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table2D((0, 0));
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -14860,7 +14860,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table3D((0, 0, 0));
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     //     let t = match t {
@@ -14886,7 +14886,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -14904,7 +14904,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1.5f64].into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14924,7 +14924,7 @@ mod tests {
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
     //         let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
-    //         model.set_table_item(TableUnion::Float(t), index, value.as_ref(py))
+    //         model.set_table_item(TableUnion::Float(t), index, value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14945,7 +14945,7 @@ mod tests {
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Float(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Float(t), value.into_bound(py))
     //     });
     //     assert!(result.is_ok());
     // }
@@ -14966,7 +14966,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1.5f64].into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Float(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Float(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -14989,7 +14989,7 @@ mod tests {
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1.5f64].into_py(py);
-    //         model.set_default(SetDefaultArgUnion::Float(t), value.as_ref(py))
+    //         model.set_default(SetDefaultArgUnion::Float(t), value.into_bound(py))
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -15014,8 +15014,8 @@ mod tests {
     //         let default = 3f64.into_py(py);
     //         model.update_table(
     //             TableUnion::Float(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_ok());
@@ -15038,7 +15038,7 @@ mod tests {
     //             map
     //         }
     //         .into_py(py);
-    //         model.update_table(TableUnion::Float(t), value.as_ref(py), None)
+    //         model.update_table(TableUnion::Float(t), value.into_bound(py), None)
     //     });
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
@@ -15064,8 +15064,8 @@ mod tests {
     //         let default = vec![1.5f64].into_py(py);
     //         model.update_table(
     //             TableUnion::Float(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -15092,8 +15092,8 @@ mod tests {
     //         let default = vec![1.5f64].into_py(py);
     //         model.update_table(
     //             TableUnion::Float(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());
@@ -15115,8 +15115,8 @@ mod tests {
     //         let default = 3f64.into_py(py);
     //         model.update_table(
     //             TableUnion::Float(t),
-    //             value.as_ref(py),
-    //             Some(default.as_ref(py)),
+    //             value.into_bound(py),
+    //             Some(default.into_bound(py)),
     //         )
     //     });
     //     assert!(result.is_err());

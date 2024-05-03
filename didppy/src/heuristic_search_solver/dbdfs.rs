@@ -120,7 +120,7 @@ impl DbdfsPy {
     fn new(
         model: &ModelPy,
         f_operator: FOperator,
-        primal_bound: Option<&PyAny>,
+        primal_bound: Option<Bound<'_, PyAny>>,
         time_limit: Option<f64>,
         get_all_solutions: bool,
         quiet: bool,

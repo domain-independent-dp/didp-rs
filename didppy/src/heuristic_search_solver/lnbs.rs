@@ -165,7 +165,7 @@ impl LnbsPy {
         model: &ModelPy,
         time_limit: f64,
         f_operator: FOperator,
-        primal_bound: Option<&PyAny>,
+        primal_bound: Option<Bound<'_, PyAny>>,
         quiet: bool,
         initial_solution: Option<Vec<TransitionPy>>,
         initial_beam_size: usize,

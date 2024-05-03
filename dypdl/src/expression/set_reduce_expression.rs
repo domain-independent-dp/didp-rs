@@ -613,14 +613,14 @@ mod tests {
     #[test]
     fn empty_eval() {
         let op = SetReduceOperator::Union;
-        let vector = vec![];
+        let vector = [];
         assert_eq!(op.eval(vector.iter(), 3), Set::with_capacity(3));
     }
 
     #[test]
     fn union_eval() {
         let op = SetReduceOperator::Union;
-        let vector = vec![
+        let vector = [
             {
                 let mut set = Set::with_capacity(3);
                 set.insert(0);
@@ -646,7 +646,7 @@ mod tests {
     #[test]
     fn intersection_eval() {
         let op = SetReduceOperator::Intersection;
-        let vector = vec![
+        let vector = [
             {
                 let mut set = Set::with_capacity(3);
                 set.insert(0);
@@ -670,7 +670,7 @@ mod tests {
     #[test]
     fn symmetric_difference_eval() {
         let op = SetReduceOperator::SymmetricDifference;
-        let vector = vec![
+        let vector = [
             {
                 let mut set = Set::with_capacity(3);
                 set.insert(0);
