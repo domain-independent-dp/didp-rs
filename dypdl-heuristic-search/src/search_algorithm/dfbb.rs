@@ -146,7 +146,8 @@ where
         let mut solution = Solution::default();
 
         if let Some(node) = input.node {
-            let (node, _) = registry.insert(node).unwrap();
+            let result = registry.insert(node);
+            let node = result.information.unwrap();
             solution.best_bound = node.bound(&input.generator.model);
             open.push(node);
             depth_dual_bounds.push(None);

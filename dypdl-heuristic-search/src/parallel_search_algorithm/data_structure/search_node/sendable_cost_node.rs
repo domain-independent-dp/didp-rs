@@ -207,20 +207,17 @@ where
             Some(SendableCostNode::new(state, cost, model, Some(transitions)))
         };
 
-        if let Some((successor, dominated)) = registry.insert_with(state, cost, constructor) {
-            let mut generated = true;
+        let result = registry.insert_with(state, cost, constructor);
 
-            if let Some(dominated) = dominated {
-                if !dominated.is_closed() {
-                    dominated.close();
-                    generated = false;
-                }
+        for d in result.dominated.iter() {
+            if !d.is_closed() {
+                d.close();
             }
-
-            Some((successor, generated))
-        } else {
-            None
         }
+
+        let node = result.information?;
+
+        Some((node, result.dominated.is_empty()))
     }
 }
 
@@ -367,8 +364,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dypdl::expression::*;
-    use dypdl::prelude::*;
+    use dypdl::{expression::*, prelude::*};
+    use smallvec::SmallVec;
 
     #[test]
     fn ordered_by_bound() {
@@ -611,7 +608,7 @@ mod tests {
         let expected_state: StateInRegistry<_> = transition.apply(&state, &model.table_registry);
         let node = SendableCostNode::generate_root_node(state, 0, &model);
         let result = registry.insert(node.clone());
-        assert!(result.is_some());
+        assert!(result.information.is_some());
 
         let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
         assert!(result.is_some());
@@ -650,7 +647,7 @@ mod tests {
         let expected_state: StateInRegistry<_> = transition.apply(&state, &model.table_registry);
         let node = SendableCostNode::generate_root_node(state, 0, &model);
         let result = registry.insert(node.clone());
-        assert!(result.is_some());
+        assert!(result.information.is_some());
 
         let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
         assert!(result.is_some());
@@ -718,9 +715,10 @@ mod tests {
         let registry =
             ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model.clone()));
         let result = registry.insert(node);
-        assert!(result.is_some());
-        let (node, dominated) = result.unwrap();
-        assert!(dominated.is_none());
+        assert!(result.information.is_some());
+        let node = result.information.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
         assert!(result.is_some());
@@ -758,9 +756,10 @@ mod tests {
         let registry =
             ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model.clone()));
         let result = registry.insert(node);
-        assert!(result.is_some());
-        let (node, dominated) = result.unwrap();
-        assert!(dominated.is_none());
+        assert!(result.information.is_some());
+        let node = result.information.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
         assert!(result.is_some());
@@ -796,9 +795,10 @@ mod tests {
         let registry =
             ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model.clone()));
         let result = registry.insert(node);
-        assert!(result.is_some());
-        let (node, dominated) = result.unwrap();
-        assert!(dominated.is_none());
+        assert!(result.information.is_some());
+        let node = result.information.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
         assert!(result.is_none());
@@ -826,9 +826,10 @@ mod tests {
         let registry =
             ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model.clone()));
         let result = registry.insert(node);
-        assert!(result.is_some());
-        let (node, dominated) = result.unwrap();
-        assert!(dominated.is_none());
+        assert!(result.information.is_some());
+        let node = result.information.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
         assert!(result.is_none());

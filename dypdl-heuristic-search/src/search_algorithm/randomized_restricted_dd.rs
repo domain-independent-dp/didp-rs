@@ -149,9 +149,9 @@ where
         };
     };
 
-    let (node, _) = registry.insert(node).unwrap();
+    let result = registry.insert(node);
 
-    current_beam.push(node);
+    current_beam.push(result.information.unwrap());
 
     if !keep_all_layers {
         registry.clear();

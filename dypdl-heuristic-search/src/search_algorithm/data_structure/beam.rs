@@ -3,6 +3,7 @@
 use super::state_registry::{StateInformation, StateRegistry};
 use core::ops::Deref;
 use dypdl::variable_type::Numeric;
+use smallvec::SmallVec;
 use std::cmp::Reverse;
 use std::collections;
 use std::fmt::Debug;
@@ -97,7 +98,7 @@ where
 /// assert!(status.is_inserted);
 /// assert!(status.is_newly_registered);
 /// assert!(!status.is_pruned);
-/// assert_eq!(status.dominated, None);
+/// assert!(status.dominated.is_empty());
 /// assert_eq!(status.removed, None);
 ///
 /// let successor = node.generate_successor_node(
@@ -107,7 +108,7 @@ where
 /// assert!(!status.is_inserted);
 /// assert!(!status.is_newly_registered);
 /// assert!(status.is_pruned);
-/// assert_eq!(status.dominated, None);
+/// assert!(status.dominated.is_empty());
 /// assert_eq!(status.removed, None);
 ///
 /// let successor = node.generate_successor_node(
@@ -118,7 +119,7 @@ where
 /// assert!(status.is_inserted);
 /// assert!(!status.is_newly_registered);
 /// assert!(!status.is_pruned);
-/// assert!(status.dominated.is_some());
+/// assert_eq!(status.dominated.len(), 1);
 /// assert_eq!(status.removed, None);
 ///
 /// let mut iter = beam.drain();
@@ -153,7 +154,7 @@ pub struct BeamInsertionStatus<I> {
     /// The given node is not inserted into the beam due to the beam width.
     pub is_pruned: bool,
     /// A node dominated by the given node.
-    pub dominated: Option<Rc<I>>,
+    pub dominated: SmallVec<[Rc<I>; 1]>,
     /// A node removed from the beam.
     pub removed: Option<Rc<I>>,
 }
@@ -251,20 +252,25 @@ where
             is_inserted: false,
             is_newly_registered: false,
             is_pruned: false,
-            dominated: None,
+            dominated: smallvec::smallvec![],
             removed: None,
         };
 
         if self.size < self.capacity || self.queue.peek().map_or(true, |peek| node > *peek.0) {
-            if let Some((node, dominated)) = registry.insert(node) {
-                if let Some(dominated) = dominated {
-                    if !dominated.is_closed() {
-                        dominated.close();
-                        self.size -= 1;
-                        self.clean_garbage();
-                        result.dominated = Some(dominated);
-                    }
-                } else {
+            let insertion_result = registry.insert(node);
+
+            for d in insertion_result.dominated.iter() {
+                if !d.is_closed() {
+                    d.close();
+                    self.size -= 1;
+                    self.clean_garbage();
+                }
+            }
+
+            result.dominated = insertion_result.dominated;
+
+            if let Some(node) = insertion_result.information {
+                if result.dominated.is_empty() {
                     result.is_newly_registered = true;
                 }
 
@@ -377,7 +383,7 @@ mod tests {
         assert!(status.is_inserted);
         assert!(status.is_newly_registered);
         assert!(!status.is_pruned);
-        assert_eq!(status.dominated, None);
+        assert_eq!(status.dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(status.removed, None);
         assert_eq!(beam.capacity(), 2);
     }
@@ -403,7 +409,7 @@ mod tests {
         assert!(status.is_inserted);
         assert!(status.is_newly_registered);
         assert!(!status.is_pruned);
-        assert_eq!(status.dominated, None);
+        assert_eq!(status.dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(status.removed, None);
         assert!(!beam.is_empty());
     }
@@ -438,7 +444,7 @@ mod tests {
         assert!(status.is_inserted);
         assert!(status.is_newly_registered);
         assert!(!status.is_pruned);
-        assert_eq!(status.dominated, None);
+        assert_eq!(status.dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(status.removed, None);
 
         let state = StateInRegistry {
@@ -471,7 +477,7 @@ mod tests {
         assert!(status.is_inserted);
         assert!(status.is_newly_registered);
         assert!(!status.is_pruned);
-        assert_eq!(status.dominated, None);
+        assert_eq!(status.dominated, SmallVec::<[_; 1]>::new());
         assert!(status.removed.is_some());
         let removed = status.removed.unwrap();
         assert_eq!(removed.cost, 2);
@@ -510,13 +516,12 @@ mod tests {
         assert!(status.is_inserted);
         assert!(!status.is_newly_registered);
         assert!(!status.is_pruned);
-        assert!(status.dominated.is_some());
-        let dominated = status.dominated.unwrap();
-        assert_eq!(dominated.cost, 1);
-        assert_eq!(dominated.h, -1);
-        assert_eq!(dominated.f, -2);
-        assert_eq!(dominated.state, expected_state);
-        assert_eq!(dominated.closed, Cell::new(true));
+        assert_eq!(status.dominated.len(), 1);
+        assert_eq!(status.dominated[0].cost, 1);
+        assert_eq!(status.dominated[0].h, -1);
+        assert_eq!(status.dominated[0].f, -2);
+        assert_eq!(status.dominated[0].state, expected_state);
+        assert_eq!(status.dominated[0].closed, Cell::new(true));
         assert_eq!(status.removed, None);
 
         let state = StateInRegistry {
@@ -541,7 +546,7 @@ mod tests {
         assert!(!status.is_inserted);
         assert!(!status.is_newly_registered);
         assert!(status.is_pruned);
-        assert_eq!(status.dominated, None);
+        assert_eq!(status.dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(status.removed, None);
 
         let peek = beam.pop();
@@ -590,7 +595,7 @@ mod tests {
         assert!(status.is_inserted);
         assert!(status.is_newly_registered);
         assert!(!status.is_pruned);
-        assert_eq!(status.dominated, None);
+        assert_eq!(status.dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(status.removed, None);
 
         let state = StateInRegistry {
@@ -623,7 +628,7 @@ mod tests {
         assert!(status.is_inserted);
         assert!(status.is_newly_registered);
         assert!(!status.is_pruned);
-        assert_eq!(status.dominated, None);
+        assert_eq!(status.dominated, SmallVec::<[_; 1]>::new());
         assert!(status.removed.is_some());
         let removed = status.removed.unwrap();
         assert_eq!(removed.cost, 2);
@@ -662,13 +667,12 @@ mod tests {
         assert!(status.is_inserted);
         assert!(!status.is_newly_registered);
         assert!(!status.is_pruned);
-        assert!(status.dominated.is_some());
-        let dominated = status.dominated.unwrap();
-        assert_eq!(dominated.cost, 1);
-        assert_eq!(dominated.h, -1);
-        assert_eq!(dominated.f, -2);
-        assert_eq!(dominated.state, expected_state);
-        assert_eq!(dominated.closed, Cell::new(true));
+        assert_eq!(status.dominated.len(), 1);
+        assert_eq!(status.dominated[0].cost, 1);
+        assert_eq!(status.dominated[0].h, -1);
+        assert_eq!(status.dominated[0].f, -2);
+        assert_eq!(status.dominated[0].state, expected_state);
+        assert_eq!(status.dominated[0].closed, Cell::new(true));
         assert_eq!(status.removed, None);
 
         let state = StateInRegistry {
@@ -692,7 +696,7 @@ mod tests {
         assert!(!status.is_inserted);
         assert!(!status.is_newly_registered);
         assert!(status.is_pruned);
-        assert_eq!(status.dominated, None);
+        assert_eq!(status.dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(status.removed, None);
 
         let mut iter = beam.drain();
@@ -741,7 +745,7 @@ mod tests {
         assert!(status.is_inserted);
         assert!(status.is_newly_registered);
         assert!(!status.is_pruned);
-        assert_eq!(status.dominated, None);
+        assert_eq!(status.dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(status.removed, None);
 
         let state = StateInRegistry {
@@ -774,7 +778,7 @@ mod tests {
         assert!(status.is_inserted);
         assert!(status.is_newly_registered);
         assert!(!status.is_pruned);
-        assert_eq!(status.dominated, None);
+        assert_eq!(status.dominated, SmallVec::<[_; 1]>::new());
         assert!(status.removed.is_some());
         let removed = status.removed.unwrap();
         assert_eq!(removed.cost, 2);
@@ -813,13 +817,12 @@ mod tests {
         assert!(status.is_inserted);
         assert!(!status.is_newly_registered);
         assert!(!status.is_pruned);
-        assert!(status.dominated.is_some());
-        let dominated = status.dominated.unwrap();
-        assert_eq!(dominated.cost, 1);
-        assert_eq!(dominated.h, -1);
-        assert_eq!(dominated.f, -2);
-        assert_eq!(dominated.state, expected_state);
-        assert_eq!(dominated.closed, Cell::new(true));
+        assert_eq!(status.dominated.len(), 1);
+        assert_eq!(status.dominated[0].cost, 1);
+        assert_eq!(status.dominated[0].h, -1);
+        assert_eq!(status.dominated[0].f, -2);
+        assert_eq!(status.dominated[0].state, expected_state);
+        assert_eq!(status.dominated[0].closed, Cell::new(true));
         assert_eq!(status.removed, None);
 
         let state = StateInRegistry {
@@ -843,7 +846,7 @@ mod tests {
         assert!(!status.is_inserted);
         assert!(!status.is_newly_registered);
         assert!(status.is_pruned);
-        assert_eq!(status.dominated, None);
+        assert_eq!(status.dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(status.removed, None);
 
         let mut iter = beam.close_and_drain();

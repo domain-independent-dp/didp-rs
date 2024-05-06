@@ -340,17 +340,16 @@ where
             Some(CostNode::new(state, cost, &model, Some(transitions)))
         };
 
-        if let Some((successor, dominated)) = registry.insert_with(state, cost, constructor) {
-            let mut generated = true;
+        let result = registry.insert_with(state, cost, constructor);
 
-            if let Some(dominated) = dominated {
-                if !dominated.is_closed() {
-                    dominated.close();
-                    generated = false;
-                }
+        for d in result.dominated.iter() {
+            if !d.is_closed() {
+                d.close();
             }
+        }
 
-            Some((successor, generated))
+        if let Some(node) = result.information {
+            Some((node, result.dominated.is_empty()))
         } else {
             None
         }
@@ -360,8 +359,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dypdl::expression::*;
-    use dypdl::prelude::*;
+    use dypdl::{expression::*, prelude::*};
+    use smallvec::SmallVec;
 
     #[test]
     fn test_new_min() {
@@ -774,7 +773,7 @@ mod tests {
         let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
         let node = CostNode::generate_root_node(state, 0, &model);
         let result = registry.insert(node.clone());
-        assert!(result.is_some());
+        assert!(result.information.is_some());
 
         let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
         assert!(result.is_some());
@@ -819,7 +818,7 @@ mod tests {
         let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
         let node = CostNode::generate_root_node(state, 0, &model);
         let result = registry.insert(node.clone());
-        assert!(result.is_some());
+        assert!(result.information.is_some());
 
         let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
         assert!(result.is_some());
@@ -891,9 +890,10 @@ mod tests {
         let node = CostNode::generate_root_node(state, 0, &model);
         let mut registry = StateRegistry::<_, CostNode<_>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
-        assert!(result.is_some());
-        let (node, dominated) = result.unwrap();
-        assert!(dominated.is_none());
+        assert!(result.information.is_some());
+        let node = result.information.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
         assert!(result.is_some());
@@ -936,9 +936,10 @@ mod tests {
         let node = CostNode::generate_root_node(state, 0, &model);
         let mut registry = StateRegistry::<_, CostNode<_>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
-        assert!(result.is_some());
-        let (node, dominated) = result.unwrap();
-        assert!(dominated.is_none());
+        assert!(result.information.is_some());
+        let node = result.information.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
         assert!(result.is_some());
@@ -979,9 +980,10 @@ mod tests {
         let node = CostNode::generate_root_node(state, 0, &model);
         let mut registry = StateRegistry::<_, CostNode<_>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
-        assert!(result.is_some());
-        let (node, dominated) = result.unwrap();
-        assert!(dominated.is_none());
+        assert!(result.information.is_some());
+        let node = result.information.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
         assert!(result.is_none());
@@ -1008,9 +1010,10 @@ mod tests {
         let node = CostNode::generate_root_node(state, 0, &model);
         let mut registry = StateRegistry::<_, CostNode<_>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
-        assert!(result.is_some());
-        let (node, dominated) = result.unwrap();
-        assert!(dominated.is_none());
+        assert!(result.information.is_some());
+        let node = result.information.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
         assert!(result.is_none());

@@ -146,6 +146,7 @@ dependencies = [
  "rand_pcg",
  "rayon",
  "rustc-hash",
+ "smallvec",
 ]
 
 [[package]]

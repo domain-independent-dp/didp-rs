@@ -77,14 +77,16 @@ where
                     if let Some(successor) =
                         (self.evaluator)(&self.node, op.clone(), self.primal_bound)
                     {
-                        if let Some((successor, dominated)) = self.registry.insert(successor) {
-                            if let Some(dominated) = dominated {
-                                if !dominated.is_closed() {
-                                    dominated.close();
-                                }
-                            }
+                        let result = self.registry.insert(successor);
 
-                            Some(successor)
+                        for d in result.dominated {
+                            if !d.is_closed() {
+                                d.close();
+                            }
+                        }
+
+                        if let Some(node) = result.information {
+                            Some(node)
                         } else {
                             self.next()
                         }
