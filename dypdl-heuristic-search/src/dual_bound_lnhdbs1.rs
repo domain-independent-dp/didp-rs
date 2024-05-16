@@ -1,12 +1,13 @@
 use super::f_evaluator_type::FEvaluatorType;
 use super::parallel_search_algorithm::{hd_beam_search2, CostNodeMessage, FNodeMessage};
 use super::search_algorithm::{
-    rollout, Cabs, CabsParameters, CostNode, FNode, Lnbs, LnbsParameters, NeighborhoodSearchInput,
-    Search, SearchInput, StateInRegistry, SuccessorGenerator, TransitionMutex, TransitionWithId,
+    data_structure::ParentAndChildStateFunctionCache, rollout, Cabs, CabsParameters, CostNode,
+    FNode, Lnbs, LnbsParameters, NeighborhoodSearchInput, Search, SearchInput, StateInRegistry,
+    SuccessorGenerator, TransitionMutex, TransitionWithId,
 };
 use super::Solution;
 use dypdl::variable_type;
-use dypdl::Transition;
+use dypdl::{StateFunctionCache, Transition};
 use std::fmt;
 use std::str;
 use std::sync::Arc;
@@ -110,9 +111,11 @@ where
         .chain(generator.forced_transitions.iter())
         .map(|t| t.as_ref().clone());
 
+    let mut function_cache = ParentAndChildStateFunctionCache::default();
     let (solution, transition_mutex) = if let Some(transitions) = transitions {
         let solution_cost = if let Some(result) = rollout(
             &generator.model.target,
+            &mut function_cache,
             root_cost,
             &transitions,
             base_cost_evaluator,
@@ -161,12 +164,15 @@ where
 
     if model.has_dual_bounds() {
         let h_model = model.clone();
-        let h_evaluator = move |state: &_| h_model.eval_dual_bound(state);
+        let h_evaluator = move |state: &_, cache: &mut _| h_model.eval_dual_bound(state, cache);
         let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
         let g_model = model.clone();
         let node_generator = move |state, cost| {
+            let mut function_cache = StateFunctionCache::new(&g_model.state_functions);
+
             FNodeMessage::<_, TransitionWithId>::generate_root_node(
                 state,
+                &mut function_cache,
                 cost,
                 &g_model,
                 &h_evaluator,
@@ -175,18 +181,20 @@ where
             )
         };
         let h_model = model.clone();
-        let h_evaluator = move |state: &_| h_model.eval_dual_bound(state);
+        let h_evaluator = move |state: &_, cache: &mut _| h_model.eval_dual_bound(state, cache);
         let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
         let t_model = model.clone();
-        let transition_evaluator = move |node: &FNode<_, _, _, _, _>, transition, primal_bound| {
-            node.generate_sendable_successor_node(
-                transition,
-                &t_model,
-                &h_evaluator,
-                &f_evaluator,
-                primal_bound,
-            )
-        };
+        let transition_evaluator =
+            move |node: &FNode<_, _, _, _, _>, transition, cache: &mut _, primal_bound| {
+                node.generate_sendable_successor_node(
+                    transition,
+                    cache,
+                    &t_model,
+                    &h_evaluator,
+                    &f_evaluator,
+                    primal_bound,
+                )
+            };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
             let (solution, _) = hd_beam_search2(
                 input,
@@ -244,8 +252,11 @@ where
         let node_generator =
             move |state, cost| Some(CostNodeMessage::generate_root_node(state, cost, &g_model));
         let t_model = model.clone();
-        let transition_evaluator = move |node: &CostNode<_, _, _, _, _>, transition, _| {
-            node.generate_sendable_successor_node(transition, &t_model)
+        let transition_evaluator = move |node: &CostNode<_, _, _, _, _>,
+                                         transition,
+                                         cache: &mut ParentAndChildStateFunctionCache,
+                                         _| {
+            node.generate_sendable_successor_node(transition, &mut cache.parent, &t_model)
         };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
             let (solution, _) = hd_beam_search2(

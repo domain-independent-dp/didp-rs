@@ -19,10 +19,7 @@ use std::sync::Arc;
 /// ```
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::{
-///     search_algorithm::{
-///         data_structure::StateInformation,
-///         StateInRegistry,
-///     },
+///     search_algorithm::{data_structure::StateInformation, StateInRegistry},
 ///     parallel_search_algorithm::{ConcurrentStateRegistry, SendableFNode},
 /// };
 /// use std::sync::Arc;
@@ -49,11 +46,18 @@ use std::sync::Arc;
 /// let model = Arc::new(model);
 /// let registry = ConcurrentStateRegistry::new(model.clone());
 ///
-/// let h_evaluator = |_: &_| Some(0);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let h_evaluator = |_: &_, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 ///
 /// let node = SendableFNode::<_, Transition>::generate_root_node(
-///     model.target.clone(), 0, &model, &h_evaluator, &f_evaluator, None,
+///     model.target.clone(),
+///     &mut function_cache,
+///     0,
+///     &model,
+///     &h_evaluator,
+///     &f_evaluator,
+///     None,
 /// ).unwrap();
 /// assert_eq!(registry.get(node.state(), node.cost(&model)), None);
 /// let result = registry.insert(node.clone());
@@ -67,11 +71,21 @@ use std::sync::Arc;
 /// assert_eq!(node.cost(&model), got.cost(&model));
 /// assert_eq!(node.bound(&model), got.bound(&model));
 ///
-/// let irrelevant: StateInRegistry<_> = increment.apply(node.state(), &model.table_registry);
-/// let cost = increment.eval_cost(node.cost(&model), node.state(), &model.table_registry);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let irrelevant: StateInRegistry<_> = increment.apply(
+///     node.state(), &mut function_cache, &model.state_functions, &model.table_registry,
+/// );
+/// let cost = increment.eval_cost(
+///     node.cost(&model),  
+///     node.state(),
+///     &mut function_cache,
+///     &model.state_functions,
+///     &model.table_registry,
+/// );
 /// assert_eq!(registry.get(&irrelevant, cost), None);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 /// let irrelevant = SendableFNode::<_, Transition>::generate_root_node(
-///     irrelevant, cost, &model, &h_evaluator, &f_evaluator, None,
+///     irrelevant, &mut function_cache, cost, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
 /// let result = registry.insert(irrelevant.clone());
 /// let information = result.information.unwrap();
@@ -80,23 +94,43 @@ use std::sync::Arc;
 /// assert_eq!(information.bound(&model), irrelevant.bound(&model));
 /// assert!(result.dominated.is_empty());
 ///
-/// let dominated: StateInRegistry<_> = increase_cost.apply(node.state(), &model.table_registry);
-/// let cost = consume.eval_cost(node.cost(&model), node.state(), &model.table_registry);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let dominated: StateInRegistry<_> = increase_cost.apply(
+///     node.state(), &mut function_cache, &model.state_functions, &model.table_registry,
+/// );
+/// let cost = consume.eval_cost(
+///     node.cost(&model),
+///     node.state(),
+///     &mut function_cache,
+///     &model.state_functions,
+///     &model.table_registry,
+/// );
 /// let dominating = registry.get(&dominated, cost).unwrap();
 /// assert_eq!(dominating.state(), node.state());
 /// assert_eq!(dominating.cost(&model), node.cost(&model));
 /// assert_eq!(dominating.bound(&model), node.bound(&model));
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 /// let dominated = SendableFNode::<_, Transition>::generate_root_node(
-///     dominated, cost, &model, &h_evaluator, &f_evaluator, None,
+///     dominated, &mut function_cache, cost, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
 /// let result = registry.insert(dominated);
 /// assert!(result.information.is_none());
 ///
-/// let dominating: StateInRegistry<_> = produce.apply(node.state(), &model.table_registry);
-/// let cost = produce.eval_cost(node.cost(&model), node.state(), &model.table_registry);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let dominating: StateInRegistry<_> = produce.apply(
+///     node.state(), &mut function_cache, &model.state_functions, &model.table_registry,
+/// );
+/// let cost = produce.eval_cost(
+///     node.cost(&model),
+///     node.state(),
+///     &mut function_cache,
+///     &model.state_functions,
+///     &model.table_registry,
+/// );
 /// assert_eq!(registry.get(&dominating, cost), None);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 /// let dominating = SendableFNode::<_, Transition>::generate_root_node(
-///     dominating, cost, &model, &h_evaluator, &f_evaluator, None,
+///     dominating, &mut function_cache, cost, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
 /// let result = registry.insert(dominating.clone());
 /// let information = result.information.unwrap();

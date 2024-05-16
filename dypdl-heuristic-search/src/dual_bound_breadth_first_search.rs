@@ -1,8 +1,10 @@
+use crate::search_algorithm::data_structure::ParentAndChildStateFunctionCache;
+
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
     BreadthFirstSearch, BrfsParameters, CostNode, FNode, Search, SearchInput, SuccessorGenerator,
 };
-use dypdl::{variable_type, Transition};
+use dypdl::{variable_type, StateFunctionCache, Transition};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -71,10 +73,12 @@ where
 
     if model.has_dual_bounds() {
         let state = model.target.clone();
-        let h_evaluator = move |state: &_| model.eval_dual_bound(state);
+        let mut cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = move |state: &_, cache: &mut _| model.eval_dual_bound(state, cache);
         let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
         let node = FNode::generate_root_node(
             state,
+            &mut cache,
             cost,
             &generator.model,
             &h_evaluator,
@@ -87,9 +91,10 @@ where
             solution_suffix: &[],
         };
         let transition_evaluator =
-            move |node: &FNode<_>, transition, registry: &mut _, primal_bound| {
+            move |node: &FNode<_>, transition, cache: &mut _, registry: &mut _, primal_bound| {
                 node.insert_successor_node(
                     transition,
+                    cache,
                     registry,
                     &h_evaluator,
                     &f_evaluator,
@@ -110,9 +115,12 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = |node: &CostNode<_>, transition, registry: &mut _, _| {
-            node.insert_successor_node(transition, registry)
-        };
+        let transition_evaluator =
+            |node: &CostNode<_>,
+             transition,
+             cache: &mut ParentAndChildStateFunctionCache,
+             registry: &mut _,
+             _| { node.insert_successor_node(transition, &mut cache.parent, registry) };
         Box::new(BreadthFirstSearch::<_, CostNode<_>, _, _>::new(
             input,
             transition_evaluator,

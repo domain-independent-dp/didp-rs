@@ -2,7 +2,7 @@ use super::super::state_registry::{StateInRegistry, StateInformation, StateRegis
 use super::super::transition_chain::{CreateTransitionChain, GetTransitions, RcChain};
 use super::BfsNode;
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ReduceFunction, Transition, TransitionInterface};
+use dypdl::{Model, ReduceFunction, StateFunctionCache, Transition, TransitionInterface};
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
@@ -223,6 +223,8 @@ where
 
     /// Generates a successor node given a transition and a DyPDL model.
     ///
+    /// `function_cache` is not cleared and updated by this node.
+    ///
     /// Returns `None` if the successor state is pruned by a state constraint.
     ///
     /// If the model is minimizing, the priority becomes the negative of the cost.
@@ -252,9 +254,15 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
-    /// let expected_state: StateInRegistry = transition.apply(&model.target, &model.table_registry);
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let expected_state: StateInRegistry = transition.apply(
+    ///     &model.target, &mut function_cache, &model.state_functions, &model.table_registry,
+    /// );
     ///
-    /// let node = node.generate_successor_node(Rc::new(transition.clone()), &model);
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let node = node.generate_successor_node(
+    ///     Rc::new(transition.clone()), &mut function_cache, &model,
+    /// );
     /// assert!(node.is_some());
     /// let node = node.unwrap();
     /// assert_eq!(node.state(), &expected_state);
@@ -262,10 +270,20 @@ where
     /// assert!(!node.is_closed());
     /// assert_eq!(node.transitions(), vec![transition]);
     /// ```
-    pub fn generate_successor_node(&self, transition: R, model: &Model) -> Option<Self> {
+    pub fn generate_successor_node(
+        &self,
+        transition: R,
+        function_cache: &mut StateFunctionCache,
+        model: &Model,
+    ) -> Option<Self> {
         let cost = self.cost(model);
-        let (state, cost) =
-            model.generate_successor_state(&self.state, cost, transition.deref(), None)?;
+        let (state, cost) = model.generate_successor_state(
+            &self.state,
+            function_cache,
+            cost,
+            transition.deref(),
+            None,
+        )?;
         let transitions = P::from(C::new(self.transition_chain.clone(), transition));
 
         Some(CostNode::new(state, cost, model, Some(transitions)))
@@ -307,11 +325,15 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry = transition.apply(
-    ///     &model.target, &model.table_registry,
+    ///     &model.target, &mut function_cache, &model.state_functions, &model.table_registry,
     /// );
     ///
-    /// let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let result = node.insert_successor_node(
+    ///     Rc::new(transition.clone()), &mut function_cache, &mut registry,
+    /// );
     /// assert!(result.is_some());
     /// let (node, generated) = result.unwrap();
     /// assert!(generated);
@@ -323,6 +345,7 @@ where
     pub fn insert_successor_node<M>(
         &self,
         transition: R,
+        function_cache: &mut StateFunctionCache,
         registry: &mut StateRegistry<T, Self, M>,
     ) -> Option<(Rc<Self>, bool)>
     where
@@ -331,6 +354,7 @@ where
         let model = registry.model().clone();
         let (state, cost) = model.generate_successor_state(
             self.state(),
+            function_cache,
             self.cost(&model),
             transition.deref(),
             None,
@@ -662,10 +686,18 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let mut expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
         let node = CostNode::<_>::generate_root_node(state, 0, &model);
 
-        let successor = node.generate_successor_node(Rc::new(transition.clone()), &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let successor =
+            node.generate_successor_node(Rc::new(transition.clone()), &mut function_cache, &model);
         assert!(successor.is_some());
         let mut successor = successor.unwrap();
         assert_eq!(successor.priority, -1);
@@ -701,10 +733,18 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let mut expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
         let node = CostNode::<_>::generate_root_node(state, 0, &model);
 
-        let successor = node.generate_successor_node(Rc::new(transition.clone()), &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let successor =
+            node.generate_successor_node(Rc::new(transition.clone()), &mut function_cache, &model);
         assert!(successor.is_some());
         let mut successor = successor.unwrap();
         assert_eq!(successor.priority, 1);
@@ -744,7 +784,9 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let result = node.generate_successor_node(Rc::new(transition), &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result =
+            node.generate_successor_node(Rc::new(transition), &mut function_cache, &model);
         assert_eq!(result, None);
     }
 
@@ -770,12 +812,23 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
         let node = CostNode::generate_root_node(state, 0, &model);
         let result = registry.insert(node.clone());
         assert!(result.information.is_some());
 
-        let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Rc::new(transition.clone()),
+            &mut function_cache,
+            &mut registry,
+        );
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.priority, -1);
@@ -815,12 +868,23 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
         let node = CostNode::generate_root_node(state, 0, &model);
         let result = registry.insert(node.clone());
         assert!(result.information.is_some());
 
-        let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Rc::new(transition.clone()),
+            &mut function_cache,
+            &mut registry,
+        );
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.priority, 1);
@@ -863,7 +927,9 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let result = node.insert_successor_node(Rc::new(transition), &mut registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result =
+            node.insert_successor_node(Rc::new(transition), &mut function_cache, &mut registry);
         assert_eq!(result, None);
         assert!(!node.is_closed());
     }
@@ -886,7 +952,13 @@ mod tests {
         assert!(result.is_ok());
 
         let state = StateInRegistry::from(model.target.clone());
-        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
         let node = CostNode::generate_root_node(state, 0, &model);
         let mut registry = StateRegistry::<_, CostNode<_>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
@@ -895,7 +967,12 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Rc::new(transition.clone()),
+            &mut function_cache,
+            &mut registry,
+        );
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.priority, 0);
@@ -932,7 +1009,13 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = StateInRegistry::from(model.target.clone());
-        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
         let node = CostNode::generate_root_node(state, 0, &model);
         let mut registry = StateRegistry::<_, CostNode<_>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
@@ -941,7 +1024,12 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Rc::new(transition.clone()),
+            &mut function_cache,
+            &mut registry,
+        );
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.priority, 1);
@@ -985,7 +1073,12 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Rc::new(transition.clone()),
+            &mut function_cache,
+            &mut registry,
+        );
         assert!(result.is_none());
     }
 
@@ -1015,7 +1108,12 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let result = node.insert_successor_node(Rc::new(transition.clone()), &mut registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Rc::new(transition.clone()),
+            &mut function_cache,
+            &mut registry,
+        );
         assert!(result.is_none());
     }
 }

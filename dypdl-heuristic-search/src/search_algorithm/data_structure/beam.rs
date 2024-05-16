@@ -54,7 +54,7 @@ where
 ///     FNode, StateInRegistry, StateRegistry,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-///     Beam, GetTransitions, StateInformation,
+///     Beam, GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
 /// };
 /// use std::rc::Rc;
 ///
@@ -81,10 +81,17 @@ where
 /// let model = Rc::new(model);
 /// let mut registry = StateRegistry::new(model.clone());
 ///
-/// let h_evaluator = |_: &StateInRegistry| Some(0);
+/// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+/// let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &StateInRegistry| g + h;
 /// let node = FNode::generate_root_node(
-///     model.target.clone(), 0, &model, &h_evaluator, &f_evaluator, None,
+///     model.target.clone(),
+///     &mut function_cache.parent,
+///     0,
+///     &model,
+///     &h_evaluator,
+///     &f_evaluator,
+///     None,
 /// ).unwrap();
 ///
 /// let mut beam = Beam::new(1);
@@ -92,7 +99,7 @@ where
 /// assert_eq!(beam.capacity(), 1);
 ///
 /// let successor = node.generate_successor_node(
-///     increment, &model, &h_evaluator, &f_evaluator, None,
+///     increment, &mut function_cache, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
 /// let status = beam.insert(&mut registry, successor);
 /// assert!(status.is_inserted);
@@ -102,7 +109,7 @@ where
 /// assert_eq!(status.removed, None);
 ///
 /// let successor = node.generate_successor_node(
-///     decrement, &model, &h_evaluator, &f_evaluator, None,
+///     decrement, &mut function_cache, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
 /// let status = beam.insert(&mut registry, successor);
 /// assert!(!status.is_inserted);
@@ -112,7 +119,7 @@ where
 /// assert_eq!(status.removed, None);
 ///
 /// let successor = node.generate_successor_node(
-///     produce.clone(), &model, &h_evaluator, &f_evaluator, None,
+///     produce.clone(), &mut function_cache, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
 /// let state = successor.state().clone();
 /// let status = beam.insert(&mut registry, successor);

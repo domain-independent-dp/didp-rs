@@ -1,7 +1,7 @@
 //! A module for successor generators.
 
 use core::ops::Deref;
-use dypdl::{Transition, TransitionInterface};
+use dypdl::{StateFunctionCache, Transition, TransitionInterface};
 use std::rc::Rc;
 
 /// Generator of applicable transitions.
@@ -34,14 +34,17 @@ use std::rc::Rc;
 /// let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
 ///
 /// let state = model.target.clone();
-/// let applicable_transitions = generator.applicable_transitions(&state).collect::<Vec<_>>();
-/// let mut iter = generator.applicable_transitions(&state);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let mut iter = generator.applicable_transitions(&state, &mut function_cache);
 /// let transition = iter.next().unwrap();
 /// assert_eq!(transition.get_full_name(), "increment");
 /// assert_eq!(iter.next(), None);
 ///
-/// let state: State = increment.apply(&state, &model.table_registry);
-/// let mut iter = generator.applicable_transitions(&state);
+/// let state: State = increment.apply(
+///     &state, &mut function_cache, &model.state_functions, &model.table_registry,
+/// );
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let mut iter = generator.applicable_transitions(&state, &mut function_cache);
 /// let transition = iter.next().unwrap();
 /// assert_eq!(transition.get_full_name(), "double");
 /// assert_eq!(iter.next(), None);
@@ -73,6 +76,7 @@ where
     S: dypdl::StateInterface,
 {
     state: &'b S,
+    function_cache: &'b mut StateFunctionCache,
     generator: &'a SuccessorGenerator<T, U, R>,
     iter: std::slice::Iter<'a, U>,
     forced: bool,
@@ -95,7 +99,12 @@ where
         }
         match self.iter.next() {
             Some(op) => {
-                if op.is_applicable(self.state, &self.generator.model.table_registry) {
+                if op.is_applicable(
+                    self.state,
+                    self.function_cache,
+                    &self.generator.model.state_functions,
+                    &self.generator.model.table_registry,
+                ) {
                     if self.forced {
                         self.end = true;
                     }
@@ -139,21 +148,31 @@ where
     pub fn generate_applicable_transitions<S: dypdl::StateInterface>(
         &self,
         state: &S,
-        mut result: Vec<U>,
-    ) -> Vec<U> {
+        function_cache: &mut StateFunctionCache,
+        result: &mut Vec<U>,
+    ) {
         result.clear();
         for op in &self.forced_transitions {
-            if op.is_applicable(state, &self.model.table_registry) {
+            if op.is_applicable(
+                state,
+                function_cache,
+                &self.model.state_functions,
+                &self.model.table_registry,
+            ) {
                 result.push(op.clone());
-                return result;
+                return;
             }
         }
         for op in &self.transitions {
-            if op.is_applicable(state, &self.model.table_registry) {
+            if op.is_applicable(
+                state,
+                function_cache,
+                &self.model.state_functions,
+                &self.model.table_registry,
+            ) {
                 result.push(op.clone());
             }
         }
-        result
     }
 
     /// Returns applicable transitions as an iterator.
@@ -161,6 +180,7 @@ where
     pub fn applicable_transitions<'a, 'b, S: dypdl::StateInterface>(
         &'a self,
         state: &'b S,
+        function_cache: &'b mut StateFunctionCache,
     ) -> ApplicableTransitions<'a, 'b, T, U, R, S>
     where
         Self: Sized,
@@ -168,6 +188,7 @@ where
         ApplicableTransitions {
             generator: self,
             state,
+            function_cache,
             iter: self.forced_transitions.iter(),
             forced: true,
             end: false,
@@ -352,16 +373,17 @@ mod tests {
             },
             ..Default::default()
         };
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
 
         let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
-        let result = Vec::new();
-        let result = generator.generate_applicable_transitions(&state, result);
+        let mut result = Vec::new();
+        generator.generate_applicable_transitions(&state, &mut function_cache, &mut result);
         assert_eq!(result.len(), 2);
         assert_eq!(*result[0], model.forward_transitions[0]);
         assert_eq!(*result[1], model.forward_transitions[1]);
 
         let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), true);
-        let result = generator.generate_applicable_transitions(&state, result);
+        generator.generate_applicable_transitions(&state, &mut function_cache, &mut result);
         assert_eq!(result.len(), 2);
         assert_eq!(*result[0], model.backward_transitions[1]);
         assert_eq!(*result[1], model.backward_transitions[2]);
@@ -373,8 +395,9 @@ mod tests {
             },
             ..Default::default()
         };
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
-        let result = generator.generate_applicable_transitions(&state, result);
+        generator.generate_applicable_transitions(&state, &mut function_cache, &mut result);
         assert_eq!(result.len(), 1);
         assert_eq!(*result[0], model.forward_forced_transitions[0]);
 
@@ -385,8 +408,9 @@ mod tests {
             },
             ..Default::default()
         };
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), true);
-        let result = generator.generate_applicable_transitions(&state, result);
+        generator.generate_applicable_transitions(&state, &mut function_cache, &mut result);
         assert_eq!(result.len(), 1);
         assert_eq!(*result[0], model.backward_forced_transitions[1]);
     }
@@ -401,9 +425,10 @@ mod tests {
             },
             ..Default::default()
         };
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
 
         let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
-        let mut transitions = generator.applicable_transitions(&state);
+        let mut transitions = generator.applicable_transitions(&state, &mut function_cache);
         assert_eq!(
             transitions.next(),
             Some(Rc::new(model.forward_transitions[0].clone()))
@@ -415,7 +440,7 @@ mod tests {
         assert_eq!(transitions.next(), None);
 
         let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), true);
-        let mut transitions = generator.applicable_transitions(&state);
+        let mut transitions = generator.applicable_transitions(&state, &mut function_cache);
         assert_eq!(
             transitions.next(),
             Some(Rc::new(model.backward_transitions[1].clone()))
@@ -433,8 +458,9 @@ mod tests {
             },
             ..Default::default()
         };
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
-        let mut transitions = generator.applicable_transitions(&state);
+        let mut transitions = generator.applicable_transitions(&state, &mut function_cache);
         assert_eq!(
             transitions.next(),
             Some(Rc::new(model.forward_forced_transitions[0].clone()))
@@ -449,7 +475,7 @@ mod tests {
             ..Default::default()
         };
         let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), true);
-        let mut transitions = generator.applicable_transitions(&state);
+        let mut transitions = generator.applicable_transitions(&state, &mut function_cache);
         assert_eq!(
             transitions.next(),
             Some(Rc::new(model.backward_forced_transitions[1].clone()))

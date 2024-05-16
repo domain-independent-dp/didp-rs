@@ -609,6 +609,236 @@ def test_set_preference_float_false():
     assert not model.get_preference(var)
 
 
+def test_add_set_state_fun():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_var(object_type=obj, target={0, 1})
+    fun = model.add_set_state_fun(var.add(2))
+
+    assert fun.eval(model.target_state, model) == {0, 1, 2}
+
+
+def test_add_set_state_fun_with_name():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_var(object_type=obj, target={0, 1})
+    model.add_set_state_fun(var.add(2), name="fun")
+    fun = model.get_set_state_fun("fun")
+
+    assert fun.eval(model.target_state, model) == {0, 1, 2}
+
+
+def test_add_set_state_fun_error():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_var(object_type=obj, target={0, 1})
+    model = dp.Model()
+
+    with pytest.raises(RuntimeError):
+        model.add_set_state_fun(var.add(0))
+
+
+def test_add_set_state_fun_name_error():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_var(object_type=obj, target={0, 1})
+    model.add_set_state_fun(var.add(2), name="fun")
+
+    with pytest.raises(RuntimeError):
+        model.add_set_state_fun(var.add(2), name="fun")
+
+
+def test_get_set_state_fun_error():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_set_var(object_type=obj, target={0, 1})
+    model.add_set_state_fun(var.add(2), name="fun")
+
+    with pytest.raises(RuntimeError):
+        model.get_set_state_fun(name="fun2")
+
+
+def test_add_element_state_fun():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_element_var(object_type=obj, target=0)
+    fun = model.add_element_state_fun(var + 1)
+
+    assert fun.eval(model.target_state, model) == 1
+
+
+def test_add_element_state_fun_with_name():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_element_var(object_type=obj, target=0)
+    model.add_element_state_fun(var + 1, name="fun")
+    fun = model.get_element_state_fun("fun")
+
+    assert fun.eval(model.target_state, model) == 1
+
+
+def test_add_element_state_fun_error():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_element_var(object_type=obj, target=0)
+    model = dp.Model()
+
+    with pytest.raises(RuntimeError):
+        model.add_element_state_fun(var + 1)
+
+
+def test_add_element_state_fun_name_error():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_element_var(object_type=obj, target=0)
+    model.add_element_state_fun(var + 1, name="fun")
+
+    with pytest.raises(RuntimeError):
+        model.add_element_state_fun(var + 2, name="fun")
+
+
+def test_get_element_state_fun_error():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_element_var(object_type=obj, target=0)
+    model.add_element_state_fun(var + 1, name="fun")
+
+    with pytest.raises(RuntimeError):
+        model.get_element_state_fun(name="fun2")
+
+
+def test_add_int_state_fun():
+    model = dp.Model()
+    var = model.add_int_var(target=0)
+    fun = model.add_int_state_fun(var + 1)
+
+    assert fun.eval(model.target_state, model) == 1
+
+
+def test_add_int_state_fun_with_name():
+    model = dp.Model()
+    var = model.add_int_var(target=0)
+    model.add_int_state_fun(var + 1, name="fun")
+    fun = model.get_int_state_fun("fun")
+
+    assert fun.eval(model.target_state, model) == 1
+
+
+def test_add_int_state_fun_error():
+    model = dp.Model()
+    var = model.add_int_var(target=0)
+    model = dp.Model()
+
+    with pytest.raises(RuntimeError):
+        model.add_int_state_fun(var + 1)
+
+
+def test_add_int_state_fun_name_error():
+    model = dp.Model()
+    var = model.add_int_var(target=0)
+    model.add_int_state_fun(var + 1, name="fun")
+
+    with pytest.raises(RuntimeError):
+        model.add_int_state_fun(var + 2, name="fun")
+
+
+def test_get_int_state_fun_error():
+    model = dp.Model()
+    var = model.add_int_var(target=0)
+    model.add_int_state_fun(var + 1, name="fun")
+
+    with pytest.raises(RuntimeError):
+        model.get_int_state_fun(name="fun2")
+
+
+def test_add_float_state_fun():
+    model = dp.Model()
+    var = model.add_float_var(target=0.0)
+    fun = model.add_float_state_fun(var + 1)
+
+    assert fun.eval(model.target_state, model) == pytest.approx(1.0)
+
+
+def test_add_float_state_fun_with_name():
+    model = dp.Model()
+    var = model.add_float_var(target=0.0)
+    model.add_float_state_fun(var + 1, name="fun")
+    fun = model.get_float_state_fun("fun")
+
+    assert fun.eval(model.target_state, model) == pytest.approx(1.0)
+
+
+def test_add_float_state_fun_error():
+    model = dp.Model()
+    var = model.add_float_var(target=0)
+    model = dp.Model()
+
+    with pytest.raises(RuntimeError):
+        model.add_float_state_fun(var + 1)
+
+
+def test_add_float_state_fun_name_error():
+    model = dp.Model()
+    var = model.add_float_var(target=0.0)
+    model.add_float_state_fun(var + 1, name="fun")
+
+    with pytest.raises(RuntimeError):
+        model.add_float_state_fun(var + 2, name="fun")
+
+
+def test_get_float_state_fun_error():
+    model = dp.Model()
+    var = model.add_float_var(target=0.0)
+    model.add_float_state_fun(var + 1, name="fun")
+
+    with pytest.raises(RuntimeError):
+        model.get_float_state_fun(name="fun2")
+
+
+def test_add_bool_state_fun():
+    model = dp.Model()
+    var = model.add_int_var(target=0)
+    fun = model.add_bool_state_fun(var < 1)
+
+    assert fun.eval(model.target_state, model)
+
+
+def test_add_bool_state_fun_with_name():
+    model = dp.Model()
+    var = model.add_int_var(target=0)
+    model.add_bool_state_fun(var < 1, name="fun")
+    fun = model.get_bool_state_fun("fun")
+
+    assert fun.eval(model.target_state, model)
+
+
+def test_add_bool_state_fun_error():
+    model = dp.Model()
+    var = model.add_int_var(target=0)
+    model = dp.Model()
+
+    with pytest.raises(RuntimeError):
+        model.add_bool_state_fun(var < 1)
+
+
+def test_add_bool_state_fun_name_error():
+    model = dp.Model()
+    var = model.add_int_var(target=0)
+    model.add_bool_state_fun(var < 1, name="fun")
+
+    with pytest.raises(RuntimeError):
+        model.add_bool_state_fun(var < 2, name="fun")
+
+
+def test_get_bool_state_fun_error():
+    model = dp.Model()
+    var = model.add_int_var(target=0)
+    model.add_bool_state_fun(var < 1, name="fun")
+
+    with pytest.raises(RuntimeError):
+        model.get_bool_state_fun(name="fun2")
+
+
 def test_add_state_constr():
     model = dp.Model()
     obj = model.add_object_type(number=4)

@@ -1,6 +1,7 @@
 use crate::expression::Condition;
 use crate::grounded_condition::GroundedCondition;
 use crate::state::StateInterface;
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry::TableRegistry;
 use crate::transition::CostExpression;
 use crate::variable_type::Numeric;
@@ -64,10 +65,16 @@ impl BaseCase {
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
     #[inline]
-    pub fn is_satisfied<S: StateInterface>(&self, state: &S, registry: &TableRegistry) -> bool {
+    pub fn is_satisfied<S: StateInterface>(
+        &self,
+        state: &S,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> bool {
         self.conditions
             .iter()
-            .all(|x| x.is_satisfied(state, registry))
+            .all(|x| x.is_satisfied(state, function_cache, state_functions, registry))
     }
 
     /// Returns the cost of the base case if it is satisfied and None otherwise.
@@ -78,14 +85,14 @@ impl BaseCase {
     pub fn eval_cost<S: StateInterface, T: Numeric>(
         &self,
         state: &S,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Option<T> {
-        if self.is_satisfied(state, registry) {
-            Some(
-                self.cost
-                    .as_ref()
-                    .map_or_else(T::zero, |cost| cost.eval(state, registry)),
-            )
+        if self.is_satisfied(state, function_cache, state_functions, registry) {
+            Some(self.cost.as_ref().map_or_else(T::zero, |cost| {
+                cost.eval(state, function_cache, state_functions, registry)
+            }))
         } else {
             None
         }
@@ -189,6 +196,8 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
 
         let registry = TableRegistry::default();
 
@@ -196,7 +205,7 @@ mod tests {
             condition: Condition::Constant(true),
             ..Default::default()
         }]);
-        assert!(base_case.is_satisfied(&state, &registry));
+        assert!(base_case.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
@@ -212,6 +221,8 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
 
         let registry = TableRegistry::default();
 
@@ -225,7 +236,7 @@ mod tests {
                 ..Default::default()
             },
         ]);
-        assert!(!base_case.is_satisfied(&state, &registry));
+        assert!(!base_case.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
@@ -241,6 +252,8 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
 
         let registry = TableRegistry::default();
 
@@ -248,7 +261,10 @@ mod tests {
             condition: Condition::Constant(true),
             ..Default::default()
         }]);
-        assert_eq!(base_case.eval_cost(&state, &registry), Some(0));
+        assert_eq!(
+            base_case.eval_cost(&state, &mut function_cache, &state_functions, &registry),
+            Some(0)
+        );
     }
 
     #[test]
@@ -264,6 +280,8 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
 
         let registry = TableRegistry::default();
 
@@ -274,7 +292,10 @@ mod tests {
             }],
             IntegerExpression::Constant(1),
         );
-        assert_eq!(base_case.eval_cost(&state, &registry), Some(1));
+        assert_eq!(
+            base_case.eval_cost(&state, &mut function_cache, &state_functions, &registry),
+            Some(1)
+        );
     }
 
     #[test]
@@ -290,6 +311,8 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
 
         let registry = TableRegistry::default();
 
@@ -306,6 +329,14 @@ mod tests {
             ],
             IntegerExpression::Constant(1),
         );
-        assert_eq!(base_case.eval_cost::<_, Integer>(&state, &registry), None);
+        assert_eq!(
+            base_case.eval_cost::<_, Integer>(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            None
+        );
     }
 }

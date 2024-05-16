@@ -2,7 +2,8 @@ use super::data_structure::{ConcurrentStateRegistry, SendableSuccessorIterator};
 use crate::search_algorithm::data_structure::{exceed_bound, HashableSignatureVariables};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
-    get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
+    data_structure::ParentAndChildStateFunctionCache, get_solution_cost_and_suffix,
+    BeamSearchParameters, BfsNode, SearchInput, Solution,
 };
 use dypdl::{variable_type, Model, ReduceFunction, TransitionInterface};
 use rayon::prelude::*;
@@ -58,12 +59,14 @@ use std::sync::Arc;
 /// let model = Arc::new(model);
 ///
 /// let state = model.target.clone();
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 /// let cost = 0;
-/// let h_evaluator = |_: &_| Some(0);
+/// let h_evaluator = |_: &_, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
 /// let node = SendableFNode::generate_root_node(
 ///     state,
+///     &mut function_cache,
 ///     cost,
 ///     &model,
 ///     &h_evaluator,
@@ -79,9 +82,10 @@ use std::sync::Arc;
 ///     solution_suffix: &[],
 /// };
 /// let transition_evaluator =
-///     move |node: &SendableFNode<_>, transition, primal_bound| {
+///     move |node: &SendableFNode<_>, transition, cache: &mut _, primal_bound| {
 ///         node.generate_successor_node(
 ///             transition,
+///             cache,
 ///             &model,
 ///             &h_evaluator,
 ///             &f_evaluator,
@@ -110,7 +114,9 @@ where
     T: variable_type::Numeric + Ord + Display + Send + Sync,
     N: BfsNode<T, V, Arc<HashableSignatureVariables>> + Clone + Send + Sync,
     Arc<N>: Send + Sync,
-    E: Fn(&N, Arc<V>, Option<T>) -> Option<N> + Send + Sync,
+    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<N>
+        + Send
+        + Sync,
     B: Fn(T, T) -> T + Send + Sync,
     V: TransitionInterface + Clone + Default + Send + Sync,
     Arc<V>: Send + Sync,
@@ -178,10 +184,16 @@ where
         let goal = thread_pool.install(|| {
             nodes_with_goal_information.par_extend(beam.par_drain(..).filter_map(|node| {
                 node.close();
+                let mut function_cache =
+                    ParentAndChildStateFunctionCache::new(&model.state_functions);
 
-                if let Some((cost, suffix)) =
-                    get_solution_cost_and_suffix(model, &*node, suffix, &base_cost_evaluator)
-                {
+                if let Some((cost, suffix)) = get_solution_cost_and_suffix(
+                    model,
+                    &*node,
+                    suffix,
+                    &base_cost_evaluator,
+                    &mut function_cache,
+                ) {
                     if !exceed_bound(model, cost, primal_bound) {
                         Some((node, Some((cost, suffix))))
                     } else {

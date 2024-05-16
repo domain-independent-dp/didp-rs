@@ -1,9 +1,12 @@
+use crate::search_algorithm::data_structure::ParentAndChildStateFunctionCache;
+
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
-    BestFirstSearch, CostNode, Parameters, Search, SearchInput, SuccessorGenerator, WeightedFNode,
+    BestFirstSearch, CostNode, FNodeEvaluators, Parameters, Search, SearchInput,
+    SuccessorGenerator, WeightedFNode,
 };
 use dypdl::variable_type::{Numeric, OrderedContinuous};
-use dypdl::{Continuous, Transition};
+use dypdl::{Continuous, StateFunctionCache, Transition};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -69,20 +72,25 @@ where
 
     if model.has_dual_bounds() {
         let state = model.target.clone();
-        let h_evaluator = move |state: &_| model.eval_dual_bound(state);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = move |state: &_, cache: &mut _| model.eval_dual_bound(state, cache);
         let bound_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
         let f_evaluator = move |g: T, h: T, _: &_| {
             let g = OrderedContinuous::from(g.to_continuous());
             let h = OrderedContinuous::from(h.to_continuous() * weight);
             f_evaluator_type.eval(g, h)
         };
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::generate_root_node(
             state,
+            &mut function_cache,
             cost,
             &generator.model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             parameters.primal_bound,
         );
         let input = SearchInput {
@@ -90,17 +98,24 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator =
-            move |node: &WeightedFNode<_, _>, transition, registry: &mut _, primal_bound| {
-                node.insert_successor_node(
-                    transition,
-                    registry,
-                    &h_evaluator,
-                    &bound_evaluator,
-                    &f_evaluator,
-                    primal_bound,
-                )
+        let transition_evaluator = move |node: &WeightedFNode<_, _>,
+                                         transition,
+                                         cache: &mut _,
+                                         registry: &mut _,
+                                         primal_bound| {
+            let evaluators = FNodeEvaluators {
+                h: &h_evaluator,
+                f: &f_evaluator,
             };
+            node.insert_successor_node(
+                transition,
+                cache,
+                registry,
+                evaluators,
+                &bound_evaluator,
+                primal_bound,
+            )
+        };
 
         Box::new(BestFirstSearch::<_, WeightedFNode<_, _>, _, _>::new(
             input,
@@ -115,9 +130,12 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = |node: &CostNode<_>, transition, registry: &mut _, _| {
-            node.insert_successor_node(transition, registry)
-        };
+        let transition_evaluator =
+            |node: &CostNode<_>,
+             transition,
+             cache: &mut ParentAndChildStateFunctionCache,
+             registry: &mut _,
+             _| { node.insert_successor_node(transition, &mut cache.parent, registry) };
         Box::new(BestFirstSearch::<_, CostNode<_>, _, _>::new(
             input,
             transition_evaluator,

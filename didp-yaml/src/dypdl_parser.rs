@@ -391,6 +391,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
         backward_transitions,
         backward_forced_transitions,
         dual_bounds,
+        ..Default::default()
     })
 }
 

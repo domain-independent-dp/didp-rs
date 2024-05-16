@@ -273,8 +273,15 @@ impl ElementExprPy {
     /// 1
     #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Element {
-        self.0
-            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
+        self.0.eval(
+            state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
+            &model.inner_as_ref().table_registry,
+        )
     }
 }
 
@@ -1157,9 +1164,17 @@ impl SetExprPy {
     /// {0, 1}
     #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> HashSet<usize> {
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
         HashSet::from_iter(
             self.0
-                .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+                .eval(
+                    state.inner_as_ref(),
+                    &mut function_cache,
+                    &model.inner_as_ref().state_functions,
+                    &model.inner_as_ref().table_registry,
+                )
                 .ones(),
         )
     }
@@ -2620,8 +2635,15 @@ impl IntExprPy {
     /// 1
     #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Integer {
-        self.0
-            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
+        self.0.eval(
+            state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
+            &model.inner_as_ref().table_registry,
+        )
     }
 
     /// eval_cost(cost, state, model)
@@ -2658,9 +2680,14 @@ impl IntExprPy {
     /// 1
     #[pyo3(signature = (cost, state, model))]
     fn eval_cost(&self, cost: Integer, state: &StatePy, model: &ModelPy) -> Integer {
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
         self.0.eval_cost(
             cost,
             state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
             &model.inner_as_ref().table_registry,
         )
     }
@@ -3441,8 +3468,15 @@ impl FloatExprPy {
     /// 3.0
     #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Continuous {
-        self.0
-            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
+        self.0.eval(
+            state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
+            &model.inner_as_ref().table_registry,
+        )
     }
 
     /// eval_cost(cost, state, model)
@@ -3479,9 +3513,14 @@ impl FloatExprPy {
     /// 3.0
     #[pyo3(signature = (cost, state, model))]
     fn eval_cost(&self, cost: Continuous, state: &StatePy, model: &ModelPy) -> Continuous {
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
         self.0.eval_cost(
             cost,
             state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
             &model.inner_as_ref().table_registry,
         )
     }
@@ -4231,8 +4270,15 @@ impl ConditionPy {
     /// True
     #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> bool {
-        self.0
-            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
+        self.0.eval(
+            state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
+            &model.inner_as_ref().table_registry,
+        )
     }
 }
 

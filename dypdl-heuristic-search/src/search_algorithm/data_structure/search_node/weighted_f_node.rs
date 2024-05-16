@@ -1,9 +1,11 @@
 use super::super::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use super::super::transition_chain::{CreateTransitionChain, GetTransitions, RcChain};
-use super::f_node::FNode;
-use super::{BfsNode, CostNode};
-use dypdl::variable_type::Numeric;
-use dypdl::{Model, ReduceFunction, Transition, TransitionInterface};
+use super::super::ParentAndChildStateFunctionCache;
+use super::{BfsNode, CostNode, FNode, FNodeEvaluators};
+use dypdl::{
+    variable_type::Numeric, Model, ReduceFunction, StateFunctionCache, Transition,
+    TransitionInterface,
+};
 use std::cmp::Ordering;
 use std::fmt::Display;
 use std::ops::Deref;
@@ -162,13 +164,13 @@ where
         self.node.transition_chain()
     }
 
-    /// Generates a root search node given a state, its cost, a DyPDL model, h-, bound, and f-evaluators,
+    /// Generates a root search node given a state, its cost, a DyPDL model, h-, f-, and bound evaluators,
     /// and a primal bound on the solution cost.
     ///
-    /// `h_evaluator` is a function that takes a state and returns the dual bound of the cost from the state.
-    /// If `h_evaluator` returns `None`, the state is a dead-end, so the node is not generated.
+    /// `evaluator.h` is a function that takes a state and returns the dual bound of the cost from the state.
+    /// If `evaluator.h` returns `None`, the state is a dead-end, so the node is not generated.
+    /// `evaluator.f` is a function that takes `cost`, the return value by `evaluator.h`, and the state and returns the priority.
     /// `bound_evaluator` is a function that takes `cost`, the return value by `h_evaluator`, and the state and returns the dual bound of the cost of a solution extending the path to this node.
-    /// `f_evaluator` is a function that takes `cost`, the return value by `h_evaluator`, and the state and returns the priority.
     ///
     /// Returns `None` if the state is a dead-end, or the dual bound exceeds the primal bound.
     ///
@@ -179,7 +181,9 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
-    /// use dypdl_heuristic_search::search_algorithm::{WeightedFNode, StateInRegistry};
+    /// use dypdl_heuristic_search::search_algorithm::{
+    ///     FNodeEvaluators, StateInRegistry, WeightedFNode,
+    /// };
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
     ///     GetTransitions, StateInformation,
     /// };
@@ -188,12 +192,23 @@ where
     /// model.add_integer_variable("variable", 0).unwrap();
     ///
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let cost = 0;
-    /// let h_evaluator = |_: &StateInRegistry| Some(1);
+    /// let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
     /// let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
     /// let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+    /// let evaluators = FNodeEvaluators {
+    ///     h: &h_evaluator,
+    ///     f: &f_evaluator,
+    /// };
     /// let node = WeightedFNode::<_, _>::generate_root_node(
-    ///     state, cost, &model, &h_evaluator, &bound_evaluator, &f_evaluator, None,
+    ///     state,
+    ///     &mut function_cache,
+    ///     cost,
+    ///     &model,
+    ///     evaluators,
+    ///     &bound_evaluator,
+    ///     None,
     /// );
     /// assert!(node.is_some());
     /// let node = node.unwrap();
@@ -205,33 +220,36 @@ where
     /// ```
     pub fn generate_root_node<S, H, B, F>(
         state: S,
+        function_cache: &mut StateFunctionCache,
         cost: T,
         model: &Model,
-        h_evaluator: H,
+        evaluators: FNodeEvaluators<H, F>,
         bound_evaluator: B,
-        f_evaluator: F,
         primal_bound: Option<T>,
     ) -> Option<Self>
     where
         StateInRegistry: From<S>,
-        H: FnOnce(&StateInRegistry) -> Option<T>,
+        H: FnOnce(&StateInRegistry, &mut StateFunctionCache) -> Option<T>,
         B: FnOnce(T, T, &StateInRegistry) -> T,
         F: FnOnce(T, T, &StateInRegistry) -> U,
     {
         let node = FNode::generate_root_node(
             state,
+            function_cache,
             cost,
             model,
-            h_evaluator,
+            evaluators.h,
             bound_evaluator,
             primal_bound,
         )?;
 
-        Some(WeightedFNode::new(node, model, f_evaluator))
+        Some(WeightedFNode::new(node, model, evaluators.f))
     }
 
-    /// Generates a successor node given a transition, a DyPDL model, h-, bound, and f-evaluators,
+    /// Generates a successor node given a transition, a DyPDL model, h-, f-, and bound evaluators,
     /// and a primal bound on the solution cost.
+    ///
+    /// `function_cache.parent` is not cleared and updated by this node while `function_cache.child` is cleared and updated by the successor node if generated.
     ///
     /// `h_evaluator` is a function that takes a state and returns the dual bound of the cost from the state.
     /// If `h_evaluator` returns `None`, the state is a dead-end, so the node is not generated.
@@ -251,9 +269,11 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
-    /// use dypdl_heuristic_search::search_algorithm::{WeightedFNode, StateInRegistry};
+    /// use dypdl_heuristic_search::search_algorithm::{
+    ///     FNodeEvaluators, StateInRegistry, WeightedFNode,
+    /// };
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation,
+    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
     /// };
     /// use std::rc::Rc;
     ///
@@ -261,23 +281,39 @@ where
     /// let variable = model.add_integer_variable("variable", 0).unwrap();
     ///
     /// let state = model.target.clone();
+    /// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
     /// let cost = 0;
-    /// let h_evaluator = |_: &StateInRegistry| Some(1);
+    /// let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
     /// let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
     /// let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+    /// let evaluators = FNodeEvaluators {
+    ///     h: &h_evaluator,
+    ///     f: &f_evaluator,
+    /// };
     /// let node = WeightedFNode::<_, _>::generate_root_node(
-    ///     state, cost, &model, &h_evaluator, &bound_evaluator, &f_evaluator, None,
+    ///     state,
+    ///     &mut function_cache.parent,
+    ///     cost,
+    ///     &model,
+    ///     evaluators.clone(),
+    ///     &bound_evaluator,   
+    ///     None,
     /// ).unwrap();
     ///
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let mut function_cache_for_expected = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry = transition.apply(
-    ///     &model.target, &model.table_registry,
+    ///     &model.target, &mut function_cache_for_expected, &model.state_functions, &model.table_registry,
     /// );
     ///
     /// let node = node.generate_successor_node(
-    ///     Rc::new(transition.clone()), &model, &h_evaluator, &bound_evaluator, &f_evaluator,
+    ///     Rc::new(transition.clone()),
+    ///     &mut function_cache,
+    ///     &model,
+    ///     evaluators,
+    ///     &bound_evaluator,
     ///     None,
     /// );
     /// assert!(node.is_some());
@@ -291,30 +327,33 @@ where
     pub fn generate_successor_node<H, B, F>(
         &self,
         transition: R,
+        function_cache: &mut ParentAndChildStateFunctionCache,
         model: &Model,
-        h_evaluator: H,
+        evaluators: FNodeEvaluators<H, F>,
         bound_evaluator: B,
-        f_evaluator: F,
         primal_bound: Option<T>,
     ) -> Option<Self>
     where
-        H: FnOnce(&StateInRegistry) -> Option<T>,
+        H: FnOnce(&StateInRegistry, &mut StateFunctionCache) -> Option<T>,
         B: FnOnce(T, T, &StateInRegistry) -> T,
         F: FnOnce(T, T, &StateInRegistry) -> U,
     {
         let node = self.node.generate_successor_node(
             transition,
+            function_cache,
             model,
-            h_evaluator,
+            evaluators.h,
             bound_evaluator,
             primal_bound,
         )?;
 
-        Some(WeightedFNode::new(node, model, f_evaluator))
+        Some(WeightedFNode::new(node, model, evaluators.f))
     }
 
-    /// Generates a successor node given a transition, h-, bound, and f- evaluators,
+    /// Generates a successor node given a transition, h-, f-, and bound evaluators,
     /// and a primal bound on the solution cost, and inserts it into a state registry.
+    ///
+    /// `function_cache.parent` is not cleared and updated by this node while `function_cache.child` is cleared and updated by the successor node if generated.
     ///
     /// `h_evaluator` is a function that takes a state and returns the dual bound of the cost from the state.
     /// If `h_evaluator` returns `None`, the state is a dead-end, so the node is not generated.
@@ -336,10 +375,10 @@ where
     /// ```
     /// use dypdl::prelude::*;
     /// use dypdl_heuristic_search::search_algorithm::{
-    ///     WeightedFNode, StateInRegistry, StateRegistry,
+    ///     FNodeEvaluators, StateInRegistry, StateRegistry, WeightedFNode,
     /// };
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation,
+    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
     /// };
     /// use std::rc::Rc;
     ///
@@ -350,24 +389,40 @@ where
     /// );
     ///
     /// let state = model.target.clone();
+    /// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
     /// let cost = 0;
-    /// let h_evaluator = |_: &StateInRegistry| Some(1);
+    /// let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
     /// let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
     /// let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+    /// let evaluators = FNodeEvaluators {
+    ///     h: &h_evaluator,
+    ///     f: &f_evaluator,
+    /// };
     /// let node = WeightedFNode::<_, _>::generate_root_node(
-    ///     state, cost, &model, &h_evaluator, &bound_evaluator, &f_evaluator, None,
+    ///     state,
+    ///     &mut function_cache.parent,
+    ///     cost,
+    ///     &model,
+    ///     evaluators.clone(),
+    ///     &bound_evaluator,
+    ///     None,
     /// ).unwrap();
     ///
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let mut function_cache_for_expected = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry = transition.apply(
-    ///     &model.target, &model.table_registry,
+    ///     &model.target, &mut function_cache_for_expected, &model.state_functions, &model.table_registry,
     /// );
     ///
     /// let result = node.insert_successor_node(
-    ///     Rc::new(transition.clone()), &mut registry, &h_evaluator, &bound_evaluator,
-    ///     &f_evaluator, None,
+    ///     Rc::new(transition.clone()),
+    ///     &mut function_cache,
+    ///     &mut registry,
+    ///     evaluators,
+    ///     &bound_evaluator,
+    ///     None,
     /// );
     /// assert!(result.is_some());
     /// let (node, generated) = result.unwrap();
@@ -381,20 +436,21 @@ where
     pub fn insert_successor_node<H, B, F, M>(
         &self,
         transition: R,
+        function_cache: &mut ParentAndChildStateFunctionCache,
         registry: &mut StateRegistry<T, Self, M>,
-        h_evaluator: H,
+        evaluators: FNodeEvaluators<H, F>,
         bound_evaluator: B,
-        f_evaluator: F,
         primal_bound: Option<T>,
     ) -> Option<(Rc<Self>, bool)>
     where
-        H: FnOnce(&StateInRegistry) -> Option<T>,
+        H: FnOnce(&StateInRegistry, &mut StateFunctionCache) -> Option<T>,
         B: FnOnce(T, T, &StateInRegistry) -> T,
         F: FnOnce(T, T, &StateInRegistry) -> U,
         M: Deref<Target = Model> + Clone,
     {
         let (state, g) = registry.model().generate_successor_state(
             self.state(),
+            &mut function_cache.parent,
             self.cost(registry.model()),
             transition.deref(),
             None,
@@ -403,12 +459,19 @@ where
         let model = registry.model().clone();
 
         let constructor = |state, g, other: Option<&Self>| {
+            function_cache.child.clear();
+            let f_evaluator = evaluators.f;
+            let evaluators = FNodeEvaluators {
+                h: evaluators.h,
+                f: bound_evaluator,
+            };
+
             let (h, f) = FNode::evaluate_state(
                 &state,
+                &mut function_cache.child,
                 g,
                 &model,
-                h_evaluator,
-                bound_evaluator,
+                evaluators,
                 primal_bound,
                 other.map(|node| &node.node),
             )?;
@@ -580,16 +643,22 @@ mod tests {
         assert!(variable.is_ok());
         let state = model.target.clone();
         let mut expected_state = StateInRegistry::from(state.clone());
-        let h_evaluator = |_: &StateInRegistry| Some(1);
+
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::<_, _>::generate_root_node(
             state,
+            &mut function_cache,
             1,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -613,16 +682,22 @@ mod tests {
         assert!(variable.is_ok());
         let state = model.target.clone();
         let mut expected_state = StateInRegistry::from(state.clone());
-        let h_evaluator = |_: &StateInRegistry| Some(1);
+
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::<_, _>::generate_root_node(
             state,
+            &mut function_cache,
             1,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -645,16 +720,21 @@ mod tests {
         let variable = model.add_integer_variable("variable", 0);
         assert!(variable.is_ok());
         let state = model.target.clone();
-        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::<_, _>::generate_root_node(
             state,
+            &mut function_cache,
             0,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             Some(0),
         );
         assert!(node.is_none());
@@ -667,16 +747,21 @@ mod tests {
         let variable = model.add_integer_variable("variable", 0);
         assert!(variable.is_ok());
         let state = model.target.clone();
-        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::<_, _>::generate_root_node(
             state,
+            &mut function_cache,
             0,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             Some(2),
         );
         assert!(node.is_none());
@@ -688,16 +773,21 @@ mod tests {
         let variable = model.add_integer_variable("variable", 0);
         assert!(variable.is_ok());
         let state = model.target.clone();
-        let h_evaluator = |_: &StateInRegistry| None;
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| None;
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::<_, _>::generate_root_node(
             state,
+            &mut function_cache,
             0,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_none());
@@ -722,17 +812,29 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let mut expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
-        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::<_, _>::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -740,10 +842,10 @@ mod tests {
 
         let successor = node.generate_successor_node(
             Rc::new(transition.clone()),
+            &mut function_cache,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(successor.is_some());
@@ -781,17 +883,29 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let mut expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
-        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::<_, _>::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -799,10 +913,10 @@ mod tests {
 
         let successor = node.generate_successor_node(
             Rc::new(transition.clone()),
+            &mut function_cache,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(successor.is_some());
@@ -835,16 +949,21 @@ mod tests {
         assert!(result.is_ok());
 
         let state = model.target.clone();
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::<_, _>::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -859,10 +978,10 @@ mod tests {
 
         let result = node.generate_successor_node(
             Rc::new(transition),
+            &mut function_cache,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert_eq!(result, None);
@@ -880,16 +999,21 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = model.target.clone();
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::<_, _>::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -904,10 +1028,10 @@ mod tests {
 
         let result = node.generate_successor_node(
             Rc::new(transition),
+            &mut function_cache,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             Some(0),
         );
         assert_eq!(result, None);
@@ -925,16 +1049,21 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = model.target.clone();
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::<_, _>::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -949,10 +1078,10 @@ mod tests {
 
         let result = node.generate_successor_node(
             Rc::new(transition),
+            &mut function_cache,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             Some(2),
         );
         assert_eq!(result, None);
@@ -969,16 +1098,21 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = model.target.clone();
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::<_, _>::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -991,16 +1125,108 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let h_evaluator = |_: &StateInRegistry| None;
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| None;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let result = node.generate_successor_node(
             Rc::new(transition),
+            &mut function_cache,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_generate_successor_with_state_functions() {
+        let mut model = Model::default();
+
+        let v = model.add_integer_variable("v1", 0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let fun1 = model.add_integer_state_function("fun1", v + 1);
+        assert!(fun1.is_ok());
+        let fun1 = fun1.unwrap();
+
+        let fun2 = model.add_integer_state_function("fun2", 4 - fun1.clone());
+        assert!(fun2.is_ok());
+        let fun2 = fun2.unwrap();
+
+        let h_model = model.clone();
+        let h_evaluator = |state: &StateInRegistry, cache: &mut _| {
+            Some(fun2.eval(
+                state,
+                cache,
+                &h_model.state_functions,
+                &h_model.table_registry,
+            ))
+        };
+        let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
+
+        let state = model.target.clone();
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+
+        let node = WeightedFNode::<_, _>::generate_root_node(
+            state,
+            &mut function_cache.parent,
+            0,
+            &model,
+            evaluators.clone(),
+            &bound_evaluator,
+            None,
+        );
+        assert!(node.is_some());
+        let node = node.unwrap();
+        assert_eq!(node.bound(&model), Some(3));
+        assert_eq!(node.f, -6);
+
+        let mut transition1 = Transition::default();
+        let result = transition1.add_effect(v, fun1.clone() + 1);
+        assert!(result.is_ok());
+        transition1.set_cost(IntegerExpression::Cost + 1);
+
+        let mut transition2 = Transition::default();
+        let result = transition2.add_effect(v, fun1 + 2);
+        assert!(result.is_ok());
+        transition2.set_cost(IntegerExpression::Cost + 1);
+
+        let successor = node.generate_successor_node(
+            Rc::new(transition1),
+            &mut function_cache,
+            &model,
+            evaluators.clone(),
+            &bound_evaluator,
+            None,
+        );
+        assert!(successor.is_some());
+        let successor = successor.unwrap();
+        assert_eq!(successor.bound(&model), Some(2));
+        assert_eq!(successor.f, -3);
+        assert_eq!(successor.state().get_integer_variable(v.id()), 2);
+
+        let successor = node.generate_successor_node(
+            Rc::new(transition2),
+            &mut function_cache,
+            &model,
+            evaluators,
+            &f_evaluator,
+            None,
+        );
+        assert!(successor.is_some());
+        let successor = successor.unwrap();
+        assert_eq!(successor.bound(&model), Some(1));
+        assert_eq!(successor.f, -1);
+        assert_eq!(successor.state().get_integer_variable(v.id()), 3);
     }
 
     #[test]
@@ -1025,17 +1251,29 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
-        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -1045,10 +1283,10 @@ mod tests {
 
         let result = node.insert_successor_node(
             Rc::new(transition.clone()),
+            &mut function_cache,
             &mut registry,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(result.is_some());
@@ -1090,17 +1328,29 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
-        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -1110,10 +1360,10 @@ mod tests {
 
         let result = node.insert_successor_node(
             Rc::new(transition.clone()),
+            &mut function_cache,
             &mut registry,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(result.is_some());
@@ -1147,18 +1397,23 @@ mod tests {
         assert!(result.is_ok());
 
         let state = StateInRegistry::from(model.target.clone());
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let mut registry = StateRegistry::<_, WeightedFNode<_, _>>::new(Rc::new(model.clone()));
 
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -1173,10 +1428,10 @@ mod tests {
 
         let result = node.insert_successor_node(
             Rc::new(transition),
+            &mut function_cache,
             &mut registry,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert_eq!(result, None);
@@ -1201,17 +1456,29 @@ mod tests {
         assert!(result.is_ok());
 
         let state = StateInRegistry::from(model.target.clone());
-        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
-        let h_evaluator = |_: &StateInRegistry| Some(1);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(1);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -1225,10 +1492,10 @@ mod tests {
 
         let result = node.insert_successor_node(
             Rc::new(transition.clone()),
+            &mut function_cache,
             &mut registry,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(result.is_some());
@@ -1267,17 +1534,29 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = StateInRegistry::from(model.target.clone());
-        let expected_state: StateInRegistry = transition.apply(&state, &model.table_registry);
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -1291,10 +1570,10 @@ mod tests {
 
         let result = node.insert_successor_node(
             Rc::new(transition.clone()),
+            &mut function_cache,
             &mut registry,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(result.is_some());
@@ -1334,16 +1613,21 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = StateInRegistry::from(model.target.clone());
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -1357,10 +1641,10 @@ mod tests {
 
         let result = node.insert_successor_node(
             Rc::new(transition.clone()),
+            &mut function_cache,
             &mut registry,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             Some(0),
         );
         assert!(result.is_none());
@@ -1386,16 +1670,21 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = StateInRegistry::from(model.target.clone());
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators.clone(),
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -1409,10 +1698,10 @@ mod tests {
 
         let result = node.insert_successor_node(
             Rc::new(transition.clone()),
+            &mut function_cache,
             &mut registry,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             Some(2),
         );
         assert!(result.is_none());
@@ -1429,18 +1718,23 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = StateInRegistry::from(model.target.clone());
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let mut registry = StateRegistry::<_, WeightedFNode<_, _>>::new(Rc::new(model.clone()));
 
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
         let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let node = WeightedFNode::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert!(node.is_some());
@@ -1453,16 +1747,110 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let h_evaluator = |_: &StateInRegistry| None;
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| None;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
         let result = node.insert_successor_node(
             Rc::new(transition),
+            &mut function_cache,
             &mut registry,
-            &h_evaluator,
+            evaluators,
             &bound_evaluator,
-            &f_evaluator,
             None,
         );
         assert_eq!(result, None);
         assert!(!node.is_closed());
+    }
+
+    #[test]
+    fn test_insert_successor_with_state_functions() {
+        let mut model = Model::default();
+
+        let v = model.add_integer_variable("v1", 0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let fun1 = model.add_integer_state_function("fun1", v + 1);
+        assert!(fun1.is_ok());
+        let fun1 = fun1.unwrap();
+
+        let fun2 = model.add_integer_state_function("fun2", 4 - fun1.clone());
+        assert!(fun2.is_ok());
+        let fun2 = fun2.unwrap();
+
+        let h_model = model.clone();
+        let h_evaluator = |state: &StateInRegistry, cache: &mut _| {
+            Some(fun2.eval(
+                state,
+                cache,
+                &h_model.state_functions,
+                &h_model.table_registry,
+            ))
+        };
+        let bound_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let f_evaluator = |g, h, _: &StateInRegistry| g + 2 * h;
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
+
+        let state = model.target.clone();
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+
+        let node = WeightedFNode::<_, _>::generate_root_node(
+            state,
+            &mut function_cache.parent,
+            0,
+            &model,
+            evaluators.clone(),
+            &bound_evaluator,
+            None,
+        );
+        assert!(node.is_some());
+        let node = node.unwrap();
+        assert_eq!(node.bound(&model), Some(3));
+        assert_eq!(node.f, -6);
+
+        let mut registry = StateRegistry::new(&model);
+
+        let mut transition1 = Transition::default();
+        let result = transition1.add_effect(v, fun1.clone() + 1);
+        assert!(result.is_ok());
+        transition1.set_cost(IntegerExpression::Cost + 1);
+
+        let mut transition2 = Transition::default();
+        let result = transition2.add_effect(v, fun1 + 2);
+        assert!(result.is_ok());
+        transition2.set_cost(IntegerExpression::Cost + 1);
+
+        let result = node.insert_successor_node(
+            Rc::new(transition1),
+            &mut function_cache,
+            &mut registry,
+            evaluators.clone(),
+            &bound_evaluator,
+            None,
+        );
+        assert!(result.is_some());
+        let (successor, _) = result.unwrap();
+        assert_eq!(successor.bound(&model), Some(2));
+        assert_eq!(successor.f, -3);
+        assert_eq!(successor.state().get_integer_variable(v.id()), 2);
+
+        let result = node.insert_successor_node(
+            Rc::new(transition2),
+            &mut function_cache,
+            &mut registry,
+            evaluators,
+            &f_evaluator,
+            None,
+        );
+        assert!(result.is_some());
+        let (successor, _) = result.unwrap();
+        assert_eq!(successor.bound(&model), Some(1));
+        assert_eq!(successor.f, -1);
+        assert_eq!(successor.state().get_integer_variable(v.id()), 3);
     }
 }

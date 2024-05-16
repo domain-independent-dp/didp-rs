@@ -1,5 +1,6 @@
 use crate::expression::*;
 use crate::state::StateInterface;
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry;
 
 /// Condition with element parameters.
@@ -119,6 +120,8 @@ impl GroundedCondition {
     pub fn is_satisfied<U: StateInterface>(
         &self,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &table_registry::TableRegistry,
     ) -> bool {
         for (i, v) in &self.elements_in_set_variable {
@@ -131,7 +134,8 @@ impl GroundedCondition {
                 return true;
             }
         }
-        self.condition.eval(state, registry)
+        self.condition
+            .eval(state, function_cache, state_functions, registry)
     }
 
     fn check_or(
@@ -617,6 +621,8 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
 
         let condition = GroundedCondition {
             condition: Condition::Set(Box::new(SetCondition::IsIn(
@@ -625,7 +631,7 @@ mod tests {
             ))),
             ..Default::default()
         };
-        assert!(condition.is_satisfied(&state, &registry));
+        assert!(condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
@@ -642,6 +648,9 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+
         let condition = GroundedCondition {
             condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(0),
@@ -650,7 +659,7 @@ mod tests {
             elements_in_set_variable: vec![],
             elements_in_vector_variable: vec![(0, 0, 2)],
         };
-        assert!(condition.is_satisfied(&state, &registry));
+        assert!(condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
@@ -667,6 +676,9 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+
         let condition = GroundedCondition {
             condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(1),
@@ -675,6 +687,6 @@ mod tests {
             elements_in_set_variable: vec![],
             elements_in_vector_variable: vec![(0, 1, 2)],
         };
-        assert!(!condition.is_satisfied(&state, &registry));
+        assert!(!condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
     }
 }

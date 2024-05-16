@@ -1,10 +1,10 @@
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
-    beam_search, rollout, Cabs, CabsParameters, CostNode, DdLns, DdLnsParameters, FNode,
-    NeighborhoodSearchInput, Search, SearchInput, Solution, StateInRegistry, SuccessorGenerator,
-    TransitionMutex, TransitionWithId,
+    beam_search, data_structure::ParentAndChildStateFunctionCache, rollout, Cabs,
+    CabsParameters, CostNode, DdLns, DdLnsParameters, FNode, NeighborhoodSearchInput, Search,
+    SearchInput, Solution, StateInRegistry, SuccessorGenerator, TransitionMutex, TransitionWithId,
 };
-use dypdl::{variable_type, Transition};
+use dypdl::{variable_type, StateFunctionCache, Transition};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -89,10 +89,12 @@ where
         .chain(generator.forced_transitions.iter())
         .map(|t| t.as_ref().clone());
 
+    let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
     let (solution, transition_mutex) = if let Some(transitions) = transitions {
         // Validate the initial solution.
         let solution_cost = if let Some(result) = rollout(
             &generator.model.target,
+            &mut function_cache,
             root_cost,
             &transitions,
             base_cost_evaluator,
@@ -142,12 +144,15 @@ where
 
     if model.has_dual_bounds() {
         let h_model = model.clone();
-        let h_evaluator = move |state: &_| h_model.eval_dual_bound(state);
+        let h_evaluator = move |state: &_, cache: &mut _| h_model.eval_dual_bound(state, cache);
         let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
         let g_model = model.clone();
         let node_generator = move |state, cost| {
+            let mut cache = StateFunctionCache::new(&g_model.state_functions);
+
             FNode::generate_root_node(
                 state,
+                &mut cache,
                 cost,
                 &g_model,
                 &h_evaluator,
@@ -162,18 +167,20 @@ where
         // Perform CABS if no initial solution is given.
         let solution = solution.unwrap_or_else(|| {
             let h_model = model.clone();
-            let h_evaluator = move |state: &_| h_model.eval_dual_bound(state);
+            let h_evaluator = move |state: &_, cache: &mut _| h_model.eval_dual_bound(state, cache);
             let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
             let t_model = model.clone();
-            let transition_evaluator = move |node: &FNode<_, _>, transition, primal_bound| {
-                node.generate_successor_node(
-                    transition,
-                    &t_model,
-                    &h_evaluator,
-                    &f_evaluator,
-                    primal_bound,
-                )
-            };
+            let transition_evaluator =
+                move |node: &FNode<_, _>, transition, cache: &mut _, primal_bound| {
+                    node.generate_successor_node(
+                        transition,
+                        cache,
+                        &t_model,
+                        &h_evaluator,
+                        &f_evaluator,
+                        primal_bound,
+                    )
+                };
             let input = SearchInput {
                 node: node_generator(StateInRegistry::from(model.target.clone()), root_cost),
                 generator: generator.clone(),
@@ -192,12 +199,13 @@ where
             solution
         });
 
-        let h_evaluator = move |state: &_| model.eval_dual_bound(state);
+        let h_evaluator = move |state: &_, cache: &mut _| model.eval_dual_bound(state, cache);
         let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
         let transition_evaluator =
-            move |node: &FNode<_, _>, transition, registry: &mut _, primal_bound| {
+            move |node: &FNode<_, _>, transition, cache: &mut _, registry: &mut _, primal_bound| {
                 node.insert_successor_node(
                     transition,
+                    cache,
                     registry,
                     &h_evaluator,
                     &f_evaluator,
@@ -240,8 +248,11 @@ where
         // Perform CABS if no initial solution is given.
         let solution = solution.unwrap_or_else(|| {
             let t_model = model.clone();
-            let transition_evaluator = move |node: &CostNode<_, _>, transition, _| {
-                node.generate_successor_node(transition, &t_model)
+            let transition_evaluator = move |node: &CostNode<_, _>,
+                                             transition,
+                                             cache: &mut ParentAndChildStateFunctionCache,
+                                             _| {
+                node.generate_successor_node(transition, &mut cache.parent, &t_model)
             };
             let input = SearchInput {
                 node: node_generator(StateInRegistry::from(model.target.clone()), root_cost),
@@ -261,8 +272,12 @@ where
             solution
         });
 
-        let transition_evaluator = move |node: &CostNode<_, _>, transition, registry: &mut _, _| {
-            node.insert_successor_node(transition, registry)
+        let transition_evaluator = move |node: &CostNode<_, _>,
+                                         transition,
+                                         cache: &mut ParentAndChildStateFunctionCache,
+                                         registry: &mut _,
+                                         _| {
+            node.insert_successor_node(transition, &mut cache.parent, registry)
         };
         parameters.beam_search_parameters.parameters.time_limit = parameters
             .beam_search_parameters

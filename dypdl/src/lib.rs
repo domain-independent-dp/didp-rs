@@ -131,6 +131,7 @@ mod effect;
 pub mod expression;
 mod grounded_condition;
 mod state;
+mod state_functions;
 mod table;
 mod table_data;
 mod table_registry;
@@ -146,6 +147,10 @@ pub use state::{
     ElementResourceVariable, ElementVariable, GetObjectTypeOf, IntegerResourceVariable,
     IntegerVariable, ObjectType, ResourceVariables, SetVariable, SignatureVariables, State,
     StateInterface, StateMetadata, VectorVariable,
+};
+pub use state_functions::{
+    BooleanStateFunction, ContinuousStateFunction, ElementStateFunction, IntegerStateFunction,
+    SetStateFunction, StateFunctionCache, StateFunctions,
 };
 pub use table::{Table, Table1D, Table2D, Table3D};
 pub use table_data::{
@@ -165,13 +170,15 @@ pub mod prelude {
         SetExpression, VectorExpression,
     };
     pub use super::{
-        AccessPreference, AccessTarget, AddDualBound, AddEffect, CheckExpression, CheckVariable,
-        Continuous, ContinuousResourceVariable, ContinuousVariable, CostExpression, CostType,
-        Element, ElementResourceVariable, ElementVariable, GetObjectTypeOf, Integer,
-        IntegerResourceVariable, IntegerVariable, Model, ObjectType, ReduceFunction,
-        ResourceVariables, Set, SetVariable, SignatureVariables, State, StateInterface,
-        StateMetadata, Table1DHandle, Table2DHandle, Table3DHandle, TableHandle, TableInterface,
-        Transition, TransitionInterface, Vector, VectorVariable,
+        AccessPreference, AccessTarget, AddDualBound, AddEffect, BooleanStateFunction,
+        CheckExpression, CheckVariable, Continuous, ContinuousResourceVariable,
+        ContinuousStateFunction, ContinuousVariable, CostExpression, CostType, Element,
+        ElementResourceVariable, ElementStateFunction, ElementVariable, GetObjectTypeOf, Integer,
+        IntegerResourceVariable, IntegerStateFunction, IntegerVariable, Model, ObjectType,
+        ReduceFunction, ResourceVariables, Set, SetStateFunction, SetVariable, SignatureVariables,
+        State, StateFunctionCache, StateFunctions, StateInterface, StateMetadata, Table1DHandle,
+        Table2DHandle, Table3DHandle, TableHandle, TableInterface, Transition, TransitionInterface,
+        Vector, VectorVariable,
     };
 }
 
@@ -222,6 +229,8 @@ impl Default for ReduceFunction {
 pub struct Model {
     /// Information about state variables.
     pub state_metadata: StateMetadata,
+    /// State functions.
+    pub state_functions: StateFunctions,
     /// Target state.
     pub target: State,
     /// Tables of constants.
@@ -259,19 +268,29 @@ impl Model {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
     /// model.add_state_constraint(condition).unwrap();
-    /// assert!(model.check_constraints(&state));
+    /// assert!(model.check_constraints(&state, &mut function_cache));
     ///
     /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 3);
     /// model.add_state_constraint(condition).unwrap();
-    /// assert!(!model.check_constraints(&state));
+    /// assert!(!model.check_constraints(&state, &mut function_cache));
     /// ```
-    pub fn check_constraints<U: StateInterface>(&self, state: &U) -> bool {
-        self.state_constraints
-            .iter()
-            .all(|constraint| constraint.is_satisfied(state, &self.table_registry))
+    pub fn check_constraints<U: StateInterface>(
+        &self,
+        state: &U,
+        function_cache: &mut StateFunctionCache,
+    ) -> bool {
+        self.state_constraints.iter().all(|constraint| {
+            constraint.is_satisfied(
+                state,
+                function_cache,
+                &self.state_functions,
+                &self.table_registry,
+            )
+        })
     }
 
     /// Returns true if a state satisfies any of base cases and false otherwise.
@@ -288,25 +307,34 @@ impl Model {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
     /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 1);
     /// model.add_base_case(vec![a, b]).unwrap();
-    /// assert!(!model.is_base(&state));
+    /// assert!(!model.is_base(&state, &mut function_cache));
     ///
     /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
     /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 2);
     /// model.add_base_case(vec![a, b]).unwrap();
-    /// assert!(model.is_base(&state));
+    /// assert!(model.is_base(&state, &mut function_cache));
     /// ```
-    pub fn is_base<U: StateInterface>(&self, state: &U) -> bool {
-        self.base_cases
+    pub fn is_base<U: StateInterface>(
+        &self,
+        state: &U,
+        function_cache: &mut StateFunctionCache,
+    ) -> bool {
+        self.base_cases.iter().any(|case| {
+            case.is_satisfied(
+                state,
+                function_cache,
+                &self.state_functions,
+                &self.table_registry,
+            )
+        }) || self
+            .base_states
             .iter()
-            .any(|case| case.is_satisfied(state, &self.table_registry))
-            || self
-                .base_states
-                .iter()
-                .any(|(base, _)| base.is_satisfied(state, &self.state_metadata))
+            .any(|(base, _)| base.is_satisfied(state, &self.state_metadata))
     }
 
     /// Evaluates the base cost given a state.
@@ -321,35 +349,57 @@ impl Model {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
     /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 1);
     /// model.add_base_case(vec![a, b]).unwrap();
-    /// assert!(!model.is_base(&state));
+    /// assert!(!model.is_base(&state, &mut function_cache));
     ///
     /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
     /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 2);
     /// model.add_base_case(vec![a, b]).unwrap();
-    /// assert!(model.is_base(&state));
+    /// assert!(model.is_base(&state, &mut function_cache));
     /// ```
     pub fn eval_base_cost<T: variable_type::Numeric + Ord, U: StateInterface>(
         &self,
         state: &U,
+        function_cache: &mut StateFunctionCache,
     ) -> Option<T> {
+        let costs = self.base_cases.iter().filter_map(|case| {
+            case.eval_cost(
+                state,
+                function_cache,
+                &self.state_functions,
+                &self.table_registry,
+            )
+        });
+
+        let cost = match self.reduce_function {
+            ReduceFunction::Min => costs.min(),
+            ReduceFunction::Max => costs.max(),
+            ReduceFunction::Sum => costs.reduce(|acc, e| acc + e),
+            ReduceFunction::Product => costs.reduce(|acc, e| acc * e),
+        };
+
         let costs = self
-            .base_cases
+            .base_states
             .iter()
-            .filter_map(|case| case.eval_cost(state, &self.table_registry))
-            .chain(self.base_states.iter().filter_map(|(base, cost)| {
+            .filter_map(|(base, cost)| {
                 if base.is_satisfied(state, &self.state_metadata) {
-                    Some(
-                        cost.as_ref()
-                            .map_or_else(T::zero, |cost| cost.eval(state, &self.table_registry)),
-                    )
+                    Some(cost.as_ref().map_or_else(T::zero, |cost| {
+                        cost.eval(
+                            state,
+                            function_cache,
+                            &self.state_functions,
+                            &self.table_registry,
+                        )
+                    }))
                 } else {
                     None
                 }
-            }));
+            })
+            .chain(cost);
 
         match self.reduce_function {
             ReduceFunction::Min => costs.min(),
@@ -374,26 +424,42 @@ impl Model {
     /// model.set_minimize();
     /// let variable = model.add_integer_variable("variable", 2).unwrap();
     /// let state = model.target.clone();
-    /// assert_eq!(model.eval_dual_bound::<_, Integer>(&state), None);
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// assert_eq!(model.eval_dual_bound::<_, Integer>(&state, &mut function_cache), None);
     ///
     /// model.add_dual_bound(IntegerExpression::from(0)).unwrap();
     /// model.add_dual_bound(IntegerExpression::from(variable)).unwrap();
-    /// assert_eq!(model.eval_dual_bound::<_, Integer>(&state), Some(2));
+    /// assert_eq!(model.eval_dual_bound::<_, Integer>(&state, &mut function_cache), Some(2));
     /// ```
     pub fn eval_dual_bound<U: StateInterface, T: variable_type::Numeric + Ord>(
         &self,
         state: &U,
+        function_cache: &mut StateFunctionCache,
     ) -> Option<T> {
         match self.reduce_function {
             ReduceFunction::Min => self
                 .dual_bounds
                 .iter()
-                .map(|b| b.eval(state, &self.table_registry))
+                .map(|b| {
+                    b.eval(
+                        state,
+                        function_cache,
+                        &self.state_functions,
+                        &self.table_registry,
+                    )
+                })
                 .max(),
             ReduceFunction::Max => self
                 .dual_bounds
                 .iter()
-                .map(|b| b.eval(state, &self.table_registry))
+                .map(|b| {
+                    b.eval(
+                        state,
+                        function_cache,
+                        &self.state_functions,
+                        &self.table_registry,
+                    )
+                })
                 .min(),
             _ => None,
         }
@@ -415,16 +481,21 @@ impl Model {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let mut transition = Transition::new("transition");
     /// transition.add_effect(variable, variable + 1);
     /// transition.set_cost(IntegerExpression::Cost + 1);
     ///
-    /// let (successor, cost): (State, _) = model.generate_successor_state(&state, 0, &transition, None).unwrap();
+    /// let (successor, cost): (State, _) = model.generate_successor_state(
+    ///     &state, &mut function_cache, 0, &transition, None,
+    /// ).unwrap();
     /// assert_eq!(successor.get_integer_variable(variable.id()), 3);
     /// assert_eq!(cost, 1);
     ///
-    /// let result: Option<(State, _)> = model.generate_successor_state(&state, 0, &transition, Some(1));
+    /// let result: Option<(State, _)> = model.generate_successor_state(
+    ///     &state, &mut function_cache, 0, &transition, Some(1),
+    /// );
     /// assert_eq!(result, None);
     /// ```
     pub fn generate_successor_state<
@@ -435,17 +506,29 @@ impl Model {
     >(
         &self,
         state: &S,
+        function_cache: &mut StateFunctionCache,
         cost: U,
         transition: &T,
         cost_bound: Option<U>,
     ) -> Option<(R, U)> {
-        let successor = transition.apply(state, &self.table_registry);
+        let successor = transition.apply(
+            state,
+            function_cache,
+            &self.state_functions,
+            &self.table_registry,
+        );
 
-        if !self.check_constraints(&successor) {
+        if !self.check_constraints(&successor, function_cache) {
             return None;
         }
 
-        let successor_cost = transition.eval_cost(cost, state, &self.table_registry);
+        let successor_cost = transition.eval_cost(
+            cost,
+            state,
+            function_cache,
+            &self.state_functions,
+            &self.table_registry,
+        );
 
         if cost_bound.map_or(false, |bound| match self.reduce_function {
             ReduceFunction::Max => successor_cost <= bound,
@@ -487,15 +570,22 @@ impl Model {
         show_message: bool,
     ) -> bool {
         let mut state_vec = vec![self.target.clone()];
+        let mut function_cache = StateFunctionCache::new(&self.state_functions);
+
         for (i, transition) in transitions.iter().enumerate() {
             let state = state_vec.last().unwrap();
-            if self.is_base(state) {
+            if self.is_base(state, &mut function_cache) {
                 if show_message {
                     println!("The {} th state satisfies a base case while there are {} transitions left.", i, transitions.len() - i);
                 }
                 return false;
             }
-            if !transition.is_applicable(state, &self.table_registry) {
+            if !transition.is_applicable(
+                state,
+                &mut function_cache,
+                &self.state_functions,
+                &self.table_registry,
+            ) {
                 if show_message {
                     println!(
                         "The {} th transition {} is not applicable.",
@@ -505,8 +595,15 @@ impl Model {
                 }
                 return false;
             }
-            let next_state = state.apply_effect(&transition.effect, &self.table_registry);
-            if !self.check_constraints(&next_state) {
+            let next_state = state.apply_effect(
+                &transition.effect,
+                &mut function_cache,
+                &self.state_functions,
+                &self.table_registry,
+            );
+            function_cache.clear();
+
+            if !self.check_constraints(&next_state, &mut function_cache) {
                 if show_message {
                     println!("The {} th state does not satisfy state constraints", i + 1);
                 }
@@ -514,7 +611,8 @@ impl Model {
             }
             state_vec.push(next_state);
         }
-        let mut validation_cost = if let Some(cost) = self.eval_base_cost(state_vec.last().unwrap())
+        let mut validation_cost = if let Some(cost) =
+            self.eval_base_cost(state_vec.last().unwrap(), &mut function_cache)
         {
             cost
         } else {
@@ -525,7 +623,14 @@ impl Model {
         };
         state_vec.pop();
         for (state, transition) in state_vec.into_iter().zip(transitions).rev() {
-            validation_cost = transition.eval_cost(validation_cost, &state, &self.table_registry);
+            function_cache.clear();
+            validation_cost = transition.eval_cost(
+                validation_cost,
+                &state,
+                &mut function_cache,
+                &self.state_functions,
+                &self.table_registry,
+            );
         }
         if cost != validation_cost && show_message {
             println!("The cost {} does not match the actual cost {}. This is possibly due to the cost is continuous.", cost, validation_cost)
@@ -1167,6 +1272,314 @@ impl Model {
             .continuous_variables
             .push(target);
         Ok(v)
+    }
+
+    /// Returns a set function given a name.
+    ///
+    /// # Errors
+    ///
+    /// If no such function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    /// model.add_set_state_function("function", variable.remove(1)).unwrap();
+    ///
+    /// assert!(model.get_set_state_function("function").is_ok());
+    /// ```
+    pub fn get_set_state_function(
+        &self,
+        name: &str,
+    ) -> Result<expression::SetExpression, ModelErr> {
+        self.state_functions.get_set_function(name)
+    }
+
+    /// Adds and returns a set function.
+    ///
+    /// # Errors
+    ///
+    /// If the name is already used.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let set = model.create_set(object_type, &[0, 1, 2, 3]).unwrap();
+    /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
+    ///
+    /// assert!(model.add_set_state_function("function", variable.remove(1)).is_ok());
+    /// ```
+    pub fn add_set_state_function<T>(
+        &mut self,
+        name: T,
+        expression: expression::SetExpression,
+    ) -> Result<expression::SetExpression, ModelErr>
+    where
+        String: From<T>,
+    {
+        self.check_expression(&expression, false)?;
+        let simplified = expression.simplify(&self.table_registry);
+
+        if let expression::SetExpression::Reference(expression::ReferenceExpression::Constant(
+            constant,
+        )) = &simplified
+        {
+            eprintln!("The state function always returns a constant {}", constant);
+        }
+
+        self.state_functions.add_set_function(name, simplified)
+    }
+
+    /// Returns a element function given a name.
+    ///
+    /// # Errors
+    ///
+    /// If no such function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    /// model.add_element_state_function("function", variable + 1).unwrap();
+    ///
+    /// assert!(model.get_element_state_function("function").is_ok());
+    /// ```
+    pub fn get_element_state_function(
+        &self,
+        name: &str,
+    ) -> Result<expression::ElementExpression, ModelErr> {
+        self.state_functions.get_element_function(name)
+    }
+
+    /// Adds and returns a element function.
+    ///
+    /// # Errors
+    ///
+    /// If the name is already used.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let object_type = model.add_object_type("object", 4).unwrap();
+    /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
+    ///
+    /// assert!(model.add_element_state_function("function", variable + 1).is_ok());
+    /// ```
+    pub fn add_element_state_function<T>(
+        &mut self,
+        name: T,
+        expression: expression::ElementExpression,
+    ) -> Result<expression::ElementExpression, ModelErr>
+    where
+        String: From<T>,
+    {
+        self.check_expression(&expression, false)?;
+        let simplified = expression.simplify(&self.table_registry);
+
+        if let expression::ElementExpression::Constant(constant) = &simplified {
+            eprintln!("The state function always returns a constant {}", constant);
+        }
+
+        self.state_functions.add_element_function(name, simplified)
+    }
+
+    /// Returns a integer function given a name.
+    ///
+    /// # Errors
+    ///
+    /// If no such function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 0).unwrap();
+    /// model.add_integer_state_function("function", variable + 1).unwrap();
+    ///
+    /// assert!(model.get_integer_state_function("function").is_ok());
+    /// ```
+    pub fn get_integer_state_function(
+        &self,
+        name: &str,
+    ) -> Result<expression::IntegerExpression, ModelErr> {
+        self.state_functions.get_integer_function(name)
+    }
+
+    /// Adds and returns a integer function.
+    ///
+    /// # Errors
+    ///
+    /// If the name is already used.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 0).unwrap();
+    ///
+    /// assert!(model.add_integer_state_function("function", variable + 1).is_ok());
+    /// ```
+    pub fn add_integer_state_function<T>(
+        &mut self,
+        name: T,
+        expression: expression::IntegerExpression,
+    ) -> Result<expression::IntegerExpression, ModelErr>
+    where
+        String: From<T>,
+    {
+        self.check_expression(&expression, false)?;
+        let simplified = expression.simplify(&self.table_registry);
+
+        if let expression::IntegerExpression::Constant(constant) = &simplified {
+            eprintln!("The state function always returns a constant {}", constant);
+        }
+
+        self.state_functions.add_integer_function(name, simplified)
+    }
+
+    /// Returns a continuous function given a name.
+    ///
+    /// # Errors
+    ///
+    /// If no such function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_continuous_variable("variable", 0.0).unwrap();
+    /// model.add_continuous_state_function("function", variable + 1).unwrap();
+    ///
+    /// assert!(model.get_continuous_state_function("function").is_ok());
+    /// ```
+    pub fn get_continuous_state_function(
+        &self,
+        name: &str,
+    ) -> Result<expression::ContinuousExpression, ModelErr> {
+        self.state_functions.get_continuous_function(name)
+    }
+
+    /// Adds and returns a continuous function.
+    ///
+    /// # Errors
+    ///
+    /// If the name is already used.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_continuous_variable("variable", 0.0).unwrap();
+    ///
+    /// assert!(model.add_continuous_state_function("function", variable + 1).is_ok());
+    /// ```
+    pub fn add_continuous_state_function<T>(
+        &mut self,
+        name: T,
+        expression: expression::ContinuousExpression,
+    ) -> Result<expression::ContinuousExpression, ModelErr>
+    where
+        String: From<T>,
+    {
+        self.check_expression(&expression, false)?;
+        let simplified = expression.simplify(&self.table_registry);
+
+        if let expression::ContinuousExpression::Constant(constant) = &simplified {
+            eprintln!("The state function always returns a constant {}", constant);
+        }
+
+        self.state_functions
+            .add_continuous_function(name, simplified)
+    }
+
+    /// Returns a boolean function given a name.
+    ///
+    /// # Errors
+    ///
+    /// If no such function.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 0).unwrap();
+    /// model.add_boolean_state_function(
+    ///     "function",
+    ///     Condition::comparison_i(ComparisonOperator::Eq, variable, 0),
+    /// ).unwrap();
+    ///
+    /// assert!(model.get_boolean_state_function("function").is_ok());
+    /// ```
+    pub fn get_boolean_state_function(
+        &self,
+        name: &str,
+    ) -> Result<expression::Condition, ModelErr> {
+        self.state_functions.get_boolean_function(name)
+    }
+
+    /// Adds and returns a boolean function.
+    ///
+    /// # Errors
+    ///
+    /// If the name is already used.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let variable = model.add_integer_variable("variable", 0).unwrap();
+    ///
+    /// assert!(
+    ///     model.add_boolean_state_function(
+    ///         "function",
+    ///         Condition::comparison_i(ComparisonOperator::Eq, variable, 0),
+    ///     ).is_ok(),
+    /// );
+    /// ```
+    pub fn add_boolean_state_function<T>(
+        &mut self,
+        name: T,
+        expression: expression::Condition,
+    ) -> Result<expression::Condition, ModelErr>
+    where
+        String: From<T>,
+    {
+        self.check_expression(&expression, false)?;
+        let simplified = expression.simplify(&self.table_registry);
+
+        if let expression::Condition::Constant(constant) = &simplified {
+            eprintln!("The state function always returns a constant {}", constant);
+        }
+
+        self.state_functions.add_boolean_function(name, simplified)
     }
 
     /// Adds a state constraint.
@@ -2580,6 +2993,17 @@ impl CheckExpression<expression::ElementExpression> for Model {
                     Ok(())
                 }
             }
+            expression::ElementExpression::StateFunction(id) => {
+                let n = self.state_functions.element_functions.len();
+                if *id >= n {
+                    Err(ModelErr::new(format!(
+                        "element state function id {} >= #variables ({})",
+                        *id, n
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
             expression::ElementExpression::BinaryOperation(_, x, y) => {
                 self.check_expression(x.as_ref(), allow_cost)?;
                 self.check_expression(y.as_ref(), allow_cost)
@@ -2692,6 +3116,17 @@ impl CheckExpression<expression::SetExpression> for Model {
             expression::SetExpression::Reference(expression::ReferenceExpression::Table(table)) => {
                 self.check_expression(table, allow_cost)
             }
+            expression::SetExpression::StateFunction(id) => {
+                let n = self.state_functions.set_functions.len();
+                if *id >= n {
+                    Err(ModelErr::new(format!(
+                        "set state function id {} >= #variables ({})",
+                        *id, n
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
             expression::SetExpression::Complement(expression) => {
                 self.check_expression(expression.as_ref(), allow_cost)
             }
@@ -2800,6 +3235,17 @@ impl CheckExpression<expression::IntegerExpression> for Model {
                     Ok(())
                 }
             }
+            expression::IntegerExpression::StateFunction(id) => {
+                let n = self.state_functions.integer_functions.len();
+                if *id >= n {
+                    Err(ModelErr::new(format!(
+                        "integer state function id {} >= #variables ({})",
+                        *id, n
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
             expression::IntegerExpression::Cost => {
                 if allow_cost {
                     if self.cost_type == CostType::Integer {
@@ -2879,6 +3325,17 @@ impl CheckExpression<expression::ContinuousExpression> for Model {
                 if *id >= n {
                     Err(ModelErr::new(format!(
                         "continuous resource variable id {} >= #variables ({})",
+                        *id, n
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
+            expression::ContinuousExpression::StateFunction(id) => {
+                let n = self.state_functions.continuous_functions.len();
+                if *id >= n {
+                    Err(ModelErr::new(format!(
+                        "continuous state function id {} >= #variables ({})",
                         *id, n
                     )))
                 } else {
@@ -3041,6 +3498,17 @@ impl CheckExpression<expression::Condition> for Model {
     ) -> Result<(), ModelErr> {
         match condition {
             expression::Condition::Constant(_) => Ok(()),
+            expression::Condition::StateFunction(id) => {
+                let n = self.state_functions.boolean_functions.len();
+                if *id >= n {
+                    Err(ModelErr::new(format!(
+                        "boolean state function id {} >= #variables ({})",
+                        *id, n
+                    )))
+                } else {
+                    Ok(())
+                }
+            }
             expression::Condition::Not(condition) => {
                 self.check_expression(condition.as_ref(), allow_cost)
             }
@@ -3123,7 +3591,7 @@ mod tests {
     }
 
     #[test]
-    fn check_constraints() {
+    fn check_constraints_true() {
         let state = state::State::default();
         let model = Model {
             state_constraints: vec![GroundedCondition {
@@ -3132,7 +3600,13 @@ mod tests {
             }],
             ..Default::default()
         };
-        assert!(model.check_constraints(&state));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert!(model.check_constraints(&state, &mut function_cache));
+    }
+
+    #[test]
+    fn check_constraints_false() {
+        let state = state::State::default();
         let model = Model {
             state_constraints: vec![
                 GroundedCondition {
@@ -3146,7 +3620,8 @@ mod tests {
             ],
             ..Default::default()
         };
-        assert!(!model.check_constraints(&state));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert!(!model.check_constraints(&state, &mut function_cache));
     }
 
     #[test]
@@ -3159,7 +3634,8 @@ mod tests {
             }])],
             ..Default::default()
         };
-        assert!(model.is_base(&state));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert!(model.is_base(&state, &mut function_cache));
     }
 
     #[test]
@@ -3172,7 +3648,8 @@ mod tests {
             }])],
             ..Default::default()
         };
-        assert!(!model.is_base(&state));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert!(!model.is_base(&state, &mut function_cache));
     }
 
     #[test]
@@ -3186,7 +3663,8 @@ mod tests {
             base_states: vec![(state::State::default(), None)],
             ..Default::default()
         };
-        assert!(model.is_base(&state));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert!(model.is_base(&state, &mut function_cache));
     }
 
     #[test]
@@ -3213,7 +3691,8 @@ mod tests {
             reduce_function: ReduceFunction::Min,
             ..Default::default()
         };
-        assert_eq!(model.eval_base_cost(&state), Some(0));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(model.eval_base_cost(&state, &mut function_cache), Some(0));
     }
 
     #[test]
@@ -3240,7 +3719,8 @@ mod tests {
             reduce_function: ReduceFunction::Min,
             ..Default::default()
         };
-        assert_eq!(model.eval_base_cost(&state), Some(2));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(model.eval_base_cost(&state, &mut function_cache), Some(2));
     }
 
     #[test]
@@ -3257,7 +3737,11 @@ mod tests {
             reduce_function: ReduceFunction::Min,
             ..Default::default()
         };
-        assert_eq!(model.eval_base_cost::<Integer, _>(&state), None);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(
+            model.eval_base_cost::<Integer, _>(&state, &mut function_cache),
+            None
+        );
     }
 
     #[test]
@@ -3284,7 +3768,8 @@ mod tests {
             reduce_function: ReduceFunction::Max,
             ..Default::default()
         };
-        assert_eq!(model.eval_base_cost(&state), Some(3));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(model.eval_base_cost(&state, &mut function_cache), Some(3));
     }
 
     #[test]
@@ -3301,7 +3786,11 @@ mod tests {
             reduce_function: ReduceFunction::Max,
             ..Default::default()
         };
-        assert_eq!(model.eval_base_cost::<Integer, _>(&state), None);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(
+            model.eval_base_cost::<Integer, _>(&state, &mut function_cache),
+            None
+        );
     }
 
     #[test]
@@ -3328,7 +3817,8 @@ mod tests {
             reduce_function: ReduceFunction::Sum,
             ..Default::default()
         };
-        assert_eq!(model.eval_base_cost(&state), Some(5));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(model.eval_base_cost(&state, &mut function_cache), Some(5));
     }
 
     #[test]
@@ -3345,7 +3835,11 @@ mod tests {
             reduce_function: ReduceFunction::Sum,
             ..Default::default()
         };
-        assert_eq!(model.eval_base_cost::<Integer, _>(&state), None);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(
+            model.eval_base_cost::<Integer, _>(&state, &mut function_cache),
+            None
+        );
     }
 
     #[test]
@@ -3372,7 +3866,8 @@ mod tests {
             reduce_function: ReduceFunction::Product,
             ..Default::default()
         };
-        assert_eq!(model.eval_base_cost(&state), Some(6));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(model.eval_base_cost(&state, &mut function_cache), Some(6));
     }
 
     #[test]
@@ -3389,7 +3884,11 @@ mod tests {
             reduce_function: ReduceFunction::Product,
             ..Default::default()
         };
-        assert_eq!(model.eval_base_cost::<Integer, _>(&state), None);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(
+            model.eval_base_cost::<Integer, _>(&state, &mut function_cache),
+            None
+        );
     }
 
     #[test]
@@ -3419,21 +3918,37 @@ mod tests {
     }
 
     #[test]
-    fn eval_dual_bound() {
+    fn eval_dual_bound_none_min() {
         let state = State::default();
 
         let model = Model {
             reduce_function: ReduceFunction::Min,
             ..Default::default()
         };
-        assert_eq!(model.eval_dual_bound::<_, Integer>(&state), None);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(
+            model.eval_dual_bound::<_, Integer>(&state, &mut function_cache),
+            None
+        );
+    }
 
+    #[test]
+    fn eval_dual_bound_none_max() {
+        let state = State::default();
         let model = Model {
             reduce_function: ReduceFunction::Max,
             ..Default::default()
         };
-        assert_eq!(model.eval_dual_bound::<_, Integer>(&state), None);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(
+            model.eval_dual_bound::<_, Integer>(&state, &mut function_cache),
+            None
+        );
+    }
 
+    #[test]
+    fn eval_dual_bound_min() {
+        let state = State::default();
         let model = Model {
             reduce_function: ReduceFunction::Min,
             dual_bounds: vec![
@@ -3442,8 +3957,16 @@ mod tests {
             ],
             ..Default::default()
         };
-        assert_eq!(model.eval_dual_bound::<_, Integer>(&state), Some(2));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(
+            model.eval_dual_bound::<_, Integer>(&state, &mut function_cache),
+            Some(2)
+        );
+    }
 
+    #[test]
+    fn eval_dual_bound_max() {
+        let state = State::default();
         let model = Model {
             reduce_function: ReduceFunction::Max,
             dual_bounds: vec![
@@ -3452,8 +3975,16 @@ mod tests {
             ],
             ..Default::default()
         };
-        assert_eq!(model.eval_dual_bound::<_, Integer>(&state), Some(1));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(
+            model.eval_dual_bound::<_, Integer>(&state, &mut function_cache),
+            Some(1)
+        );
+    }
 
+    #[test]
+    fn eval_dual_bound_sum() {
+        let state = State::default();
         let model = Model {
             reduce_function: ReduceFunction::Sum,
             dual_bounds: vec![
@@ -3462,8 +3993,16 @@ mod tests {
             ],
             ..Default::default()
         };
-        assert_eq!(model.eval_dual_bound::<_, Integer>(&state), None);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(
+            model.eval_dual_bound::<_, Integer>(&state, &mut function_cache),
+            None
+        );
+    }
 
+    #[test]
+    fn eval_dual_bound_product() {
+        let state = State::default();
         let model = Model {
             reduce_function: ReduceFunction::Product,
             dual_bounds: vec![
@@ -3472,7 +4011,11 @@ mod tests {
             ],
             ..Default::default()
         };
-        assert_eq!(model.eval_dual_bound::<_, Integer>(&state), None);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert_eq!(
+            model.eval_dual_bound::<_, Integer>(&state, &mut function_cache),
+            None
+        );
     }
 
     #[test]
@@ -3515,8 +4058,10 @@ mod tests {
             forward_transitions: vec![transition.clone()],
             ..Default::default()
         };
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
 
-        let result = model.generate_successor_state(&state, 0, &transition, None);
+        let result =
+            model.generate_successor_state(&state, &mut function_cache, 0, &transition, None);
         assert_eq!(
             result,
             Some((
@@ -3573,8 +4118,10 @@ mod tests {
             reduce_function: ReduceFunction::Min,
             ..Default::default()
         };
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
 
-        let result = model.generate_successor_state(&state, 0, &transition, Some(2));
+        let result =
+            model.generate_successor_state(&state, &mut function_cache, 0, &transition, Some(2));
         assert_eq!(
             result,
             Some((
@@ -3631,8 +4178,10 @@ mod tests {
             reduce_function: ReduceFunction::Max,
             ..Default::default()
         };
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
 
-        let result = model.generate_successor_state(&state, 0, &transition, Some(0));
+        let result =
+            model.generate_successor_state(&state, &mut function_cache, 0, &transition, Some(0));
         assert_eq!(
             result,
             Some((
@@ -3689,9 +4238,10 @@ mod tests {
             reduce_function: ReduceFunction::Min,
             ..Default::default()
         };
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
 
         let result: Option<(State, _)> =
-            model.generate_successor_state(&state, 0, &transition, Some(1));
+            model.generate_successor_state(&state, &mut function_cache, 0, &transition, Some(1));
         assert_eq!(result, None);
     }
 
@@ -3736,9 +4286,10 @@ mod tests {
             reduce_function: ReduceFunction::Max,
             ..Default::default()
         };
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
 
         let result: Option<(State, _)> =
-            model.generate_successor_state(&state, 0, &transition, Some(1));
+            model.generate_successor_state(&state, &mut function_cache, 0, &transition, Some(1));
         assert_eq!(result, None);
     }
 
@@ -3790,9 +4341,10 @@ mod tests {
             forward_transitions: vec![transition.clone()],
             ..Default::default()
         };
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
 
         let result: Option<(State, _)> =
-            model.generate_successor_state(&state, 0, &transition, None);
+            model.generate_successor_state(&state, &mut function_cache, 0, &transition, None);
         assert_eq!(result, None);
     }
 
@@ -4918,6 +5470,218 @@ mod tests {
         assert!(preference.is_err());
         let result = model.set_preference(v, false);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_set_state_function() {
+        let mut model = Model::default();
+        let ob = model.add_object_type(String::from("something"), 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let target = model.create_set(ob, &[1, 2, 4]);
+        assert!(target.is_ok());
+        let target = target.unwrap();
+        let v = model.add_set_variable(String::from("v"), ob, target);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let f = model.add_set_state_function("f", v.add(3));
+        assert!(f.is_ok());
+
+        let g = model.add_set_state_function("g", v.remove(1));
+        assert!(g.is_ok());
+
+        let f = model.add_set_state_function("f", v.remove(1));
+        assert!(f.is_err());
+
+        let f = model.get_set_state_function("f");
+        assert!(f.is_ok());
+
+        let g = model.get_set_state_function("g");
+        assert!(g.is_ok());
+
+        let h = model.get_set_state_function("h");
+        assert!(h.is_err());
+    }
+
+    #[test]
+    fn add_set_state_function_expression_err() {
+        let mut model = Model::default();
+        let ob = model.add_object_type(String::from("something"), 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let target = model.create_set(ob, &[1, 2, 4]);
+        assert!(target.is_ok());
+        let target = target.unwrap();
+        let v = model.add_set_variable(String::from("v"), ob, target);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut model = Model::default();
+        let f = model.add_set_state_function("f", v.add(3));
+        assert!(f.is_err());
+    }
+
+    #[test]
+    fn test_add_element_state_function() {
+        let mut model = Model::default();
+        let ob = model.add_object_type(String::from("something"), 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = model.add_element_variable(String::from("v"), ob, 0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let f = model.add_element_state_function("f", v + 1);
+        assert!(f.is_ok());
+
+        let g = model.add_element_state_function("g", v - 1);
+        assert!(g.is_ok());
+
+        let f = model.add_element_state_function("f", v - 1);
+        assert!(f.is_err());
+
+        let f = model.get_element_state_function("f");
+        assert!(f.is_ok());
+
+        let g = model.get_element_state_function("g");
+        assert!(g.is_ok());
+
+        let h = model.get_element_state_function("h");
+        assert!(h.is_err());
+    }
+
+    #[test]
+    fn add_element_state_function_expression_err() {
+        let mut model = Model::default();
+        let ob = model.add_object_type(String::from("something"), 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = model.add_element_variable(String::from("v"), ob, 0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut model = Model::default();
+        let f = model.add_element_state_function("f", v + 1);
+        assert!(f.is_err());
+    }
+
+    #[test]
+    fn test_add_integer_state_function() {
+        let mut model = Model::default();
+        let v = model.add_integer_variable(String::from("v"), 0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let f = model.add_integer_state_function("f", v + 1);
+        assert!(f.is_ok());
+
+        let g = model.add_integer_state_function("g", v - 1);
+        assert!(g.is_ok());
+
+        let f = model.add_integer_state_function("f", v - 1);
+        assert!(f.is_err());
+
+        let f = model.get_integer_state_function("f");
+        assert!(f.is_ok());
+
+        let g = model.get_integer_state_function("g");
+        assert!(g.is_ok());
+
+        let h = model.get_integer_state_function("h");
+        assert!(h.is_err());
+    }
+
+    #[test]
+    fn add_integer_state_function_expression_err() {
+        let mut model = Model::default();
+        let v = model.add_integer_variable(String::from("v"), 0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut model = Model::default();
+        let f = model.add_integer_state_function("f", v + 1);
+        assert!(f.is_err());
+    }
+
+    #[test]
+    fn test_add_continuous_state_function() {
+        let mut model = Model::default();
+        let v = model.add_continuous_variable(String::from("v"), 0.0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let f = model.add_continuous_state_function("f", v + 1);
+        assert!(f.is_ok());
+
+        let g = model.add_continuous_state_function("g", v - 1);
+        assert!(g.is_ok());
+
+        let f = model.add_continuous_state_function("f", v - 1);
+        assert!(f.is_err());
+
+        let f = model.get_continuous_state_function("f");
+        assert!(f.is_ok());
+
+        let g = model.get_continuous_state_function("g");
+        assert!(g.is_ok());
+
+        let h = model.get_continuous_state_function("h");
+        assert!(h.is_err());
+    }
+
+    #[test]
+    fn add_continuous_state_function_expression_err() {
+        let mut model = Model::default();
+        let v = model.add_continuous_variable(String::from("v"), 0.0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut model = Model::default();
+        let f = model.add_continuous_state_function("f", v + 1);
+        assert!(f.is_err());
+    }
+
+    #[test]
+    fn test_add_boolean_state_function() {
+        let mut model = Model::default();
+        let v = model.add_integer_variable(String::from("v"), 0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let f = model
+            .add_boolean_state_function("f", Condition::comparison_i(ComparisonOperator::Eq, v, 0));
+        assert!(f.is_ok());
+
+        let g = model
+            .add_boolean_state_function("g", Condition::comparison_i(ComparisonOperator::Ne, v, 0));
+        assert!(g.is_ok());
+
+        let f = model
+            .add_boolean_state_function("f", Condition::comparison_i(ComparisonOperator::Ne, v, 0));
+        assert!(f.is_err());
+
+        let f = model.get_boolean_state_function("f");
+        assert!(f.is_ok());
+
+        let g = model.get_boolean_state_function("g");
+        assert!(g.is_ok());
+
+        let h = model.get_boolean_state_function("h");
+        assert!(h.is_err());
+    }
+
+    #[test]
+    fn add_boolean_state_function_expression_err() {
+        let mut model = Model::default();
+        let v = model.add_integer_variable(String::from("v"), 0);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut model = Model::default();
+        let f = model
+            .add_boolean_state_function("f", Condition::comparison_i(ComparisonOperator::Eq, v, 0));
+        assert!(f.is_err());
     }
 
     #[test]

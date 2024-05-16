@@ -285,8 +285,8 @@ impl dypdl::StateInterface for StateWithHashableSignatureVariables {
 mod tests {
     use super::*;
     use dypdl::variable_type::Set;
-    use dypdl::StateInterface;
-    use dypdl::{expression::*, TableRegistry};
+    use dypdl::{expression::*, StateFunctions, TableRegistry};
+    use dypdl::{StateFunctionCache, StateInterface};
     use std::rc::Rc;
 
     #[test]
@@ -723,6 +723,9 @@ mod tests {
 
     #[test]
     fn apply_effect() {
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+
         let mut set1 = Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
@@ -845,7 +848,12 @@ mod tests {
                 continuous_variables: vec![OrderedFloat(5.0), OrderedFloat(2.5), OrderedFloat(6.0)],
             },
         };
-        let successor: HashableState = state.apply_effect(&effect, &registry);
+        let successor: HashableState = state.apply_effect(
+            &effect,
+            &mut function_cache,
+            &state_functions,
+            &registry,
+        );
         assert_eq!(successor, expected);
     }
 
@@ -1276,6 +1284,9 @@ mod tests {
 
     #[test]
     fn state_with_hashable_signature_variables_apply_effect() {
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+
         let mut set1 = Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
@@ -1398,7 +1409,12 @@ mod tests {
                 continuous_variables: vec![5.0, 2.5, 6.0],
             },
         };
-        let successor: StateWithHashableSignatureVariables = state.apply_effect(&effect, &registry);
+        let successor: StateWithHashableSignatureVariables = state.apply_effect(
+            &effect,
+            &mut function_cache,
+            &state_functions,
+            &registry,
+        );
         assert_eq!(successor, expected);
     }
 }

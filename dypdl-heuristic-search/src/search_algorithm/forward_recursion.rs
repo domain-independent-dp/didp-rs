@@ -1,7 +1,7 @@
 use super::data_structure::{HashableState, SuccessorGenerator};
 use super::search::{Parameters, Search, Solution};
 use super::util;
-use dypdl::{variable_type, Transition, TransitionInterface};
+use dypdl::{variable_type, StateFunctionCache, Transition, TransitionInterface};
 use rustc_hash::FxHashMap;
 use std::error::Error;
 use std::fmt;
@@ -102,9 +102,17 @@ where
                 if self.solution.cost.is_some() =>
             {
                 let mut state = HashableState::from(self.model.target.clone());
+                let mut function_cache = StateFunctionCache::new(&self.model.state_functions);
+
                 while let Some((_, Some(transition))) = memo.get(&state) {
+                    function_cache.clear();
                     let transition = transition.as_ref().clone();
-                    state = transition.apply(&state, &self.model.table_registry);
+                    state = transition.apply(
+                        &state,
+                        &mut function_cache,
+                        &self.model.state_functions,
+                        &self.model.table_registry,
+                    );
                     self.solution.transitions.push(transition);
                 }
             }
@@ -137,7 +145,9 @@ pub fn forward_recursion<T: variable_type::Numeric + Ord>(
     time_keeper: &util::TimeKeeper,
     expanded: &mut usize,
 ) -> Option<T> {
-    if let Some(cost) = model.eval_base_cost(&state) {
+    let mut function_cache = StateFunctionCache::new(&model.state_functions);
+
+    if let Some(cost) = model.eval_base_cost(&state, &mut function_cache) {
         return Some(cost);
     }
 
@@ -153,16 +163,34 @@ pub fn forward_recursion<T: variable_type::Numeric + Ord>(
     let mut best_transition = None;
     *expanded += 1;
 
-    for transition in generator.applicable_transitions(&state) {
-        let successor = transition.apply(&state, &model.table_registry);
+    let mut applicable_transitions = Vec::new();
 
-        if model.check_constraints(&successor) {
+    generator.generate_applicable_transitions(
+        &state,
+        &mut function_cache,
+        &mut applicable_transitions,
+    );
+
+    for transition in applicable_transitions {
+        let successor = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
+        if model.check_constraints(&successor, &mut function_cache) {
             let successor_cost =
                 forward_recursion(successor, model, generator, memo, time_keeper, expanded);
 
             if let Some(successor_cost) = successor_cost {
-                let current_cost =
-                    transition.eval_cost(successor_cost, &state, &model.table_registry);
+                let current_cost = transition.eval_cost(
+                    successor_cost,
+                    &state,
+                    &mut function_cache,
+                    &model.state_functions,
+                    &model.table_registry,
+                );
                 if cost.is_none() {
                     cost = Some(current_cost);
                     match model.reduce_function {
