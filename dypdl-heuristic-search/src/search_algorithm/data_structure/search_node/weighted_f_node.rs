@@ -459,7 +459,6 @@ where
         let model = registry.model().clone();
 
         let constructor = |state, g, other: Option<&Self>| {
-            function_cache.child.clear();
             let f_evaluator = evaluators.f;
             let evaluators = FNodeEvaluators {
                 h: evaluators.h,

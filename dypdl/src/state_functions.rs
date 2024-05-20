@@ -244,15 +244,21 @@ impl StateFunctions {
 /// If the state is changed, the cache must be cleared.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StateFunctionCache {
+    current_cycle: usize,
     set_values: Vec<Option<Set>>,
+    set_cycles: Vec<usize>,
     element_values: Vec<Option<Element>>,
+    element_cycles: Vec<usize>,
     integer_values: Vec<Option<Integer>>,
+    integer_cycles: Vec<usize>,
     continuous_values: Vec<Option<Continuous>>,
+    continuous_cycles: Vec<usize>,
     boolean_values: Vec<Option<bool>>,
+    boolean_cycles: Vec<usize>,
 }
 
 macro_rules! define_getter {
-    ($name:ident, $type:ty, $field:ident, $functions:ident) => {
+    ($name:ident, $type:ty, $field:ident, $cycles:ident, $functions:ident) => {
         /// Get the value of a state function.
         ///
         /// # Panics
@@ -268,9 +274,10 @@ macro_rules! define_getter {
         where
             S: StateInterface,
         {
-            if self.$field[i].is_none() {
+            if self.$cycles[i] < self.current_cycle {
                 self.$field[i] =
-                    Some(functions.$functions[i].eval(state, self, functions, &registry))
+                    Some(functions.$functions[i].eval(state, self, functions, &registry));
+                self.$cycles[i] = self.current_cycle;
             }
 
             self.$field[i].unwrap()
@@ -279,10 +286,11 @@ macro_rules! define_getter {
 }
 
 macro_rules! define_setter {
-    ($name:ident, $type:ty, $field:ident) => {
+    ($name:ident, $type:ty, $field:ident, $cycles:ident) => {
         /// Set the value of the state function.
         pub fn $name(&mut self, i: usize, value: $type) {
             self.$field[i] = Some(value);
+            self.$cycles[i] = self.current_cycle;
         }
     };
 }
@@ -290,18 +298,29 @@ macro_rules! define_setter {
 impl StateFunctionCache {
     /// Create a new state function cache.
     pub fn new(state_functions: &StateFunctions) -> Self {
-        let set_variables = vec![None; state_functions.set_functions.len()];
-        let element_variables = vec![None; state_functions.element_functions.len()];
-        let integer_variables = vec![None; state_functions.integer_functions.len()];
-        let continuous_variables = vec![None; state_functions.continuous_functions.len()];
-        let boolean_variables = vec![None; state_functions.boolean_functions.len()];
+        let set_values = vec![None; state_functions.set_functions.len()];
+        let set_cycles = vec![0; set_values.len()];
+        let element_values = vec![None; state_functions.element_functions.len()];
+        let element_cycles = vec![0; element_values.len()];
+        let integer_values = vec![None; state_functions.integer_functions.len()];
+        let integer_cycles = vec![0; integer_values.len()];
+        let continuous_values = vec![None; state_functions.continuous_functions.len()];
+        let continuous_cycles = vec![0; continuous_values.len()];
+        let boolean_values = vec![None; state_functions.boolean_functions.len()];
+        let boolean_cycles = vec![0; boolean_values.len()];
 
         Self {
-            set_values: set_variables,
-            element_values: element_variables,
-            integer_values: integer_variables,
-            continuous_values: continuous_variables,
-            boolean_values: boolean_variables,
+            current_cycle: 1,
+            set_values,
+            set_cycles,
+            element_values,
+            element_cycles,
+            integer_values,
+            integer_cycles,
+            continuous_values,
+            continuous_cycles,
+            boolean_values,
+            boolean_cycles,
         }
     }
 
@@ -317,9 +336,10 @@ impl StateFunctionCache {
         functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> &Set {
-        if self.set_values[i].is_none() {
+        if self.set_cycles[i] < self.current_cycle {
             self.set_values[i] =
-                Some(functions.set_functions[i].eval(state, self, functions, registry))
+                Some(functions.set_functions[i].eval(state, self, functions, registry));
+            self.set_cycles[i] = self.current_cycle;
         }
 
         self.set_values[i].as_ref().unwrap()
@@ -351,46 +371,56 @@ impl StateFunctionCache {
         )
     }
 
-    define_setter!(set_set_value, Set, set_values);
+    define_setter!(set_set_value, Set, set_values, set_cycles);
 
     define_getter!(
         get_element_value,
         Element,
         element_values,
+        element_cycles,
         element_functions
     );
 
-    define_setter!(set_element_value, Element, element_values);
+    define_setter!(set_element_value, Element, element_values, element_cycles);
 
     define_getter!(
         get_integer_value,
         Integer,
         integer_values,
+        integer_cycles,
         integer_functions
     );
 
-    define_setter!(set_integer_value, Integer, integer_values);
+    define_setter!(set_integer_value, Integer, integer_values, integer_cycles);
 
     define_getter!(
         get_continuous_value,
         Continuous,
         continuous_values,
+        continuous_cycles,
         continuous_functions
     );
 
-    define_setter!(set_continuous_value, Continuous, continuous_values);
+    define_setter!(
+        set_continuous_value,
+        Continuous,
+        continuous_values,
+        continuous_cycles
+    );
 
-    define_getter!(get_boolean_value, bool, boolean_values, boolean_functions);
+    define_getter!(
+        get_boolean_value,
+        bool,
+        boolean_values,
+        boolean_cycles,
+        boolean_functions
+    );
 
-    define_setter!(set_boolean_value, bool, boolean_values);
+    define_setter!(set_boolean_value, bool, boolean_values, boolean_cycles);
 
     /// Clear the cache.
     pub fn clear(&mut self) {
-        self.set_values.iter_mut().for_each(|v| *v = None);
-        self.element_values.iter_mut().for_each(|v| *v = None);
-        self.integer_values.iter_mut().for_each(|v| *v = None);
-        self.continuous_values.iter_mut().for_each(|v| *v = None);
-        self.boolean_values.iter_mut().for_each(|v| *v = None);
+        self.current_cycle += 1;
     }
 }
 
@@ -1402,6 +1432,8 @@ mod tests {
         let mut state_functions = StateFunctions::default();
         let f = state_functions.add_integer_function("f", v + 1);
         assert!(f.is_ok());
+        let g = state_functions.add_integer_function("g", v + 2);
+        assert!(g.is_ok());
 
         let state = State {
             signature_variables: SignatureVariables {
@@ -1418,6 +1450,10 @@ mod tests {
             function_cache.get_integer_value(0, &state, &state_functions, &registry),
             1
         );
+        assert_eq!(
+            function_cache.get_integer_value(1, &state, &state_functions, &registry),
+            2
+        );
 
         let state = State {
             signature_variables: SignatureVariables {
@@ -1432,6 +1468,25 @@ mod tests {
         assert_eq!(
             function_cache.get_integer_value(0, &state, &state_functions, &registry),
             2
+        );
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![2],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        function_cache.clear();
+
+        assert_eq!(
+            function_cache.get_integer_value(0, &state, &state_functions, &registry),
+            3
+        );
+        assert_eq!(
+            function_cache.get_integer_value(1, &state, &state_functions, &registry),
+            4
         );
     }
 }

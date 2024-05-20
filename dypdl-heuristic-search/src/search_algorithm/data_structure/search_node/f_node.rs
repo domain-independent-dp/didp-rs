@@ -368,7 +368,6 @@ where
             transition.deref(),
             None,
         )?;
-        function_cache.child.clear();
         let evaluators = FNodeEvaluators {
             h: h_evaluator,
             f: f_evaluator,
