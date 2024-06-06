@@ -22,6 +22,8 @@ use std::str;
 /// where `cost` is `IntegerExpression::Cost`or `ContinuousExpression::Cost` and `w` is a numeric expression independent of `cost`.
 /// `f_evaluator_type` must be specified appropriately according to the cost expressions.
 ///
+/// Note that a solution found by this solver may not apply a forced transition when it is applicable.
+///
 /// # Panics
 ///
 /// If CABS to find an initial feasible solution panics.

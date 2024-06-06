@@ -30,6 +30,8 @@ use std::sync::Arc;
 /// By default, this solver only keeps states in the current layer to check for duplicates.
 /// If :code:`keep_all_layers` is :code:`True`, LNBS keeps states in all layers to check for duplicates.
 ///
+/// Note that a solution found by this solver may not apply a forced transition when it is applicable.
+///
 /// Parameters
 /// ----------
 /// model: Model
