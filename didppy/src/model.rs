@@ -406,14 +406,19 @@ impl ModelPy {
         self.0.target = state.into();
     }
 
-    /// Return the yaml strings that represent the model.
+    /// Returns the YAML strings representing the model.
     ///
     /// Returns
     /// -------
     /// domain_str: str
-    ///     A single string that can be loaded into the Yaml object of the domain file.
+    ///     Single string that can be loaded into the YAML object of the domain file.
     /// problem_str: str
-    ///     A single string that can be loaded into the Yaml object of the problem file.
+    ///     Single string that can be loaded into the YAML object of the problem file.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If the model is not valid.
     fn dump_to_str(&self) -> PyResult<(String, String)> {
         match dump_model(&Model::from(self.clone())) {
             Ok(results) => Ok(results),
@@ -421,14 +426,21 @@ impl ModelPy {
         }
     }
 
-    /// Write the yaml files in the provided path
+    /// Writes the YAML files in the provided paths.
     ///
     /// Parameters
     /// -------
     /// domain_path: str
-    ///     The path for writing the yaml domain file.
+    ///     Path for writing the YAML domain file.
     /// problem_path: str
-    ///     The path for writing the yaml problem file.
+    ///     Path for writing the YAML problem file.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If the model is not valid.
+    /// FileNotFoundError
+    ///     If the file paths are not valid.
     fn dump_to_files(&self, domain_path: &str, problem_path: &str) -> PyResult<()> {
         let (domain_str, problem_str) = self.dump_to_str()?;
         fs::write(domain_path, domain_str)?;
@@ -436,19 +448,26 @@ impl ModelPy {
         Ok(())
     }
 
-    /// Load a model from the yaml strings.
+    /// Loads a model from the YAML strings.
     ///
     /// Parameters
-    /// -------
+    /// ----------
     /// domain_str: str
-    ///     A single string that can be loaded into the Yaml object of the domain file.
+    ///     Single string that can be loaded into the YAML object of the domain file.
     /// problem_str: str
-    ///     A single string that can be loaded into the Yaml object of the problem file.
+    ///     Single string that can be loaded into the YAML object of the problem file.
     ///
     /// Returns
     /// -------
     /// Model
-    ///     A DIDP Model that is represented by the Yaml strings.
+    ///     Model represented by the YAML strings.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///    If the strings are not formatted in YAML or invalid.
+    /// PanicException
+    ///    If the model is invalid.
     #[staticmethod]
     fn load_from_str(domain_str: &str, problem_str: &str) -> PyResult<ModelPy> {
         let domain_result = yaml_rust::YamlLoader::load_from_str(domain_str);
@@ -456,8 +475,8 @@ impl ModelPy {
         let domain = match domain_result {
             Ok(domain) => domain,
             Err(error) => {
-                return Err(PyErr::new::<PyTypeError, _>(format!(
-                    "Couldn't load a domain as yaml: {:?}",
+                return Err(PyErr::new::<PyRuntimeError, _>(format!(
+                    "Couldn't load a domain as YAML: {:?}",
                     error
                 )))
             }
@@ -469,8 +488,8 @@ impl ModelPy {
         let problem = match problem_result {
             Ok(problem) => problem,
             Err(error) => {
-                return Err(PyErr::new::<PyTypeError, _>(format!(
-                    "Couldn't load a problem as yaml: {:?}",
+                return Err(PyErr::new::<PyRuntimeError, _>(format!(
+                    "Couldn't load a problem as YAML: {:?}",
                     error
                 )))
             }
@@ -481,26 +500,35 @@ impl ModelPy {
 
         match model_result {
             Ok(model) => Ok(ModelPy::from(model)),
-            Err(error) => Err(PyErr::new::<PyTypeError, _>(format!(
+            Err(error) => Err(PyErr::new::<PyRuntimeError, _>(format!(
                 "Couldn't load a model: {:?}",
                 error
             ))),
         }
     }
 
-    /// Load the yaml files in the provided path.
+    /// Loads the YAML files in the provided path.
     ///
     /// Parameters
-    /// -------
+    /// ----------
     /// domain_path: str
-    ///     The path for the given yaml domain file.
+    ///     Path for the given YAML domain file.
     /// problem_path: str
-    ///     The path for the given yaml problem file.
+    ///     Path for the given YAML problem file.
     ///
     /// Returns
     /// -------
     /// Model
-    ///     A DIDP Model that is represented by the Yaml strings.
+    ///     Model represented by the YAML strings.
+    ///
+    /// Raises
+    /// ------
+    /// FileNotFoundError
+    ///     If the files do not exist.
+    /// RuntimeError
+    ///     If the strings are not formatted in YAML or invalid.
+    /// PanicException
+    ///     If the model is invalid.
     #[staticmethod]
     fn load_from_files(domain_path: &str, problem_path: &str) -> PyResult<ModelPy> {
         let domain_str = fs::read_to_string(domain_path)?;
@@ -525,6 +553,7 @@ impl ModelPy {
     /// ------
     /// RuntimeError
     ///     If no such object type.
+    ///
     /// Examples
     /// --------
     /// >>> import didppy as dp
