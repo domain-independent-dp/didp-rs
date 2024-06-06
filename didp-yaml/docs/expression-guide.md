@@ -29,8 +29,9 @@ dual_bounds:
   - [if](#if)
 - [Set Expression](#set-expression)
   - [Immediate Value](#immediate-value-1)
-  - [Table](#table-1)
-  - [Table Reduce](#table-reduce)
+  - [Immediate Value with an Object Type](#immediate-value-with-an-object-type)
+  - [Table or Dictionary](#table-or-dictionary)
+  - [Table or Dictionary Reduce](#table-or-dictionary-reduce)
   - [Variable](#variable-1)
   - [complement](#complement)
   - [union](#union)
@@ -41,8 +42,8 @@ dual_bounds:
   - [if](#if-1)
 - [Integer Expression](#integer-expression)
   - [Immediate Value](#immediate-value-1)
-  - [Table](#table-2)
-  - [Table Reduce](#table-reduce-1)
+  - [Table or Dictionary](#table-or-dictionary-1)
+  - [Table or Dictionary Reduce](#table-or-dictionary-reduce-1)
   - [Variable](#variable-1)
   - [Arithmetic Operations](#arithmetic-operations-1)
   - [Rounding](#rounding)
@@ -50,15 +51,15 @@ dual_bounds:
   - [if](#if-2)
 - [Continuous Expression](#continuous-expression)
   - [Immediate Value](#immediate-value-2)
-  - [Table](#table-3)
-  - [Table Reduce](#table-reduce-2)
+  - [Table or Dictionary](#table-or-dictionary-2)
+  - [Table or Dictionary Reduce](#table-or-dictionary-reduce-2)
   - [Variable](#variable-2)
   - [Arithmetic Operations](#arithmetic-operations-2)
   - [Rounding](#rounding-1)
   - [Cardinality](#cardinality-1)
   - [if](#if-3)
 - [Condition](#condition)
-  - [Table](#table-4)
+  - [Table or Dictionary](#table-or-dictionary-3)
   - [Arithmetic Comparison](#arithmetic-comparison)
   - [Set Comparison](#set-comparison)
   - [is_in](#is_in)
@@ -133,30 +134,38 @@ An effect on an set variable must be a set expression.
 ### Immediate Value
 
 ```
+{<nonegatve integer 1>, ..., <nonegative integer k> : <positive integer>}
+```
+
+It returns a set consisting of the nonnegative integers with the maximum cardinality of `<positive integer>`.
+
+### Immediate Value with an Object Type
+
+```
 (<object name> <parameter 1>|<element constant 1>|<element immediate 1> , ..., <parameter k>|<element constant k>|<element immediate k>)
 ```
 
 It returns a set of objects with type `<object name>` consisting of the argument.
 Each argument is an element expression but restricted to a parameter, an element table having no `args`, and an immediate value.
 
-### Table
+### Table or Dictionary
 
 ```
-(<table name> <element expression 1>, ..., <element expression k>)
+(<table name>|<dictionary name> <element expression 1>, ..., <element expression k>)
 ```
 
-It returns a value in table `<table name>` with indices `<element expression 1>` to `<element expression k>`.
+It returns a value in table `<table name>` or dictionary `<dictionary name>` with indices `<element expression 1>` to `<element expression k>`.
 The number of element expressions must be the same as `args` of the table.
 
-### Table Reduce
+### Table or Dictionary Reduce
 
 ```
-(union <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
-(intersection <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
-(disjunctive_union <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(union <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(intersection <table name>|<dictionary nam> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(disjunctive_union <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
 ```
 
-It returns the union/intersection/disjunctive union of values in table `<table name>` with indices specified by the arguments.
+It returns the union/intersection/disjunctive union of values in table `<table name>` or dictionary `<dictionary name>` with indices specified by the arguments.
 It takes the sum over all elements in the cartesian product of the arguments.
 
 For example, suppose that a table named `table1` is 3-dimensional.
@@ -237,24 +246,24 @@ If `cost_type` is `integer`, the cost exprssion of each transition and dual boun
 
 An integer is an integer expression.
 
-### Table
+### Table or Dictionary
 
 ```
-(<table name> <element expression 1>, ..., <element expression k>)
+(<table name>|<dictionary name> <element expression 1>, ..., <element expression k>)
 ```
 
-It returns a value in table `<table name>` with indices `<element expression 1>` to `<element expression k>`.
+It returns a value in table `<table name>` or dictionary `<dictionary name>` with indices `<element expression 1>` to `<element expression k>`.
 The number of element expressions must be the same as `args` of the table.
 
-### Table Reduce
+### Table or Dictionary Reduce
 
 ```
-(sum <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
-(max <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
-(min <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(sum <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(max <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(min <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
 ```
 
-It returns the sum/maximum/minimum of values in table `<table name>` with indices specified by the arguments.
+It returns the sum/maximum/minimum of values in table `<table name>` or dictionary `<dictionary name>` with indices specified by the arguments.
 It takes the sum over all elements in the cartesian product of the arguments.
 
 For example, suppose that a table named `table1` is 3-dimensional.
@@ -327,25 +336,25 @@ If `cost_type` is `continuous`, the cost exprssion of each transition and dual b
 
 A real value is a continuous expression.
 
-### Table
+### Table or Dictionary
 
 ```
-(<table name> <element expression 1>, ..., <element expression k>)
+(<table name>|<dictionary name> <element expression 1>, ..., <element expression k>)
 ```
 
-It returns a value in table `<table name>` with indices `<element expression 1>` to `<element expression k>`.
+It returns a value in table `<table name>` or dictionary `<dictionary name>` with indices `<element expression 1>` to `<element expression k>`.
 The number of element expressions must be the same as `args` of the table.
 An integer table can be used in a continuous expression.
 
-### Table Reduce
+### Table or Dictionary Reduce
 
 ```
-(sum <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
-(max <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
-(min <table name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(sum <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(max <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
+(min <table name>|<dictionary name> <element expression 1>|<set expression 1>, ..., <element expression k>|<set expression k>)
 ```
 
-It returns the sum/maximum/minimum of values in table `<table name>` with indices specified by the arguments.
+It returns the sum/maximum/minimum of values in table `<table name>` or dictionary `<dictionary name>` with indices specified by the arguments.
 It takes the sum over all elements in the cartesian product of the arguments.
 
 For example, suppose that a table named `table1` is 3-dimensional.
@@ -421,13 +430,13 @@ Conditions are used in state constraints and preconditions.
 It returns a boolean value, `true` or `false`.
 Also, conditions are used in element, set, and numeric expressions with `if`.
 
-### Table
+### Table or Dictionary
 
 ```
-(<table name> <element expression 1>, ..., <element expression k>)
+(<table name>|<dictionary name> <element expression 1>, ..., <element expression k>)
 ```
 
-It returns a value in table `<table name>` with indices `<element expression 1>` to `<element expression k>`.
+It returns a value in table `<table name>` or dictionary `<dictionary name>` with indices `<element expression 1>` to `<element expression k>`.
 The `type` of the table must be `bool`.
 The number of element expressions must be the same as `args` of the table.
 
