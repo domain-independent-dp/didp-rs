@@ -17,7 +17,9 @@ crate-type = ["cdylib"]
 [dependencies]
 dypdl = { path = "../dypdl", version = "0.7.3" }
 dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.7.3" }
+didp-yaml = { path = "../didp-yaml", version = "0.7.3" }
 rustc-hash = "1.1"
+yaml-rust = "0.4"
 
 [dependencies.pyo3]
 version = "0.21"

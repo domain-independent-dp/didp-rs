@@ -100,6 +100,7 @@ dependencies = [
  "approx",
  "dypdl",
  "dypdl-heuristic-search",
+ "itertools",
  "lazy_static",
  "linked-hash-map",
  "num-traits",
@@ -114,11 +115,13 @@ dependencies = [
 name = "didppy"
 version = "0.7.3"
 dependencies = [
+ "didp-yaml",
  "dypdl",
  "dypdl-heuristic-search",
  "pyo3",
  "pyo3-build-config",
  "rustc-hash",
+ "yaml-rust",
 ]
 
 [[package]]
@@ -127,6 +130,7 @@ version = "0.7.3"
 dependencies = [
  "approx",
  "fixedbitset",
+ "itertools",
  "num-traits",
  "ordered-float",
  "rustc-hash",
@@ -211,6 +215,15 @@ name = "indoc"
 version = "2.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b248f5224d1d606005e02c97f5aa4e88eeb230488bcc03bc9ca4d7991399f2b5"
+
+[[package]]
+name = "itertools"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba291022dbbd398a455acf126c1e341954079855bc60dfdda641363bd6922569"
+dependencies = [
+ "either",
+]
 
 [[package]]
 name = "itoa"

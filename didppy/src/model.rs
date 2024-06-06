@@ -4,6 +4,7 @@ mod state;
 mod table;
 mod transition;
 
+use didp_yaml::{dump_model, dypdl_parser};
 use dypdl::prelude::*;
 use dypdl::variable_type::{OrderedContinuous, ToNumeric};
 pub use expression::*;
@@ -12,6 +13,7 @@ use pyo3::prelude::*;
 use rustc_hash::FxHashMap;
 pub use state::StatePy;
 use std::collections::HashSet;
+use std::fs;
 pub use table::*;
 pub use transition::{CostUnion, IntOrFloat, TransitionPy};
 
@@ -403,6 +405,121 @@ impl ModelPy {
     #[setter]
     fn set_target_state(&mut self, state: state::StatePy) {
         self.0.target = state.into();
+    }
+
+    /// dump_to_str()
+    ///
+    /// Return the yaml strings that represent the model.
+    ///
+    /// Returns
+    /// -------
+    /// domain_str: str
+    ///     A single string that can be loaded into the Yaml object of the domain file.
+    /// problem_str: str
+    ///     A single string that can be loaded into the Yaml object of the problem file.
+    #[pyo3(signature=())]
+    fn dump_to_str(&self) -> PyResult<(String, String)> {
+        match dump_model(&Model::from(self.clone())) {
+            Ok(results) => Ok(results),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// dump_to_files(domain_path, problem_path)
+    ///
+    /// Write the yaml files in the provided path
+    ///
+    /// Parameters
+    /// -------
+    /// domain_path: str
+    ///     The path for writing the yaml domain file.
+    /// problem_path: str
+    ///     The path for writing the yaml problem file.
+    #[pyo3(signature=(domain_path, problem_path))]
+    fn dump_to_files(&self, domain_path: &str, problem_path: &str) -> PyResult<()> {
+        let (domain_str, problem_str) = self.dump_to_str()?;
+        fs::write(domain_path, domain_str)?;
+        fs::write(problem_path, problem_str)?;
+        Ok(())
+    }
+
+    /// load_from_str(domain_str, problem_str)
+    ///
+    /// Load a model from the yaml strings.
+    ///
+    /// Parameters
+    /// -------
+    /// domain_str: str
+    ///     A single string that can be loaded into the Yaml object of the domain file.
+    /// problem_str: str
+    ///     A single string that can be loaded into the Yaml object of the problem file.
+    ///
+    /// Returns
+    /// -------
+    /// Model
+    ///     A DIDP Model that is represented by the Yaml strings.
+    #[staticmethod]
+    #[pyo3(signature=(domain_str, problem_str))]
+    fn load_from_str(domain_str: &str, problem_str: &str) -> PyResult<ModelPy> {
+        let domain_result = yaml_rust::YamlLoader::load_from_str(domain_str);
+
+        let domain = match domain_result {
+            Ok(domain) => domain,
+            Err(error) => {
+                return Err(PyErr::new::<PyTypeError, _>(format!(
+                    "Couldn't load a domain as yaml: {:?}",
+                    error
+                )))
+            }
+        };
+        let domain = &domain[0];
+
+        let problem_result = yaml_rust::YamlLoader::load_from_str(problem_str);
+
+        let problem = match problem_result {
+            Ok(problem) => problem,
+            Err(error) => {
+                return Err(PyErr::new::<PyTypeError, _>(format!(
+                    "Couldn't load a problem as yaml: {:?}",
+                    error
+                )))
+            }
+        };
+        let problem = &problem[0];
+
+        let model_result = dypdl_parser::load_model_from_yaml(domain, problem);
+
+        match model_result {
+            Ok(model) => Ok(ModelPy::from(model)),
+            Err(error) => Err(PyErr::new::<PyTypeError, _>(format!(
+                "Couldn't load a model: {:?}",
+                error
+            ))),
+        }
+    }
+
+    /// load_from_files(domain_path, problem_path)
+    ///
+    /// Load the yaml files in the provided path.
+    ///
+    /// Parameters
+    /// -------
+    /// domain_path: str
+    ///     The path for the given yaml domain file.
+    /// problem_path: str
+    ///     The path for the given yaml problem file.
+    ///
+    /// Returns
+    /// -------
+    /// Model
+    ///     A DIDP Model that is represented by the Yaml strings.
+    #[staticmethod]
+    #[pyo3(signature=(domain_path, problem_path))]
+    fn load_from_files(domain_path: &str, problem_path: &str) -> PyResult<ModelPy> {
+        let domain_str = fs::read_to_string(domain_path)?;
+        let problem_str = fs::read_to_string(problem_path)?;
+
+        Self::load_from_str(&domain_str, &problem_str)
     }
 
     /// get_object_type(name)
@@ -3445,7 +3562,13 @@ impl ModelPy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dypdl::{BaseCase, GroundedCondition};
+    use dypdl::{
+        expression::{
+            BinaryOperator, NumericTableExpression, ReferenceExpression, SetCondition,
+            SetElementOperator, TableExpression,
+        },
+        BaseCase, Effect, GroundedCondition,
+    };
 
     #[test]
     fn object_from_py() {
@@ -15122,4 +15245,1365 @@ mod tests {
     //     assert!(result.is_err());
     //     assert_eq!(model, snapshot);
     // }
+
+    #[test]
+    fn load_from_str_ok() {
+        let domain = r"
+domain: TSPTW
+reduce: min
+objects: [cities]
+state_variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: integer
+          preference: less
+tables:
+        - name: ready_time
+          type: integer
+          args: [cities]
+        - name: due_date 
+          type: integer
+          args: [cities]
+        - name: distance 
+          type: integer
+          args: [cities, cities]
+          default: 0
+dictionaries:
+        - name: connected
+          type: bool
+          default: true
+constraints:
+        - (<= time (due_date location))
+        - (= 0 0)
+reduce: min
+cost_type: continuous
+transitions:
+        - name: visit
+          direction: forward
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effect:
+              unvisited: (remove to unvisited)
+              location: to
+              time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - [(is_empty unvisited), (= location 0)]
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+dictionary_values:
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_ok());
+        let model = model.unwrap();
+
+        let mut expected_model = ModelPy::new_py(false, true);
+
+        let cities = expected_model.add_object_type(3, Some("cities"));
+        assert!(cities.is_ok());
+        let cities = cities.unwrap();
+
+        let unvisited = expected_model.add_set_var(
+            cities,
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity_and_blocks(
+                3,
+                vec![7],
+            ))),
+            Some("unvisited"),
+        );
+        assert!(unvisited.is_ok());
+
+        let location = expected_model.add_element_var(cities, 0, Some("location"));
+        assert!(location.is_ok());
+
+        let time = expected_model.add_int_resource_var(0, true, Some("time"));
+        assert!(time.is_ok());
+
+        let base_case_result = expected_model.add_base_case(
+            vec![
+                ConditionPy::from(Condition::Set(Box::new(SetCondition::IsEmpty(
+                    SetExpression::Reference(ReferenceExpression::Variable(0)),
+                )))),
+                ConditionPy::from(Condition::ComparisonE(
+                    ComparisonOperator::Eq,
+                    Box::new(ElementExpression::Variable(0)),
+                    Box::new(ElementExpression::Constant(0)),
+                )),
+            ],
+            None,
+        );
+        assert!(base_case_result.is_ok());
+
+        let ready_time = expected_model.add_int_table(
+            IntTableArgUnion::Table1D(vec![0, 1, 1]),
+            None,
+            Some("ready_time"),
+        );
+        assert!(ready_time.is_ok());
+
+        let due_date = expected_model.add_int_table(
+            IntTableArgUnion::Table1D(vec![10000, 2, 2]),
+            None,
+            Some("due_date"),
+        );
+        assert!(due_date.is_ok());
+
+        let distance = expected_model.add_int_table(
+            IntTableArgUnion::Table2D(vec![vec![0, 1, 1], vec![1, 0, 1], vec![1, 1, 0]]),
+            None,
+            Some("distance"),
+        );
+        assert!(distance.is_ok());
+
+        let mut connected = FxHashMap::default();
+        connected.insert(vec![0, 0], false);
+        connected.insert(vec![1, 1], false);
+        connected.insert(vec![2, 2], false);
+        let connected = expected_model.add_bool_table(
+            BoolTableArgUnion::Table(connected),
+            Some(true),
+            Some("connected"),
+        );
+        assert!(connected.is_ok());
+
+        let constraint_result =
+            expected_model.add_state_constr(ConditionPy::from(Condition::ComparisonI(
+                ComparisonOperator::Le,
+                Box::new(IntegerExpression::ResourceVariable(0)),
+                Box::new(IntegerExpression::Table(Box::new(
+                    NumericTableExpression::Table1D(1, ElementExpression::Variable(0)),
+                ))),
+            )));
+        assert!(constraint_result.is_ok());
+
+        let transition_result = expected_model.add_transition(
+            TransitionPy::from(Transition {
+                name: String::from("visit"),
+                parameter_names: vec![String::from("to")],
+                parameter_values: vec![0],
+                elements_in_set_variable: vec![(0, 0)],
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::Table(Box::new(TableExpression::Table(
+                        0,
+                        vec![
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(0),
+                        ],
+                    ))),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![(
+                        0,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Remove,
+                            ElementExpression::Constant(0),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                        ),
+                    )],
+                    element_effects: vec![(0, ElementExpression::Constant(0))],
+                    integer_resource_effects: vec![(
+                        0,
+                        IntegerExpression::BinaryOperation(
+                            BinaryOperator::Max,
+                            Box::new(IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::ResourceVariable(0)),
+                                Box::new(IntegerExpression::Table(Box::new(
+                                    NumericTableExpression::Table2D(
+                                        0,
+                                        ElementExpression::Variable(0),
+                                        ElementExpression::Constant(0),
+                                    ),
+                                ))),
+                            )),
+                            Box::new(IntegerExpression::Constant(0)),
+                        ),
+                    )],
+                    ..Default::default()
+                },
+                cost: CostExpression::Continuous(ContinuousExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(ContinuousExpression::Cost),
+                    Box::new(ContinuousExpression::FromInteger(Box::new(
+                        IntegerExpression::Table(Box::new(NumericTableExpression::Table2D(
+                            0,
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(0),
+                        ))),
+                    ))),
+                )),
+                ..Default::default()
+            }),
+            false,
+            false,
+        );
+        assert!(transition_result.is_ok());
+
+        let transition_result = expected_model.add_transition(
+            TransitionPy::from(Transition {
+                name: String::from("visit"),
+                parameter_names: vec![String::from("to")],
+                parameter_values: vec![1],
+                elements_in_set_variable: vec![(0, 1)],
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::Table(Box::new(TableExpression::Table(
+                        0,
+                        vec![
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(1),
+                        ],
+                    ))),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![(
+                        0,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Remove,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                        ),
+                    )],
+                    element_effects: vec![(0, ElementExpression::Constant(1))],
+                    integer_resource_effects: vec![(
+                        0,
+                        IntegerExpression::BinaryOperation(
+                            BinaryOperator::Max,
+                            Box::new(IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::ResourceVariable(0)),
+                                Box::new(IntegerExpression::Table(Box::new(
+                                    NumericTableExpression::Table2D(
+                                        0,
+                                        ElementExpression::Variable(0),
+                                        ElementExpression::Constant(1),
+                                    ),
+                                ))),
+                            )),
+                            Box::new(IntegerExpression::Constant(1)),
+                        ),
+                    )],
+                    ..Default::default()
+                },
+                cost: CostExpression::Continuous(ContinuousExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(ContinuousExpression::Cost),
+                    Box::new(ContinuousExpression::FromInteger(Box::new(
+                        IntegerExpression::Table(Box::new(NumericTableExpression::Table2D(
+                            0,
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(1),
+                        ))),
+                    ))),
+                )),
+                ..Default::default()
+            }),
+            false,
+            false,
+        );
+        assert!(transition_result.is_ok());
+
+        let transition_result = expected_model.add_transition(
+            TransitionPy::from(Transition {
+                name: String::from("visit"),
+                parameter_names: vec![String::from("to")],
+                parameter_values: vec![2],
+                elements_in_set_variable: vec![(0, 2)],
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::Table(Box::new(TableExpression::Table(
+                        0,
+                        vec![
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(2),
+                        ],
+                    ))),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![(
+                        0,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Remove,
+                            ElementExpression::Constant(2),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                        ),
+                    )],
+                    element_effects: vec![(0, ElementExpression::Constant(2))],
+                    integer_resource_effects: vec![(
+                        0,
+                        IntegerExpression::BinaryOperation(
+                            BinaryOperator::Max,
+                            Box::new(IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::ResourceVariable(0)),
+                                Box::new(IntegerExpression::Table(Box::new(
+                                    NumericTableExpression::Table2D(
+                                        0,
+                                        ElementExpression::Variable(0),
+                                        ElementExpression::Constant(2),
+                                    ),
+                                ))),
+                            )),
+                            Box::new(IntegerExpression::Constant(1)),
+                        ),
+                    )],
+                    ..Default::default()
+                },
+                cost: CostExpression::Continuous(ContinuousExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(ContinuousExpression::Cost),
+                    Box::new(ContinuousExpression::FromInteger(Box::new(
+                        IntegerExpression::Table(Box::new(NumericTableExpression::Table2D(
+                            0,
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(2),
+                        ))),
+                    ))),
+                )),
+                ..Default::default()
+            }),
+            false,
+            false,
+        );
+        assert!(transition_result.is_ok());
+
+        assert_eq!(Model::from(model), Model::from(expected_model));
+    }
+
+    #[test]
+    fn load_from_str_err() {
+        let domain = r"
+domain: ADD
+state_variables: [ {name: v1, type: integer}, {name: v2, type: integer} ]
+base_cases:
+        - [(>= v1 1)]
+constraints:
+        - (>= v1 0)
+transitions:
+        - name: add
+          effect:
+                v1: (+ v1 1)
+          cost: (+ cost 1)
+        - name: recover
+          preconditions: [(< v1 0)] 
+          effect:
+                v1: '0'
+          cost: cost
+          forced: true
+dual_bounds:
+        - 0
+        - foo
+";
+        let problem = r"
+domain: ADD
+problem: one
+target:
+        v1: 0
+        v2: 0
+base_cases:
+        - [(>= v2 1), (= 0 0)]
+constraints:
+        - (>= v2 0)
+transitions:
+        - name: addv2
+          effect:
+                v2: (+ v2 1)
+          cost: (+ cost 1)
+dual_bounds:
+        - 2
+        - 3
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let domain = r"
+domain: ADD
+state_variables: [ {name: v1, type: integer}, {name: v2, type: integer} ]
+base_cases:
+        - [(>= v1 1)]
+constraints:
+        - (>= v1 0)
+transitions:
+        - name: add
+          effect:
+                v1: (+ v1 1)
+          cost: (+ cost 1)
+        - name: recover
+          preconditions: [(< v1 0)] 
+          effect:
+                v1: '0'
+          cost: cost
+          forced: true
+dual_bounds:
+        - 0
+        - 1
+";
+        let problem = r"
+domain: ADD
+problem: one
+target:
+        v1: 0
+        v2: 0
+base_cases:
+        - [(>= v2 1), (= 0 0)]
+constraints:
+        - (>= v2 0)
+transitions:
+        - name: addv2
+          effect:
+                v2: (+ v2 1)
+          cost: (+ cost 1)
+dual_bounds:
+        - 2
+        - foo
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - condition: (is_empty unvisited)
+        - condition: (is location 0)
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let domain = r"
+reduce: min
+objects: [cities]
+variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: integer
+          preference: less
+tables:
+        - name: ready_time
+          type: integer
+          args: [cities]
+        - name: due_date 
+          type: integer
+          args: [cities]
+        - name: distance 
+          type: integer
+          args: [cities, cities]
+          default: 0
+        - name: connected
+          type: bool
+          args: [cities, cities]
+          default: true
+constraints:
+        - condition: (<= time (due_date location))
+reduce: min
+transitions:
+        - name: visit
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effect:
+                unvisited: (remove to unvisited)
+                location: to
+                time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let domain = r"
+domain: TSPTW
+reduce: min
+state_variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: integer
+          preference: less
+tables:
+        - name: ready_time
+          type: integer
+          args: [cities]
+        - name: due_date 
+          type: integer
+          args: [cities]
+        - name: distance 
+          type: integer
+          args: [cities, cities]
+          default: 0
+        - name: connected
+          type: bool
+          args: [cities, cities]
+          default: true
+constraints:
+        - condition: (<= time (due_date location))
+reduce: min
+transitions:
+        - name: visit
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effect:
+                unvisited: (remove to unvisited)
+                location: to
+                time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let domain = r"
+domain: TSPTW
+reduce: min
+objects: [null]
+tables:
+        - name: ready_time
+          type: integer
+          args: [cities]
+        - name: due_date 
+          type: integer
+          args: [cities]
+        - name: distance 
+          type: integer
+          args: [cities, cities]
+          default: 0
+        - name: connected
+          type: bool
+          args: [cities, cities]
+          default: true
+constraints:
+        - condition: (<= time (due_date location))
+reduce: min
+transitions:
+        - name: visit
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effect:
+                unvisited: (remove to unvisited)
+                location: to
+                time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let domain = r"
+domain: TSPTW
+reduce: min
+objects: [cities]
+state_variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: integer
+          preference: less
+constraints:
+        - condition: (<= time (due_date location))
+reduce: min
+transitions:
+        - name: visit
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effect:
+                unvisited: (remove to unvisited)
+                location: to
+                time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let domain = r"
+reduce: min
+objects: [cities]
+state_variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: integer
+          preference: less
+tables:
+        - name: ready_time
+          type: integer
+          args: [cities]
+        - name: due_date 
+          type: integer
+          args: [cities]
+        - name: distance 
+          type: integer
+          args: [cities, cities]
+          default: 0
+        - name: connected
+          type: bool
+          args: [cities, cities]
+          default: true
+constraints:
+        - condition: (<= time (due_date location))
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let domain = r"
+domain: TSPTW
+reduce: min
+objects: [cities]
+state_variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: integer
+          preference: less
+tables:
+        - name: ready_time
+          type: integer
+          args: [cities]
+        - name: due_date 
+          type: integer
+          args: [cities]
+        - name: distance 
+          type: integer
+          args: [cities, cities]
+          default: 0
+        - name: connected
+          type: bool
+          args: [cities, cities]
+          default: true
+constraints:
+        - condition: (<= time (due_date location))
+        - condition: (= 1 2)
+reduce: min
+transitions:
+        - name: visit
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effect:
+                unvisited: (remove to unvisited)
+                location: to
+                time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+        let problem = r"
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - [(is_empty unvisited), (is location 0)]
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let problem = r"
+domain: TSP
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - [(is_empty unvisited) (is location 0)]
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - [(is_empty unvisited), (is location 0)]
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+base_cases:
+        - [(is_empty unvisited), (is location 0)]
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - [(is_empty unvisited), (is location 0)]
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - [(is_empty unvisited), (is location 0), (!= 0 0)]
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let domain = r"
+domain: TSPTW
+reduce: min
+objects: [cities]
+state_variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: integer
+          preference: less
+tables:
+        - name: ready_time
+          type: integer
+          args: [cities]
+        - name: due_date 
+          type: integer
+          args: [cities]
+        - name: distance 
+          type: integer
+          args: [cities, cities]
+          default: 0
+dictionaries:
+        - name: connected
+          type: bool
+          default: true
+constraints:
+        - (<= time (due_date location))
+        - (= 0 0)
+reduce: min
+cost_type: continuous
+transitions:
+        - name: visit
+          direction: forward
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effect:
+              unvisited: (remove to unvisited)
+              location: to
+              time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - [(is_empty unvisited), (= location 0)]
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+
+        let domain = r"
+domain: TSPTW
+reduce: min
+objects: [cities]
+state_variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: integer
+          preference: less
+tables:
+        - name: ready_time
+          type: integer
+          args: [cities]
+        - name: due_date 
+          type: integer
+          args: [cities]
+        - name: distance 
+          type: integer
+          args: [cities, cities]
+          default: 0
+constraints:
+        - (<= time (due_date location))
+        - (= 0 0)
+reduce: min
+cost_type: continuous
+transitions:
+        - name: visit
+          direction: forward
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effect:
+              unvisited: (remove to unvisited)
+              location: to
+              time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - [(is_empty unvisited), (= location 0)]
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+dictionary_values:
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let model = ModelPy::load_from_str(domain, problem);
+        assert!(model.is_err());
+    }
+
+    #[test]
+    fn dump_to_str_ok() {
+        let mut model = ModelPy::new_py(false, true);
+
+        let cities = model.add_object_type(3, Some("cities"));
+        assert!(cities.is_ok());
+        let cities = cities.unwrap();
+
+        let unvisited = model.add_set_var(
+            cities,
+            TargetSetArgUnion::SetConst(SetConstPy::from(Set::with_capacity_and_blocks(
+                3,
+                vec![7],
+            ))),
+            Some("unvisited"),
+        );
+        assert!(unvisited.is_ok());
+
+        let location = model.add_element_var(cities, 0, Some("location"));
+        assert!(location.is_ok());
+
+        let time = model.add_int_resource_var(0, true, Some("time"));
+        assert!(time.is_ok());
+
+        let base_case_result = model.add_base_case(
+            vec![
+                ConditionPy::from(Condition::Set(Box::new(SetCondition::IsEmpty(
+                    SetExpression::Reference(ReferenceExpression::Variable(0)),
+                )))),
+                ConditionPy::from(Condition::ComparisonE(
+                    ComparisonOperator::Eq,
+                    Box::new(ElementExpression::Variable(0)),
+                    Box::new(ElementExpression::Constant(0)),
+                )),
+            ],
+            None,
+        );
+        assert!(base_case_result.is_ok());
+
+        let ready_time = model.add_int_table(
+            IntTableArgUnion::Table1D(vec![0, 1, 1]),
+            None,
+            Some("ready_time"),
+        );
+        assert!(ready_time.is_ok());
+
+        let due_date = model.add_int_table(
+            IntTableArgUnion::Table1D(vec![10000, 2, 2]),
+            None,
+            Some("due_date"),
+        );
+        assert!(due_date.is_ok());
+
+        let distance = model.add_int_table(
+            IntTableArgUnion::Table2D(vec![vec![0, 1, 1], vec![1, 0, 1], vec![1, 1, 0]]),
+            None,
+            Some("distance"),
+        );
+        assert!(distance.is_ok());
+
+        let mut connected = FxHashMap::default();
+        connected.insert(vec![0, 0], false);
+        connected.insert(vec![1, 1], false);
+        connected.insert(vec![2, 2], false);
+        let connected = model.add_bool_table(
+            BoolTableArgUnion::Table(connected),
+            Some(true),
+            Some("connected"),
+        );
+        assert!(connected.is_ok());
+
+        let constraint_result = model.add_state_constr(ConditionPy::from(Condition::ComparisonI(
+            ComparisonOperator::Le,
+            Box::new(IntegerExpression::ResourceVariable(0)),
+            Box::new(IntegerExpression::Table(Box::new(
+                NumericTableExpression::Table1D(1, ElementExpression::Variable(0)),
+            ))),
+        )));
+        assert!(constraint_result.is_ok());
+
+        let transition_result = model.add_transition(
+            TransitionPy::from(Transition {
+                name: String::from("visit"),
+                parameter_names: vec![String::from("to")],
+                parameter_values: vec![0],
+                elements_in_set_variable: vec![(0, 0)],
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::Table(Box::new(TableExpression::Table(
+                        0,
+                        vec![
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(0),
+                        ],
+                    ))),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![(
+                        0,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Remove,
+                            ElementExpression::Constant(0),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                        ),
+                    )],
+                    element_effects: vec![(0, ElementExpression::Constant(0))],
+                    integer_resource_effects: vec![(
+                        0,
+                        IntegerExpression::BinaryOperation(
+                            BinaryOperator::Max,
+                            Box::new(IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::ResourceVariable(0)),
+                                Box::new(IntegerExpression::Table(Box::new(
+                                    NumericTableExpression::Table2D(
+                                        0,
+                                        ElementExpression::Variable(0),
+                                        ElementExpression::Constant(0),
+                                    ),
+                                ))),
+                            )),
+                            Box::new(IntegerExpression::Constant(0)),
+                        ),
+                    )],
+                    ..Default::default()
+                },
+                cost: CostExpression::Continuous(ContinuousExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(ContinuousExpression::Cost),
+                    Box::new(ContinuousExpression::FromInteger(Box::new(
+                        IntegerExpression::Table(Box::new(NumericTableExpression::Table2D(
+                            0,
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(0),
+                        ))),
+                    ))),
+                )),
+                ..Default::default()
+            }),
+            false,
+            false,
+        );
+        assert!(transition_result.is_ok());
+
+        let transition_result = model.add_transition(
+            TransitionPy::from(Transition {
+                name: String::from("visit"),
+                parameter_names: vec![String::from("to")],
+                parameter_values: vec![1],
+                elements_in_set_variable: vec![(0, 1)],
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::Table(Box::new(TableExpression::Table(
+                        0,
+                        vec![
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(1),
+                        ],
+                    ))),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![(
+                        0,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Remove,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                        ),
+                    )],
+                    element_effects: vec![(0, ElementExpression::Constant(1))],
+                    integer_resource_effects: vec![(
+                        0,
+                        IntegerExpression::BinaryOperation(
+                            BinaryOperator::Max,
+                            Box::new(IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::ResourceVariable(0)),
+                                Box::new(IntegerExpression::Table(Box::new(
+                                    NumericTableExpression::Table2D(
+                                        0,
+                                        ElementExpression::Variable(0),
+                                        ElementExpression::Constant(1),
+                                    ),
+                                ))),
+                            )),
+                            Box::new(IntegerExpression::Constant(1)),
+                        ),
+                    )],
+                    ..Default::default()
+                },
+                cost: CostExpression::Continuous(ContinuousExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(ContinuousExpression::Cost),
+                    Box::new(ContinuousExpression::FromInteger(Box::new(
+                        IntegerExpression::Table(Box::new(NumericTableExpression::Table2D(
+                            0,
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(1),
+                        ))),
+                    ))),
+                )),
+                ..Default::default()
+            }),
+            false,
+            false,
+        );
+        assert!(transition_result.is_ok());
+
+        let transition_result = model.add_transition(
+            TransitionPy::from(Transition {
+                name: String::from("visit"),
+                parameter_names: vec![String::from("to")],
+                parameter_values: vec![2],
+                elements_in_set_variable: vec![(0, 2)],
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::Table(Box::new(TableExpression::Table(
+                        0,
+                        vec![
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(2),
+                        ],
+                    ))),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![(
+                        0,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Remove,
+                            ElementExpression::Constant(2),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                        ),
+                    )],
+                    element_effects: vec![(0, ElementExpression::Constant(2))],
+                    integer_resource_effects: vec![(
+                        0,
+                        IntegerExpression::BinaryOperation(
+                            BinaryOperator::Max,
+                            Box::new(IntegerExpression::BinaryOperation(
+                                BinaryOperator::Add,
+                                Box::new(IntegerExpression::ResourceVariable(0)),
+                                Box::new(IntegerExpression::Table(Box::new(
+                                    NumericTableExpression::Table2D(
+                                        0,
+                                        ElementExpression::Variable(0),
+                                        ElementExpression::Constant(2),
+                                    ),
+                                ))),
+                            )),
+                            Box::new(IntegerExpression::Constant(1)),
+                        ),
+                    )],
+                    ..Default::default()
+                },
+                cost: CostExpression::Continuous(ContinuousExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(ContinuousExpression::Cost),
+                    Box::new(ContinuousExpression::FromInteger(Box::new(
+                        IntegerExpression::Table(Box::new(NumericTableExpression::Table2D(
+                            0,
+                            ElementExpression::Variable(0),
+                            ElementExpression::Constant(2),
+                        ))),
+                    ))),
+                )),
+                ..Default::default()
+            }),
+            false,
+            false,
+        );
+        assert!(transition_result.is_ok());
+
+        let dump_result = model.dump_to_str();
+        assert!(dump_result.is_ok());
+        let (domain, problem) = dump_result.unwrap();
+
+        let expected_domain = r"---
+cost_type: continuous
+reduce: min
+objects:
+  - cities
+state_variables:
+  - name: time
+    type: integer
+    preference: less
+  - name: location
+    type: element
+    object: cities
+  - name: unvisited
+    type: set
+    object: cities
+tables:
+  - name: ready_time
+    type: integer
+    args:
+      - 3
+  - name: due_date
+    type: integer
+    args:
+      - 3
+  - name: distance
+    type: integer
+    args:
+      - 3
+      - 3
+dictionaries:
+  - name: connected
+    type: bool
+    default: true";
+        let expected_problem = r#"---
+object_numbers:
+  cities: 3
+target:
+  location: 0
+  unvisited:
+    - 0
+    - 1
+    - 2
+  time: 0
+transitions:
+  - name: "visit to:0"
+    effect:
+      unvisited: (remove 0 unvisited)
+      location: "0"
+      time: (max (+ time (distance location 0)) 0)
+    cost: (+ cost (distance location 0))
+    preconditions:
+      - (is_in 0 unvisited)
+      - (connected location 0)
+    forced: false
+    direction: forward
+  - name: "visit to:1"
+    effect:
+      unvisited: (remove 1 unvisited)
+      location: "1"
+      time: (max (+ time (distance location 1)) 1)
+    cost: (+ cost (distance location 1))
+    preconditions:
+      - (is_in 1 unvisited)
+      - (connected location 1)
+    forced: false
+    direction: forward
+  - name: "visit to:2"
+    effect:
+      unvisited: (remove 2 unvisited)
+      location: "2"
+      time: (max (+ time (distance location 2)) 1)
+    cost: (+ cost (distance location 2))
+    preconditions:
+      - (is_in 2 unvisited)
+      - (connected location 2)
+    forced: false
+    direction: forward
+base_cases:
+  - - (is_empty unvisited)
+    - (= location 0)
+constraints:
+  - (<= time (due_date location))
+table_values:
+  ready_time:
+    0: 0
+    1: 1
+    2: 1
+  due_date:
+    0: 10000
+    1: 2
+    2: 2
+  distance:
+    ? - 0
+      - 0
+    : 0
+    ? - 0
+      - 1
+    : 1
+    ? - 0
+      - 2
+    : 1
+    ? - 1
+      - 0
+    : 1
+    ? - 1
+      - 1
+    : 0
+    ? - 1
+      - 2
+    : 1
+    ? - 2
+      - 0
+    : 1
+    ? - 2
+      - 1
+    : 1
+    ? - 2
+      - 2
+    : 0
+dictionary_values:
+  connected:
+    ? - 1
+      - 1
+    : false
+    ? - 2
+      - 2
+    : false
+    ? - 0
+      - 0
+    : false"#;
+        assert_eq!(domain, expected_domain);
+        assert_eq!(problem, expected_problem);
+    }
+
+    #[test]
+    fn dump_to_str_err() {
+        let mut model = ModelPy::new_py(false, true);
+
+        let cities = model.add_object_type((i64::MAX as usize) + 2, Some("cities"));
+        assert!(cities.is_ok());
+        let cities = cities.unwrap();
+
+        let location = model.add_element_var(cities, (i64::MAX as usize) + 1, Some("location"));
+        assert!(location.is_ok());
+
+        let dump_result = model.dump_to_str();
+        assert!(dump_result.is_err());
+    }
 }

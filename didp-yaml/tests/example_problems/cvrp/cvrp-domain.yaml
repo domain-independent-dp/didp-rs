@@ -1,0 +1,81 @@
+domain: CVRP
+reduce: min
+cost_type: integer
+objects:
+  - customer
+state_variables:
+  - name: unvisited
+    type: set
+    object: customer
+  - name: location
+    type: element
+    object: customer
+  - name: load
+    type: integer
+    preference: less
+  - name: vehicles
+    type: integer
+    preference: less
+tables:
+  - name: m
+    type: integer
+  - name: q
+    type: integer
+  - name: weight
+    type: integer
+    args:
+      - customer
+  - name: distance
+    type: integer
+    args:
+      - customer
+      - customer
+  - name: min_distance_to
+    type: integer
+    args:
+      - customer
+  - name: min_distance_from
+    type: integer
+    args:
+      - customer
+transitions:
+  - name: visit
+    parameters:
+      - name: to
+        object: unvisited
+    cost: (+ cost (distance location to))
+    effect:
+      unvisited: (remove to unvisited)
+      location: to
+      load: (+ load (weight to))
+    preconditions:
+      - (<= (+ load (weight to)) q)
+  - name: visit-via-depot
+    parameters:
+      - name: to
+        object: unvisited
+    cost: (+ cost (+ (distance location 0) (distance 0 to)))
+    effect:
+      unvisited: (remove to unvisited)
+      location: to
+      load: (weight to)
+      vehicles: (+ vehicles 1)
+    preconditions:
+      - (< vehicles m)
+  - name: return
+    cost: (+ cost (distance location 0))
+    effect:
+      location: 0
+    preconditions:
+      - (is_empty unvisited)
+      - (!= location 0)
+base_cases:
+  - - (is_empty unvisited)
+    - (= location 0)
+constraints:
+  - condition: >
+      (>= (+ (* (- m vehicles) q) q)
+          (+ load (sum weight unvisited)))
+dual_bounds:
+  - (+ (sum min_distance_to unvisited) (if (!= location 0) (min_distance_to 0) 0))
+  - (+ (sum min_distance_from unvisited) (if (!= location 0) (min_distance_from location) 0))

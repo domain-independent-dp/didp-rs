@@ -20,6 +20,13 @@ impl fmt::Display for ParseErr {
 
 impl error::Error for ParseErr {}
 
+pub fn get_next_token_and_rest(tokens: &[String]) -> Result<(&String, &[String]), ParseErr> {
+    let (item, rest) = tokens
+        .split_first()
+        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+    Ok((item, rest))
+}
+
 pub fn parse_closing(tokens: &[String]) -> Result<&[String], ParseErr> {
     let (token, rest) = tokens
         .split_first()
@@ -34,6 +41,24 @@ pub fn parse_closing(tokens: &[String]) -> Result<&[String], ParseErr> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn get_next_token_and_rest_ok() {
+        let tokens: Vec<String> = [")", "(", "+", "2", "n0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = get_next_token_and_rest(&tokens);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), (&tokens[0], &tokens[1..]));
+    }
+
+    #[test]
+    fn get_next_token_and_rest_err() {
+        let tokens: Vec<String> = [].iter().map(|x: &&str| x.to_string()).collect();
+        let result = get_next_token_and_rest(&tokens);
+        assert!(result.is_err());
+    }
 
     #[test]
     fn parse_closing_ok() {

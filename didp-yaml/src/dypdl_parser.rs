@@ -13,6 +13,7 @@ pub use grounded_condition_parser::load_grounded_conditions_from_yaml;
 pub use state_parser::load_state_from_yaml;
 pub use table_registry_parser::load_table_registry_from_yaml;
 pub use transition_parser::load_transitions_from_yaml;
+use yaml_rust::yaml::{Array, Hash};
 
 use crate::util;
 use dypdl::expression::{
@@ -20,7 +21,7 @@ use dypdl::expression::{
     VectorExpression,
 };
 use dypdl::variable_type::Element;
-use dypdl::{CostType, GroundedCondition, Model, ModelErr, ReduceFunction, TableRegistry};
+use dypdl::{CostType, GroundedCondition, Model, ModelErr, ReduceFunction};
 use rustc_hash::FxHashMap;
 use std::error::Error;
 use yaml_rust::Yaml;
@@ -164,16 +165,14 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
     let target = util::get_yaml_by_key(problem, "target")?;
     let target = load_state_from_yaml(target, &state_metadata)?;
 
-    let table_registry = match (
+    let empty_array = Yaml::Array(Array::new());
+    let empty_hash = Yaml::Hash(Hash::new());
+    let (tables, table_values) = match (
         domain.get(&Yaml::from_str("tables")),
         problem.get(&Yaml::from_str("table_values")),
     ) {
-        (Some(tables), Some(table_values)) => {
-            load_table_registry_from_yaml(tables, table_values, &state_metadata)?
-        }
-        (None, None) => TableRegistry {
-            ..Default::default()
-        },
+        (Some(tables), Some(table_values)) => (tables, table_values),
+        (None, None) => (&empty_array, &empty_hash),
         (Some(_), None) => {
             return Err(ModelErr::new(String::from(
                 "key `table_values` not found while `table` found ",
@@ -187,6 +186,34 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
             .into())
         }
     };
+
+    let (dictionaries, dictionary_values) = match (
+        domain.get(&Yaml::from_str("dictionaries")),
+        problem.get(&Yaml::from_str("dictionary_values")),
+    ) {
+        (Some(dictionaries), Some(dictionary_values)) => (dictionaries, dictionary_values),
+        (None, None) => (&empty_array, &empty_hash),
+        (Some(_), None) => {
+            return Err(ModelErr::new(String::from(
+                "key `dictionary_values` not found while `dictionary` found ",
+            ))
+            .into())
+        }
+        (None, Some(_)) => {
+            return Err(ModelErr::new(String::from(
+                "key `dictionaries` not found while `dictionary_values` found ",
+            ))
+            .into())
+        }
+    };
+
+    let table_registry = load_table_registry_from_yaml(
+        tables,
+        table_values,
+        dictionaries,
+        dictionary_values,
+        &state_metadata,
+    )?;
 
     let mut constraints = Vec::new();
     if let Some(value) = domain.get(&Yaml::from_str("constraints")) {
@@ -444,6 +471,7 @@ mod tests {
     use super::*;
     use dypdl::expression::*;
     use dypdl::variable_type::*;
+    use dypdl::Table;
     use dypdl::{
         BaseCase, CostExpression, Effect, ResourceVariables, SignatureVariables, State,
         StateMetadata, Table1D, Table2D, TableData, TableRegistry, Transition,
@@ -1344,6 +1372,382 @@ table_values:
     }
 
     #[test]
+    fn model_load_from_yaml_with_dictionary_ok() {
+        let domain = r"
+domain: TSPTW
+reduce: min
+objects: [cities]
+state_variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: integer
+          preference: less
+tables:
+        - name: ready_time
+          type: integer
+          args: [cities]
+        - name: due_date 
+          type: integer
+          args: [cities]
+        - name: distance 
+          type: integer
+          args: [cities, cities]
+          default: 0
+dictionaries:
+        - name: connected
+          type: bool
+          default: true
+constraints:
+        - (<= time (due_date location))
+        - (= 0 0)
+reduce: min
+cost_type: continuous
+transitions:
+        - name: visit
+          direction: forward
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effect:
+              unvisited: (remove to unvisited)
+              location: to
+              time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+        let domain = yaml_rust::YamlLoader::load_from_str(domain);
+        assert!(domain.is_ok());
+        let domain = domain.unwrap();
+        assert_eq!(domain.len(), 1);
+        let domain = &domain[0];
+
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - [(is_empty unvisited), (= location 0)]
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+dictionary_values:
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let problem = yaml_rust::YamlLoader::load_from_str(problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+        assert_eq!(problem.len(), 1);
+        let problem = &problem[0];
+
+        let model = load_model_from_yaml(domain, problem);
+        assert!(model.is_ok());
+        let model = model.unwrap();
+
+        let mut name_to_object = FxHashMap::default();
+        name_to_object.insert(String::from("cities"), 0);
+        let mut name_to_set_variable = FxHashMap::default();
+        name_to_set_variable.insert(String::from("unvisited"), 0);
+        let mut name_to_element_variable = FxHashMap::default();
+        name_to_element_variable.insert(String::from("location"), 0);
+        let mut name_to_integer_resource_variable = FxHashMap::default();
+        name_to_integer_resource_variable.insert(String::from("time"), 0);
+        let mut unvisited = Set::with_capacity(3);
+        unvisited.insert(0);
+        unvisited.insert(1);
+        unvisited.insert(2);
+        let mut name_to_table_1d = FxHashMap::default();
+        name_to_table_1d.insert(String::from("ready_time"), 0);
+        name_to_table_1d.insert(String::from("due_date"), 1);
+        let mut numeric_name_to_table_2d = FxHashMap::default();
+        numeric_name_to_table_2d.insert(String::from("distance"), 0);
+        let mut bool_name_to_table = FxHashMap::default();
+        bool_name_to_table.insert(String::from("connected"), 0);
+        let mut bool_table = FxHashMap::<Vec<Element>, bool>::default();
+        bool_table.insert(vec![0, 0], false);
+        bool_table.insert(vec![1, 1], false);
+        bool_table.insert(vec![2, 2], false);
+
+        let expected = Model {
+            state_metadata: StateMetadata {
+                object_type_names: vec![String::from("cities")],
+                name_to_object_type: name_to_object,
+                object_numbers: vec![3],
+                set_variable_names: vec![String::from("unvisited")],
+                name_to_set_variable,
+                set_variable_to_object: vec![0],
+                element_variable_names: vec![String::from("location")],
+                name_to_element_variable,
+                element_variable_to_object: vec![0],
+                integer_resource_variable_names: vec![String::from("time")],
+                name_to_integer_resource_variable,
+                integer_less_is_better: vec![true],
+                ..Default::default()
+            },
+            target: State {
+                signature_variables: SignatureVariables {
+                    set_variables: vec![unvisited],
+                    element_variables: vec![0],
+                    ..Default::default()
+                },
+                resource_variables: ResourceVariables {
+                    integer_variables: vec![0],
+                    ..Default::default()
+                },
+            },
+            table_registry: TableRegistry {
+                integer_tables: TableData {
+                    tables_1d: vec![Table1D::new(vec![0, 1, 1]), Table1D::new(vec![10000, 2, 2])],
+                    name_to_table_1d,
+                    tables_2d: vec![Table2D::new(vec![
+                        vec![0, 1, 1],
+                        vec![1, 0, 1],
+                        vec![1, 1, 0],
+                    ])],
+                    name_to_table_2d: numeric_name_to_table_2d,
+                    ..Default::default()
+                },
+                bool_tables: TableData {
+                    tables: vec![Table::new(bool_table, true)],
+                    name_to_table: bool_name_to_table,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            state_constraints: vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Le,
+                    Box::new(IntegerExpression::ResourceVariable(0)),
+                    Box::new(IntegerExpression::Table(Box::new(
+                        NumericTableExpression::Table1D(1, ElementExpression::Variable(0)),
+                    ))),
+                ),
+                ..Default::default()
+            }],
+            base_cases: vec![BaseCase::from(vec![
+                GroundedCondition {
+                    condition: Condition::Set(Box::new(SetCondition::IsEmpty(
+                        SetExpression::Reference(ReferenceExpression::Variable(0)),
+                    ))),
+                    ..Default::default()
+                },
+                GroundedCondition {
+                    condition: Condition::ComparisonE(
+                        ComparisonOperator::Eq,
+                        Box::new(ElementExpression::Variable(0)),
+                        Box::new(ElementExpression::Constant(0)),
+                    ),
+                    ..Default::default()
+                },
+            ])],
+            base_states: Vec::new(),
+            reduce_function: ReduceFunction::Min,
+            cost_type: CostType::Continuous,
+            forward_transitions: vec![
+                Transition {
+                    name: String::from("visit"),
+                    parameter_names: vec![String::from("to")],
+                    parameter_values: vec![0],
+                    elements_in_set_variable: vec![(0, 0)],
+                    preconditions: vec![GroundedCondition {
+                        condition: Condition::Table(Box::new(TableExpression::Table(
+                            0,
+                            vec![
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(0),
+                            ],
+                        ))),
+                        ..Default::default()
+                    }],
+                    effect: Effect {
+                        set_effects: vec![(
+                            0,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Remove,
+                                ElementExpression::Constant(0),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    0,
+                                ))),
+                            ),
+                        )],
+                        element_effects: vec![(0, ElementExpression::Constant(0))],
+                        integer_resource_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Max,
+                                Box::new(IntegerExpression::BinaryOperation(
+                                    BinaryOperator::Add,
+                                    Box::new(IntegerExpression::ResourceVariable(0)),
+                                    Box::new(IntegerExpression::Table(Box::new(
+                                        NumericTableExpression::Table2D(
+                                            0,
+                                            ElementExpression::Variable(0),
+                                            ElementExpression::Constant(0),
+                                        ),
+                                    ))),
+                                )),
+                                Box::new(IntegerExpression::Constant(0)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Continuous(ContinuousExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(ContinuousExpression::Cost),
+                        Box::new(ContinuousExpression::FromInteger(Box::new(
+                            IntegerExpression::Table(Box::new(NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(0),
+                            ))),
+                        ))),
+                    )),
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("visit"),
+                    parameter_names: vec![String::from("to")],
+                    parameter_values: vec![1],
+                    elements_in_set_variable: vec![(0, 1)],
+                    preconditions: vec![GroundedCondition {
+                        condition: Condition::Table(Box::new(TableExpression::Table(
+                            0,
+                            vec![
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(1),
+                            ],
+                        ))),
+                        ..Default::default()
+                    }],
+                    effect: Effect {
+                        set_effects: vec![(
+                            0,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Remove,
+                                ElementExpression::Constant(1),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    0,
+                                ))),
+                            ),
+                        )],
+                        element_effects: vec![(0, ElementExpression::Constant(1))],
+                        integer_resource_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Max,
+                                Box::new(IntegerExpression::BinaryOperation(
+                                    BinaryOperator::Add,
+                                    Box::new(IntegerExpression::ResourceVariable(0)),
+                                    Box::new(IntegerExpression::Table(Box::new(
+                                        NumericTableExpression::Table2D(
+                                            0,
+                                            ElementExpression::Variable(0),
+                                            ElementExpression::Constant(1),
+                                        ),
+                                    ))),
+                                )),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Continuous(ContinuousExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(ContinuousExpression::Cost),
+                        Box::new(ContinuousExpression::FromInteger(Box::new(
+                            IntegerExpression::Table(Box::new(NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(1),
+                            ))),
+                        ))),
+                    )),
+                    ..Default::default()
+                },
+                Transition {
+                    name: String::from("visit"),
+                    parameter_names: vec![String::from("to")],
+                    parameter_values: vec![2],
+                    elements_in_set_variable: vec![(0, 2)],
+                    preconditions: vec![GroundedCondition {
+                        condition: Condition::Table(Box::new(TableExpression::Table(
+                            0,
+                            vec![
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(2),
+                            ],
+                        ))),
+                        ..Default::default()
+                    }],
+                    effect: Effect {
+                        set_effects: vec![(
+                            0,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Remove,
+                                ElementExpression::Constant(2),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    0,
+                                ))),
+                            ),
+                        )],
+                        element_effects: vec![(0, ElementExpression::Constant(2))],
+                        integer_resource_effects: vec![(
+                            0,
+                            IntegerExpression::BinaryOperation(
+                                BinaryOperator::Max,
+                                Box::new(IntegerExpression::BinaryOperation(
+                                    BinaryOperator::Add,
+                                    Box::new(IntegerExpression::ResourceVariable(0)),
+                                    Box::new(IntegerExpression::Table(Box::new(
+                                        NumericTableExpression::Table2D(
+                                            0,
+                                            ElementExpression::Variable(0),
+                                            ElementExpression::Constant(2),
+                                        ),
+                                    ))),
+                                )),
+                                Box::new(IntegerExpression::Constant(1)),
+                            ),
+                        )],
+                        ..Default::default()
+                    },
+                    cost: CostExpression::Continuous(ContinuousExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(ContinuousExpression::Cost),
+                        Box::new(ContinuousExpression::FromInteger(Box::new(
+                            IntegerExpression::Table(Box::new(NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(2),
+                            ))),
+                        ))),
+                    )),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(model.state_metadata, expected.state_metadata);
+        assert_eq!(model.target, expected.target);
+        assert_eq!(model.table_registry, expected.table_registry);
+        assert_eq!(model.state_constraints, expected.state_constraints);
+        assert_eq!(model.base_cases, expected.base_cases);
+        assert_eq!(model.reduce_function, expected.reduce_function);
+        assert_eq!(model.cost_type, expected.cost_type);
+        assert_eq!(model.forward_transitions, expected.forward_transitions);
+        assert_eq!(model.backward_transitions, expected.backward_transitions);
+        assert_eq!(model, expected);
+    }
+
+    #[test]
     fn model_load_from_yaml_err() {
         let domain = r"
 domain: ADD
@@ -1908,6 +2312,159 @@ table_values:
         ready_time: {0: 0, 1: 1, 2: 1}
         due_date: {0: 10000, 1: 2, 2: 2}
         distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+        connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
+";
+        let problem = yaml_rust::YamlLoader::load_from_str(problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+        assert_eq!(problem.len(), 1);
+        let problem = &problem[0];
+
+        let model = load_model_from_yaml(domain, problem);
+        assert!(model.is_err());
+    }
+
+    #[test]
+    fn model_load_from_yaml_with_dictionary_err() {
+        let domain = r"
+domain: TSPTW
+reduce: min
+objects: [cities]
+state_variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: integer
+          preference: less
+tables:
+        - name: ready_time
+          type: integer
+          args: [cities]
+        - name: due_date 
+          type: integer
+          args: [cities]
+        - name: distance 
+          type: integer
+          args: [cities, cities]
+          default: 0
+dictionaries:
+        - name: connected
+          type: bool
+          default: true
+constraints:
+        - (<= time (due_date location))
+        - (= 0 0)
+reduce: min
+cost_type: continuous
+transitions:
+        - name: visit
+          direction: forward
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effect:
+              unvisited: (remove to unvisited)
+              location: to
+              time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+        let domain = yaml_rust::YamlLoader::load_from_str(domain);
+        assert!(domain.is_ok());
+        let domain = domain.unwrap();
+        assert_eq!(domain.len(), 1);
+        let domain = &domain[0];
+
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - [(is_empty unvisited), (= location 0)]
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+";
+        let problem = yaml_rust::YamlLoader::load_from_str(problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+        assert_eq!(problem.len(), 1);
+        let problem = &problem[0];
+
+        let model = load_model_from_yaml(domain, problem);
+        assert!(model.is_err());
+
+        let domain = r"
+domain: TSPTW
+reduce: min
+objects: [cities]
+state_variables:
+        - name: unvisited
+          type: set
+          object: cities
+        - name: location
+          type: element
+          object: cities
+        - name: time
+          type: integer
+          preference: less
+tables:
+        - name: ready_time
+          type: integer
+          args: [cities]
+        - name: due_date 
+          type: integer
+          args: [cities]
+        - name: distance 
+          type: integer
+          args: [cities, cities]
+          default: 0
+constraints:
+        - (<= time (due_date location))
+        - (= 0 0)
+reduce: min
+cost_type: continuous
+transitions:
+        - name: visit
+          direction: forward
+          parameters: [{ name: to, object: unvisited }]
+          preconditions: [(connected location to)]
+          effect:
+              unvisited: (remove to unvisited)
+              location: to
+              time: (max (+ time (distance location to)) (ready_time to))
+          cost: (+ cost (distance location to))
+";
+        let domain = yaml_rust::YamlLoader::load_from_str(domain);
+        assert!(domain.is_ok());
+        let domain = domain.unwrap();
+        assert_eq!(domain.len(), 1);
+        let domain = &domain[0];
+
+        let problem = r"
+domain: TSPTW
+problem: test
+numeric_type: integer
+object_numbers: { cities: 3 }
+target:
+        unvisited: [0, 1, 2]
+        location: 0
+        time: 0
+base_cases:
+        - [(is_empty unvisited), (= location 0)]
+table_values:
+        ready_time: {0: 0, 1: 1, 2: 1}
+        due_date: {0: 10000, 1: 2, 2: 2}
+        distance: {[0, 1]: 1, [0, 2]: 1, [1, 0]: 1, [1, 2]: 1, [2, 0]: 1, [2, 1]: 1}
+dictionary_values:
         connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
 ";
         let problem = yaml_rust::YamlLoader::load_from_str(problem);

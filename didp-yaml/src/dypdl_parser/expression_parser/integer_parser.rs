@@ -126,6 +126,10 @@ fn parse_unary_operation(name: &str, x: IntegerExpression) -> Result<IntegerExpr
             UnaryOperator::Abs,
             Box::new(x),
         )),
+        "neg" => Ok(IntegerExpression::UnaryOperation(
+            UnaryOperator::Neg,
+            Box::new(x),
+        )),
         _ => Err(ParseErr::new(format!("no such unary operator `{}`", name))),
     }
 }
@@ -612,6 +616,22 @@ mod tests {
             )
         );
         assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["(", "neg", "4", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            IntegerExpression::UnaryOperation(
+                UnaryOperator::Neg,
+                Box::new(IntegerExpression::Constant(4)),
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
     }
 
     #[test]
@@ -628,6 +648,20 @@ mod tests {
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "sqrt", "2", "3", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "neg", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["(", "neg", "2", "3", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();

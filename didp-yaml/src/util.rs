@@ -1,11 +1,12 @@
 //! Utility functions for parsing YAML.
 
 use dypdl::variable_type;
+use dypdl::StateMetadata;
 use std::convert::TryFrom;
 use std::error;
 use std::fmt;
 use std::str;
-use yaml_rust::Yaml;
+use yaml_rust::{yaml::Array, Yaml};
 
 /// Error representing that the format is invalid.
 #[derive(Debug, Clone)]
@@ -255,6 +256,47 @@ pub fn get_string_array(value: &Yaml) -> Result<Vec<String>, YamlContentErr> {
     }
 }
 
+/// Returns an usize parsed from a YAML item.
+///
+/// The item can be String that stands for object name or integers.
+///
+/// # Errors
+///
+/// If it cannot be parsed.
+pub fn get_size_from_yaml(
+    item: &Yaml,
+    metadata: &StateMetadata,
+) -> Result<usize, Box<dyn error::Error>> {
+    match item {
+        Yaml::String(object) => {
+            if let Some(index) = metadata.name_to_object_type.get(object) {
+                Ok(metadata.object_numbers[*index])
+            } else {
+                Err(YamlContentErr::new(format!("no such object `{}`", object)).into())
+            }
+        }
+        Yaml::Integer(size) => Ok(usize::try_from(*size)?),
+        _ => Err(YamlContentErr::new("Invalid table arg elements".to_owned()).into()),
+    }
+}
+
+/// Returns an array of dimension sizes parsed from a YAML array.
+///
+/// The elements in Yaml array can be String that stands for object name or integers.
+///
+/// # Errors
+///
+/// If it cannot be parsed.
+pub fn get_table_arg_array(
+    arg_array: &Array,
+    metadata: &StateMetadata,
+) -> Result<Vec<usize>, Box<dyn error::Error>> {
+    arg_array
+        .iter()
+        .map(|item: &Yaml| get_size_from_yaml(item, metadata))
+        .collect()
+}
+
 /// Returns a string from a map given a key.
 ///
 /// # Errors
@@ -285,6 +327,8 @@ fn parse_string_array(array: &[Yaml]) -> Result<Vec<String>, YamlContentErr> {
 
 #[cfg(test)]
 mod tests {
+    use rustc_hash::FxHashMap;
+
     use super::*;
 
     #[test]
@@ -548,6 +592,71 @@ mod tests {
         let yaml = Yaml::Array(vec![Yaml::String(String::from("0")), Yaml::Boolean(true)]);
         let array = get_string_array(&yaml);
         assert!(array.is_err());
+    }
+
+    #[test]
+    fn get_size_from_yaml_ok() {
+        let yaml = Yaml::Integer(1);
+        let size = get_size_from_yaml(&yaml, &StateMetadata::default());
+        assert!(size.is_ok());
+        assert_eq!(size.unwrap(), 1);
+
+        let yaml = Yaml::String("object".to_owned());
+        let mut name_to_object_type = FxHashMap::default();
+        name_to_object_type.insert("object".to_owned(), 0);
+        let state_metadata = StateMetadata {
+            name_to_object_type,
+            object_numbers: vec![10],
+            ..Default::default()
+        };
+        let size = get_size_from_yaml(&yaml, &state_metadata);
+        assert!(size.is_ok());
+        assert_eq!(size.unwrap(), 10);
+    }
+
+    #[test]
+    fn get_size_from_yaml_err() {
+        let yaml = Yaml::Array(vec![]);
+        let size = get_size_from_yaml(&yaml, &StateMetadata::default());
+        assert!(size.is_err());
+
+        let yaml = Yaml::String("object".to_owned());
+        let size = get_size_from_yaml(&yaml, &StateMetadata::default());
+        assert!(size.is_err());
+    }
+
+    #[test]
+    fn get_table_arg_array_ok() {
+        let arg_array = vec![Yaml::Integer(1), Yaml::String("object".to_owned())];
+        let mut name_to_object_type = FxHashMap::default();
+        name_to_object_type.insert("object".to_owned(), 0);
+        let state_metadata = StateMetadata {
+            name_to_object_type,
+            object_numbers: vec![10],
+            ..Default::default()
+        };
+
+        let sizes = get_table_arg_array(&arg_array, &state_metadata);
+        assert!(sizes.is_ok());
+        assert_eq!(sizes.unwrap(), vec![1, 10]);
+    }
+
+    #[test]
+    fn get_table_arg_array_err() {
+        let arg_array = vec![
+            Yaml::Integer(1),
+            Yaml::String("non_exist_object".to_owned()),
+        ];
+        let mut name_to_object_type = FxHashMap::default();
+        name_to_object_type.insert("object".to_owned(), 0);
+        let state_metadata = StateMetadata {
+            name_to_object_type,
+            object_numbers: vec![10],
+            ..Default::default()
+        };
+
+        let sizes = get_table_arg_array(&arg_array, &state_metadata);
+        assert!(sizes.is_err());
     }
 
     #[test]

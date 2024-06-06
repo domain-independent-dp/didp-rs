@@ -147,7 +147,7 @@ pub use state::{
     IntegerVariable, ObjectType, ResourceVariables, SetVariable, SignatureVariables, State,
     StateInterface, StateMetadata, VectorVariable,
 };
-pub use table::{Table, Table1D, Table2D, Table3D};
+pub use table::{HasShape, Table, Table1D, Table2D, Table3D};
 pub use table_data::{
     Table1DHandle, Table2DHandle, Table3DHandle, TableData, TableHandle, TableInterface,
 };

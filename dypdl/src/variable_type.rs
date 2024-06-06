@@ -18,6 +18,36 @@ pub type Continuous = f64;
 /// Continuous numeric value with a total order.
 pub type OrderedContinuous = ordered_float::OrderedFloat<Continuous>;
 
+/// Trait for string representation of variables, since the ToString trait for Set outputs binary
+/// bits, which is hard to read, ToVariableString overrides it with readable string representations.
+pub trait ToVariableString {
+    fn to_variable_string(&self) -> String;
+}
+
+impl ToVariableString for Set {
+    fn to_variable_string(&self) -> String {
+        let debug_string = format!("{:?}", self.ones().collect::<Vec<usize>>()).replace(',', "");
+        let len = debug_string.len();
+        format!("{{{} : {}}}", &debug_string[1..(len - 1)], self.len())
+    }
+}
+
+macro_rules! create_default_ToVariableString {
+    ($t:ty) => {
+        impl ToVariableString for $t {
+            fn to_variable_string(&self) -> String {
+                self.to_string()
+            }
+        }
+    };
+}
+
+create_default_ToVariableString!(Element);
+create_default_ToVariableString!(Integer);
+create_default_ToVariableString!(Continuous);
+create_default_ToVariableString!(OrderedContinuous);
+create_default_ToVariableString!(bool);
+
 /// Numeric value.
 pub trait Numeric:
     num_traits::Num
@@ -159,5 +189,50 @@ impl FromNumeric for OrderedContinuous {
     #[inline]
     fn from<T: ToNumeric>(n: T) -> OrderedContinuous {
         ordered_float::OrderedFloat(n.to_continuous())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        variable_type::{OrderedContinuous, ToVariableString},
+        Continuous, Element, Integer, Set,
+    };
+
+    #[test]
+    fn integer_to_variable_string() {
+        assert_eq!((10 as Integer).to_variable_string(), "10".to_owned());
+    }
+
+    #[test]
+    fn float_to_variable_string() {
+        assert_eq!((3.3 as Continuous).to_variable_string(), "3.3".to_owned());
+    }
+
+    #[test]
+    fn bool_to_variable_string() {
+        assert_eq!((false).to_variable_string(), "false".to_owned());
+    }
+
+    #[test]
+    fn element_to_variable_string() {
+        assert_eq!((10 as Element).to_variable_string(), "10".to_owned());
+    }
+
+    #[test]
+    fn ordered_continuous_to_variable_string() {
+        assert_eq!(
+            OrderedContinuous::from(3.3).to_variable_string(),
+            "3.3".to_owned()
+        );
+    }
+
+    #[test]
+    fn set_to_variable_string() {
+        let mut set = Set::with_capacity(10);
+        set.insert(1);
+        set.insert(3);
+
+        assert_eq!(set.to_variable_string(), "{1 3 : 10}".to_owned());
     }
 }
