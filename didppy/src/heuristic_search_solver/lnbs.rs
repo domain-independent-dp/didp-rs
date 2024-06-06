@@ -137,9 +137,6 @@ pub struct LnbsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<Ordered
 #[pymethods]
 impl LnbsPy {
     #[new]
-    #[pyo3(
-        text_signature = "(model, time_limit, f_operator=didppy.FOperator.Plus, primal_bound=None, quiet=False, initial_solution=None, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, seed=2023, has_negative_cost=false, use_cost_weight=false, no_bandit=false, no_transition_mutex=false, cabs_initial_beam_size=None, cabs_max_beam_size=None, threads=1, parallelization_method=BeamParallelizationMethod.Hdbs2)"
-    )]
     #[pyo3(signature = (
         model,
         time_limit,
@@ -343,8 +340,6 @@ impl LnbsPy {
         }
     }
 
-    /// search()
-    ///
     /// Search for the optimal solution of a DyPDL model.
     ///
     /// Returns
@@ -374,13 +369,10 @@ impl LnbsPy {
     /// >>> solution = solver.search()
     /// >>> solution.cost
     /// 1
-    #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()
     }
 
-    /// search_next()
-    ///
     /// Search for the next solution of a DyPDL model.
     ///
     /// Returns
@@ -414,7 +406,6 @@ impl LnbsPy {
     /// 1
     /// >>> terminated
     /// True
-    #[pyo3(signature = ())]
     fn search_next(&mut self) -> PyResult<(SolutionPy, bool)> {
         self.0.search_next()
     }

@@ -160,9 +160,6 @@ impl ExpressionBeamSearchPy {
 #[pymethods]
 impl ExpressionBeamSearchPy {
     #[new]
-    #[pyo3(
-        text_signature = "(model, beam_size, custom_cost_dict=None, h_expression=None, f_operator=didppy.FOperator.Plus, custom_f_operator=didppy.FOperator.Plus, maximize=False, keep_all_layers=False, time_limit=None, quiet=False, float_custom_cost=None)"
-    )]
     #[pyo3(signature = (
         model,
         beam_size,
@@ -307,8 +304,6 @@ impl ExpressionBeamSearchPy {
         }
     }
 
-    /// search()
-    ///
     /// Search for the optimal solution of a DyPDL model.
     ///
     /// Returns
@@ -338,7 +333,6 @@ impl ExpressionBeamSearchPy {
     /// >>> solution = solver.search()
     /// >>> print(solution.cost)
     /// 1
-    #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()
     }

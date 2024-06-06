@@ -96,9 +96,6 @@ pub struct BreadthFirstSearchPy(
 #[pymethods]
 impl BreadthFirstSearchPy {
     #[new]
-    #[pyo3(
-        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000, keep_all_layers=False)"
-    )]
     #[pyo3(signature = (
         model,
         f_operator = FOperator::Plus,
@@ -178,8 +175,6 @@ impl BreadthFirstSearchPy {
         }
     }
 
-    /// search()
-    ///
     /// Search for the optimal solution of a DyPDL model.
     ///
     /// Returns
@@ -209,13 +204,10 @@ impl BreadthFirstSearchPy {
     /// >>> solution = solver.search()
     /// >>> solution.cost
     /// 1
-    #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()
     }
 
-    /// search_next()
-    ///
     /// Search for the next solution of a DyPDL model.
     ///
     /// Returns
@@ -249,7 +241,6 @@ impl BreadthFirstSearchPy {
     /// 1
     /// >>> terminated
     /// True
-    #[pyo3(signature = ())]
     fn search_next(&mut self) -> PyResult<(SolutionPy, bool)> {
         self.0.search_next()
     }

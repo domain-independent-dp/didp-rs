@@ -148,7 +148,6 @@ impl TransitionPy {
 #[pymethods]
 impl TransitionPy {
     #[new]
-    #[pyo3(text_signature = "(name, cost=None, preconditions=None, effects=None)")]
     #[pyo3(signature = (name, cost = None, preconditions = None, effects = None))]
     pub fn new_py(
         name: &str,
@@ -209,8 +208,6 @@ impl TransitionPy {
             .collect()
     }
 
-    /// add_precondition(condition)
-    ///
     /// Adds a precondition to the transition.
     ///
     /// Parameters
@@ -227,7 +224,6 @@ impl TransitionPy {
     /// >>> t.add_precondition(var >= 1)
     /// >>> t.preconditions[0].eval(model.target_state, model)
     /// True
-    #[pyo3(signature = (condition))]
     fn add_precondition(&mut self, condition: ConditionPy) {
         self.0.add_precondition(condition.into())
     }
@@ -359,8 +355,6 @@ impl TransitionPy {
         Ok(())
     }
 
-    /// add_effect(var, expr)
-    ///
     /// Adds an effect to the transition.
     ///
     /// Parameters
@@ -384,7 +378,6 @@ impl TransitionPy {
     /// >>> t.add_effect(var, var + 1)
     /// >>> t[var].eval(model.target_state, model)
     /// 5
-    #[pyo3(signature = (var, expr))]
     fn add_effect(&mut self, var: VarUnion, expr: Bound<'_, PyAny>) -> PyResult<()> {
         let result = match var {
             VarUnion::Element(var) => {
@@ -437,8 +430,6 @@ impl TransitionPy {
         }
     }
 
-    /// is_applicable(state, model)
-    ///
     /// Checks if the transition is applicable in the given state.
     ///
     /// Parameters
@@ -466,14 +457,11 @@ impl TransitionPy {
     /// >>> t = dp.Transition(name="t", preconditions=[var >= 0])
     /// >>> t.is_applicable(model.target_state, model)
     /// True
-    #[pyo3(signature = (state, model))]
     fn is_applicable(&self, state: &StatePy, model: &ModelPy) -> bool {
         self.0
             .is_applicable(state.inner_as_ref(), &model.inner_as_ref().table_registry)
     }
 
-    /// apply(state, model)
-    ///
     /// Applies the transition to the given state.
     ///
     /// Parameters
@@ -502,14 +490,11 @@ impl TransitionPy {
     /// >>> state = t.apply(model.target_state, model)
     /// >>> state[var]
     /// 5
-    #[pyo3(signature = (state, model))]
     fn apply(&self, state: &mut StatePy, model: &ModelPy) -> StatePy {
         self.0
             .apply(state.inner_as_ref(), &model.inner_as_ref().table_registry)
     }
 
-    /// eval_cost(cost, state, model)
-    ///
     /// Evaluates the cost of the transition in the given state.
     ///
     /// Parameters
@@ -541,7 +526,6 @@ impl TransitionPy {
     /// >>> t = dp.Transition(name="t", cost=dp.IntExpr.state_cost() + 1)
     /// >>> t.eval_cost(1, model.target_state, model)
     /// 2
-    #[pyo3(signature = (cost, state, model))]
     fn eval_cost(
         &self,
         cost: Bound<'_, PyAny>,

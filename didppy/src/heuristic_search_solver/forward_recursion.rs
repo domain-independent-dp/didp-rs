@@ -87,8 +87,6 @@ impl ForwardRecursionPy {
         }
     }
 
-    /// search()
-    ///
     /// Search for the optimal solution of a DyPDL model.
     ///
     /// Returns
@@ -118,7 +116,6 @@ impl ForwardRecursionPy {
     /// >>> solution = solver.search()
     /// >>> print(solution.cost)
     /// 1
-    #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()
     }
