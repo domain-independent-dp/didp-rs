@@ -1,11 +1,14 @@
 [package]
 name = "didppy"
-version = "0.7.3"
+version = "0.8.0"
 edition = "2021"
 rust-version = "1.65"
 description = "Python interface for Dynamic Programming Description Language (DyPDL) and DyPDL solvers."
 license = "MIT OR Apache-2.0"
-authors = ["Ryo Kuroiwa <ryo.kuroiwa@mail.utoronto.ca>"]
+authors = [
+    "Ryo Kuroiwa <ryo.kuroiwa@mail.utoronto.ca>",
+    "Yuxiao (Jasper) Chen <yuxiao.chen@mail.utoronto.ca>",
+]
 homepage = "https://didp.ai"
 repository = "https://github.com/domain-independent-dp/didp-rs"
 
@@ -15,12 +18,14 @@ name = "didppy"
 crate-type = ["cdylib"]
 
 [dependencies]
-dypdl = { path = "../dypdl", version = "0.7.3" }
-dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.7.3" }
+dypdl = { path = "../dypdl", version = "0.8.0" }
+dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.8.0" }
+didp-yaml = { path = "../didp-yaml", version = "0.8.0" }
 rustc-hash = "1.1"
+yaml-rust = "0.4"
 
 [dependencies.pyo3]
-version = "0.20"
+version = "0.21"
 
 [features]
 extension-module = ["pyo3/extension-module"]
@@ -28,4 +33,4 @@ abi3 = ["pyo3/abi3-py37"]
 default = ["extension-module", "abi3"]
 
 [build-dependencies]
-pyo3-build-config = "0.20"
+pyo3-build-config = "0.21"

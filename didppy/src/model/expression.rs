@@ -240,8 +240,6 @@ impl ElementExprPy {
         ))
     }
 
-    /// eval(state, model)
-    ///
     /// Evaluates the expression.
     ///
     /// Parameters
@@ -271,7 +269,6 @@ impl ElementExprPy {
     /// >>> state = model.target_state
     /// >>> expr.eval(state, model)
     /// 1
-    #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Element {
         self.0
             .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
@@ -688,8 +685,6 @@ impl SetExprPy {
         ))
     }
 
-    /// isdisjoint(other)
-    ///
     /// Checks if two sets are disjoint.
     ///
     /// Parameters
@@ -713,13 +708,10 @@ impl SetExprPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[2, 3])
     /// >>> expr.isdisjoint(const).eval(state, model)
     /// True
-    #[pyo3(signature = (other))]
     fn isdisjoint(&self, other: SetUnion) -> ConditionPy {
         self.__and__(other).is_empty()
     }
 
-    /// issubset(other)
-    ///
     /// Checks if this set is a subset of another set.
     ///
     /// Parameters
@@ -743,15 +735,12 @@ impl SetExprPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[0, 1, 2])
     /// >>> expr.issubset(const).eval(state, model)
     /// True
-    #[pyo3(signature = (other))]
     fn issubset(&self, other: SetUnion) -> ConditionPy {
         let lhs = self.clone().0;
         let rhs = SetExpression::from(other);
         ConditionPy(lhs.is_subset(rhs))
     }
 
-    /// issuperset(other)
-    ///
     /// Checks if this set is a superset of another set.
     ///
     /// Parameters
@@ -775,15 +764,12 @@ impl SetExprPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[0])
     /// >>> expr.issuperset(const).eval(state, model)
     /// True
-    #[pyo3(signature = (other))]
     fn issuperset(&self, other: SetUnion) -> ConditionPy {
         let lhs = self.clone().0;
         let rhs = SetExpression::from(other);
         ConditionPy(rhs.is_subset(lhs))
     }
 
-    /// add(element)
-    ///
     /// Adds an element to a set.
     ///
     /// This method does not change the instance itself.
@@ -813,14 +799,11 @@ impl SetExprPy {
     /// >>> expr = dp.SetExpr(const)
     /// >>> expr.add(2).eval(state, model)
     /// {0, 1, 2}
-    #[pyo3(signature = (element))]
     fn add(&self, element: ElementUnion) -> SetExprPy {
         let element = ElementExpression::from(element);
         SetExprPy(self.clone().0.add(element))
     }
 
-    /// remove(element)
-    ///
     /// Removes an element from a set.
     ///
     /// This method does not change the instance itself.
@@ -850,13 +833,10 @@ impl SetExprPy {
     /// >>> expr = dp.SetExpr(const)
     /// >>> expr.remove(1).eval(state, model)
     /// {0}
-    #[pyo3(signature = (element))]
     fn remove(&self, element: ElementUnion) -> SetExprPy {
         self.discard(element)
     }
 
-    /// discard(element)
-    ///
     /// Removes an element from a set.
     ///
     /// This method does not change the instance itself.
@@ -886,14 +866,11 @@ impl SetExprPy {
     /// >>> expr = dp.SetExpr(const)
     /// >>> expr.discard(1).eval(state, model)
     /// {0}
-    #[pyo3(signature = (element))]
     fn discard(&self, element: ElementUnion) -> SetExprPy {
         let element = ElementExpression::from(element);
         SetExprPy(self.clone().0.remove(element))
     }
 
-    /// difference(other)
-    ///
     /// Returns a set where all elements in an input set are removed.
     ///
     /// This method is the same as :code:`-` operation.
@@ -919,13 +896,10 @@ impl SetExprPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> expr.difference(const).eval(state, model)
     /// {0}
-    #[pyo3(signature = (other))]
     fn difference(&self, other: SetUnion) -> SetExprPy {
         self.__sub__(other)
     }
 
-    /// intersection(other)
-    ///
     /// Returns the intersection with another set.
     ///
     /// This method is the same as :code:`&` operation.
@@ -952,13 +926,10 @@ impl SetExprPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> expr.intersection(const).eval(state, model)
     /// {1}
-    #[pyo3(signature = (other))]
     fn intersection(&self, other: SetUnion) -> SetExprPy {
         self.__and__(other)
     }
 
-    /// symmetric_difference(other)
-    ///
     /// Returns a set which only contains elements included in either of two sets but not in both.
     ///
     /// This method is the same as :code:`^` operation.
@@ -985,13 +956,10 @@ impl SetExprPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> expr.symmetric_difference(const).eval(state, model)
     /// {0, 2}
-    #[pyo3(signature = (other))]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
         self.__xor__(other)
     }
 
-    /// union(other)
-    ///
     /// Returns the union of two sets.
     ///
     /// This method is the same as :code:`\|` operation.
@@ -1018,13 +986,10 @@ impl SetExprPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> expr.union(const).eval(state, model)
     /// {0, 1, 2}
-    #[pyo3(signature = (other))]
     fn union(&self, other: SetUnion) -> SetExprPy {
         self.__or__(other)
     }
 
-    /// contains(element)
-    ///
     /// Returns a condition checking if an element is included.
     ///
     /// Parameters
@@ -1052,7 +1017,6 @@ impl SetExprPy {
     /// >>> expr = dp.SetExpr(const)
     /// >>> expr.contains(0).eval(state, model)
     /// True
-    #[pyo3(signature = (element))]
     fn contains(&self, element: ElementUnion) -> ConditionPy {
         let element = ElementExpression::from(element);
         ConditionPy(self.clone().0.contains(element))
@@ -1075,7 +1039,6 @@ impl SetExprPy {
     /// >>> expr = dp.SetExpr(const)
     /// >>> expr.len().eval(state, model)
     /// 2
-    #[pyo3(signature = ())]
     pub fn len(&self) -> IntExprPy {
         IntExprPy(self.clone().0.len())
     }
@@ -1097,7 +1060,6 @@ impl SetExprPy {
     /// >>> expr = dp.SetExpr(const)
     /// >>> expr.is_empty().eval(state, model)
     /// False
-    #[pyo3(signature = ())]
     pub fn is_empty(&self) -> ConditionPy {
         ConditionPy(self.clone().0.is_empty())
     }
@@ -1119,13 +1081,10 @@ impl SetExprPy {
     /// >>> expr = dp.SetExpr(const)
     /// >>> expr.complement().eval(state, model)
     /// {2, 3}
-    #[pyo3(signature = ())]
     pub fn complement(&self) -> SetExprPy {
         SetExprPy(!self.clone().0)
     }
 
-    /// eval(state, model)
-    ///
     /// Evaluates the expression.
     ///
     /// Parameters
@@ -1155,7 +1114,6 @@ impl SetExprPy {
     /// >>> state = model.target_state
     /// >>> expr.eval(state, model)
     /// {0, 1}
-    #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> HashSet<usize> {
         HashSet::from_iter(
             self.0
@@ -1280,8 +1238,6 @@ impl SetVarPy {
         ))
     }
 
-    /// isdisjoint(other)
-    ///
     /// Checks if two sets are disjoint.
     ///
     /// Parameters
@@ -1304,13 +1260,10 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.isdisjoint(const).eval(state, model)
     /// True
-    #[pyo3(signature = (other))]
     fn isdisjoint(&self, other: SetUnion) -> ConditionPy {
         self.__and__(other).is_empty()
     }
 
-    /// issubset(other)
-    ///
     /// Checks if this set is a subset of another set.
     ///
     /// Parameters
@@ -1333,15 +1286,12 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.issubset(const).eval(state, model)
     /// True
-    #[pyo3(signature = (other))]
     fn issubset(&self, other: SetUnion) -> ConditionPy {
         let lhs = self.0;
         let rhs = SetExpression::from(other);
         ConditionPy(lhs.is_subset(rhs))
     }
 
-    /// issuperset(other)
-    ///
     /// Checks if this set is a superset of another set.
     ///
     /// Parameters
@@ -1364,15 +1314,12 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> expr.issuperset(const).eval(state, model)
     /// True
-    #[pyo3(signature = (other))]
     fn issuperset(&self, other: SetUnion) -> ConditionPy {
         let lhs = self.0;
         let rhs = SetExpression::from(other);
         ConditionPy(rhs.is_subset(lhs))
     }
 
-    /// add(element)
-    ///
     /// Adds an element to a set.
     ///
     /// This method does not change the instance itself.
@@ -1401,14 +1348,11 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.add(2).eval(state, model)
     /// {0, 1, 2}
-    #[pyo3(signature = (element))]
     fn add(&self, element: ElementUnion) -> SetExprPy {
         let element = ElementExpression::from(element);
         SetExprPy(self.0.add(element))
     }
 
-    /// remove(element)
-    ///
     /// Removes an element from a set.
     ///
     /// This method does not change the instance itself.
@@ -1437,13 +1381,10 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.remove(1).eval(state, model)
     /// {0}
-    #[pyo3(signature = (element))]
     fn remove(&self, element: ElementUnion) -> SetExprPy {
         self.discard(element)
     }
 
-    /// discard(element)
-    ///
     /// Removes an element from a set.
     ///
     /// This method does not change the instance itself.
@@ -1472,14 +1413,11 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.discard(1).eval(state, model)
     /// {0}
-    #[pyo3(signature = (element))]
     fn discard(&self, element: ElementUnion) -> SetExprPy {
         let element = ElementExpression::from(element);
         SetExprPy(self.0.remove(element))
     }
 
-    /// difference(other)
-    ///
     /// Returns a set where all elements in an input set are removed.
     ///
     /// This method is the same as :code:`-` operation.
@@ -1505,13 +1443,10 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.difference(const).eval(state, model)
     /// {0}
-    #[pyo3(signature = (other))]
     fn difference(&self, other: SetUnion) -> SetExprPy {
         self.__sub__(other)
     }
 
-    /// intersection(other)
-    ///
     /// Returns the intersection with another set.
     ///
     /// This method is the same as :code:`&` operation.
@@ -1541,8 +1476,6 @@ impl SetVarPy {
         self.__and__(other)
     }
 
-    /// symmetric_difference(other)
-    ///
     /// Returns a set which only contains elements included in either of two sets but not in both.
     ///
     /// This method is the same as :code:`^` operation.
@@ -1568,13 +1501,10 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.symmetric_difference(const).eval(state, model)
     /// {0, 2}
-    #[pyo3(signature = (other))]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
         self.__xor__(other)
     }
 
-    /// union(other)
-    ///
     /// Returns the union of two sets.
     ///
     /// This method is the same as :code:`\|` operation.
@@ -1600,13 +1530,10 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.union(const).eval(state, model)
     /// {0, 1, 2}
-    #[pyo3(signature = (other))]
     fn union(&self, other: SetUnion) -> SetExprPy {
         self.__or__(other)
     }
 
-    /// contains(element)
-    ///
     /// Returns a condition checking if an element is included.
     ///
     /// Parameters
@@ -1633,7 +1560,6 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.contains(0).eval(state, model)
     /// True
-    #[pyo3(signature = (element))]
     fn contains(&self, element: ElementUnion) -> ConditionPy {
         let element = ElementExpression::from(element);
         ConditionPy(self.0.contains(element))
@@ -1655,7 +1581,6 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.len().eval(state, model)
     /// 2
-    #[pyo3(signature = ())]
     fn len(&self) -> IntExprPy {
         IntExprPy(self.0.len())
     }
@@ -1676,7 +1601,6 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.is_empty().eval(state, model)
     /// False
-    #[pyo3(signature = ())]
     fn is_empty(&self) -> ConditionPy {
         ConditionPy(self.0.is_empty())
     }
@@ -1697,7 +1621,6 @@ impl SetVarPy {
     /// >>> state = model.target_state
     /// >>> var.complement().eval(state, model)
     /// {2, 3}
-    #[pyo3(signature = ())]
     fn complement(&self) -> SetExprPy {
         SetExprPy(!self.0)
     }
@@ -1817,8 +1740,6 @@ impl SetConstPy {
         ))
     }
 
-    /// isdisjoint(other)
-    ///
     /// Checks if two sets are disjoint.
     ///
     /// Parameters
@@ -1841,13 +1762,10 @@ impl SetConstPy {
     /// >>> other = model.create_set_const(object_type=obj, value=[2, 3])
     /// >>> const.isdisjoint(other).eval(state, model)
     /// True
-    #[pyo3(signature = (other))]
     fn isdisjoint(&self, other: SetUnion) -> ConditionPy {
         self.__and__(other).is_empty()
     }
 
-    /// issubset(other)
-    ///
     /// Checks if this set is a subset of another set.
     ///
     /// Parameters
@@ -1870,15 +1788,12 @@ impl SetConstPy {
     /// >>> other = model.create_set_const(object_type=obj, value=[0, 1, 2])
     /// >>> const.issubset(other).eval(state, model)
     /// True
-    #[pyo3(signature = (other))]
     fn issubset(&self, other: SetUnion) -> ConditionPy {
         let lhs = SetExpression::from(self.clone().0);
         let rhs = SetExpression::from(other);
         ConditionPy(lhs.is_subset(rhs))
     }
 
-    /// issuperset(other)
-    ///
     /// Checks if this set is a superset of another set.
     ///
     /// Parameters
@@ -1901,15 +1816,12 @@ impl SetConstPy {
     /// >>> other = model.create_set_const(object_type=obj, value=[0])
     /// >>> cost.issuperset(other).eval(state, model)
     /// True
-    #[pyo3(signature = (other))]
     fn issuperset(&self, other: SetUnion) -> ConditionPy {
         let lhs = SetExpression::from(self.clone().0);
         let rhs = SetExpression::from(other);
         ConditionPy(rhs.is_subset(lhs))
     }
 
-    /// add(element)
-    ///
     /// Adds an element to a set.
     ///
     /// This method does not change the instance itself.
@@ -1969,13 +1881,10 @@ impl SetConstPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
     /// >>> const.remove(1).eval(state, model)
     /// {0}
-    #[pyo3(signature = (element))]
     fn remove(&self, element: ElementUnion) -> SetExprPy {
         self.discard(element)
     }
 
-    /// discard(element)
-    ///
     /// Removes an element from a set.
     ///
     /// This method does not change the instance itself.
@@ -2004,15 +1913,12 @@ impl SetConstPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
     /// >>> const.discard(1).eval(state, model)
     /// {0}
-    #[pyo3(signature = (element))]
     fn discard(&self, element: ElementUnion) -> SetExprPy {
         let set = SetExpression::from(self.clone());
         let element = ElementExpression::from(element);
         SetExprPy(set.remove(element))
     }
 
-    /// difference(other)
-    ///
     /// Returns a set where all elements in an input set are removed.
     ///
     /// This method is the same as :code:`-` operation.
@@ -2043,13 +1949,10 @@ impl SetConstPy {
     /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> const.difference(other).eval(state, model)
     /// {0}
-    #[pyo3(signature = (other))]
     fn difference(&self, other: SetUnion) -> SetExprPy {
         self.__sub__(other)
     }
 
-    /// intersection(other)
-    ///
     /// Returns the intersection with another set.
     ///
     /// This method is the same as :code:`&` operation.
@@ -2075,13 +1978,10 @@ impl SetConstPy {
     /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> const.intersection(other).eval(state, model)
     /// {1}
-    #[pyo3(signature = (other))]
     fn intersection(&self, other: SetUnion) -> SetExprPy {
         self.__and__(other)
     }
 
-    /// symmetric_difference(other)
-    ///
     /// Returns a set which only contains elements included in either of two sets but not in both.
     ///
     /// This method is the same as :code:`^` operation.
@@ -2107,13 +2007,10 @@ impl SetConstPy {
     /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> const.symmetric_difference(other).eval(state, model)
     /// {0, 2}
-    #[pyo3(signature = (other))]
     fn symmetric_difference(&self, other: SetUnion) -> SetExprPy {
         self.__xor__(other)
     }
 
-    /// union(other)
-    ///
     /// Returns the union of two sets.
     ///
     /// This method is the same as :code:`\|` operation.
@@ -2139,13 +2036,10 @@ impl SetConstPy {
     /// >>> other = model.create_set_const(object_type=obj, value=[1, 2])
     /// >>> const.union(other).eval(state, model)
     /// {0, 1, 2}
-    #[pyo3(signature = (other))]
     fn union(&self, other: SetUnion) -> SetExprPy {
         self.__or__(other)
     }
 
-    /// contains(element)
-    ///
     /// Returns a condition checking if an element is included.
     ///
     /// Parameters
@@ -2172,7 +2066,6 @@ impl SetConstPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
     /// >>> const.contains(0).eval(state, model)
     /// True
-    #[pyo3(signature = (element))]
     fn contains(&self, element: ElementUnion) -> ConditionPy {
         let set = SetExpression::from(self.clone());
         let element = ElementExpression::from(element);
@@ -2195,7 +2088,6 @@ impl SetConstPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
     /// >>> const.len().eval(state, model)
     /// 2
-    #[pyo3(signature = ())]
     fn len(&self) -> IntExprPy {
         let set = SetExpression::from(self.clone());
         IntExprPy(set.len())
@@ -2217,7 +2109,6 @@ impl SetConstPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
     /// >>> const.is_empty().eval(state, model)
     /// False
-    #[pyo3(signature = ())]
     fn is_empty(&self) -> ConditionPy {
         let set = SetExpression::from(self.clone());
         ConditionPy(set.is_empty())
@@ -2239,7 +2130,6 @@ impl SetConstPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
     /// >>> const.complement().eval(state, model)
     /// {2, 3}
-    #[pyo3(signature = ())]
     fn complement(&self) -> SetExprPy {
         let set = SetExpression::from(self.clone());
         SetExprPy(!set)
@@ -2260,7 +2150,6 @@ impl SetConstPy {
     /// >>> const = model.create_set_const(object_type=obj, value=[0, 1])
     /// >>> const.eval()
     /// {0, 1}
-    #[pyo3(signature = ())]
     fn eval(&self) -> HashSet<Element> {
         HashSet::from_iter(self.0.ones())
     }
@@ -2402,7 +2291,6 @@ impl From<IntegerExpression> for IntExprPy {
 #[pymethods]
 impl IntExprPy {
     #[new]
-    #[pyo3(text_signature = "(value)")]
     fn new_py(value: Integer) -> Self {
         Self(IntegerExpression::from(value))
     }
@@ -2422,7 +2310,6 @@ impl IntExprPy {
     /// >>> cost = dp.IntExpr.state_cost() + 1
     /// >>> cost.eval_cost(1, state, model)
     /// 2
-    #[pyo3(signature = ())]
     #[staticmethod]
     fn state_cost() -> IntExprPy {
         Self(IntegerExpression::Cost)
@@ -2588,8 +2475,6 @@ impl IntExprPy {
         ))
     }
 
-    /// eval(state, model)
-    ///
     /// Evaluates the expression.
     ///
     /// Parameters
@@ -2618,14 +2503,11 @@ impl IntExprPy {
     /// >>> state = model.target_state
     /// >>> expr.eval(state, model)
     /// 1
-    #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Integer {
         self.0
             .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
     }
 
-    /// eval_cost(cost, state, model)
-    ///
     /// Evaluates the cost expression.
     ///
     /// Parameters
@@ -2656,7 +2538,6 @@ impl IntExprPy {
     /// >>> state = model.target_state
     /// >>> expr.eval_cost(1, state, model)
     /// 1
-    #[pyo3(signature = (cost, state, model))]
     fn eval_cost(&self, cost: Integer, state: &StatePy, model: &ModelPy) -> Integer {
         self.0.eval_cost(
             cost,
@@ -3409,8 +3290,6 @@ impl FloatExprPy {
         ))
     }
 
-    /// eval(state, model)
-    ///
     /// Evaluates the expression.
     ///
     /// Parameters
@@ -3439,14 +3318,11 @@ impl FloatExprPy {
     /// >>> state = model.target_state
     /// >>> expr.eval(state, model)
     /// 3.0
-    #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Continuous {
         self.0
             .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
     }
 
-    /// eval_cost(cost, state, model)
-    ///
     /// Evaluates the cost expression.
     ///
     /// Parameters
@@ -3477,7 +3353,6 @@ impl FloatExprPy {
     /// >>> state = model.target_state
     /// >>> expr.eval_cost(1.5, state, model)
     /// 3.0
-    #[pyo3(signature = (cost, state, model))]
     fn eval_cost(&self, cost: Continuous, state: &StatePy, model: &ModelPy) -> Continuous {
         self.0.eval_cost(
             cost,
@@ -3899,7 +3774,6 @@ impl FloatResourceVarPy {
 /// >>> dp.sqrt(expr).eval(state, model)
 /// 2.0
 #[pyfunction]
-#[pyo3(signature = (x))]
 pub fn sqrt(x: FloatUnion) -> FloatExprPy {
     FloatExprPy(ContinuousExpression::from(x).sqrt())
 }
@@ -3928,7 +3802,6 @@ pub fn sqrt(x: FloatUnion) -> FloatExprPy {
 /// >>> dp.log(x, y).eval(state, model)
 /// 2.0
 #[pyfunction]
-#[pyo3(signature = (x, y))]
 pub fn log(x: FloatUnion, y: FloatUnion) -> FloatExprPy {
     let x = ContinuousExpression::from(x);
     let y = ContinuousExpression::from(y);
@@ -3956,7 +3829,6 @@ pub fn log(x: FloatUnion, y: FloatUnion) -> FloatExprPy {
 /// >>> dp.float(expr).eval(state, model)
 /// 4.0
 #[pyfunction]
-#[pyo3(signature = (x))]
 pub fn float(x: IntUnion) -> FloatExprPy {
     FloatExprPy(ContinuousExpression::from(IntegerExpression::from(x)))
 }
@@ -3988,8 +3860,7 @@ pub fn float(x: IntUnion) -> FloatExprPy {
 /// >>> dp.max(var, 1).eval(model.target_state, model)
 /// 2
 #[pyfunction]
-#[pyo3(signature = (x, y))]
-pub fn max(x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
+pub fn max(x: Bound<'_, PyAny>, y: Bound<'_, PyAny>) -> PyResult<ExprUnion> {
     let result: (PyResult<IntUnion>, PyResult<IntUnion>) = (x.extract(), y.extract());
     if let (Ok(x), Ok(y)) = result {
         let x = IntegerExpression::from(x);
@@ -4047,8 +3918,7 @@ pub fn max(x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
 /// >>> dp.min(var, 1).eval(model.target_state, model)
 /// 1
 #[pyfunction]
-#[pyo3(signature = (x, y))]
-pub fn min(x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
+pub fn min(x: Bound<'_, PyAny>, y: Bound<'_, PyAny>) -> PyResult<ExprUnion> {
     let result: (PyResult<IntUnion>, PyResult<IntUnion>) = (x.extract(), y.extract());
     if let (Ok(x), Ok(y)) = result {
         let x = IntegerExpression::from(x);
@@ -4136,8 +4006,6 @@ impl ConditionPy {
         ))
     }
 
-    /// if_then_else(x, y)
-    ///
     /// Returns an 'if-then-else' expression, which returns the first expression if the condition holds and the second one otherwise.
     ///
     /// Parameters
@@ -4166,8 +4034,7 @@ impl ConditionPy {
     /// >>> expr = (var >= 0).if_then_else(2, 3)
     /// >>> expr.eval(model.target_state, model)
     /// 2
-    #[pyo3(signature = (x, y))]
-    fn if_then_else(&self, x: &PyAny, y: &PyAny) -> PyResult<ExprUnion> {
+    fn if_then_else(&self, x: Bound<'_, PyAny>, y: Bound<'_, PyAny>) -> PyResult<ExprUnion> {
         let result: (PyResult<IntUnion>, PyResult<IntUnion>) = (x.extract(), y.extract());
         if let (Ok(x), Ok(y)) = result {
             let x = IntegerExpression::from(x);
@@ -4199,8 +4066,6 @@ impl ConditionPy {
         Err(PyTypeError::new_err("arguments ('x', 'y') failed to extract (IntExpr, IntExpr), (FloatExpr, FloatExpr), (ElementExpr, ElementExpr), or (SetExpr, SetExpr)"))
     }
 
-    /// eval(state, model)
-    ///
     /// Evaluates the condition.
     ///
     /// Parameters
@@ -4229,7 +4094,6 @@ impl ConditionPy {
     /// >>> state = model.target_state
     /// >>> condition.eval(state, model)
     /// True
-    #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> bool {
         self.0
             .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
@@ -11077,7 +10941,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            max(x.as_ref(py), y.as_ref(py))
+            max(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11099,7 +10963,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            max(x.as_ref(py), y.as_ref(py))
+            max(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11121,7 +10985,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            max(x.as_ref(py), y.as_ref(py))
+            max(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11143,7 +11007,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            min(x.as_ref(py), y.as_ref(py))
+            min(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -11157,7 +11021,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            min(x.as_ref(py), y.as_ref(py))
+            min(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11179,7 +11043,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            min(x.as_ref(py), y.as_ref(py))
+            min(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11201,7 +11065,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            min(x.as_ref(py), y.as_ref(py))
+            min(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11223,7 +11087,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            min(x.as_ref(py), y.as_ref(py))
+            min(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_err());
     }
@@ -11286,7 +11150,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            condition.if_then_else(x.as_ref(py), y.as_ref(py))
+            condition.if_then_else(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11309,7 +11173,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            condition.if_then_else(x.as_ref(py), y.as_ref(py))
+            condition.if_then_else(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11332,7 +11196,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            condition.if_then_else(x.as_ref(py), y.as_ref(py))
+            condition.if_then_else(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11355,7 +11219,7 @@ mod tests {
         let result = Python::with_gil(|py| {
             let x = x.into_py(py);
             let y = y.into_py(py);
-            condition.if_then_else(x.as_ref(py), y.as_ref(py))
+            condition.if_then_else(x.into_bound(py), y.into_bound(py))
         });
         assert!(result.is_err());
     }

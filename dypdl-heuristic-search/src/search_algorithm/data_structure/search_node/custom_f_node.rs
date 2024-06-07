@@ -402,26 +402,25 @@ where
             Some(CustomFNode::new(node, g, h, f))
         };
 
-        let (successor, dominated) = registry.insert_with(state, cost, constructor)?;
+        let result = registry.insert_with(state, cost, constructor);
 
-        let mut generated = true;
-
-        if let Some(dominated) = dominated {
-            if !dominated.is_closed() {
-                dominated.close();
-                generated = false;
+        for d in result.dominated.iter() {
+            if !d.is_closed() {
+                d.close();
             }
         }
 
-        Some((successor, generated))
+        let node = result.information?;
+
+        Some((node, result.dominated.is_empty()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dypdl::expression::*;
-    use dypdl::prelude::*;
+    use dypdl::{expression::*, prelude::*};
+    use smallvec::SmallVec;
 
     #[test]
     fn test_new() {
@@ -735,7 +734,7 @@ mod tests {
         assert!(node.is_some());
         let node = node.unwrap();
         let result = registry.insert(node.clone());
-        assert!(result.is_some());
+        assert!(result.information.is_some());
 
         let result = node.insert_successor_node(
             Rc::new(transition.clone()),
@@ -838,9 +837,10 @@ mod tests {
         let node = node.unwrap();
         let mut registry = StateRegistry::<_, CustomFNode<_, _>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
-        assert!(result.is_some());
-        let (node, dominated) = result.unwrap();
-        assert!(dominated.is_none());
+        assert!(result.information.is_some());
+        let node = result.information.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let result = node.insert_successor_node(
             Rc::new(transition.clone()),
@@ -897,9 +897,10 @@ mod tests {
         let node = node.unwrap();
         let mut registry = StateRegistry::<_, CustomFNode<_, _>>::new(Rc::new(model.clone()));
         let result = registry.insert(node);
-        assert!(result.is_some());
-        let (node, dominated) = result.unwrap();
-        assert!(dominated.is_none());
+        assert!(result.information.is_some());
+        let node = result.information.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let result = node.insert_successor_node(
             Rc::new(transition),

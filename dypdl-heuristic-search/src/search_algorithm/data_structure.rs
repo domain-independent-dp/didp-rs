@@ -18,7 +18,9 @@ pub use hashable_state::{
 pub use search_node::{
     BfsNode, BfsNodeWithTransitionIds, CostNode, CustomFNode, FNode, WeightedFNode,
 };
-pub use state_registry::{StateInRegistry, StateInformation, StateRegistry};
+pub use state_registry::{
+    remove_dominated, InsertionResult, StateInRegistry, StateInformation, StateRegistry,
+};
 pub use successor_generator::{ApplicableTransitions, SuccessorGenerator};
 pub use transition::{TransitionWithCustomCost, TransitionWithId};
 pub use transition_chain::{CreateTransitionChain, GetTransitions, RcChain};

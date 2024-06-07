@@ -1,0 +1,69 @@
+domain: bin packing
+reduce: min
+cost_type: integer
+objects:
+  - item
+state_variables:
+  - name: unpacked
+    type: set
+    object: item
+  - name: remaining
+    type: integer
+    preference: greater
+  - name: number_of_bins
+    type: element
+    object: item
+    preference: less
+tables:
+  - name: c
+    type: integer
+  - name: weight
+    type: integer
+    args:
+      - item
+  - name: weight_2_1
+    type: integer
+    args:
+      - item
+  - name: weight_2_2
+    type: continuous
+    args:
+      - item
+  - name: weight_3
+    type: continuous
+    args:
+      - item
+transitions:
+  - name: pack
+    parameters:
+      - name: i
+        object: unpacked
+    cost: cost
+    preconditions:
+      - (<= (weight i) remaining)
+      - (>= (+ i 1) number_of_bins)
+    effect:
+      unpacked: (remove i unpacked)
+      remaining: (- remaining (weight i))
+  - name: open-and-pack
+    cost: (+ cost 1)
+    effect:
+      unpacked: (remove i unpacked)
+      remaining: (- c (weight i))
+      number_of_bins: (+ 1 number_of_bins)
+    parameters:
+      - name: i
+        object: unpacked
+    preconditions:
+      - (>= i number_of_bins)
+      - forall:
+          - name: j
+            object: unpacked
+        condition: (> (weight j) remaining)
+    forced: true
+base_cases:
+  - - (is_empty unpacked)
+dual_bounds:
+  - (ceil (/ (- (sum weight unpacked) remaining) c))
+  - (- (+ (sum weight_2_1 unpacked) (ceil (sum weight_2_2 unpacked))) (if (>= remaining (/ c 2.0)) 1 0))
+  - (- (ceil (sum weight_3 unpacked)) (if (>= remaining (/ c 3.0)) 1 0))

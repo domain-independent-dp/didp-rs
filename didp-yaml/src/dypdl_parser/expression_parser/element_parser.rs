@@ -1,7 +1,7 @@
 use super::argument_parser::{parse_argument, parse_multiple_arguments};
 use super::condition_parser;
-use super::util;
 use super::util::ParseErr;
+use super::util::{self, get_next_token_and_rest};
 use dypdl::expression::{
     BinaryOperator, ElementExpression, ReferenceExpression, SetElementOperator, SetExpression,
     SetOperator, SetReduceExpression, SetReduceOperator, TableExpression, VectorExpression,
@@ -456,6 +456,49 @@ pub fn parse_set_expression<'a, 'b>(
                     "no such table, object, or operation `{}`",
                     name
                 )))
+            }
+        }
+        // parse the set constants, where a set of 1, 2, and 3 with a total size of 10 is represented by
+        // the string '{1 2 3 : 10}'
+        "{" => {
+            let (mut item, mut rest) = get_next_token_and_rest(rest)?;
+            let mut all_elements = Vec::<usize>::new();
+            while item != ":" {
+                if let Ok(value) = item.parse::<usize>() {
+                    all_elements.push(value);
+                } else {
+                    return Err(ParseErr::new(
+                        "could not parse the element token in set constant".to_string(),
+                    ));
+                }
+                (item, rest) = get_next_token_and_rest(rest)?;
+            }
+
+            (item, rest) = get_next_token_and_rest(rest)?;
+
+            if let Ok(size) = item.parse::<usize>() {
+                let (closing, rest) = get_next_token_and_rest(rest)?;
+                if closing == "}" {
+                    let mut set = Set::with_capacity(size);
+                    for element in &all_elements {
+                        if *element >= size {
+                            return Err(ParseErr::new("set element out of range".to_string()));
+                        }
+                    }
+                    set.extend(all_elements);
+                    Ok((
+                        SetExpression::Reference(ReferenceExpression::Constant(set)),
+                        rest,
+                    ))
+                } else {
+                    Err(ParseErr::new(
+                        "wrong closing symbol in set constant".to_string(),
+                    ))
+                }
+            } else {
+                Err(ParseErr::new(
+                    "could not parse the size token in set constant".to_string(),
+                ))
             }
         }
         ")" => Err(ParseErr::new("unexpected `)`".to_string())),
@@ -2682,6 +2725,61 @@ mod tests {
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "something", "s0", ")", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_set_from_constant_ok() {
+        let metadata = StateMetadata::default();
+        let registry = TableRegistry::default();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["{", "1", "2", ":", "6", "}", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        let mut set = Set::with_capacity(6);
+        set.extend(1..3);
+        assert_eq!(
+            expression,
+            SetExpression::Reference(ReferenceExpression::Constant(set))
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_set_from_constant_err() {
+        let metadata = StateMetadata::default();
+        let registry = TableRegistry::default();
+        let parameters = generate_parameters();
+        let tokens: Vec<String> = ["{", "1", "2", "6", "}", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["{", "1", "2", ":", "6", "10", "}", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["{", "1", "2", ":", "6", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &registry, &parameters);
+        assert!(result.is_err());
+
+        let tokens: Vec<String> = ["{", "1", "6", ":", "6", "}"]
             .iter()
             .map(|x| x.to_string())
             .collect();

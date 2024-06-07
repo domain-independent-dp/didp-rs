@@ -1,3 +1,4 @@
+[![Actions Status](https://img.shields.io/github/actions/workflow/status/domain-independent-dp/didp-rs/didp-yaml.yaml?branch=main&logo=github&style=flat-square)](https://github.com/domain-independent-dp/didp-rs/actions)
 [![crates.io](https://img.shields.io/crates/v/didp-yaml)](https://crates.io/crates/didp-yaml)
 [![minimum rustc 1.65](https://img.shields.io/badge/rustc-1.65+-blue.svg)](https://rust-lang.github.io/rfcs/2495-min-rust-version.html)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)

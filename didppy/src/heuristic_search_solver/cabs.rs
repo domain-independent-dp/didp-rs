@@ -118,9 +118,6 @@ pub struct CabsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<Ordered
 #[pymethods]
 impl CabsPy {
     #[new]
-    #[pyo3(
-        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, initial_beam_size=1, keep_all_layers=False, max_beam_size=None, threads=1, parallelization_method=BeamParallelizationMethod.Hdbs2)"
-    )]
     #[pyo3(signature = (
         model,
         f_operator = FOperator::Plus,
@@ -137,7 +134,7 @@ impl CabsPy {
     fn new(
         model: &ModelPy,
         f_operator: FOperator,
-        primal_bound: Option<&PyAny>,
+        primal_bound: Option<Bound<'_, PyAny>>,
         time_limit: Option<f64>,
         quiet: bool,
         initial_beam_size: usize,
@@ -261,8 +258,6 @@ impl CabsPy {
         }
     }
 
-    /// search()
-    ///
     /// Search for the optimal solution of a DyPDL model.
     ///
     /// Returns
@@ -292,13 +287,10 @@ impl CabsPy {
     /// >>> solution = solver.search()
     /// >>> solution.cost
     /// 1
-    #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()
     }
 
-    /// search_next()
-    ///
     /// Search for the next solution of a DyPDL model.
     ///
     /// Returns
@@ -332,7 +324,6 @@ impl CabsPy {
     /// 1
     /// >>> terminated
     /// True
-    #[pyo3(signature = ())]
     fn search_next(&mut self) -> PyResult<(SolutionPy, bool)> {
         self.0.search_next()
     }

@@ -8,8 +8,8 @@ use crate::variable_type::Numeric;
 /// Base case.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct BaseCase {
-    conditions: Vec<GroundedCondition>,
-    cost: Option<CostExpression>,
+    pub conditions: Vec<GroundedCondition>,
+    pub cost: Option<CostExpression>,
 }
 
 impl From<Vec<GroundedCondition>> for BaseCase {

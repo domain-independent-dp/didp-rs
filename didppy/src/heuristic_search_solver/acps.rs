@@ -108,9 +108,6 @@ pub struct AcpsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<Ordered
 #[pymethods]
 impl AcpsPy {
     #[new]
-    #[pyo3(
-        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000, width_init=1, width_step=1, width_bound=None, reset_width=False)"
-    )]
     #[pyo3(signature = (
         model,
         f_operator = FOperator::Plus,
@@ -128,7 +125,7 @@ impl AcpsPy {
     fn new(
         model: &ModelPy,
         f_operator: FOperator,
-        primal_bound: Option<&PyAny>,
+        primal_bound: Option<Bound<'_, PyAny>>,
         time_limit: Option<f64>,
         get_all_solutions: bool,
         quiet: bool,

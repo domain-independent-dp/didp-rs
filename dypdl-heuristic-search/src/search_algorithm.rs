@@ -27,8 +27,8 @@ pub use breadth_first_search::{BreadthFirstSearch, BrfsParameters};
 pub use cabs::{Cabs, CabsParameters};
 pub use cbfs::Cbfs;
 pub use data_structure::{
-    BfsNode, CostNode, CustomFNode, FNode, StateInRegistry, StateRegistry, SuccessorGenerator,
-    TransitionMutex, TransitionWithCustomCost, TransitionWithId, WeightedFNode,
+    BfsNode, CostNode, CustomFNode, FNode, InsertionResult, StateInRegistry, StateRegistry,
+    SuccessorGenerator, TransitionMutex, TransitionWithCustomCost, TransitionWithId, WeightedFNode,
 };
 pub use dbdfs::{Dbdfs, DbdfsParameters};
 pub use dd_lns::{DdLns, DdLnsParameters};

@@ -33,6 +33,7 @@ If the time to prove optimality is not very important, and you want to find a go
 It is slower than :class:`~didppy.CABS` to prove the optimality, but it tends to find a better solution quickly when the dual bound functions are not tight.
 For example, :class:`~didppy.LNBS` is better than :class:`~didppy.CABS` with the DIDP models for :ref:`TSPTW <tutorial:TSPTW>` and :ref:`talent scheduling <advanced-tutorials/forced-transitions:Talent Scheduling>`.
 In contrast, :class:`~didppy.CABS` is better with the DIDP model for :ref:`MOSP <advanced-tutorials/general-cost:MOSP>` for example.
+Note that a solution found by :class:`~didppy.LNBS` may not apply a forced transition when it is applicable.
 
 
 Layer-by-Layer Search

@@ -189,7 +189,8 @@ where
         let mut solution = Solution::default();
 
         if let Some(node) = input.node {
-            let (node, _) = registry.insert(node).unwrap();
+            let result = registry.insert(node);
+            let node = result.information.unwrap();
             solution.generated += 1;
             solution.best_bound = node.bound(&input.generator.model);
             open[0].push(node);
@@ -267,9 +268,12 @@ where
                     self.no_node = false;
                 }
 
-                if let Some((cost, suffix)) =
-                    get_solution_cost_and_suffix(model, &*node, suffix, &mut self.base_cost_evaluator)
-                {
+                if let Some((cost, suffix)) = get_solution_cost_and_suffix(
+                    model,
+                    &*node,
+                    suffix,
+                    &mut self.base_cost_evaluator,
+                ) {
                     self.node_index += 1;
 
                     if !exceed_bound(model, cost, self.primal_bound) {

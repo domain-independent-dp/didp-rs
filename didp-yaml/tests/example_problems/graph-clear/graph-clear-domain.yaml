@@ -1,0 +1,39 @@
+domain: graph-clear
+reduce: min
+cost_type: integer
+objects:
+  - node
+state_variables:
+  - name: clean
+    type: set
+    object: node
+tables:
+  - name: all_nodes
+    type: set
+    object: node
+  - name: node_weight
+    type: integer
+    args:
+      - node
+  - name: edge_weight
+    type: integer
+    args:
+      - node
+      - node
+transitions:
+  - name: sweep
+    parameters:
+      - name: c
+        object: node
+    cost: (max cost
+      (+ (node_weight c)
+      (+ (sum edge_weight c all_nodes)
+      (sum edge_weight clean (remove c ~clean)))))
+    effect:
+      clean: (add c clean)
+    preconditions:
+      - (not (is_in c clean))
+base_cases:
+  - - (= clean all_nodes)
+dual_bounds:
+  - 0

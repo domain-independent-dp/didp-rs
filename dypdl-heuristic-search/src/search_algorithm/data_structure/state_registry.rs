@@ -2,14 +2,13 @@
 
 use super::hashable_state::{HashableSignatureVariables, StateWithHashableSignatureVariables};
 use core::ops::Deref;
-use dypdl::variable_type::{Continuous, Element, Integer, Numeric, Set, Vector};
-use dypdl::{Model, ReduceFunction};
+use dypdl::{prelude::*, variable_type::Numeric, ReduceFunction};
 use rustc_hash::FxHashMap;
+use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections;
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::mem;
 use std::rc::Rc;
 
 /// State stored in a state registry using signature variables as the key.
@@ -169,15 +168,81 @@ where
     fn close(&self);
 }
 
+/// Remove dominated state information from a vector of non-dominated information given a model, a state, and the cost of the state.
+///
+/// Returns a tuple of a boolean indicating if information in the vector dominates the given state,
+/// a vector of dominated information removed from the input vector,
+/// and the index of the information (in the returned vector) that has the same state as the given state.
+pub fn remove_dominated<T, K, I, D>(
+    non_dominated: &mut Vec<D>,
+    model: &Model,
+    state: &StateInRegistry<K>,
+    cost: T,
+) -> (bool, SmallVec<[D; 1]>, Option<usize>)
+where
+    T: Numeric,
+    K: Hash
+        + Eq
+        + Clone
+        + Debug
+        + Deref<Target = HashableSignatureVariables>
+        + From<HashableSignatureVariables>,
+    I: StateInformation<T, K>,
+    D: Deref<Target = I>,
+{
+    let mut same_state_index = None;
+    let mut dominated_indices = SmallVec::<[usize; 1]>::new();
+
+    for (i, other) in non_dominated.iter().enumerate() {
+        match model.state_metadata.dominance(state, other.state()) {
+            Some(Ordering::Equal) | Some(Ordering::Less)
+                if (model.reduce_function == ReduceFunction::Max && cost <= other.cost(model))
+                    || (model.reduce_function == ReduceFunction::Min
+                        && cost >= other.cost(model)) =>
+            {
+                return (true, smallvec::smallvec![], None);
+            }
+            Some(Ordering::Equal) => {
+                if same_state_index.is_none() {
+                    same_state_index = Some(dominated_indices.len());
+                }
+
+                dominated_indices.push(i);
+            }
+            Some(Ordering::Greater)
+                if (model.reduce_function == ReduceFunction::Max && cost >= other.cost(model))
+                    || (model.reduce_function == ReduceFunction::Min
+                        && cost <= other.cost(model)) =>
+            {
+                dominated_indices.push(i);
+            }
+            _ => {}
+        }
+    }
+
+    if dominated_indices.is_empty() {
+        return (false, smallvec::smallvec![], None);
+    }
+
+    // Remove dominated information starting from the end of the vector using `swap_remove`.
+    // Convert `same_state_index` to the index in the vector of the removed information.
+    let same_state_index = same_state_index.map(|i| dominated_indices.len() - 1 - i);
+    let mut dominated = SmallVec::with_capacity(dominated_indices.len());
+    dominated_indices.into_iter().rev().for_each(|i| {
+        dominated.push(non_dominated.swap_remove(i));
+    });
+
+    (false, dominated, same_state_index)
+}
+
 /// Registry storing generated states considering dominance relationship.
 ///
 /// # Examples
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::search_algorithm::{FNode, StateInRegistry, StateRegistry};
-/// use dypdl_heuristic_search::search_algorithm::data_structure::{
-///     StateInformation,
+/// use dypdl_heuristic_search::search_algorithm::{
+///     data_structure::StateInformation, FNode, StateInRegistry, StateRegistry,
 /// };
 /// use std::rc::Rc;
 ///
@@ -212,37 +277,61 @@ where
 /// ).unwrap();
 /// assert_eq!(registry.get(node.state(), node.cost(&model)), None);
 /// let result = registry.insert(node.clone());
-/// assert_eq!(result, Some((Rc::new(node), None)));
-/// let (node, _) = result.unwrap();
-/// assert_eq!(registry.get(node.state(), node.cost(&model)), Some(&node));
+/// let information = result.information.unwrap();
+/// assert_eq!(information.state(), node.state());
+/// assert_eq!(information.cost(&model), node.cost(&model));
+/// assert_eq!(information.bound(&model), node.bound(&model));
+/// assert!(result.dominated.is_empty());
+/// let got = registry.get(node.state(), node.cost(&model)).unwrap();
+/// assert_eq!(node.state(), got.state());
+/// assert_eq!(node.cost(&model), got.cost(&model));
+/// assert_eq!(node.bound(&model), got.bound(&model));
 ///
 /// let irrelevant: StateInRegistry = increment.apply(node.state(), &model.table_registry);
 /// let cost = increment.eval_cost(node.cost(&model), node.state(), &model.table_registry);
-/// let new_node = FNode::generate_root_node(
-///     irrelevant.clone(), cost, &model, &h_evaluator, &f_evaluator, None,
-/// ).unwrap();
 /// assert_eq!(registry.get(&irrelevant, cost), None);
-/// assert_eq!(registry.insert(new_node.clone()), Some((Rc::new(new_node), None)));
+/// let irrelevant = FNode::generate_root_node(
+///     irrelevant, cost, &model, &h_evaluator, &f_evaluator, None,
+/// ).unwrap();
+/// let result = registry.insert(irrelevant.clone());
+/// let information = result.information.unwrap();
+/// assert_eq!(information.state(), irrelevant.state());
+/// assert_eq!(information.cost(&model), irrelevant.cost(&model));
+/// assert_eq!(information.bound(&model), irrelevant.bound(&model));
+/// assert!(result.dominated.is_empty());
 ///
 /// let dominated: StateInRegistry = increase_cost.apply(node.state(), &model.table_registry);
 /// let cost = consume.eval_cost(node.cost(&model), node.state(), &model.table_registry);
-/// let new_node = FNode::generate_root_node(
-///     dominated.clone(), cost, &model, &h_evaluator, &f_evaluator, None,
+/// let dominating = registry.get(&dominated, cost).unwrap();
+/// assert_eq!(dominating.state(), node.state());
+/// assert_eq!(dominating.cost(&model), node.cost(&model));
+/// assert_eq!(dominating.bound(&model), node.bound(&model));
+/// let dominated = FNode::generate_root_node(
+///     dominated, cost, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
-/// assert_eq!(registry.get(&dominated, cost), Some(&node));
-/// assert_eq!(registry.insert(new_node), None);
+/// let result = registry.insert(dominated);
+/// assert_eq!(result.information, None);
+/// assert!(result.dominated.is_empty());
 ///
 /// let dominating: StateInRegistry = produce.apply(node.state(), &model.table_registry);
 /// let cost = produce.eval_cost(node.cost(&model), node.state(), &model.table_registry);
-/// let new_node = FNode::generate_root_node(
-///     dominating.clone(), cost, &model, &h_evaluator, &f_evaluator, None,
-/// ).unwrap();
 /// assert_eq!(registry.get(&dominating, cost), None);
-/// assert_eq!(
-///     registry.insert(new_node.clone()),
-///     Some((Rc::new(new_node.clone()), Some(node.clone()))),
-/// );
-/// assert_eq!(registry.get(node.state(), node.cost(&model)), Some(&node));
+/// let dominating = FNode::generate_root_node(
+///     dominating, cost, &model, &h_evaluator, &f_evaluator, None,
+/// ).unwrap();
+/// let result = registry.insert(dominating.clone());
+/// let information = result.information.unwrap();
+/// assert_eq!(information.state(), dominating.state());
+/// assert_eq!(information.cost(&model), dominating.cost(&model));
+/// assert_eq!(information.bound(&model), dominating.bound(&model));
+/// assert_eq!(result.dominated.len(), 1);
+/// assert_eq!(result.dominated[0].state(), node.state());
+/// assert_eq!(result.dominated[0].cost(&model), node.cost(&model));
+/// assert_eq!(result.dominated[0].bound(&model), node.bound(&model));
+/// let got = registry.get(node.state(), node.cost(&model)).unwrap();
+/// assert_eq!(dominating.state(), got.state());
+/// assert_eq!(dominating.cost(&model), got.cost(&model));
+/// assert_eq!(dominating.bound(&model), got.bound(&model));
 ///
 /// registry.clear();
 /// assert_eq!(registry.get(node.state(), node.cost(&model)), None);
@@ -256,6 +345,15 @@ where
     registry: FxHashMap<Rc<HashableSignatureVariables>, Vec<Rc<I>>>,
     model: R,
     phantom: std::marker::PhantomData<T>,
+}
+
+/// Result of insertion to a state registry.
+#[derive(Debug, Clone)]
+pub struct InsertionResult<D> {
+    /// The inserted information. `None` if the given information is dominated.
+    pub information: Option<D>,
+    /// Vector of dominated information by the given information.
+    pub dominated: SmallVec<[D; 1]>,
 }
 
 impl<T, I, R> StateRegistry<T, I, R>
@@ -296,11 +394,11 @@ where
     #[inline]
     pub fn drain(
         &mut self,
-    ) -> collections::hash_map::Drain<Rc<HashableSignatureVariables>, Vec<Rc<I>>> {
+    ) -> impl Iterator<Item = (Rc<HashableSignatureVariables>, Vec<Rc<I>>)> + '_ {
         self.registry.drain()
     }
 
-    /// Gets the information of a state that dominates the given state.
+    /// Gets the first information of a state that dominates the given state.
     pub fn get(&self, state: &StateInRegistry, cost: T) -> Option<&Rc<I>> {
         if let Some(v) = self.registry.get(&state.signature_variables) {
             for other in v {
@@ -333,15 +431,13 @@ where
     /// In addition, if exactly the same state is already saved in the registry,
     /// its information is passed as the last argument.
     /// It might be used to avoid recomputing values depending only on the state.
-    /// It is called only when the state is not dominated.
-    ///
-    /// If the given state is not dominated, returns the created information and the information of a dominated state if it exists.
+    /// The constructor is called only when the state is not dominated.
     pub fn insert_with<F>(
         &mut self,
         mut state: StateInRegistry,
         cost: T,
         constructor: F,
-    ) -> Option<(Rc<I>, Option<Rc<I>>)>
+    ) -> InsertionResult<Rc<I>>
     where
         F: FnOnce(StateInRegistry, T, Option<&I>) -> Option<I>,
     {
@@ -350,112 +446,92 @@ where
             collections::hash_map::Entry::Occupied(entry) => {
                 // use signature variables already stored
                 state.signature_variables = entry.key().clone();
+
                 let v = entry.into_mut();
-                for other in v.iter_mut() {
-                    let result = self.model.state_metadata.dominance(&state, other.state());
-                    match result {
-                        Some(Ordering::Equal) | Some(Ordering::Less)
-                            if (self.model.reduce_function == ReduceFunction::Max
-                                && cost <= other.cost(&self.model))
-                                || (self.model.reduce_function == ReduceFunction::Min
-                                    && cost >= other.cost(&self.model)) =>
-                        {
-                            // dominated
-                            return None;
-                        }
-                        Some(Ordering::Equal) | Some(Ordering::Greater)
-                            if (self.model.reduce_function == ReduceFunction::Max
-                                && cost >= other.cost(&self.model))
-                                || (self.model.reduce_function == ReduceFunction::Min
-                                    && cost <= other.cost(&self.model)) =>
-                        {
-                            // dominating
-                            if let Some(information) = match result.unwrap() {
-                                // if the same state is saved, reuse some information
-                                Ordering::Equal => {
-                                    constructor(state, cost, Some(&*other)).map(Rc::new)
-                                }
-                                _ => constructor(state, cost, None).map(Rc::new),
-                            } {
-                                let mut tmp = information.clone();
-                                mem::swap(other, &mut tmp);
-                                return Some((information, Some(tmp)));
-                            } else {
-                                return None;
-                            }
-                        }
-                        _ => {}
-                    }
+                let (dominating, dominated, same_state_index) =
+                    remove_dominated(v, &self.model, &state, cost);
+
+                if dominating {
+                    return InsertionResult {
+                        information: None,
+                        dominated: smallvec::smallvec![],
+                    };
                 }
-                if let Some(information) = constructor(state, cost, None).map(Rc::new) {
+
+                let same_state_information = same_state_index.map(|i| dominated[i].as_ref());
+
+                if let Some(information) =
+                    constructor(state, cost, same_state_information).map(Rc::new)
+                {
                     v.push(information.clone());
-                    Some((information, None))
+
+                    InsertionResult {
+                        information: Some(information),
+                        dominated,
+                    }
                 } else {
-                    None
+                    InsertionResult {
+                        information: None,
+                        dominated,
+                    }
                 }
             }
             collections::hash_map::Entry::Vacant(entry) => {
                 if let Some(information) = constructor(state, cost, None).map(Rc::new) {
                     entry.insert(vec![information.clone()]);
-                    Some((information, None))
+                    InsertionResult {
+                        information: Some(information),
+                        dominated: smallvec::smallvec![],
+                    }
                 } else {
-                    None
+                    InsertionResult {
+                        information: None,
+                        dominated: smallvec::smallvec![],
+                    }
                 }
             }
         }
     }
 
     /// Inserts state information.
-    ///
-    /// If the given state is not dominated, returns a pointer to the information and the information of a dominated state if it exists.
-    pub fn insert(&mut self, mut information: I) -> Option<(Rc<I>, Option<Rc<I>>)> {
+    pub fn insert(&mut self, mut information: I) -> InsertionResult<Rc<I>> {
         let entry = self
             .registry
             .entry(information.state().signature_variables.clone());
-        let v = match entry {
+        let (v, removed) = match entry {
             collections::hash_map::Entry::Occupied(entry) => {
                 // use signature variables already stored
                 information.state_mut().signature_variables = entry.key().clone();
+
                 let v = entry.into_mut();
-                for other in v.iter_mut() {
-                    let result = self
-                        .model
-                        .state_metadata
-                        .dominance(information.state(), other.state());
-                    match result {
-                        Some(Ordering::Equal) | Some(Ordering::Less)
-                            if (self.model.reduce_function == ReduceFunction::Max
-                                && information.cost(&self.model) <= other.cost(&self.model))
-                                || (self.model.reduce_function == ReduceFunction::Min
-                                    && information.cost(&self.model)
-                                        >= other.cost(&self.model)) =>
-                        {
-                            // dominated
-                            return None;
-                        }
-                        Some(Ordering::Equal) | Some(Ordering::Greater)
-                            if (self.model.reduce_function == ReduceFunction::Max
-                                && information.cost(&self.model) >= other.cost(&self.model))
-                                || (self.model.reduce_function == ReduceFunction::Min
-                                    && information.cost(&self.model)
-                                        <= other.cost(&self.model)) =>
-                        {
-                            // dominating
-                            let information = Rc::new(information);
-                            let mut tmp = information.clone();
-                            mem::swap(other, &mut tmp);
-                            return Some((information, Some(tmp)));
-                        }
-                        _ => {}
-                    }
+                let (dominating, dominated, _) = remove_dominated(
+                    v,
+                    &self.model,
+                    information.state(),
+                    information.cost(&self.model),
+                );
+
+                if dominating {
+                    return InsertionResult {
+                        information: None,
+                        dominated: smallvec::smallvec![],
+                    };
                 }
-                v
+
+                (v, dominated)
             }
-            collections::hash_map::Entry::Vacant(entry) => entry.insert(Vec::with_capacity(1)),
+            collections::hash_map::Entry::Vacant(entry) => {
+                (entry.insert(Vec::with_capacity(1)), smallvec::smallvec![])
+            }
         };
+
         let information = Rc::new(information);
         v.push(information.clone());
-        Some((information, None))
+
+        InsertionResult {
+            information: Some(information),
+            dominated: removed,
+        }
     }
 }
 
@@ -1156,6 +1232,134 @@ mod tests {
     }
 
     #[test]
+    fn remove_dominated_non_dominating_non_dominated() {
+        let model = generate_model();
+
+        let state1 = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
+        };
+        let state2 = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![2, 3, 3]),
+        };
+        let mut non_dominated = vec![
+            Rc::new(MockInformation {
+                state: state1,
+                cost: 1,
+                value: Cell::new(None),
+            }),
+            Rc::new(MockInformation {
+                state: state2,
+                cost: 3,
+                value: Cell::new(None),
+            }),
+        ];
+
+        let state3 = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![2, 2, 3]),
+        };
+        let cost = 2;
+
+        let (dominating, dominated, same_state_index) =
+            remove_dominated(&mut non_dominated, &model, &state3, cost);
+        assert!(!dominating);
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
+        assert_eq!(same_state_index, None);
+    }
+
+    #[test]
+    fn remove_dominated_dominated() {
+        let model = generate_model();
+
+        let state1 = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
+        };
+        let state2 = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![2, 3, 3]),
+        };
+        let state3 = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![3, 3, 3]),
+        };
+        let mut non_dominated = vec![
+            Rc::new(MockInformation {
+                state: state1.clone(),
+                cost: 1,
+                value: Cell::new(None),
+            }),
+            Rc::new(MockInformation {
+                state: state2,
+                cost: 3,
+                value: Cell::new(None),
+            }),
+            Rc::new(MockInformation {
+                state: state3,
+                cost: 1,
+                value: Cell::new(None),
+            }),
+        ];
+
+        let state4 = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![2, 3, 3]),
+        };
+        let cost = 0;
+
+        let (dominating, dominated, same_state_index) =
+            remove_dominated(&mut non_dominated, &model, &state4, cost);
+        assert!(!dominating);
+        assert_eq!(dominated.len(), 2);
+        assert!(same_state_index.is_some());
+        let same_state_index = same_state_index.unwrap();
+        assert_eq!(dominated[same_state_index].state, state4);
+        assert_eq!(dominated[same_state_index].cost, 3);
+        assert_eq!(dominated[1 - same_state_index].state, state1);
+        assert_eq!(dominated[1 - same_state_index].cost, 1);
+    }
+
+    #[test]
+    fn remove_dominated_dominating() {
+        let model = generate_model();
+
+        let state1 = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![1, 2, 3]),
+        };
+        let state2 = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![2, 3, 3]),
+        };
+        let mut non_dominated = vec![
+            Rc::new(MockInformation {
+                state: state1,
+                cost: 1,
+                value: Cell::new(None),
+            }),
+            Rc::new(MockInformation {
+                state: state2,
+                cost: 3,
+                value: Cell::new(None),
+            }),
+        ];
+
+        let state3 = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![2, 2, 3]),
+        };
+        let cost = 4;
+
+        let (dominating, dominated, same_state_index) =
+            remove_dominated(&mut non_dominated, &model, &state3, cost);
+        assert!(dominating);
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
+        assert_eq!(same_state_index, None);
+    }
+
+    #[test]
     fn insert_get_new_information() {
         let model = Rc::new(generate_model());
         let mut registry = StateRegistry::<i32, MockInformation>::new(model);
@@ -1170,10 +1374,12 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
-        let information = registry.insert(information);
-        assert!(information.is_some());
-        let (information1, dominated) = information.unwrap();
-        assert_eq!(dominated, None);
+        let result = registry.insert(information);
+        let information1 = result.information;
+        assert!(information1.is_some());
+        let information1 = information1.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(information1.state, state);
         assert_eq!(information1.value.get(), None);
         assert_eq!(registry.get(&state, 1), Some(&information1));
@@ -1188,10 +1394,12 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
-        let information = registry.insert(information);
-        assert!(information.is_some());
-        let (information2, dominated) = information.unwrap();
-        assert_eq!(dominated, None);
+        let result = registry.insert(information);
+        let information2 = result.information;
+        assert!(information2.is_some());
+        let information2 = information2.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(information2.state, state);
         assert_eq!(information2.value.get(), None);
         assert_eq!(registry.get(&state, 1), Some(&information2));
@@ -1206,10 +1414,12 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
-        let information = registry.insert(information);
-        assert!(information.is_some());
-        let (information3, dominated) = information.unwrap();
-        assert_eq!(dominated, None);
+        let result = registry.insert(information);
+        let information3 = result.information;
+        assert!(information3.is_some());
+        let information3 = information3.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(information3.state, state);
         assert_eq!(information3.value.get(), None);
         assert_eq!(registry.get(&state, 1), Some(&information3));
@@ -1224,10 +1434,12 @@ mod tests {
             cost: 0,
             value: Cell::new(None),
         };
-        let information = registry.insert(information);
-        assert!(information.is_some());
-        let (information4, dominated) = information.unwrap();
-        assert_eq!(dominated, None);
+        let result = registry.insert(information);
+        let information4 = result.information;
+        assert!(information4.is_some());
+        let information4 = information4.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(information4.state, state);
         assert_eq!(information4.value.get(), None);
         assert_eq!(registry.get(&state, 0), Some(&information4));
@@ -1259,12 +1471,14 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
-        let previous = registry.insert(previous);
+        let result = registry.insert(previous);
+        let previous = result.information;
         assert!(previous.is_some());
-        let (previous, dominated) = previous.unwrap();
+        let previous = previous.unwrap();
+        let dominated = result.dominated;
         assert_eq!(previous.state, state);
         assert_eq!(previous.value.get(), None);
-        assert_eq!(dominated, None);
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -1276,8 +1490,9 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
-        let information = registry.insert(information);
-        assert!(information.is_none());
+        let result = registry.insert(information);
+        assert!(result.information.is_none());
+        assert!(result.dominated.is_empty());
         assert_eq!(registry.get(&state, 1), Some(&previous));
 
         let state = StateInRegistry {
@@ -1290,8 +1505,9 @@ mod tests {
             cost: 1,
             value: Cell::new(None),
         };
-        let information = registry.insert(information);
-        assert!(information.is_none());
+        let result = registry.insert(information);
+        assert!(result.information.is_none());
+        assert!(result.dominated.is_empty());
         assert_eq!(registry.get(&state, 1), Some(&previous));
 
         let state = StateInRegistry {
@@ -1304,8 +1520,9 @@ mod tests {
             cost: 2,
             value: Cell::new(None),
         };
-        let information = registry.insert(information);
-        assert!(information.is_none());
+        let result = registry.insert(information);
+        assert!(result.information.is_none());
+        assert!(result.dominated.is_empty());
         assert_eq!(registry.get(&state, 2), Some(&previous));
 
         let mut iter = registry.drain();
@@ -1325,33 +1542,37 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        assert_eq!(registry.get(&state, 1), None);
+        assert_eq!(registry.get(&state, 2), None);
         let information = MockInformation {
             state: state.clone(),
-            cost: 1,
+            cost: 2,
             value: Cell::new(None),
         };
-        let information1 = registry.insert(information);
+        let result = registry.insert(information);
+        let information1 = result.information;
         assert!(information1.is_some());
-        let (information1, dominated) = information1.unwrap();
+        let information1 = information1.unwrap();
+        let dominated = result.dominated;
         assert_eq!(information1.state, state);
         assert_eq!(information1.value.get(), None);
-        assert_eq!(dominated, None);
-        assert_eq!(registry.get(&information1.state, 1), Some(&information1));
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
+        assert_eq!(registry.get(&information1.state, 2), Some(&information1));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        assert_eq!(registry.get(&state, 0), None);
+        assert_eq!(registry.get(&state, 1), None);
         let information = MockInformation {
             state,
-            cost: 0,
+            cost: 1,
             value: Cell::new(None),
         };
-        let information2 = registry.insert(information);
+        let result = registry.insert(information);
+        let information2 = result.information;
         assert!(information2.is_some());
-        let (information2, dominated) = information2.unwrap();
+        let information2 = information2.unwrap();
+        let dominated = result.dominated;
         assert_eq!(
             information2.state.signature_variables,
             information1.state.signature_variables
@@ -1361,9 +1582,37 @@ mod tests {
             information1.state.resource_variables
         );
         assert_eq!(information2.value.get(), None);
-        assert_eq!(dominated.as_ref(), Some(&information1));
-        assert_eq!(registry.get(&information1.state, 0), Some(&information2));
-        assert_eq!(registry.get(&information2.state, 0), Some(&information2));
+        assert_eq!(dominated, SmallVec::<[_; 1]>::from([information1.clone()]));
+        assert_eq!(registry.get(&information1.state, 2), Some(&information2));
+        assert_eq!(registry.get(&information2.state, 1), Some(&information2));
+
+        let state = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![2, 1, 3]),
+        };
+        assert_eq!(registry.get(&state, 0), None);
+        let information = MockInformation {
+            state,
+            cost: 0,
+            value: Cell::new(None),
+        };
+        let result = registry.insert(information);
+        let information3 = result.information;
+        assert!(information3.is_some());
+        let information3 = information3.unwrap();
+        let dominated = result.dominated;
+        assert_eq!(
+            information3.state.signature_variables,
+            information2.state.signature_variables
+        );
+        assert_ne!(
+            information3.state.resource_variables,
+            information2.state.resource_variables,
+        );
+        assert_eq!(information3.value.get(), None);
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
+        assert_eq!(registry.get(&information2.state, 1), Some(&information2));
+        assert_eq!(registry.get(&information3.state, 0), Some(&information3));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -1375,29 +1624,44 @@ mod tests {
             cost: 0,
             value: Cell::new(None),
         };
-        let information3 = registry.insert(information);
-        assert!(information3.is_some());
-        let (information3, dominated) = information3.unwrap();
+        let result = registry.insert(information);
+        let information4 = result.information;
+        assert!(information4.is_some());
+        let information4 = information4.unwrap();
+        let mut dominated = result.dominated;
         assert_eq!(
-            information3.state.signature_variables,
+            information4.state.signature_variables,
             information2.state.signature_variables
         );
+        assert_eq!(
+            information4.state.signature_variables,
+            information3.state.signature_variables
+        );
         assert_ne!(
-            information3.state.resource_variables,
+            information4.state.resource_variables,
             information2.state.resource_variables,
         );
-        assert_eq!(information3.value.get(), None);
-        assert_eq!(dominated.as_ref(), Some(&information2));
-        assert_eq!(registry.get(&information1.state, 1), Some(&information3));
-        assert_eq!(registry.get(&information2.state, 0), Some(&information3));
-        assert_eq!(registry.get(&information3.state, 0), Some(&information3));
+        assert_ne!(
+            information4.state.resource_variables,
+            information3.state.resource_variables,
+        );
+        assert_eq!(information4.value.get(), None);
+        dominated.sort();
+        assert_eq!(
+            dominated,
+            SmallVec::<[_; 1]>::from(vec![information3.clone(), information2.clone()])
+        );
+        assert_eq!(registry.get(&information1.state, 2), Some(&information4));
+        assert_eq!(registry.get(&information2.state, 1), Some(&information4));
+        assert_eq!(registry.get(&information3.state, 0), Some(&information4));
+        assert_eq!(registry.get(&information4.state, 0), Some(&information4));
 
         let mut iter = registry.drain();
         assert_eq!(
             iter.next(),
             Some((
-                information3.state.signature_variables.clone(),
-                vec![information3]
+                information4.state.signature_variables.clone(),
+                vec![information4]
             ))
         );
         assert_eq!(iter.next(), None);
@@ -1420,14 +1684,16 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(registry.get(&state, 1), None);
-        let information = registry.insert_with(state, 1, constructor);
-        assert!(information.is_some());
-        let (information1, dominated) = information.unwrap();
+        let result = registry.insert_with(state, 1, constructor);
+        let information1 = result.information;
+        assert!(information1.is_some());
+        let information1 = information1.unwrap();
+        let dominated = result.dominated;
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        assert_eq!(dominated, None);
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(information1.state, state);
         assert_eq!(information1.value.get(), None);
         assert_eq!(registry.get(&state, 1), Some(&information1));
@@ -1437,14 +1703,16 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(registry.get(&state, 1), None);
-        let information = registry.insert_with(state, 1, constructor);
-        assert!(information.is_some());
-        let (information2, dominated) = information.unwrap();
+        let result = registry.insert_with(state, 1, constructor);
+        let information2 = result.information;
+        assert!(information2.is_some());
+        let information2 = information2.unwrap();
+        let dominated = result.dominated;
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        assert_eq!(dominated, None);
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(information2.state, state);
         assert_eq!(information2.value.get(), None);
         assert_eq!(registry.get(&state, 1), Some(&information2));
@@ -1454,14 +1722,16 @@ mod tests {
             resource_variables: generate_resource_variables(vec![3, 1, 3]),
         };
         assert_eq!(registry.get(&state, 1), None);
-        let information = registry.insert_with(state, 1, constructor);
-        assert!(information.is_some());
-        let (information3, dominated) = information.unwrap();
+        let result = registry.insert_with(state, 1, constructor);
+        let information3 = result.information;
+        assert!(information3.is_some());
+        let information3 = information3.unwrap();
+        let dominated = result.dominated;
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![3, 1, 3]),
         };
-        assert_eq!(dominated, None);
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(information3.state, state);
         assert_eq!(information3.value.get(), None);
         assert_eq!(registry.get(&state, 1), Some(&information3));
@@ -1471,14 +1741,16 @@ mod tests {
             resource_variables: generate_resource_variables(vec![0, 1, 3]),
         };
         assert_eq!(registry.get(&state, 0), None);
-        let information = registry.insert_with(state, 0, constructor);
-        assert!(information.is_some());
-        let (information4, dominated) = information.unwrap();
+        let result = registry.insert_with(state, 0, constructor);
+        let information4 = result.information;
+        assert!(information4.is_some());
+        let information4 = information4.unwrap();
+        let dominated = result.dominated;
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 2, 3]),
             resource_variables: generate_resource_variables(vec![0, 1, 3]),
         };
-        assert_eq!(dominated, None);
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
         assert_eq!(information4.state, state);
         assert_eq!(information4.value.get(), None);
         assert_eq!(registry.get(&state, 0), Some(&information4));
@@ -1513,24 +1785,27 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        let previous = registry.insert_with(state, 1, constructor);
+        let result = registry.insert_with(state, 1, constructor);
+        let previous = result.information;
         assert!(previous.is_some());
-        let (previous, dominated) = previous.unwrap();
+        let previous = previous.unwrap();
+        let dominated = result.dominated;
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(previous.state, state);
         assert_eq!(previous.value.get(), None);
-        assert_eq!(dominated, None);
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(registry.get(&state, 1), Some(&previous));
-        let information = registry.insert_with(state, 1, constructor);
-        assert!(information.is_none());
+        let result = registry.insert_with(state, 1, constructor);
+        assert!(result.information.is_none());
+        assert!(result.dominated.is_empty());
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
@@ -1542,8 +1817,9 @@ mod tests {
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
         };
         assert_eq!(registry.get(&state, 1), Some(&previous));
-        let information = registry.insert_with(state, 1, constructor);
-        assert!(information.is_none());
+        let result = registry.insert_with(state, 1, constructor);
+        assert!(result.information.is_none());
+        assert!(result.dominated.is_empty());
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
@@ -1555,8 +1831,9 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(registry.get(&state, 2), Some(&previous));
-        let information = registry.insert_with(state, 2, constructor);
-        assert!(information.is_none());
+        let result = registry.insert_with(state, 2, constructor);
+        assert!(result.information.is_none());
+        assert!(result.dominated.is_empty());
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![0, 2, 3]),
@@ -1596,10 +1873,12 @@ mod tests {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        assert_eq!(registry.get(&state, 1), None);
-        let information1 = registry.insert_with(state, 1, constructor);
+        assert_eq!(registry.get(&state, 2), None);
+        let result = registry.insert_with(state, 2, constructor);
+        let information1 = result.information;
         assert!(information1.is_some());
-        let (information1, dominated) = information1.unwrap();
+        let information1 = information1.unwrap();
+        let dominated = result.dominated;
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
@@ -1607,17 +1886,19 @@ mod tests {
         assert_eq!(information1.state, state);
         assert_eq!(information1.value.get(), None);
         information1.value.set(Some(10));
-        assert_eq!(dominated, None);
-        assert_eq!(registry.get(&information1.state, 1), Some(&information1));
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
+        assert_eq!(registry.get(&information1.state, 2), Some(&information1));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
-        assert_eq!(registry.get(&state, 0), None);
-        let information2 = registry.insert_with(state, 0, constructor);
+        assert_eq!(registry.get(&state, 1), None);
+        let result = registry.insert_with(state, 1, constructor);
+        let information2 = result.information;
         assert!(information2.is_some());
-        let (information2, dominated) = information2.unwrap();
+        let information2 = information2.unwrap();
+        let dominated = result.dominated;
         assert_eq!(
             information2.state.signature_variables,
             information1.state.signature_variables
@@ -1627,18 +1908,20 @@ mod tests {
             information1.state.resource_variables
         );
         assert_eq!(information2.value.get(), Some(10));
-        assert_eq!(dominated.as_ref(), Some(&information1));
-        assert_eq!(registry.get(&information1.state, 0), Some(&information2));
-        assert_eq!(registry.get(&information2.state, 0), Some(&information2));
+        assert_eq!(dominated, SmallVec::<[_; 1]>::from([information1.clone()]));
+        assert_eq!(registry.get(&information1.state, 2), Some(&information2));
+        assert_eq!(registry.get(&information2.state, 1), Some(&information2));
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
-            resource_variables: generate_resource_variables(vec![2, 3, 3]),
+            resource_variables: generate_resource_variables(vec![2, 1, 3]),
         };
         assert_eq!(registry.get(&state, 0), None);
-        let information3 = registry.insert_with(state, 0, constructor);
+        let result = registry.insert_with(state, 0, constructor);
+        let information3 = result.information;
         assert!(information3.is_some());
-        let (information3, dominated) = information3.unwrap();
+        let information3 = information3.unwrap();
+        let dominated = result.dominated;
         assert_eq!(
             information3.state.signature_variables,
             information2.state.signature_variables
@@ -1648,17 +1931,55 @@ mod tests {
             information2.state.resource_variables,
         );
         assert_eq!(information3.value.get(), None);
-        assert_eq!(dominated.as_ref(), Some(&information2));
-        assert_eq!(registry.get(&information1.state, 1), Some(&information3));
-        assert_eq!(registry.get(&information2.state, 0), Some(&information3));
+        assert_eq!(dominated, SmallVec::<[_; 1]>::new());
+        assert_eq!(registry.get(&information1.state, 2), Some(&information2));
+        assert_eq!(registry.get(&information2.state, 1), Some(&information2));
         assert_eq!(registry.get(&information3.state, 0), Some(&information3));
+
+        let state = StateInRegistry {
+            signature_variables: generate_signature_variables(vec![0, 1, 2]),
+            resource_variables: generate_resource_variables(vec![2, 3, 3]),
+        };
+        assert_eq!(registry.get(&state, 0), None);
+        let result = registry.insert_with(state, 0, constructor);
+        let information4 = result.information;
+        assert!(information4.is_some());
+        let information4 = information4.unwrap();
+        let mut dominated = result.dominated;
+        assert_eq!(
+            information4.state.signature_variables,
+            information2.state.signature_variables
+        );
+        assert_eq!(
+            information4.state.signature_variables,
+            information3.state.signature_variables
+        );
+        assert_ne!(
+            information4.state.resource_variables,
+            information2.state.resource_variables,
+        );
+        assert_ne!(
+            information4.state.resource_variables,
+            information3.state.resource_variables,
+        );
+        assert_eq!(information4.value.get(), None);
+        assert_eq!(information4.value.get(), None);
+        dominated.sort();
+        assert_eq!(
+            dominated,
+            SmallVec::<[_; 1]>::from(vec![information3.clone(), information2.clone()])
+        );
+        assert_eq!(registry.get(&information1.state, 2), Some(&information4));
+        assert_eq!(registry.get(&information2.state, 1), Some(&information4));
+        assert_eq!(registry.get(&information3.state, 0), Some(&information3));
+        assert_eq!(registry.get(&information4.state, 0), Some(&information4));
 
         let mut iter = registry.drain();
         assert_eq!(
             iter.next(),
             Some((
-                information3.state.signature_variables.clone(),
-                vec![information3]
+                information4.state.signature_variables.clone(),
+                vec![information4]
             ))
         );
         assert_eq!(iter.next(), None);
@@ -1695,9 +2016,10 @@ mod tests {
                 value: Cell::new(None),
             })
         };
-        let information = registry.insert_with(state, 1, constructor);
+        let result = registry.insert_with(state, 1, constructor);
+        let information = result.information;
         assert!(information.is_some());
-        let (information, _) = information.unwrap();
+        let information = information.unwrap();
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
@@ -1712,9 +2034,10 @@ mod tests {
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
         };
         assert_eq!(registry.get(&information.state, 1), None);
-        let information = registry.insert_with(state, 1, constructor);
+        let result = registry.insert_with(state, 1, constructor);
+        let information = result.information;
         assert!(information.is_some());
-        let (information, _) = information.unwrap();
+        let information = information.unwrap();
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
             resource_variables: generate_resource_variables(vec![1, 2, 3]),
@@ -1741,7 +2064,7 @@ mod tests {
             value: Cell::new(None),
         };
         let information = registry.insert(information);
-        assert!(information.is_some());
+        assert!(information.information.is_some());
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -1753,7 +2076,7 @@ mod tests {
             value: Cell::new(None),
         };
         let information = registry.insert(information);
-        assert!(information.is_none());
+        assert!(information.information.is_none());
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -1765,7 +2088,7 @@ mod tests {
             value: Cell::new(None),
         };
         let information = registry.insert(information);
-        assert!(information.is_some());
+        assert!(information.information.is_some());
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),
@@ -1777,7 +2100,7 @@ mod tests {
             value: Cell::new(None),
         };
         let information = registry.insert(information);
-        assert!(information.is_some());
+        assert!(information.information.is_some());
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![1, 1, 2]),
@@ -1789,7 +2112,7 @@ mod tests {
             value: Cell::new(None),
         };
         let information = registry.insert(information);
-        assert!(information.is_some());
+        assert!(information.information.is_some());
 
         let state = StateInRegistry {
             signature_variables: generate_signature_variables(vec![0, 1, 2]),

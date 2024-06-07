@@ -156,8 +156,8 @@ where
 
         let mut solution = Solution::default();
         if let Some(node) = input.node.clone() {
-            let (node, _) = registry.insert(node).unwrap();
-            open.push_back(node);
+            let result = registry.insert(node);
+            open.push_back(result.information.unwrap());
             solution.generated += 1;
         } else {
             solution.is_infeasible = true;

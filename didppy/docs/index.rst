@@ -31,6 +31,7 @@ Python 3.7 or higher is required.
     :caption: User Guide
 
     solver-selection
+    dump-and-load
     debugging
 
 .. toctree::

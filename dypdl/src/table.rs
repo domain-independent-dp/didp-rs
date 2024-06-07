@@ -2,10 +2,15 @@ use crate::variable_type::{Element, Set};
 use approx::{AbsDiffEq, RelativeEq};
 use rustc_hash::FxHashMap;
 
+pub trait HasShape {
+    /// Returns the size of the Table.
+    fn shape(&self) -> Vec<usize>;
+}
+
 /// 1D table of constants.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, PartialEq, Clone)]
-pub struct Table1D<T>(Vec<T>);
+pub struct Table1D<T>(pub Vec<T>);
 
 impl<T> Table1D<T> {
     /// Returns a new table.
@@ -83,6 +88,12 @@ where
     }
 }
 
+impl<T> HasShape for Table1D<T> {
+    fn shape(&self) -> Vec<usize> {
+        vec![self.0.len()]
+    }
+}
+
 impl<T: RelativeEq> RelativeEq for Table1D<T>
 where
     T::Epsilon: Copy,
@@ -102,7 +113,7 @@ where
 /// 2D table of constants.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, PartialEq, Clone)]
-pub struct Table2D<T>(Vec<Vec<T>>);
+pub struct Table2D<T>(pub Vec<Vec<T>>);
 
 impl<T> Table2D<T> {
     /// Returns a new table.
@@ -181,6 +192,16 @@ where
     }
 }
 
+impl<T> HasShape for Table2D<T> {
+    fn shape(&self) -> Vec<usize> {
+        if self.0.is_empty() {
+            vec![0, 0]
+        } else {
+            vec![self.0.len(), self.0[0].len()]
+        }
+    }
+}
+
 impl<T: RelativeEq> RelativeEq for Table2D<T>
 where
     T::Epsilon: Copy,
@@ -201,7 +222,7 @@ where
 /// 3D table of constants.
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, PartialEq, Clone)]
-pub struct Table3D<T>(Vec<Vec<Vec<T>>>);
+pub struct Table3D<T>(pub Vec<Vec<Vec<T>>>);
 
 impl<T> Table3D<T> {
     /// Returns a new table.
@@ -282,6 +303,16 @@ where
     }
 }
 
+impl<T> HasShape for Table3D<T> {
+    fn shape(&self) -> Vec<usize> {
+        if self.0.is_empty() || self.0[0].is_empty() {
+            vec![0, 0, 0]
+        } else {
+            vec![self.0.len(), self.0[0].len(), self.0[0][0].len()]
+        }
+    }
+}
+
 impl<T: RelativeEq> RelativeEq for Table3D<T>
 where
     T::Epsilon: Copy,
@@ -307,8 +338,8 @@ where
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct Table<T> {
-    map: FxHashMap<Vec<Element>, T>,
-    default: T,
+    pub map: FxHashMap<Vec<Element>, T>,
+    pub default: T,
 }
 
 impl<T> Table<T> {
@@ -475,6 +506,12 @@ mod tests {
     }
 
     #[test]
+    fn table_1d_shape() {
+        let table = Table1D::new(vec![10.0, 20.0, 30.0]);
+        assert_eq!(table.shape(), vec![3]);
+    }
+
+    #[test]
     fn table_1d_relative_eq() {
         let t1 = Table1D::new(vec![10.0, 20.0, 30.0]);
         let t2 = Table1D::new(vec![10.0, 20.0, 30.0]);
@@ -513,6 +550,12 @@ mod tests {
     fn table_2d_capacity_of_set() {
         let f = Table2D::new(vec![vec![Set::with_capacity(3)]]);
         assert_eq!(f.capacity_of_set(), 3);
+    }
+
+    #[test]
+    fn table_2d_shape() {
+        let table = Table2D::new(vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]]);
+        assert_eq!(table.shape(), vec![3, 3]);
     }
 
     #[test]
@@ -570,6 +613,16 @@ mod tests {
     fn table_3d_capacity_of_set() {
         let f = Table3D::new(vec![vec![vec![Set::with_capacity(3)]]]);
         assert_eq!(f.capacity_of_set(), 3);
+    }
+
+    #[test]
+    fn table_3d_shape() {
+        let table = Table3D::new(vec![
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+            vec![vec![10, 20, 30], vec![40, 50, 60], vec![70, 80, 90]],
+        ]);
+        assert_eq!(table.shape(), vec![3, 3, 3]);
     }
 
     #[test]

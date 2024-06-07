@@ -98,7 +98,7 @@ impl StatePy {
         }
     }
 
-    fn __setitem__(&mut self, var: VarUnion, value: &PyAny) -> PyResult<()> {
+    fn __setitem__(&mut self, var: VarUnion, value: Bound<'_, PyAny>) -> PyResult<()> {
         match var {
             VarUnion::Element(var) => {
                 let var = ElementVariable::from(var);

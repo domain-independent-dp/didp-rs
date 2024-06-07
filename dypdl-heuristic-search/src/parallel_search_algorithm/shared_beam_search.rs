@@ -150,8 +150,8 @@ where
     };
 
     let mut best_dual_bound = node.bound(model);
-    let (node, _) = registry.insert(node).unwrap();
-    beam.push(node);
+    let result = registry.insert(node);
+    beam.push(result.information.unwrap());
 
     if !parameters.keep_all_layers {
         registry.clear();

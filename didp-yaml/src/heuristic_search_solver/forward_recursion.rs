@@ -7,7 +7,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::str;
 
-pub fn load_from_yaml<T: Numeric>(
+pub fn load_from_yaml<T>(
     model: dypdl::Model,
     config: &yaml_rust::Yaml,
 ) -> Result<Box<dyn Search<T>>, Box<dyn Error>>

@@ -1,5 +1,6 @@
+[![Actions Status](https://img.shields.io/github/actions/workflow/status/domain-independent-dp/didp-rs/didppy.yaml?branch=main&logo=github&style=flat-square)](https://github.com/domain-independent-dp/didp-rs/actions)
 [![PyPi version](https://img.shields.io/pypi/v/didppy.svg)](https://pypi.python.org/pypi/didppy/)
-[![](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![Python version](https://img.shields.io/badge/python-3.7+-blue.svg)](<https://www.python.org/downloads/>)
 [![crates.io](https://img.shields.io/crates/v/didppy)](https://crates.io/crates/didppy)
 [![minimum rustc 1.65](https://img.shields.io/badge/rustc-1.65+-blue.svg)](https://rust-lang.github.io/rfcs/2495-min-rust-version.html)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)

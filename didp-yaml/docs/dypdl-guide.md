@@ -11,10 +11,10 @@ To solve a problem using the DyPDL solver, you need to create three files, `doma
 - [YAML Basics](#yaml-basics)
 - [Forbidden Characters](#forbidden-characters)
 - [Domain YAML](#domain-yaml)
-  - [domain](#domain)
   - [objects](#objects)
   - [state_variables](#state_variables)
   - [tables](#tables)
+  - [dictionaries](#dictionaries)
   - [constraints](#constraints)
   - [base_cases](#base_cases)
   - [reduce](#reduce)
@@ -22,10 +22,9 @@ To solve a problem using the DyPDL solver, you need to create three files, `doma
   - [transitions](#transitions)
   - [dual_bounds](#dual_bounds)
 - [Problem YAML](#problem-yaml)
-  - [domain](#domain-1)
-  - [problem](#problem)
   - [object_numbers](#object_numbers)
   - [table_values](#table_values)
+  - [dictionary_values](#dictionary_values)
   - [target](#target)
 
 For a config file, see [the solver guide](./solver-guide.md).
@@ -95,16 +94,6 @@ Also, avoid using reserved names used in [expressions](./expression-guide.md)
 
 A domain file is used to define problem features that are shared by multiple problem instances.
 
-### domain
-
-`domain` is optional, and the value is a string describing the name of the problem domain.
-
-#### Example
-
-```yaml
-domain: TSPTW
-```
-
 ### objects
 
 `objects` is optional, and the value  is a list of names of object types.
@@ -165,39 +154,55 @@ Each map can have the following keys:
 - `name`
 - `type`
 - `args`
+- `object`
 - `default`
 
 `name` is required, and the value is a string describing the name of the table.
 `type` is required, and the value is either of `set`, `element`, `integer`, `continuous`, or `bool`.
 It represents the type of the constants.
 
-`args` is optional, and the value is a list of names of object types.
+`args` is optional, and the value is a list of names of object types or positive integers.
 If it is not defined, the table becomes a constant storing a just one value.
-If it is defined, multiple values are stored and indexed by the corresponding objects.
+If it is defined, the i-th value defines the size of the i-th dimension.
+If it is an object type, the size is the number of the objects
+If it is an integer, the size is the integer.
+
+`object` is required for a set table.
+It must be an object type or a positive integer.
+This value defines the maximum cardinality of sets in the table.
+If it is an object type, the maximum cardinality is the number of the objects
+If it is an integer, the maximum cardinality is the integer.
 
 `default` is optional, and the value is a list of non-negative integer values if `type` is `set`, an non-negative integer value if `type` is `element`, an integer value if `type` is `integer`, and a real value if `type` is `continuous`.
-For a set table and a element table, an object used in the value must be from `0` to `n-1` where `n` is the number of objects defined with [`object_numbers`](#objectnumbers) in a problem file.
+For a set table default value, the items in the list must be from `0` to `n-1`, where `n` is the maximum cardinality of the set defined in the `object` field.
 It represents the default value of the constants, which is used if the value is not defined with the [`table_values`](#tablevalues) key in the problem file.
 
-#### Example
+### dictionaries
 
-```yaml
-tables:
-  - name: ready_time
-    type: continuous
-    args:
-      - customer
-  - name: due_date
-    type: continuous
-    args:
-      - customer
-  - name: distance
-    type: continuous
-    args:
-      - customer
-      - customer
-    default: 0
-```
+`dictionaries` is optional, and the value is a list of maps describing a dictionary of constants.
+These values can be accessed from expressions.
+Each map can have the following keys:
+
+- `name`
+- `type`
+- `object`
+- `default`
+
+`name` is required, and the value is a string describing the name of the dictionary.
+`type` is required, and the value is either of `set`, `element`, `integer`, `continuous`, or `bool`.
+It represents the type of the constants.
+
+`object` is required for a set dictionary.
+It must be an object type or a positive integer.
+This value defines the maximum cardinality of sets in the dictionary.
+If it is an object type, the maximum cardinality is the number of the objects
+If it is an integer, the maximum cardinality is the integer.
+
+`default` is optional, and the value is a list of non-negative integer values if `type` is `set`, an non-negative integer value if `type` is `element`, an integer value if `type` is `integer`, and a real value if `type` is `continuous`.
+For a set dictionary default value, the items in the list must be from `0` to `n-1`, where `n` is the maximum cardinality of the set defined in the `object` field.
+It represents the default value of the constants, which is used if the value is not defined with the [`dictionary_values`](#dictionary_values) key in the problem file.
+
+Using dictionaries are not recommended when tables can be used instead.
 
 ### constraints
 
@@ -363,20 +368,6 @@ It can be also defined in a problem file.
 
 A problem file is used to define problem features that are specific to particular problem instances.
 
-### domain
-
-`domain` is optional, and the value is a string describing the name of the problem domain.
-
-### problem
-
-`problem` is optional, and the value is a string describing the name of the problem instance.
-
-#### Example
-
-```yaml
-problem: test-instance
-```
-
 ### object_numbers
 
 `object_numbers` is optional, and the value is a map describing the numbers of objects.
@@ -418,10 +409,10 @@ For a set table and a element table, an object used in the value must be from `0
 
 If `args` is defined, the value is a map.
 A key of the map is a list of non-negative integer values representing an object.
-The length of the list must be the same as the number of the value of `args`.
-For a set table and a element table, an object used in the value must be from `0` to `n-1` where `n` is the number of objects defined with [`object_numbers`](#objectnumbers) in a problem file.
+The length of the list must be the same as the number of the values of `args`.
+For a set table, the items in the each set must be from `0` to `n-1` where `n` is the maximum cardinality of the set defined by the `object` fields.
 If you do not include a combination of objects as a key in the map, the default value defined in [`tables`](#tables) is used.
-If the default value is not defined, an empty set is used for set tables, and `0` is used for element, integer, and continuous tables.
+If the default value is not defined, an empty set is used for set tables, and `0` is used for element, integer, and continuous tables, and `false` is used for boolean tables.
 
 #### Example
 
@@ -437,3 +428,16 @@ distance: {
 ```
 
 In this case, if you use `(due_date 0)` or `(distance 0 0)` in an expression, it returns the default value.
+
+### dictionary_values
+
+`dictionary_values` is optional, and the value is a map defining the values of dictionaries.
+This must be defined if [`dictionaries`](#dictionaries) is defined in a domain file.
+The names of all dictionaries must be included as keys in the map.
+
+The value is a map.
+A key of the map is a list of non-negative integer values representing an object.
+The length of the list must be the same as the number of the values of `args`.
+For a set dictionary, the items in the each set must be from `0` to `n-1` where `n` is the maximum cardinality of the set defined by the `object` fields.
+If you do not include a combination of objects as a key in the map, the default value defined in [`dictionaries`](#dictionaries) is used.
+If the default value is not defined, an empty set is used for set dictionaries, `0` is used for element, integer, and continuous dictionaries, and `false` is used for boolean dictionaries.
