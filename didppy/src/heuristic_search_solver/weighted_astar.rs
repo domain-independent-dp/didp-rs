@@ -96,9 +96,6 @@ pub struct WeightedAstarPy(
 #[pymethods]
 impl WeightedAstarPy {
     #[new]
-    #[pyo3(
-        text_signature = "(model, weight, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, get_all_solutions=False, quiet=False, initial_registry_capacity=1000000)"
-    )]
     #[pyo3(signature = (
         model,
         weight,
@@ -174,8 +171,6 @@ impl WeightedAstarPy {
         }
     }
 
-    /// search()
-    ///
     /// Search for a bounded-suboptimal solution of a DyPDL model.
     ///
     /// Returns
@@ -205,13 +200,10 @@ impl WeightedAstarPy {
     /// >>> solution = solver.search()
     /// >>> solution.cost
     /// 1
-    #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()
     }
 
-    /// search_next()
-    ///
     /// Search for the next solution of a DyPDL model.
     ///
     /// Returns
@@ -245,7 +237,6 @@ impl WeightedAstarPy {
     /// 1
     /// >>> terminated
     /// True
-    #[pyo3(signature = ())]
     fn search_next(&mut self) -> PyResult<(SolutionPy, bool)> {
         self.0.search_next()
     }

@@ -190,8 +190,6 @@ impl SetTable1DPy {
         SetExprPy::from(self.0.element(i))
     }
 
-    /// union(x)
-    ///
     /// Takes the union of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -219,13 +217,10 @@ impl SetTable1DPy {
     /// >>> table = model.add_set_table([[2, 3], [1, 2]], object_type=obj2)
     /// >>> table.union(var).eval(model.target_state, model)
     /// {1, 2, 3}
-    #[pyo3(signature = (x))]
     fn union(&self, x: ArgumentUnion) -> SetExprPy {
         SetExprPy::from(self.0.union(self.1, x))
     }
 
-    /// intersection(x)
-    ///
     /// Takes the intersection of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -253,13 +248,10 @@ impl SetTable1DPy {
     /// >>> table = model.add_set_table([[2, 3], [1, 2]], object_type=obj2)
     /// >>> table.intersection(var).eval(model.target_state, model)
     /// {2}
-    #[pyo3(signature = (x))]
     fn intersection(&self, x: ArgumentUnion) -> SetExprPy {
         SetExprPy::from(self.0.intersection(self.1, x))
     }
 
-    /// symmetric_difference(x)
-    ///
     /// Takes the symmetric difference of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -287,7 +279,6 @@ impl SetTable1DPy {
     /// >>> table = model.add_set_table([[2, 3], [1, 2]], object_type=obj2)
     /// >>> table.symmetric_difference(var).eval(model.target_state, model)
     /// {1, 3}
-    #[pyo3(signature = (x))]
     fn symmetric_difference(&self, x: ArgumentUnion) -> SetExprPy {
         SetExprPy::from(self.0.symmetric_difference(self.1, x))
     }
@@ -337,8 +328,6 @@ impl SetTable2DPy {
         SetExprPy::from(self.0.element(x, y))
     }
 
-    /// union(x, y)
-    ///
     /// Takes the union of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -371,13 +360,10 @@ impl SetTable2DPy {
     /// ... )
     /// >>> table.union(0, var).eval(model.target_state, model)
     /// {1, 2, 3}
-    #[pyo3(signature = (x, y))]
     fn union(&self, x: ArgumentUnion, y: ArgumentUnion) -> SetExprPy {
         SetExprPy::from(self.0.union(self.1, x, y))
     }
 
-    /// intersection(x, y)
-    ///
     /// Takes the intersection of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -410,13 +396,10 @@ impl SetTable2DPy {
     /// ... )
     /// >>> table.intersection(0, var).eval(model.target_state, model)
     /// {2}
-    #[pyo3(signature = (x, y))]
     fn intersection(&self, x: ArgumentUnion, y: ArgumentUnion) -> SetExprPy {
         SetExprPy::from(self.0.intersection(self.1, x, y))
     }
 
-    /// symmetric_difference(x, y)
-    ///
     /// Takes the symmetric difference of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -449,7 +432,6 @@ impl SetTable2DPy {
     /// ... )
     /// >>> table.symmetric_difference(0, var).eval(model.target_state, model)
     /// {1, 3}
-    #[pyo3(signature = (x, y))]
     fn symmetric_difference(&self, x: ArgumentUnion, y: ArgumentUnion) -> SetExprPy {
         SetExprPy::from(self.0.symmetric_difference(self.1, x, y))
     }
@@ -499,8 +481,6 @@ impl SetTable3DPy {
         SetExprPy::from(self.0.element(x, y, z))
     }
 
-    /// union(x, y, z)
-    ///
     /// Takes the union of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -535,13 +515,10 @@ impl SetTable3DPy {
     /// ... )
     /// >>> table.union(0, var, 1).eval(model.target_state, model)
     /// {1, 2}
-    #[pyo3(signature = (x, y, z))]
     fn union(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> SetExprPy {
         SetExprPy::from(self.0.union(self.1, x, y, z))
     }
 
-    /// intersection(x, y, z)
-    ///
     /// Takes the intersection of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -576,13 +553,10 @@ impl SetTable3DPy {
     /// ... )
     /// >>> table.intersection(0, var, 1).eval(model.target_state, model)
     /// {2}
-    #[pyo3(signature = (x, y, z))]
     fn intersection(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> SetExprPy {
         SetExprPy::from(self.0.intersection(self.1, x, y, z))
     }
 
-    /// symmetric_difference(x, y, z)
-    ///
     /// Takes the symmetric difference of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -617,7 +591,6 @@ impl SetTable3DPy {
     /// ... )
     /// >>> table.symmetric_difference(0, var, 1).eval(model.target_state, model)
     /// {1}
-    #[pyo3(signature = (x, y, z))]
     fn symmetric_difference(
         &self,
         x: ArgumentUnion,
@@ -673,8 +646,6 @@ impl SetTablePy {
         SetExprPy::from(self.0.element(index))
     }
 
-    /// union(indices)
-    ///
     /// Takes the union of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -706,7 +677,6 @@ impl SetTablePy {
     /// ... )
     /// >>> table.union((0, var, 0, 0)).eval(model.target_state, model)
     /// {1, 2}
-    #[pyo3(signature = (indices))]
     fn union(&self, indices: Vec<ArgumentUnion>) -> SetExprPy {
         SetExprPy::from(self.0.union(
             self.1,
@@ -714,8 +684,6 @@ impl SetTablePy {
         ))
     }
 
-    /// intersection(indices)
-    ///
     /// Takes the intersection of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -747,7 +715,6 @@ impl SetTablePy {
     /// ... )
     /// >>> table.intersection((0, var, 0, 0)).eval(model.target_state, model)
     /// set()
-    #[pyo3(signature = (indices))]
     fn intersection(&self, indices: Vec<ArgumentUnion>) -> SetExprPy {
         SetExprPy::from(self.0.intersection(
             self.1,
@@ -755,8 +722,6 @@ impl SetTablePy {
         ))
     }
 
-    /// symmetric_difference(indices)
-    ///
     /// Takes the symmetric difference of set constants in a table over the set of indices.
     ///
     /// Parameters
@@ -788,7 +753,6 @@ impl SetTablePy {
     /// ... )
     /// >>> table.symmetric_difference((0, var, 0, 0)).eval(model.target_state, model)
     /// {1, 2}
-    #[pyo3(signature = (indices))]
     fn symmetric_difference(&self, indices: Vec<ArgumentUnion>) -> SetExprPy {
         SetExprPy::from(self.0.symmetric_difference(
             self.1,
@@ -1005,8 +969,6 @@ impl IntTable1DPy {
         })
     }
 
-    /// product(set)
-    ///
     /// Takes the product of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1028,13 +990,10 @@ impl IntTable1DPy {
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.product(var).eval(model.target_state, model)
     /// 6
-    #[pyo3(signature = (i))]
     fn product(&self, i: SetUnion) -> IntExprPy {
         IntExprPy::from(self.0.product(i))
     }
 
-    /// max(set)
-    ///
     /// Takes the maximum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1056,13 +1015,10 @@ impl IntTable1DPy {
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.max(var).eval(model.target_state, model)
     /// 3
-    #[pyo3(signature = (i))]
     fn max(&self, i: SetUnion) -> IntExprPy {
         IntExprPy::from(self.0.max(i))
     }
 
-    /// min(set)
-    ///
     /// Takes the minimum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1084,7 +1040,6 @@ impl IntTable1DPy {
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.min(var).eval(model.target_state, model)
     /// 2
-    #[pyo3(signature = (i))]
     fn min(&self, i: SetUnion) -> IntExprPy {
         IntExprPy::from(self.0.min(i))
     }
@@ -1133,8 +1088,6 @@ impl IntTable2DPy {
         })
     }
 
-    /// product(x, y)
-    ///
     /// Takes the product of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1164,7 +1117,6 @@ impl IntTable2DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.product(var, set_var).eval(model.target_state, model)
     /// -2
-    #[pyo3(signature = (x, y))]
     fn product(&self, x: ArgumentUnion, y: ArgumentUnion) -> IntExprPy {
         IntExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
@@ -1174,8 +1126,6 @@ impl IntTable2DPy {
         })
     }
 
-    /// max(x, y)
-    ///
     /// Takes the maximum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1205,7 +1155,6 @@ impl IntTable2DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.max(var, set_var).eval(model.target_state, model)
     /// 2
-    #[pyo3(signature = (x, y))]
     fn max(&self, x: ArgumentUnion, y: ArgumentUnion) -> IntExprPy {
         IntExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
@@ -1215,8 +1164,6 @@ impl IntTable2DPy {
         })
     }
 
-    /// min(x, y)
-    ///
     /// Takes the minimum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1246,7 +1193,6 @@ impl IntTable2DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.min(var, set_var).eval(model.target_state, model)
     /// -1
-    #[pyo3(signature = (x, y))]
     fn min(&self, x: ArgumentUnion, y: ArgumentUnion) -> IntExprPy {
         IntExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
@@ -1300,8 +1246,6 @@ impl IntTable3DPy {
         })
     }
 
-    /// product(x, y, z)
-    ///
     /// Takes the product of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1333,7 +1277,6 @@ impl IntTable3DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.product(var, set_var, 1).eval(model.target_state, model)
     /// -2
-    #[pyo3(signature = (x, y, z))]
     fn product(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> IntExprPy {
         IntExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
@@ -1343,8 +1286,6 @@ impl IntTable3DPy {
         })
     }
 
-    /// max(x, y, z)
-    ///
     /// Takes the maximum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1376,7 +1317,6 @@ impl IntTable3DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.max(var, set_var, 1).eval(model.target_state, model)
     /// 2
-    #[pyo3(signature = (x, y, z))]
     fn max(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> IntExprPy {
         IntExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
@@ -1386,8 +1326,6 @@ impl IntTable3DPy {
         })
     }
 
-    /// min(x, y, z)
-    ///
     /// Takes the minimum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1419,7 +1357,6 @@ impl IntTable3DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.min(var, set_var, 1).eval(model.target_state, model)
     /// -1
-    #[pyo3(signature = (x, y, z))]
     fn min(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> IntExprPy {
         IntExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
@@ -1474,8 +1411,6 @@ impl IntTablePy {
         IntExprPy::from(self.0.element(elements))
     }
 
-    /// product(indices)
-    ///
     /// Takes the product of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1503,7 +1438,6 @@ impl IntTablePy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.product((0, var, set_var, 0)).eval(model.target_state, model)
     /// 4
-    #[pyo3(signature = (indices))]
     fn product(&self, indices: Vec<ArgumentUnion>) -> IntExprPy {
         let mut elements = Vec::with_capacity(indices.len());
         for i in &indices {
@@ -1515,8 +1449,6 @@ impl IntTablePy {
         IntExprPy::from(self.0.element(elements))
     }
 
-    /// max(indices)
-    ///
     /// Takes the maximum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1544,7 +1476,6 @@ impl IntTablePy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.max((0, var, set_var, 0)).eval(model.target_state, model)
     /// 2
-    #[pyo3(signature = (indices))]
     fn max(&self, indices: Vec<ArgumentUnion>) -> IntExprPy {
         let mut elements = Vec::with_capacity(indices.len());
         for i in &indices {
@@ -1556,8 +1487,6 @@ impl IntTablePy {
         IntExprPy::from(self.0.element(elements))
     }
 
-    /// min(indices)
-    ///
     /// Takes the minimum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1585,7 +1514,6 @@ impl IntTablePy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.min((0, var, set_var, 0)).eval(model.target_state, model)
     /// 2
-    #[pyo3(signature = (indices))]
     fn min(&self, indices: Vec<ArgumentUnion>) -> IntExprPy {
         let mut elements = Vec::with_capacity(indices.len());
         for i in &indices {
@@ -1640,8 +1568,6 @@ impl FloatTable1DPy {
         })
     }
 
-    /// product(set)
-    ///
     /// Takes the product of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1663,13 +1589,10 @@ impl FloatTable1DPy {
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.product(var).eval(model.target_state, model)
     /// 8.75
-    #[pyo3(signature = (i))]
     fn product(&self, i: SetUnion) -> FloatExprPy {
         FloatExprPy::from(self.0.product(i))
     }
 
-    /// max(set)
-    ///
     /// Takes the maximum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1691,13 +1614,10 @@ impl FloatTable1DPy {
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.max(var).eval(model.target_state, model)
     /// 3.5
-    #[pyo3(signature = (i))]
     fn max(&self, i: SetUnion) -> FloatExprPy {
         FloatExprPy::from(self.0.max(i))
     }
 
-    /// min(set)
-    ///
     /// Takes the minimum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1719,7 +1639,6 @@ impl FloatTable1DPy {
     /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.min(var).eval(model.target_state, model)
     /// 2.5
-    #[pyo3(signature = (i))]
     fn min(&self, i: SetUnion) -> FloatExprPy {
         FloatExprPy::from(self.0.min(i))
     }
@@ -1768,8 +1687,6 @@ impl FloatTable2DPy {
         })
     }
 
-    /// product(x, y)
-    ///
     /// Takes the product of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1799,7 +1716,6 @@ impl FloatTable2DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.product(var, set_var).eval(model.target_state, model)
     /// -3.75
-    #[pyo3(signature = (x, y))]
     fn product(&self, x: ArgumentUnion, y: ArgumentUnion) -> FloatExprPy {
         FloatExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
@@ -1809,8 +1725,6 @@ impl FloatTable2DPy {
         })
     }
 
-    /// max(x, y)
-    ///
     /// Takes the maximum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1840,7 +1754,6 @@ impl FloatTable2DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.max(var, set_var).eval(model.target_state, model)
     /// 2.5
-    #[pyo3(signature = (x, y))]
     fn max(&self, x: ArgumentUnion, y: ArgumentUnion) -> FloatExprPy {
         FloatExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
@@ -1850,8 +1763,6 @@ impl FloatTable2DPy {
         })
     }
 
-    /// min(x, y)
-    ///
     /// Takes the minimum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1881,7 +1792,6 @@ impl FloatTable2DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.min(var, set_var).eval(model.target_state, model)
     /// -1.5
-    #[pyo3(signature = (x, y))]
     fn min(&self, x: ArgumentUnion, y: ArgumentUnion) -> FloatExprPy {
         FloatExprPy::from(match (x, y) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y)) => self.0.element(x, y),
@@ -1935,8 +1845,6 @@ impl FloatTable3DPy {
         })
     }
 
-    /// product(x, y, z)
-    ///
     /// Takes the product of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -1968,7 +1876,6 @@ impl FloatTable3DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.product(var, set_var, 1).eval(model.target_state, model)
     /// -3.75
-    #[pyo3(signature = (x, y, z))]
     fn product(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> FloatExprPy {
         FloatExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
@@ -1978,8 +1885,6 @@ impl FloatTable3DPy {
         })
     }
 
-    /// max(x, y, z)
-    ///
     /// Takes the maximum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -2011,7 +1916,6 @@ impl FloatTable3DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.max(var, set_var, 1).eval(model.target_state, model)
     /// 2.5
-    #[pyo3(signature = (x, y, z))]
     fn max(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> FloatExprPy {
         FloatExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
@@ -2021,8 +1925,6 @@ impl FloatTable3DPy {
         })
     }
 
-    /// min(x, y, z)
-    ///
     /// Takes the minimum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -2054,7 +1956,6 @@ impl FloatTable3DPy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.min(var, set_var, 1).eval(model.target_state, model)
     /// -1.5
-    #[pyo3(signature = (x, y, z))]
     fn min(&self, x: ArgumentUnion, y: ArgumentUnion, z: ArgumentUnion) -> FloatExprPy {
         FloatExprPy::from(match (x, y, z) {
             (ArgumentUnion::Element(x), ArgumentUnion::Element(y), ArgumentUnion::Element(z)) => {
@@ -2109,8 +2010,6 @@ impl FloatTablePy {
         FloatExprPy::from(self.0.element(elements))
     }
 
-    /// product(index)
-    ///
     /// Takes the product of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -2138,7 +2037,6 @@ impl FloatTablePy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.product((0, var, set_var, 0)).eval(model.target_state, model)
     /// 6.25
-    #[pyo3(signature = (index))]
     fn product(&self, index: Vec<ArgumentUnion>) -> FloatExprPy {
         let mut elements = Vec::with_capacity(index.len());
         for i in &index {
@@ -2150,8 +2048,6 @@ impl FloatTablePy {
         FloatExprPy::from(self.0.element(elements))
     }
 
-    /// max(index)
-    ///
     /// Takes the maximum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -2179,7 +2075,6 @@ impl FloatTablePy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.max((0, var, set_var, 0)).eval(model.target_state, model)
     /// 2.5
-    #[pyo3(signature = (index))]
     fn max(&self, index: Vec<ArgumentUnion>) -> FloatExprPy {
         let mut elements = Vec::with_capacity(index.len());
         for i in &index {
@@ -2191,8 +2086,6 @@ impl FloatTablePy {
         FloatExprPy::from(self.0.element(elements))
     }
 
-    /// min(index)
-    ///
     /// Takes the minimum of constants in a table over the set of indices.
     ///
     /// Parameters
@@ -2220,7 +2113,6 @@ impl FloatTablePy {
     /// >>> set_var = model.add_set_var(object_type=obj, target=[0, 1])
     /// >>> table.min((0, var, set_var, 0)).eval(model.target_state, model)
     /// 2.5
-    #[pyo3(signature = (index))]
     fn min(&self, index: Vec<ArgumentUnion>) -> FloatExprPy {
         let mut elements = Vec::with_capacity(index.len());
         for i in &index {

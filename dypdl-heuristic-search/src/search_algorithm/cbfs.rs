@@ -130,7 +130,7 @@ where
         base_cost_evaluator: B,
         parameters: Parameters<T>,
     ) -> Cbfs<'a, T, N, E, B, V> {
-        let time_keeper = parameters
+        let mut time_keeper = parameters
             .time_limit
             .map_or_else(TimeKeeper::default, TimeKeeper::with_time_limit);
         let primal_bound = parameters.primal_bound;
@@ -160,6 +160,8 @@ where
         } else {
             solution.is_infeasible = true;
         }
+
+        time_keeper.stop();
 
         Cbfs {
             generator: input.generator,

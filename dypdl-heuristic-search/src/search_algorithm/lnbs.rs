@@ -51,6 +51,8 @@ pub struct LnbsParameters<T> {
 ///
 /// `parameters.parameters.time_limit` is required in this solver.
 ///
+/// Note that a solution found by this solver may not apply a forced transition when it is applicable.
+///
 /// # References
 ///
 /// Ryo Kuroiwa and J. Christopher Beck. "Large Neighborhood Beam Search for Domain-Independent Dynamic Programming,"

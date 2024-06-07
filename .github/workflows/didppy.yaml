@@ -5,6 +5,9 @@ on:
     paths:
       - "dypdl/**"
       - "dypdl-heuristic-search/**"
+      - "didp-yaml/**"
+      - "!didp-yaml/examples/**"
+      - "!didp-yaml/docs/**"
       - "didppy/**"
       - "!didppy/docs/**"
       - "!didppy/examples/**"
@@ -16,6 +19,9 @@ on:
     paths:
       - "dypdl/**"
       - "dypdl-heuristic-search/**"
+      - "didp-yaml/**"
+      - "!didp-yaml/examples/**"
+      - "!didp-yaml/docs/**"
       - "didppy/**"
       - "!didppy/docs/**"
       - "!didppy/examples/**"

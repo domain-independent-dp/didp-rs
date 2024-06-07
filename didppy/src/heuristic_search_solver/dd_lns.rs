@@ -113,9 +113,6 @@ pub struct DdLnsPy(WrappedSolver<Box<dyn Search<Integer>>, Box<dyn Search<Ordere
 #[pymethods]
 impl DdLnsPy {
     #[new]
-    #[pyo3(
-        text_signature = "(model, f_operator=didppy.FOperator.Plus, primal_bound=None, time_limit=None, quiet=False, initial_solution=None, beam_size=1000, keep_probability=0.1, keep_all_layers=False, seed=2023, cabs_initial_beam_size=None, cabs_max_beam_size=None)"
-    )]
     #[pyo3(signature = (
         model,
         f_operator = FOperator::Plus,
@@ -234,8 +231,6 @@ impl DdLnsPy {
         }
     }
 
-    /// search()
-    ///
     /// Search for the optimal solution of a DyPDL model.
     ///
     /// Returns
@@ -265,13 +260,10 @@ impl DdLnsPy {
     /// >>> solution = solver.search()
     /// >>> solution.cost
     /// 1
-    #[pyo3(signature = ())]
     fn search(&mut self) -> PyResult<SolutionPy> {
         self.0.search()
     }
 
-    /// search_next()
-    ///
     /// Search for the next solution of a DyPDL model.
     ///
     /// Returns
@@ -305,7 +297,6 @@ impl DdLnsPy {
     /// 1
     /// >>> terminated
     /// True
-    #[pyo3(signature = ())]
     fn search_next(&mut self) -> PyResult<(SolutionPy, bool)> {
         self.0.search_next()
     }
