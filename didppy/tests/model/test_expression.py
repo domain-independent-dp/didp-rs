@@ -14,6 +14,13 @@ def test_element_expr_raise():
         dp.ElementExpr(-1)
 
 
+def test_element_expr_to_int_expr():
+    model = dp.Model()
+    state = model.target_state
+
+    assert dp.ElementExpr(3).to_int_expr().eval(state, model) == 3
+
+
 def test_element_expr_bool_raise():
     with pytest.raises(Exception):
         bool(dp.ElementExpr(3))
@@ -42,6 +49,16 @@ def test_element_var():
     assert state[var] == 3
 
 
+def test_element_var_to_int_expr():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_element_var(object_type=obj, target=3)
+    state = model.target_state
+    expr = var.to_int_expr()
+
+    assert expr.eval(state, model) == 3
+
+
 def test_element_var_bool_raise():
     model = dp.Model()
     obj = model.add_object_type(number=4)
@@ -62,6 +79,16 @@ def test_element_resource_var():
     state = model.target_state
 
     assert state[var] == 3
+
+
+def test_element_resource_var_to_int_expr():
+    model = dp.Model()
+    obj = model.add_object_type(number=4)
+    var = model.add_element_resource_var(object_type=obj, target=3, less_is_better=True)
+    state = model.target_state
+    expr = var.to_int_expr()
+
+    assert expr.eval(state, model) == 3
 
 
 def test_element_resource_var_bool_raise():
@@ -834,6 +861,13 @@ def test_int_expr(value, expected):
     assert expr.eval(state, model) == expected
 
 
+def test_int_expr_to_element_expr():
+    model = dp.Model()
+    state = model.target_state
+
+    assert dp.IntExpr(3).to_element_expr().eval(state, model) == 3
+
+
 def test_int_expr_bool_raise():
     expr = dp.IntExpr(1)
 
@@ -843,6 +877,15 @@ def test_int_expr_bool_raise():
     with pytest.raises(Exception):
         if expr:
             pass
+
+
+def test_int_var_to_element_expr():
+    model = dp.Model()
+    var = model.add_int_var(target=1)
+    state = model.target_state
+    expr = var.to_element_expr()
+
+    assert expr.eval(state, model) == 1
 
 
 def test_int_var_bool_raise():
@@ -855,6 +898,15 @@ def test_int_var_bool_raise():
     with pytest.raises(Exception):
         if var:
             pass
+
+
+def test_int_resource_var_to_element_expr():
+    model = dp.Model()
+    var = model.add_int_resource_var(target=1)
+    state = model.target_state
+    expr = var.to_element_expr()
+
+    assert expr.eval(state, model) == 1
 
 
 def test_int_resource_var_bool_raise():
