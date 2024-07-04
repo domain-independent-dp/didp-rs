@@ -1,13 +1,9 @@
 use super::condition::{Condition, IfThenElse};
-use super::integer_expression::IntegerExpression;
 use super::numeric_operator::{BinaryOperator, MaxMin};
 use super::reference_expression::ReferenceExpression;
 use super::table_expression::TableExpression;
 use super::vector_expression::VectorExpression;
-use crate::state::{
-    ElementResourceVariable, ElementVariable, IntegerResourceVariable, IntegerVariable,
-    StateInterface,
-};
+use crate::state::{ElementResourceVariable, ElementVariable, StateInterface};
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
@@ -31,8 +27,6 @@ pub enum ElementExpression {
         Box<ElementExpression>,
         Box<ElementExpression>,
     ),
-    /// Conversion from an integer expression.
-    FromInteger(Box<IntegerExpression>),
     /// The last value of a vector expression.
     Last(Box<VectorExpression>),
     /// An item in a vector expression.
@@ -73,27 +67,6 @@ impl From<ElementResourceVariable> for ElementExpression {
     #[inline]
     fn from(v: ElementResourceVariable) -> ElementExpression {
         ElementExpression::ResourceVariable(v.id())
-    }
-}
-
-impl From<IntegerExpression> for ElementExpression {
-    #[inline]
-    fn from(e: IntegerExpression) -> Self {
-        Self::FromInteger(Box::new(e))
-    }
-}
-
-impl From<IntegerVariable> for ElementExpression {
-    #[inline]
-    fn from(v: IntegerVariable) -> Self {
-        Self::FromInteger(Box::new(v.into()))
-    }
-}
-
-impl From<IntegerResourceVariable> for ElementExpression {
-    #[inline]
-    fn from(v: IntegerResourceVariable) -> Self {
-        Self::FromInteger(Box::new(v.into()))
     }
 }
 
@@ -599,9 +572,6 @@ impl ElementExpression {
                 x.eval(state, function_cache, state_functions, registry),
                 y.eval(state, function_cache, state_functions, registry),
             ),
-            Self::FromInteger(x) => {
-                x.eval(state, function_cache, state_functions, registry) as Element
-            }
             Self::Last(vector) => match vector.as_ref() {
                 VectorExpression::Reference(vector) => *vector
                     .eval(state, function_cache, state_functions, registry)
@@ -673,10 +643,6 @@ impl ElementExpression {
                     Box::new(x.simplify(registry)),
                     Box::new(y.simplify(registry)),
                 ),
-            },
-            Self::FromInteger(x) => match x.simplify(registry) {
-                IntegerExpression::Constant(x) => Self::Constant(x as Element),
-                x => Self::FromInteger(Box::new(x)),
             },
             _ => self.clone(),
         }
@@ -809,28 +775,6 @@ mod tests {
         assert_eq!(
             ElementExpression::from(v),
             ElementExpression::ResourceVariable(v.id())
-        );
-
-        let e = IntegerExpression::from(1);
-        assert_eq!(
-            ElementExpression::from(e.clone()),
-            ElementExpression::FromInteger(Box::new(e))
-        );
-
-        let v = metadata.add_integer_variable(String::from("iv"));
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        assert_eq!(
-            ElementExpression::from(v),
-            ElementExpression::FromInteger(Box::new(IntegerExpression::Variable(v.id())))
-        );
-
-        let v = metadata.add_integer_resource_variable(String::from("irv"), true);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        assert_eq!(
-            ElementExpression::from(v),
-            ElementExpression::FromInteger(Box::new(IntegerExpression::ResourceVariable(v.id())))
         );
     }
 
@@ -2519,19 +2463,6 @@ mod tests {
     }
 
     #[test]
-    fn element_from_integer_eval() {
-        let state = generate_state();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = generate_registry();
-        let expression = ElementExpression::FromInteger(Box::new(IntegerExpression::Constant(1)));
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            1
-        );
-    }
-
-    #[test]
     fn element_last_eval() {
         let state = generate_state();
         let state_functions = StateFunctions::default();
@@ -2641,19 +2572,6 @@ mod tests {
             Box::new(ElementExpression::Variable(0)),
             Box::new(ElementExpression::Constant(1)),
         );
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
-    fn element_from_integer_simplify() {
-        let registry = generate_registry();
-        let expression = ElementExpression::FromInteger(Box::new(IntegerExpression::Constant(1)));
-        assert_eq!(
-            expression.simplify(&registry),
-            ElementExpression::Constant(1)
-        );
-
-        let expression = ElementExpression::FromInteger(Box::new(IntegerExpression::Variable(0)));
         assert_eq!(expression.simplify(&registry), expression);
     }
 

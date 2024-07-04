@@ -172,27 +172,6 @@ impl ElementExprPy {
         Self(ElementExpression::from(value))
     }
 
-    /// Convert to an integer expression.
-    ///
-    /// :code:`self.eval(state, model)` should always return a value less than or equal to 2^31.
-    ///
-    /// Returns
-    /// -------
-    /// IntExpr
-    ///     The integer expression.
-    ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model()
-    /// >>> state = model.target_state
-    /// >>> expr = dp.ElementExpr(0).to_int_expr()
-    /// >>> expr.eval(state, model)
-    /// 0
-    fn to_int_expr(&self) -> IntExprPy {
-        IntExprPy(self.0.clone().into())
-    }
-
     fn __richcmp__(&self, other: ElementUnion, op: CompareOp) -> ConditionPy {
         let lhs = self.clone().0;
         let rhs = ElementExpression::from(other);
@@ -294,7 +273,8 @@ impl ElementExprPy {
     /// 1
     #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Element {
-        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
 
         self.0.eval(
             state.inner_as_ref(),
@@ -370,30 +350,6 @@ impl From<ElementVarPy> for ElementExpression {
 
 #[pymethods]
 impl ElementVarPy {
-    /// Convert to an integer expression.
-    ///
-    /// :code:`self.eval(state, model)` should always return a value less than or equal to 2^31.
-    ///
-    /// Returns
-    /// -------
-    /// IntExpr
-    ///     The integer expression.
-    ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model()
-    /// >>> obj = model.add_object_type(number=4)
-    /// >>> var = model.add_element_var(object_type=obj, target=3)
-    /// >>> state = model.target_state
-    /// >>> expr = var.to_int_expr()
-    /// >>> expr.eval(state, model)
-    /// 3
-    #[allow(clippy::wrong_self_convention)]
-    fn to_int_expr(&self) -> IntExprPy {
-        IntExprPy(IntegerExpression::from(ElementExpression::from(self.0)))
-    }
-
     fn __richcmp__(&self, other: ElementUnion, op: CompareOp) -> ConditionPy {
         let lhs = self.0;
         let rhs = ElementExpression::from(other);
@@ -531,30 +487,6 @@ impl From<ElementResourceVarPy> for ElementExpression {
 
 #[pymethods]
 impl ElementResourceVarPy {
-    /// Convert to an integer expression.
-    ///
-    /// :code:`self.eval(state, model)` should always return a value less than or equal to 2^31.
-    ///
-    /// Returns
-    /// -------
-    /// IntExpr
-    ///     The integer expression.
-    ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model()
-    /// >>> obj = model.add_object_type(number=4)
-    /// >>> var = model.add_element_resource_var(object_type=obj, target=3, less_is_better=True)
-    /// >>> state = model.target_state
-    /// >>> expr = var.to_int_expr()
-    /// >>> expr.eval(state, model)
-    /// 3
-    #[allow(clippy::wrong_self_convention)]
-    fn to_int_expr(&self) -> IntExprPy {
-        IntExprPy(IntegerExpression::from(ElementExpression::from(self.0)))
-    }
-
     fn __richcmp__(&self, other: ElementUnion, op: CompareOp) -> ConditionPy {
         let lhs = self.0;
         let rhs = ElementExpression::from(other);
@@ -1232,7 +1164,8 @@ impl SetExprPy {
     /// {0, 1}
     #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> HashSet<usize> {
-        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
 
         HashSet::from_iter(
             self.0
@@ -2510,28 +2443,6 @@ impl IntExprPy {
         Self(IntegerExpression::Cost)
     }
 
-    /// Convert to an element expression.
-    ///
-    /// :code:`self` should not be a cost expression,
-    /// and :code:`self.eval(state, model)` should always return a nonnegative value.
-    ///
-    /// Returns
-    /// -------
-    /// ElementExpr
-    ///     The element expression.
-    ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model()
-    /// >>> state = model.target_state
-    /// >>> expr = dp.IntExpr(0).to_element_expr()
-    /// >>> expr.eval(state, model)
-    /// 0
-    fn to_element_expr(&self) -> ElementExprPy {
-        ElementExprPy(self.0.clone().into())
-    }
-
     fn __richcmp__(&self, other: IntOrFloatUnion, op: CompareOp) -> ConditionPy {
         let lhs = self.clone().0;
         let op = match op {
@@ -2724,7 +2635,8 @@ impl IntExprPy {
     /// 1
     #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Integer {
-        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
 
         self.0.eval(
             state.inner_as_ref(),
@@ -2768,7 +2680,8 @@ impl IntExprPy {
     /// 1
     #[pyo3(signature = (cost, state, model))]
     fn eval_cost(&self, cost: Integer, state: &StatePy, model: &ModelPy) -> Integer {
-        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
 
         self.0.eval_cost(
             cost,
@@ -2862,30 +2775,6 @@ impl From<IntVarPy> for IntegerExpression {
 
 #[pymethods]
 impl IntVarPy {
-    /// Convert to an element expression.
-    ///
-    /// :code:`self` should not be a cost expression,
-    /// and :code:`self.eval(state, model)` should always return a nonnegative value.
-    ///
-    /// Returns
-    /// -------
-    /// ElementExpr
-    ///     The element expression.
-    ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model()
-    /// >>> var = model.add_int_var(target=3)
-    /// >>> state = model.target_state
-    /// >>> expr = var.to_element_expr()
-    /// >>> expr.eval(state, model)
-    /// 3
-    #[allow(clippy::wrong_self_convention)]
-    fn to_element_expr(&self) -> ElementExprPy {
-        ElementExprPy(self.0.into())
-    }
-
     fn __richcmp__(&self, other: IntOrFloatUnion, op: CompareOp) -> ConditionPy {
         let lhs = self.0;
         let op = match op {
@@ -3132,30 +3021,6 @@ impl From<IntResourceVarPy> for IntegerExpression {
 
 #[pymethods]
 impl IntResourceVarPy {
-    /// Convert to an element expression.
-    ///
-    /// :code:`self` should not be a cost expression,
-    /// and :code:`self.eval(state, model)` should always return a nonnegative value.
-    ///
-    /// Returns
-    /// -------
-    /// ElementExpr
-    ///     The element expression.
-    ///
-    /// Examples
-    /// --------
-    /// >>> import didppy as dp
-    /// >>> model = dp.Model()
-    /// >>> var = model.add_int_resource_var(target=3, less_is_better=True)
-    /// >>> state = model.target_state
-    /// >>> expr = var.to_element_expr()
-    /// >>> expr.eval(state, model)
-    /// 3
-    #[allow(clippy::wrong_self_convention)]
-    fn to_element_expr(&self) -> ElementExprPy {
-        ElementExprPy(self.0.into())
-    }
-
     fn __richcmp__(&self, other: IntOrFloatUnion, op: CompareOp) -> ConditionPy {
         let lhs = self.0;
         let op = match op {
@@ -3603,7 +3468,8 @@ impl FloatExprPy {
     /// 3.0
     #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Continuous {
-        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
 
         self.0.eval(
             state.inner_as_ref(),
@@ -3647,7 +3513,8 @@ impl FloatExprPy {
     /// 3.0
     #[pyo3(signature = (cost, state, model))]
     fn eval_cost(&self, cost: Continuous, state: &StatePy, model: &ModelPy) -> Continuous {
-        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
 
         self.0.eval_cost(
             cost,
@@ -4403,7 +4270,8 @@ impl ConditionPy {
     /// True
     #[pyo3(signature = (state, model))]
     fn eval(&self, state: &StatePy, model: &ModelPy) -> bool {
-        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+        let mut function_cache =
+            StateFunctionCache::new(&model.inner_as_ref().state_functions);
 
         self.0.eval(
             state.inner_as_ref(),

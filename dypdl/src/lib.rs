@@ -3008,9 +3008,6 @@ impl CheckExpression<expression::ElementExpression> for Model {
                 self.check_expression(x.as_ref(), allow_cost)?;
                 self.check_expression(y.as_ref(), allow_cost)
             }
-            expression::ElementExpression::FromInteger(x) => {
-                self.check_expression(x.as_ref(), allow_cost)
-            }
             expression::ElementExpression::Last(vector) => {
                 self.check_expression(vector.as_ref(), allow_cost)
             }
@@ -3289,9 +3286,6 @@ impl CheckExpression<expression::IntegerExpression> for Model {
             }
             expression::IntegerExpression::FromContinuous(_, continuous) => {
                 self.check_expression(continuous.as_ref(), allow_cost)
-            }
-            expression::IntegerExpression::FromElement(element) => {
-                self.check_expression(element.as_ref(), allow_cost)
             }
             expression::IntegerExpression::Last(vector)
             | expression::IntegerExpression::Reduce(_, vector) => {
@@ -15969,10 +15963,6 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = ElementExpression::FromInteger(Box::new(IntegerExpression::Constant(0)));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
         let expression = ElementExpression::Last(Box::new(VectorExpression::Reference(
             ReferenceExpression::Constant(vec![0, 1]),
         )));
@@ -16026,10 +16016,6 @@ mod tests {
             Box::new(ElementExpression::Constant(0)),
             Box::new(ElementExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = ElementExpression::FromInteger(Box::new(IntegerExpression::Variable(0)));
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
@@ -16936,10 +16922,6 @@ mod tests {
         assert!(model.check_expression(&expression, false).is_ok());
         assert!(model.check_expression(&expression, true).is_ok());
 
-        let expression = IntegerExpression::FromElement(Box::new(ElementExpression::Constant(0)));
-        assert!(model.check_expression(&expression, false).is_ok());
-        assert!(model.check_expression(&expression, true).is_ok());
-
         let expression =
             IntegerExpression::Last(Box::new(IntegerVectorExpression::Constant(vec![0, 1])));
         assert!(model.check_expression(&expression, false).is_ok());
@@ -17057,10 +17039,6 @@ mod tests {
             CastOperator::Ceil,
             Box::new(ContinuousExpression::Variable(0)),
         );
-        assert!(model.check_expression(&expression, false).is_err());
-        assert!(model.check_expression(&expression, true).is_err());
-
-        let expression = IntegerExpression::FromElement(Box::new(ElementExpression::Variable(0)));
         assert!(model.check_expression(&expression, false).is_err());
         assert!(model.check_expression(&expression, true).is_err());
 
