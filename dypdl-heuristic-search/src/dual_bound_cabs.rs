@@ -1,10 +1,12 @@
 use crate::search_algorithm::data_structure::ParentAndChildStateFunctionCache;
+use crate::search_algorithm::TransitionWithId;
 
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
-    beam_search, Cabs, CabsParameters, CostNode, FNode, Search, SearchInput, SuccessorGenerator,
+    beam_search_with_dominance, Cabs, CabsParameters, CostNode, FNode, Search, SearchInput,
+    SuccessorGenerator,
 };
-use dypdl::{variable_type, StateFunctionCache, Transition};
+use dypdl::{variable_type, StateFunctionCache};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -64,7 +66,7 @@ where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+    let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
     let base_cost_evaluator = move |cost, base_cost| f_evaluator_type.eval(cost, base_cost);
     let cost = match f_evaluator_type {
         FEvaluatorType::Plus => T::zero(),
@@ -94,7 +96,7 @@ where
             solution_suffix: &[],
         };
         let transition_evaluator =
-            move |node: &FNode<_>, transition, cache: &mut _, primal_bound| {
+            move |node: &FNode<_, TransitionWithId>, transition, cache: &mut _, primal_bound| {
                 node.generate_successor_node(
                     transition,
                     cache,
@@ -105,14 +107,20 @@ where
                 )
             };
         let beam_search = move |input: &SearchInput<_, _>, parameters| {
-            beam_search(
+            beam_search_with_dominance(
                 input,
                 &transition_evaluator,
                 base_cost_evaluator,
                 parameters,
             )
         };
-        Box::new(Cabs::<_, FNode<_>, _>::new(input, beam_search, parameters))
+        Box::new(
+            Cabs::<_, FNode<_, TransitionWithId>, _, TransitionWithId>::new(
+                input,
+                beam_search,
+                parameters,
+            ),
+        )
     } else {
         let node = CostNode::generate_root_node(model.target.clone(), cost, &model);
         let input = SearchInput {
@@ -120,24 +128,26 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &CostNode<_>,
+        let transition_evaluator = move |node: &CostNode<_, TransitionWithId>,
                                          transition,
                                          cache: &mut ParentAndChildStateFunctionCache,
                                          _| {
             node.generate_successor_node(transition, &mut cache.parent, &model)
         };
         let beam_search = move |input: &SearchInput<_, _>, parameters| {
-            beam_search(
+            beam_search_with_dominance(
                 input,
                 &transition_evaluator,
                 base_cost_evaluator,
                 parameters,
             )
         };
-        Box::new(Cabs::<_, CostNode<_>, _>::new(
-            input,
-            beam_search,
-            parameters,
-        ))
+        Box::new(
+            Cabs::<_, CostNode<_, TransitionWithId>, _, TransitionWithId>::new(
+                input,
+                beam_search,
+                parameters,
+            ),
+        )
     }
 }

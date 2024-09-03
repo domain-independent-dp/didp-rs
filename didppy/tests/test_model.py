@@ -1107,6 +1107,35 @@ def test_eval_base_case_none():
     assert model.eval_base_cost(state) is None
 
 
+def test_get_transition():
+    model = dp.Model()
+    t1 = dp.Transition(name="t1")
+    id1 = model.add_transition(t1)
+    t1 = model.get_transition(id1)
+
+    assert t1.name == "t1"
+
+
+def test_get_forced_transition():
+    model = dp.Model()
+    t1 = dp.Transition(name="t1")
+    id1 = model.add_transition(t1, forced=True)
+    t1 = model.get_transition(id1)
+
+    assert t1.name == "t1"
+
+
+def test_get_transition_error():
+    model = dp.Model()
+    t1 = dp.Transition(name="t1")
+    id1 = model.add_transition(t1, forced=True)
+
+    model = dp.Model()
+
+    with pytest.raises(RuntimeError):
+        t1 = model.get_transition(id1)
+
+
 def test_add_transition():
     model = dp.Model()
 
@@ -1198,6 +1227,43 @@ class TestTransitionError:
 
         with pytest.raises(error):
             self.model.add_transition(transition, forced=True)
+
+
+def test_add_transition_dominance():
+    model = dp.Model()
+    int_var = model.add_int_var(target=0)
+    transition1 = dp.Transition(name="t1", preconditions=[int_var >= 1])
+    id1 = model.add_transition(transition1)
+    transition2 = dp.Transition(name="t2", preconditions=[int_var >= 2])
+    id2 = model.add_transition(transition2)
+    transition3 = dp.Transition(name="t3", preconditions=[int_var >= 3])
+    id3 = model.add_transition(transition3)
+
+    model.add_transition_dominance(id1, id2, condition=int_var >= 1)
+    model.add_transition_dominance(id2, id3)
+
+
+class TestAddTransitionDominanceError:
+    model = dp.Model()
+    int_var = model.add_int_var(target=0)
+    transition1 = dp.Transition(name="t1", preconditions=[int_var >= 1])
+    id1 = model.add_transition(transition1)
+    transition2 = dp.Transition(name="t2", preconditions=[int_var >= 2])
+    id2 = model.add_transition(transition2)
+    transition3 = dp.Transition(name="t3", preconditions=[int_var >= 3],)
+    id3 = model.add_transition(transition3, forced=True)
+
+    cases = [
+        (id1, id1, None, RuntimeError),
+        (id1, id2, int_var >= dp.IntExpr.state_cost(), RuntimeError),
+        (id1, id3, None, RuntimeError),
+        (id3, id2, None, RuntimeError),
+    ]
+
+    @pytest.mark.parametrize("id1, id2, condition, error", cases)
+    def test(self, id1, id2, condition, error):
+        with pytest.raises(error):
+            self.model.add_transition_dominance(id1, id2, condition)
 
 
 def test_add_dual_bound_int():

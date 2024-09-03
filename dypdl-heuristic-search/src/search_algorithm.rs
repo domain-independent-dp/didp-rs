@@ -21,15 +21,15 @@ pub mod util;
 
 pub use acps::{Acps, ProgressiveSearchParameters};
 pub use apps::Apps;
-pub use beam_search::{beam_search, BeamSearchParameters};
-pub use best_first_search::BestFirstSearch;
+pub use beam_search::{beam_search, beam_search_with_dominance, BeamSearchParameters};
+pub use best_first_search::{BestFirstSearch, BestFirstSearchWithDominance};
 pub use breadth_first_search::{BreadthFirstSearch, BrfsParameters};
 pub use cabs::{Cabs, CabsParameters};
 pub use cbfs::Cbfs;
 pub use data_structure::{
     BfsNode, CostNode, CustomFNode, FNode, FNodeEvaluators, InsertionResult, StateInRegistry,
-    StateRegistry, SuccessorGenerator, TransitionMutex, TransitionWithCustomCost, TransitionWithId,
-    WeightedFNode,
+    StateRegistry, SuccessorGenerator, SuccessorGeneratorWithDominance, TransitionMutex,
+    TransitionWithCustomCost, TransitionWithId, WeightedFNode,
 };
 pub use dbdfs::{Dbdfs, DbdfsParameters};
 pub use dd_lns::{DdLns, DdLnsParameters};

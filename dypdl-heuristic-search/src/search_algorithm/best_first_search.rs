@@ -4,6 +4,7 @@ use super::data_structure::{
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::{update_bound_if_better, update_solution, TimeKeeper};
+use super::{SuccessorGeneratorWithDominance, TransitionWithId};
 use dypdl::{variable_type, Transition, TransitionInterface};
 use std::collections::BinaryHeap;
 use std::error::Error;
@@ -280,6 +281,230 @@ where
                 &mut self.function_cache.parent,
                 &mut self.applicable_transitions,
             );
+
+            for transition in self.applicable_transitions.drain(..) {
+                if let Some((successor, new_generated)) = (self.transition_evaluator)(
+                    &node,
+                    transition,
+                    &mut self.function_cache,
+                    &mut self.registry,
+                    self.primal_bound,
+                ) {
+                    self.open.push(successor);
+
+                    if new_generated {
+                        self.solution.generated += 1;
+                    }
+                }
+            }
+        }
+
+        self.solution.is_infeasible = self.solution.cost.is_none();
+        self.solution.is_optimal = self.solution.cost.is_some();
+        self.solution.best_bound = self.solution.cost;
+        self.solution.time = self.time_keeper.elapsed_time();
+        self.time_keeper.stop();
+        Ok((self.solution.clone(), true))
+    }
+}
+
+pub struct BestFirstSearchWithDominance<'a, T, N, E, B, V = Transition>
+where
+    T: variable_type::Numeric + Ord + fmt::Display,
+    N: BfsNode<T, TransitionWithId<V>>,
+    E: FnMut(
+        &N,
+        Rc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
+        &mut StateRegistry<T, N>,
+        Option<T>,
+    ) -> Option<(Rc<N>, bool)>,
+    B: FnMut(T, T) -> T,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
+{
+    generator: SuccessorGeneratorWithDominance<V>,
+    suffix: &'a [TransitionWithId<V>],
+    transition_evaluator: E,
+    base_cost_evaluator: B,
+    primal_bound: Option<T>,
+    get_all_solutions: bool,
+    quiet: bool,
+    open: BinaryHeap<Rc<N>>,
+    registry: StateRegistry<T, N>,
+    function_cache: ParentAndChildStateFunctionCache,
+    applicable_transitions: Vec<Rc<TransitionWithId<V>>>,
+    time_keeper: TimeKeeper,
+    solution: Solution<T>,
+    phantom: PhantomData<N>,
+}
+
+impl<'a, T, N, E, B, V> BestFirstSearchWithDominance<'a, T, N, E, B, V>
+where
+    T: variable_type::Numeric + Ord + fmt::Display,
+    N: BfsNode<T, TransitionWithId<V>>,
+    E: FnMut(
+        &N,
+        Rc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
+        &mut StateRegistry<T, N>,
+        Option<T>,
+    ) -> Option<(Rc<N>, bool)>,
+    B: FnMut(T, T) -> T,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
+{
+    /// Creates a new best-first search solver.
+    pub fn new(
+        input: SearchInput<'a, N, TransitionWithId<V>>,
+        transition_evaluator: E,
+        base_cost_evaluator: B,
+        parameters: Parameters<T>,
+    ) -> BestFirstSearchWithDominance<T, N, E, B, V> {
+        let mut time_keeper = parameters
+            .time_limit
+            .map_or_else(TimeKeeper::default, TimeKeeper::with_time_limit);
+        let primal_bound = parameters.primal_bound;
+        let get_all_solutions = parameters.get_all_solutions;
+        let quiet = parameters.quiet;
+
+        let mut open = BinaryHeap::new();
+        let mut registry = StateRegistry::new(input.generator.model.clone());
+
+        if let Some(capacity) = parameters.initial_registry_capacity {
+            registry.reserve(capacity);
+        }
+
+        let mut solution = Solution::default();
+        if let Some(node) = input.node {
+            let result = registry.insert(node);
+            open.push(result.information.unwrap());
+            solution.generated += 1;
+        } else {
+            solution.is_infeasible = true;
+        }
+
+        time_keeper.stop();
+
+        let function_cache =
+            ParentAndChildStateFunctionCache::new(&input.generator.model.state_functions);
+
+        let generator = SuccessorGeneratorWithDominance::from(input.generator);
+
+        BestFirstSearchWithDominance {
+            generator,
+            suffix: input.solution_suffix,
+            transition_evaluator,
+            base_cost_evaluator,
+            primal_bound,
+            get_all_solutions,
+            quiet,
+            open,
+            registry,
+            function_cache,
+            applicable_transitions: Vec::new(),
+            time_keeper,
+            solution,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<'a, T, N, E, B, V> Search<T> for BestFirstSearchWithDominance<'a, T, N, E, B, V>
+where
+    T: variable_type::Numeric + Ord + fmt::Display,
+    N: BfsNode<T, TransitionWithId<V>>,
+    E: FnMut(
+        &N,
+        Rc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
+        &mut StateRegistry<T, N>,
+        Option<T>,
+    ) -> Option<(Rc<N>, bool)>,
+    B: FnMut(T, T) -> T,
+    V: TransitionInterface + Clone + Default,
+    Transition: From<V>,
+{
+    fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
+        self.time_keeper.start();
+        let model = self.generator.get_model().clone();
+
+        while let Some(node) = self.open.pop() {
+            if node.is_closed() {
+                continue;
+            }
+            node.close();
+
+            if let Some(dual_bound) = node.bound(&model) {
+                if exceed_bound(&model, dual_bound, self.primal_bound) {
+                    if N::ordered_by_bound() {
+                        self.open.clear();
+                    }
+                    continue;
+                }
+
+                if N::ordered_by_bound() || self.open.is_empty() {
+                    self.solution.time = self.time_keeper.elapsed_time();
+                    update_bound_if_better(&mut self.solution, dual_bound, &model, self.quiet);
+                }
+            }
+
+            self.function_cache.parent.clear();
+
+            if let Some((cost, suffix)) = get_solution_cost_and_suffix(
+                &model,
+                &*node,
+                self.suffix,
+                &mut self.base_cost_evaluator,
+                &mut self.function_cache,
+            ) {
+                if !exceed_bound(&model, cost, self.primal_bound) {
+                    self.primal_bound = Some(cost);
+                    let time = self.time_keeper.elapsed_time();
+                    update_solution::<_, _, TransitionWithId<V>>(
+                        &mut self.solution,
+                        &*node,
+                        cost,
+                        suffix,
+                        time,
+                        self.quiet,
+                    );
+                    self.time_keeper.stop();
+
+                    return Ok((self.solution.clone(), self.solution.is_optimal));
+                } else if self.get_all_solutions {
+                    let mut solution = self.solution.clone();
+                    let time = self.time_keeper.elapsed_time();
+                    update_solution::<_, _, TransitionWithId<V>>(
+                        &mut solution,
+                        &*node,
+                        cost,
+                        suffix,
+                        time,
+                        true,
+                    );
+                    self.time_keeper.stop();
+
+                    return Ok((solution, false));
+                }
+                continue;
+            }
+
+            if self.time_keeper.check_time_limit(self.quiet) {
+                self.solution.time_out = true;
+                self.solution.time = self.time_keeper.elapsed_time();
+                self.time_keeper.stop();
+
+                return Ok((self.solution.clone(), true));
+            }
+
+            self.solution.expanded += 1;
+            self.generator
+                .generate_applicable_transitions_with_dominance(
+                    node.state(),
+                    &mut self.function_cache.parent,
+                    &mut self.applicable_transitions,
+                );
 
             for transition in self.applicable_transitions.drain(..) {
                 if let Some((successor, new_generated)) = (self.transition_evaluator)(

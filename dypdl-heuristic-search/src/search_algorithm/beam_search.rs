@@ -4,6 +4,7 @@ use super::data_structure::{
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, SearchInput, Solution};
 use super::util::TimeKeeper;
+use super::{SuccessorGeneratorWithDominance, TransitionWithId};
 use dypdl::{variable_type, TransitionInterface};
 use std::fmt::Display;
 use std::mem;
@@ -234,6 +235,232 @@ where
 
             expanded += 1;
             generator.generate_applicable_transitions(
+                node.state(),
+                &mut function_cache.parent,
+                &mut applicable_transitions,
+            );
+
+            for transition in applicable_transitions.drain(..) {
+                if let Some(successor) =
+                    transition_evaluator(&node, transition, &mut function_cache, primal_bound)
+                {
+                    let successor_bound = successor.bound(model);
+                    let status = next_beam.insert(&mut registry, successor);
+
+                    if !pruned && (status.is_pruned || status.removed.is_some()) {
+                        pruned = true;
+                    }
+
+                    if let Some(bound) = successor_bound {
+                        if !exceed_bound(model, bound, layer_dual_bound) {
+                            layer_dual_bound = Some(bound);
+                        }
+
+                        if status.is_pruned && !exceed_bound(model, bound, removed_dual_bound) {
+                            removed_dual_bound = Some(bound);
+                        }
+                    }
+
+                    if let Some(bound) = status.removed.and_then(|removed| removed.bound(model)) {
+                        if !exceed_bound(model, bound, removed_dual_bound) {
+                            removed_dual_bound = Some(bound);
+                        }
+                    }
+
+                    if status.is_newly_registered {
+                        generated += 1;
+                    }
+                }
+            }
+        }
+
+        if !quiet {
+            println!(
+                "Searched layer: {}, expanded: {}, elapsed time: {}",
+                layer_index,
+                expanded,
+                time_keeper.elapsed_time()
+            );
+        }
+
+        if let Some(value) = layer_dual_bound {
+            if exceed_bound(model, value, primal_bound) {
+                best_dual_bound = primal_bound;
+            } else if best_dual_bound.map_or(true, |bound| !exceed_bound(model, bound, Some(value)))
+            {
+                best_dual_bound = layer_dual_bound;
+            }
+        }
+
+        if let Some((node, cost, suffix)) = &incumbent {
+            let mut transitions = node.transitions();
+            transitions.extend_from_slice(suffix);
+            let is_optimal = (!pruned && next_beam.is_empty()) || Some(*cost) == best_dual_bound;
+
+            return Solution {
+                cost: Some(*cost),
+                best_bound: if is_optimal {
+                    Some(*cost)
+                } else {
+                    best_dual_bound
+                },
+                transitions,
+                expanded,
+                generated,
+                is_optimal,
+                time: time_keeper.elapsed_time(),
+                ..Default::default()
+            };
+        }
+
+        mem::swap(&mut current_beam, &mut next_beam);
+
+        if !parameters.keep_all_layers {
+            registry.clear();
+        }
+
+        layer_index += 1;
+    }
+
+    Solution {
+        is_infeasible: !pruned,
+        best_bound: if pruned { best_dual_bound } else { None },
+        expanded,
+        generated,
+        time: time_keeper.elapsed_time(),
+        ..Default::default()
+    }
+}
+
+pub fn beam_search_with_dominance<'a, T, N, E, B, V>(
+    input: &'a SearchInput<'a, N, TransitionWithId<V>>,
+    mut transition_evaluator: E,
+    mut base_cost_evaluator: B,
+    parameters: BeamSearchParameters<T>,
+) -> Solution<T, TransitionWithId<V>>
+where
+    T: variable_type::Numeric + Ord + Display,
+    N: BfsNode<T, TransitionWithId<V>> + Clone,
+    E: FnMut(
+        &N,
+        Rc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
+        Option<T>,
+    ) -> Option<N>,
+    B: FnMut(T, T) -> T,
+    V: TransitionInterface + Clone + Default,
+{
+    let time_keeper = parameters
+        .parameters
+        .time_limit
+        .map_or_else(TimeKeeper::default, TimeKeeper::with_time_limit);
+    let quiet = parameters.parameters.quiet;
+    let mut primal_bound = parameters.parameters.primal_bound;
+
+    let model = &input.generator.model;
+    let generator = &mut SuccessorGeneratorWithDominance::from(input.generator.clone());
+    let suffix = input.solution_suffix;
+    let mut current_beam = Beam::new(parameters.beam_size);
+    let mut next_beam = Beam::new(parameters.beam_size);
+    let mut registry = StateRegistry::new(model.clone());
+    let capacity = parameters
+        .parameters
+        .initial_registry_capacity
+        .unwrap_or_else(|| current_beam.capacity());
+    registry.reserve(capacity);
+
+    let node = if let Some(node) = input.node.clone() {
+        node
+    } else {
+        return Solution {
+            is_infeasible: true,
+            ..Default::default()
+        };
+    };
+
+    current_beam.insert(&mut registry, node);
+
+    if !parameters.keep_all_layers {
+        registry.clear();
+    }
+
+    let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+    let mut applicable_transitions = Vec::new();
+
+    let mut expanded = 0;
+    let mut generated = 1;
+    let mut pruned = false;
+    let mut best_dual_bound = None;
+    let mut removed_dual_bound = None;
+    let mut layer_index = 0;
+
+    while !current_beam.is_empty() {
+        let mut incumbent = None;
+        let mut layer_dual_bound = removed_dual_bound;
+
+        let iter = if parameters.keep_all_layers {
+            current_beam.close_and_drain()
+        } else {
+            current_beam.drain()
+        };
+
+        for node in iter {
+            if let Some(dual_bound) = node.bound(model) {
+                if exceed_bound(model, dual_bound, primal_bound) {
+                    continue;
+                }
+            }
+
+            function_cache.parent.clear();
+
+            if let Some((cost, suffix)) = get_solution_cost_and_suffix(
+                model,
+                &*node,
+                suffix,
+                &mut base_cost_evaluator,
+                &mut function_cache,
+            ) {
+                if !exceed_bound(model, cost, primal_bound) {
+                    primal_bound = Some(cost);
+                    incumbent = Some((node, cost, suffix));
+
+                    if Some(cost) == best_dual_bound {
+                        break;
+                    }
+                }
+                continue;
+            }
+
+            if time_keeper.check_time_limit(quiet) {
+                let solution = incumbent.map_or_else(
+                    || Solution {
+                        expanded,
+                        generated,
+                        time: time_keeper.elapsed_time(),
+                        time_out: true,
+                        ..Default::default()
+                    },
+                    |(node, cost, suffix)| {
+                        let mut transitions = node.transitions();
+                        transitions.extend_from_slice(suffix);
+                        Solution {
+                            cost: Some(cost),
+                            best_bound: best_dual_bound,
+                            transitions,
+                            expanded,
+                            generated,
+                            time: time_keeper.elapsed_time(),
+                            time_out: true,
+                            ..Default::default()
+                        }
+                    },
+                );
+
+                return solution;
+            }
+
+            expanded += 1;
+            generator.generate_applicable_transitions_with_dominance(
                 node.state(),
                 &mut function_cache.parent,
                 &mut applicable_transitions,

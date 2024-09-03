@@ -6,6 +6,7 @@ mod parent_and_child_state_function_cache;
 mod search_node;
 mod state_registry;
 mod successor_generator;
+mod successor_generator_with_dominance;
 mod transition;
 mod transition_chain;
 mod transition_id_chain;
@@ -24,6 +25,7 @@ pub use state_registry::{
     remove_dominated, InsertionResult, StateInRegistry, StateInformation, StateRegistry,
 };
 pub use successor_generator::{ApplicableTransitions, SuccessorGenerator};
+pub use successor_generator_with_dominance::SuccessorGeneratorWithDominance;
 pub use transition::{TransitionWithCustomCost, TransitionWithId};
 pub use transition_chain::{CreateTransitionChain, GetTransitions, RcChain};
 pub use transition_id_chain::GetTransitionIds;

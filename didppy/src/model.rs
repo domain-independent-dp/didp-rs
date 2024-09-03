@@ -4,8 +4,8 @@ mod state;
 mod table;
 mod transition;
 
-use dypdl::prelude::*;
 use dypdl::variable_type::{OrderedContinuous, ToNumeric};
+use dypdl::{prelude::*, TransitionId};
 pub use expression::*;
 use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::prelude::*;
@@ -299,6 +299,10 @@ impl IntoPy<Py<PyAny>> for FloatTableUnion {
         }
     }
 }
+
+#[pyclass(name = "TransitionId")]
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct TransitionIdPy(TransitionId);
 
 #[allow(rustdoc::broken_intra_doc_links)]
 /// DyPDL model.
@@ -2223,6 +2227,11 @@ impl ModelPy {
     /// backward: bool, default: False
     ///     If it is a backward transition or not.
     ///
+    /// Returns
+    /// -------
+    /// TransitionId
+    ///     ID of the transition.
+    ///
     /// Raises
     /// ------
     /// RuntimeError
@@ -2248,7 +2257,7 @@ impl ModelPy {
         transition: TransitionPy,
         forced: bool,
         backward: bool,
-    ) -> PyResult<()> {
+    ) -> PyResult<TransitionIdPy> {
         let result = if forced && backward {
             self.0.add_backward_forced_transition(transition.into())
         } else if forced {
@@ -2259,8 +2268,91 @@ impl ModelPy {
             self.0.add_forward_transition(transition.into())
         };
         match result {
-            Ok(_) => Ok(()),
+            Ok(id) => Ok(TransitionIdPy(id)),
             Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// Gets a transition by an ID.
+    ///
+    /// Parameters
+    /// ----------
+    /// id: TransitionId
+    ///    ID of the transition.
+    ///
+    /// Returns
+    /// -------
+    /// Transition
+    ///     Transition.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If the transition does not
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> t = dp.Transition(name="t", cost=1 + dp.IntExpr.state_cost())
+    /// >>> id = model.add_transition(t)
+    /// >>> t = model.get_transition(id)
+    /// >>> t.name
+    /// 't'
+    fn get_transition(&self, id: &TransitionIdPy) -> PyResult<TransitionPy> {
+        self.0
+            .get_transition(&id.0)
+            .map(|t| TransitionPy::from(t.clone()))
+            .map_err(|err| PyRuntimeError::new_err(err.to_string()))
+    }
+
+    /// Adds a transition dominance.
+    ///
+    /// Parameters
+    /// ----------
+    /// dominating: TransitionId
+    ///     ID of the dominating transition.
+    /// dominated: TransitionId
+    ///     ID of the dominated transition.
+    /// condition: Condition or None
+    ///     Condition to dominate the transition.
+    ///     If `None`, the dominated transition is always dominated by the dominating transition.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If the dominating or dominated transition is forced or does not exist, or the condition is invalid.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=4)
+    /// >>> t1 = dp.Transition(name="t1", cost=1 + dp.IntExpr.state_cost())
+    /// >>> id1 = model.add_transition(t1)
+    /// >>> t2 = dp.Transition(name="t2", cost=2 + dp.IntExpr.state_cost())
+    /// >>> id2 = model.add_transition(t2)
+    /// >>> model.add_transition_dominance(id1, id2, condition=var >= 0)
+    #[pyo3(signature = (dominating, dominated, condition = None))]
+    fn add_transition_dominance(
+        &mut self,
+        dominating: &TransitionIdPy,
+        dominated: &TransitionIdPy,
+        condition: Option<ConditionPy>,
+    ) -> PyResult<()> {
+        if let Some(condition) = condition {
+            self.0
+                .add_transition_dominance_with_condition(
+                    &dominating.0,
+                    &dominated.0,
+                    condition.into(),
+                )
+                .map_err(|err| PyRuntimeError::new_err(err.to_string()))
+        } else {
+            self.0
+                .add_transition_dominance(&dominating.0, &dominated.0)
+                .map_err(|err| PyRuntimeError::new_err(err.to_string()))
         }
     }
 

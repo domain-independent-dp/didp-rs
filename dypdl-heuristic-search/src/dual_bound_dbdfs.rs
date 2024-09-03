@@ -1,10 +1,11 @@
 use crate::search_algorithm::data_structure::ParentAndChildStateFunctionCache;
+use crate::search_algorithm::TransitionWithId;
 
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
     CostNode, Dbdfs, DbdfsParameters, FNode, Search, SearchInput, SuccessorGenerator,
 };
-use dypdl::{variable_type, StateFunctionCache, Transition};
+use dypdl::{variable_type, StateFunctionCache};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -61,7 +62,7 @@ where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+    let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
     let base_cost_evaluator = move |cost, base_cost| f_evaluator_type.eval(cost, base_cost);
     let cost = match f_evaluator_type {
         FEvaluatorType::Plus => T::zero(),
@@ -90,18 +91,21 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator =
-            move |node: &FNode<_>, transition, cache: &mut _, registry: &mut _, primal_bound| {
-                node.insert_successor_node(
-                    transition,
-                    cache,
-                    registry,
-                    &h_evaluator,
-                    &f_evaluator,
-                    primal_bound,
-                )
-            };
-        Box::new(Dbdfs::<_, FNode<_>, _, _>::new(
+        let transition_evaluator = move |node: &FNode<_, TransitionWithId>,
+                                         transition,
+                                         cache: &mut _,
+                                         registry: &mut _,
+                                         primal_bound| {
+            node.insert_successor_node(
+                transition,
+                cache,
+                registry,
+                &h_evaluator,
+                &f_evaluator,
+                primal_bound,
+            )
+        };
+        Box::new(Dbdfs::<_, FNode<_, TransitionWithId>, _, _>::new(
             input,
             transition_evaluator,
             base_cost_evaluator,
@@ -115,12 +119,12 @@ where
             solution_suffix: &[],
         };
         let transition_evaluator =
-            |node: &CostNode<_>,
+            |node: &CostNode<_, TransitionWithId>,
              transition,
              cache: &mut ParentAndChildStateFunctionCache,
              registry: &mut _,
              _| { node.insert_successor_node(transition, &mut cache.parent, registry) };
-        Box::new(Dbdfs::<_, CostNode<_>, _, _>::new(
+        Box::new(Dbdfs::<_, CostNode<_, TransitionWithId>, _, _>::new(
             input,
             transition_evaluator,
             base_cost_evaluator,

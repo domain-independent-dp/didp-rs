@@ -246,9 +246,7 @@ pub fn update_bound_if_better<T, V>(
 
 #[cfg(test)]
 mod tests {
-    use super::super::data_structure::{
-        FNode, ParentAndChildStateFunctionCache, StateInRegistry,
-    };
+    use super::super::data_structure::{FNode, ParentAndChildStateFunctionCache, StateInRegistry};
     use super::*;
     use dypdl::prelude::*;
     use std::rc::Rc;

@@ -1,12 +1,13 @@
 use super::data_structure::{
-    exceed_bound, BfsNode, ParentAndChildStateFunctionCache, StateRegistry, SuccessorGenerator,
+    exceed_bound, BfsNode, ParentAndChildStateFunctionCache, StateRegistry,
 };
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::{print_dual_bound, update_bound_if_better, update_solution, TimeKeeper};
+use super::{SuccessorGeneratorWithDominance, TransitionWithId};
 use dypdl::{variable_type, Transition, TransitionInterface};
 use std::cmp;
-use std::collections;
+use std::collections::BinaryHeap;
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
@@ -135,10 +136,10 @@ impl Default for ProgressiveSearchParameters {
 pub struct Acps<'a, T, N, E, B, V = Transition>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNode<T, V>,
+    N: BfsNode<T, TransitionWithId<V>>,
     E: FnMut(
         &N,
-        Rc<V>,
+        Rc<TransitionWithId<V>>,
         &mut ParentAndChildStateFunctionCache,
         &mut StateRegistry<T, N>,
         Option<T>,
@@ -147,8 +148,8 @@ where
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
 {
-    generator: SuccessorGenerator<V>,
-    suffix: &'a [V],
+    generator: SuccessorGeneratorWithDominance<V>,
+    suffix: &'a [TransitionWithId<V>],
     transition_evaluator: E,
     base_cost_evaluator: B,
     progressive_parameters: ProgressiveSearchParameters,
@@ -156,10 +157,10 @@ where
     get_all_solutions: bool,
     quiet: bool,
     width: usize,
-    open: Vec<collections::BinaryHeap<Rc<N>>>,
+    open: Vec<BinaryHeap<Rc<N>>>,
     registry: StateRegistry<T, N>,
     function_cache: ParentAndChildStateFunctionCache,
-    applicable_transitions: Vec<Rc<V>>,
+    applicable_transitions: Vec<Rc<TransitionWithId<V>>>,
     layer_index: usize,
     node_index: usize,
     no_node: bool,
@@ -172,10 +173,10 @@ where
 impl<'a, T, N, E, B, V> Acps<'a, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNode<T, V>,
+    N: BfsNode<T, TransitionWithId<V>>,
     E: FnMut(
         &N,
-        Rc<V>,
+        Rc<TransitionWithId<V>>,
         &mut ParentAndChildStateFunctionCache,
         &mut StateRegistry<T, N>,
         Option<T>,
@@ -186,7 +187,7 @@ where
 {
     /// Creates a new ACPS solver.
     pub fn new(
-        input: SearchInput<'a, N, V>,
+        input: SearchInput<'a, N, TransitionWithId<V>>,
         transition_evaluator: E,
         base_cost_evaluator: B,
         parameters: Parameters<T>,
@@ -198,8 +199,8 @@ where
         let primal_bound = parameters.primal_bound;
         let quiet = parameters.quiet;
 
-        let mut open = vec![collections::BinaryHeap::new()];
-        let mut registry = StateRegistry::<_, _>::new(input.generator.model.clone());
+        let mut open = vec![BinaryHeap::new()];
+        let mut registry = StateRegistry::new(input.generator.model.clone());
 
         if let Some(capacity) = parameters.initial_registry_capacity {
             registry.reserve(capacity);
@@ -227,8 +228,10 @@ where
 
         time_keeper.stop();
 
+        let generator = SuccessorGeneratorWithDominance::from(input.generator);
+
         Acps {
-            generator: input.generator,
+            generator: generator,
             suffix: input.solution_suffix,
             transition_evaluator,
             base_cost_evaluator,
@@ -255,10 +258,10 @@ where
 impl<'a, T, N, E, B, V> Search<T> for Acps<'a, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNode<T, V>,
+    N: BfsNode<T, TransitionWithId<V>>,
     E: FnMut(
         &N,
-        Rc<V>,
+        Rc<TransitionWithId<V>>,
         &mut ParentAndChildStateFunctionCache,
         &mut StateRegistry<T, N>,
         Option<T>,
@@ -273,7 +276,7 @@ where
         }
 
         self.time_keeper.start();
-        let model = &self.generator.model;
+        let model = self.generator.get_model().clone();
         let suffix = self.suffix;
 
         loop {
@@ -285,8 +288,8 @@ where
                 }
                 node.close();
 
-                if let Some(dual_bound) = node.bound(model) {
-                    if exceed_bound(model, dual_bound, self.primal_bound) {
+                if let Some(dual_bound) = node.bound(&model) {
+                    if exceed_bound(&model, dual_bound, self.primal_bound) {
                         if N::ordered_by_bound() {
                             self.open[self.layer_index].clear();
                         }
@@ -301,7 +304,7 @@ where
                 self.function_cache.parent.clear();
 
                 if let Some((cost, suffix)) = get_solution_cost_and_suffix(
-                    model,
+                    &model,
                     &*node,
                     suffix,
                     &mut self.base_cost_evaluator,
@@ -309,21 +312,35 @@ where
                 ) {
                     self.node_index += 1;
 
-                    if !exceed_bound(model, cost, self.primal_bound) {
+                    if !exceed_bound(&model, cost, self.primal_bound) {
                         if !self.goal_found {
                             self.goal_found = true;
                         }
 
                         self.primal_bound = Some(cost);
                         let time = self.time_keeper.elapsed_time();
-                        update_solution(&mut self.solution, &*node, cost, suffix, time, self.quiet);
+                        update_solution::<_, _, TransitionWithId<V>>(
+                            &mut self.solution,
+                            &*node,
+                            cost,
+                            suffix,
+                            time,
+                            self.quiet,
+                        );
                         self.time_keeper.stop();
 
                         return Ok((self.solution.clone(), self.solution.is_optimal));
                     } else if self.get_all_solutions {
                         let mut solution = self.solution.clone();
                         let time = self.time_keeper.elapsed_time();
-                        update_solution(&mut solution, &*node, cost, suffix, time, true);
+                        update_solution::<_, _, TransitionWithId<V>>(
+                            &mut solution,
+                            &*node,
+                            cost,
+                            suffix,
+                            time,
+                            true,
+                        );
                         self.time_keeper.stop();
 
                         return Ok((solution, false));
@@ -340,11 +357,12 @@ where
                 }
 
                 self.solution.expanded += 1;
-                self.generator.generate_applicable_transitions(
-                    node.state(),
-                    &mut self.function_cache.parent,
-                    &mut self.applicable_transitions,
-                );
+                self.generator
+                    .generate_applicable_transitions_with_dominance(
+                        node.state(),
+                        &mut self.function_cache.parent,
+                        &mut self.applicable_transitions,
+                    );
 
                 for transition in self.applicable_transitions.drain(..) {
                     if let Some((successor, new_generated)) = (self.transition_evaluator)(
@@ -355,7 +373,7 @@ where
                         self.primal_bound,
                     ) {
                         while self.layer_index + 1 >= self.open.len() {
-                            self.open.push(collections::BinaryHeap::new());
+                            self.open.push(BinaryHeap::new());
                         }
 
                         self.open[self.layer_index + 1].push(successor);
@@ -372,9 +390,9 @@ where
             if N::ordered_by_bound() {
                 if let Some(bound) = self.open[self.layer_index]
                     .peek()
-                    .map(|node| node.bound(model).unwrap())
+                    .map(|node| node.bound(&model).unwrap())
                 {
-                    if !exceed_bound(model, bound, self.dual_bound_candidate) {
+                    if !exceed_bound(&model, bound, self.dual_bound_candidate) {
                         self.dual_bound_candidate = Some(bound);
                     }
                 }
@@ -399,11 +417,11 @@ where
                 }
 
                 if let Some(dual_bound) = self.dual_bound_candidate {
-                    if exceed_bound(model, dual_bound, self.primal_bound) {
+                    if exceed_bound(&model, dual_bound, self.primal_bound) {
                         break;
                     } else {
                         self.solution.time = self.time_keeper.elapsed_time();
-                        update_bound_if_better(&mut self.solution, dual_bound, model, self.quiet);
+                        update_bound_if_better(&mut self.solution, dual_bound, &model, self.quiet);
                         self.dual_bound_candidate = None;
                     }
                 }
