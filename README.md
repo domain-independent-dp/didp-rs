@@ -26,8 +26,6 @@ git clone https://github.com/domain-independent-dp/didp-rs
 cd didp-rs
 ```
 
-See [TIDEL DIDP development workflow](https://hackmd.io/LnyQw0gxQSe_SbpiPOmM_Q) for conventions used in TIDEL.
-
 ### Install Rust
 
 Follow the instruction on the official webpage: <https://www.rust-lang.org/tools/install>
