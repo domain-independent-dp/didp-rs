@@ -12,7 +12,7 @@ use pyo3::prelude::*;
 /// :attr:`~FOperator.Product`: :code:`f = g * h`
 ///
 /// :attr:`~FOperator.Overwrite`: :code:`f = h`
-#[pyclass(name = "FOperator")]
+#[pyclass(eq, eq_int, name = "FOperator")]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum FOperator {
     /// :code:`f = g + h`

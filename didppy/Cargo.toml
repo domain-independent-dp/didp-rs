@@ -21,11 +21,12 @@ crate-type = ["cdylib"]
 dypdl = { path = "../dypdl", version = "0.8.0" }
 dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.8.0" }
 didp-yaml = { path = "../didp-yaml", version = "0.8.0" }
-rustc-hash = "1.1"
+rustc-hash = "2.1"
 yaml-rust = "0.4"
 
 [dependencies.pyo3]
-version = "0.21"
+# 0.23 has many breaking changes, so we stick with 0.22 for now.
+version = "0.22"
 
 [features]
 extension-module = ["pyo3/extension-module"]
@@ -33,4 +34,4 @@ abi3 = ["pyo3/abi3-py37"]
 default = ["extension-module", "abi3"]
 
 [build-dependencies]
-pyo3-build-config = "0.21"
+pyo3-build-config = "0.22"

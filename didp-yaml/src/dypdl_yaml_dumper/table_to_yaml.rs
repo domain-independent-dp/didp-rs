@@ -67,8 +67,10 @@ impl<T: ToYaml> ToYaml for Table3D<T> {
 impl<T: ToYaml> ToYaml for Table<T> {
     fn to_yaml(&self) -> Result<yaml_rust::Yaml, Box<dyn Error>> {
         let mut hash = Hash::new();
+        let mut keys = self.map.keys().collect::<Vec<_>>();
+        keys.sort();
 
-        for key in self.map.keys() {
+        for key in keys {
             let key_array: Result<Vec<Yaml>, Box<dyn Error>> =
                 key.iter().map(|i: &usize| (*i).to_yaml()).collect();
             hash.insert(Yaml::Array(key_array?), self.get(key).to_yaml()?);

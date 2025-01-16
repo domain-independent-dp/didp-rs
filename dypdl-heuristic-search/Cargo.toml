@@ -17,8 +17,8 @@ repository = "https://github.com/domain-independent-dp/didp-rs"
 [dependencies]
 ordered-float = "4.2"
 dypdl = { path = "../dypdl", version = "0.8.0" }
-rustc-hash = "1.1"
-dashmap = "5.5"
+rustc-hash = "2.1"
+dashmap = "6.1"
 rayon = "1.10"
 crossbeam-channel = "0.5"
 bus = "2.4"

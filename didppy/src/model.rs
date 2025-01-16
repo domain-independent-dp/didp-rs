@@ -16471,14 +16471,14 @@ table_values:
     : 0
 dictionary_values:
   connected:
+    ? - 0
+      - 0
+    : false
     ? - 1
       - 1
     : false
     ? - 2
       - 2
-    : false
-    ? - 0
-      - 0
     : false"#;
         assert_eq!(domain, expected_domain);
         assert_eq!(problem, expected_problem);
