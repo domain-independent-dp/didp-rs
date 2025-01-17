@@ -1,4 +1,4 @@
-use crate::model::TransitionPy;
+use crate::{model::TransitionPy, model::StatePy, ModelPy};
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{Search, Solution};
@@ -52,6 +52,34 @@ pub struct SolutionPy {
     /// bool : Whether to exceed the time limit.
     #[pyo3(get)]
     pub time_out: bool,
+}
+
+#[pymethods]
+impl SolutionPy {
+
+    /// Applies transitions in the solution to the model's target state.
+    ///
+    /// Parameters
+    /// ----------
+    /// model: Model
+    ///     DyPDL model.
+    ///
+    /// Returns
+    /// -------
+    /// State
+    ///    The solution state after sequentially applying the transitions.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If preconditions are invalid.
+    fn state(&self, model: &ModelPy) -> StatePy {
+        let mut next = model.target_state();
+        for t in self.transitions.iter(){
+            next = t.apply(&mut next, model)
+        }
+        next
+    }
 }
 
 impl From<Solution<Integer>> for SolutionPy {

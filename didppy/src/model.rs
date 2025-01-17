@@ -397,7 +397,7 @@ impl ModelPy {
 
     /// State : Target state.
     #[getter]
-    fn target_state(&self) -> state::StatePy {
+    pub fn target_state(&self) -> state::StatePy {
         self.0.target.clone().into()
     }
 

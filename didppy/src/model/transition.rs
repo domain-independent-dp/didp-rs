@@ -490,7 +490,7 @@ impl TransitionPy {
     /// >>> state = t.apply(model.target_state, model)
     /// >>> state[var]
     /// 5
-    fn apply(&self, state: &mut StatePy, model: &ModelPy) -> StatePy {
+    pub fn apply(&self, state: &mut StatePy, model: &ModelPy) -> StatePy {
         self.0
             .apply(state.inner_as_ref(), &model.inner_as_ref().table_registry)
     }
