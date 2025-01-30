@@ -15,6 +15,7 @@ use crate::state::{
     ContinuousResourceVariable, ContinuousVariable, IntegerResourceVariable, IntegerVariable,
     SetVariable, StateInterface,
 };
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Continuous, Integer};
@@ -30,6 +31,8 @@ pub enum ContinuousExpression {
     Variable(usize),
     /// Resource variable index.
     ResourceVariable(usize),
+    /// State function index.
+    StateFunction(usize),
     /// The cost of the transitioned state.
     Cost,
     /// Unary arithmetic operation.
@@ -140,10 +143,16 @@ impl ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expression = ContinuousExpression::from(-1.5);
     /// let expression = expression.abs();
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 1.5);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1.5,
+    /// );
     /// ```
     #[inline]
     pub fn abs(self) -> ContinuousExpression {
@@ -160,10 +169,16 @@ impl ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expression = ContinuousExpression::from(4.0);
     /// let expression = expression.sqrt();
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2.0,
+    /// );
     /// ```
     #[inline]
     pub fn sqrt(self) -> ContinuousExpression {
@@ -180,10 +195,16 @@ impl ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expression = ContinuousExpression::from(1.5);
     /// let expression = expression.floor();
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 1.0);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1.0,
+    /// );
     /// ```
     #[inline]
     pub fn floor(self) -> ContinuousExpression {
@@ -200,10 +221,16 @@ impl ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expression = ContinuousExpression::from(1.5);
     /// let expression = expression.ceil();
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2.0,
+    /// );
     /// ```
     #[inline]
     pub fn ceil(self) -> ContinuousExpression {
@@ -220,10 +247,16 @@ impl ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expression = ContinuousExpression::from(1.5);
     /// let expression = expression.round();
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2.0,
+    /// );
     /// ```
     #[inline]
     pub fn round(self) -> ContinuousExpression {
@@ -240,10 +273,16 @@ impl ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expression = ContinuousExpression::from(1.5);
     /// let expression = expression.trunc();
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 1.0);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1.0,
+    /// );
     /// ```
     #[inline]
     pub fn trunc(self) -> ContinuousExpression {
@@ -264,10 +303,16 @@ impl ops::Neg for ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expression = ContinuousExpression::from(1.5);
     /// let expression = -expression;
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), -1.5);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     -1.5,
+    /// );
     /// ```
     #[inline]
     fn neg(self) -> Self::Output {
@@ -288,11 +333,17 @@ impl ops::Add for ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ContinuousExpression::from(0.2);
     /// let b = ContinuousExpression::from(0.3);
     /// let expression = a + b;
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.5,
+    /// );
     /// ```
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
@@ -313,11 +364,17 @@ impl ops::Sub for ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ContinuousExpression::from(0.2);
     /// let b = ContinuousExpression::from(0.3);
     /// let expression = a - b;
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), -0.1);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     -0.1,
+    /// );
     /// ```
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
@@ -338,11 +395,17 @@ impl ops::Mul for ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ContinuousExpression::from(0.2);
     /// let b = ContinuousExpression::from(0.3);
     /// let expression = a * b;
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.06);
+    /// assert_relative_eq!(
+    ///     expression.eval(    
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.06,
+    /// );
     /// ```
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
@@ -363,11 +426,17 @@ impl ops::Div for ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ContinuousExpression::from(0.2);
     /// let b = ContinuousExpression::from(0.3);
     /// let expression = a / b;
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0 / 3.0);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2.0 / 3.0,
+    /// );
     /// ```
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
@@ -388,11 +457,17 @@ impl ops::Rem for ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ContinuousExpression::from(0.2);
     /// let b = ContinuousExpression::from(0.3);
     /// let expression = a % b;
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.2,
+    /// );
     /// ```
     #[inline]
     fn rem(self, rhs: Self) -> Self::Output {
@@ -413,11 +488,17 @@ impl MaxMin for ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ContinuousExpression::from(0.2);
     /// let b = ContinuousExpression::from(0.3);
     /// let expression = a.max(b);
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.3);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry
+    ///     ),
+    ///     0.3,
+    /// );
     /// ```
     #[inline]
     fn max(self, rhs: Self) -> Self::Output {
@@ -434,11 +515,17 @@ impl MaxMin for ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ContinuousExpression::from(0.2);
     /// let b = ContinuousExpression::from(0.3);
     /// let expression = a.min(b);
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.2,
+    /// );
     /// ```
     #[inline]
     fn min(self, rhs: Self) -> Self::Output {
@@ -459,11 +546,17 @@ impl ContinuousBinaryOperation for ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ContinuousExpression::from(2.0);
     /// let b = ContinuousExpression::from(-1.0);
     /// let expression = a.pow(b);
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.5,
+    /// );
     /// ```
     #[inline]
     fn pow(self, rhs: Self) -> Self::Output {
@@ -484,11 +577,17 @@ impl ContinuousBinaryOperation for ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ContinuousExpression::from(4.0);
     /// let b = ContinuousExpression::from(2.0);
     /// let expression = a.log(b);
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2.0,
+    /// );
     /// ```
     #[inline]
     fn log(self, rhs: Self) -> Self::Output {
@@ -513,11 +612,17 @@ impl SetExpression {
     /// let object_type = model.add_object_type("object", 4).unwrap();
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = SetExpression::from(set);
     /// let expression = expression.len_continuous();
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2.0,
+    /// );
     /// ```
     #[inline]
     pub fn len_continuous(self) -> ContinuousExpression {
@@ -537,12 +642,18 @@ impl SetVariable {
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object", 4).unwrap();
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
     ///
     /// let expression = variable.len_continuous();
     ///
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 2.0);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2.0
+    /// );
     /// ```
     #[inline]
     pub fn len_continuous(self) -> ContinuousExpression {
@@ -564,9 +675,15 @@ impl Table1DHandle<Continuous> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.element(variable);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.2
+    /// );
     /// ```
     #[inline]
     pub fn element<T>(&self, x: T) -> ContinuousExpression
@@ -591,9 +708,15 @@ impl Table1DHandle<Continuous> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.sum(variable);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.5
+    /// );
     /// ```
     #[inline]
     pub fn sum<T>(&self, x: T) -> ContinuousExpression
@@ -621,9 +744,15 @@ impl Table1DHandle<Continuous> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.product(variable);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.06);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.06,
+    /// );
     /// ```
     #[inline]
     pub fn product<T>(&self, x: T) -> ContinuousExpression
@@ -651,9 +780,15 @@ impl Table1DHandle<Continuous> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.max(variable);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.3);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.3,
+    /// );
     /// ```
     #[inline]
     pub fn max<T>(&self, x: T) -> ContinuousExpression
@@ -681,9 +816,15 @@ impl Table1DHandle<Continuous> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.min(variable);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.2,
+    /// );
     /// ```
     #[inline]
     pub fn min<T>(&self, x: T) -> ContinuousExpression
@@ -712,9 +853,15 @@ impl Table2DHandle<Continuous> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.element(variable, 1);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.3);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.3,
+    /// );
     /// ```
     #[inline]
     pub fn element<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -744,9 +891,15 @@ impl Table2DHandle<Continuous> {
     /// let x = model.add_set_variable("x", object_type, set).unwrap();
     /// let y = model.add_element_variable("y", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.sum_x(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.6);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.6,
+    /// );
     /// ```
     #[inline]
     pub fn sum_x<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -777,9 +930,15 @@ impl Table2DHandle<Continuous> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.sum_y(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// assert_relative_eq!(    
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.5,
+    /// );
     /// ```
     #[inline]
     pub fn sum_y<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -809,9 +968,15 @@ impl Table2DHandle<Continuous> {
     /// let x = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.sum(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 1.4);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1.4,
+    /// );
     /// ```
     #[inline]
     pub fn sum<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -842,9 +1007,15 @@ impl Table2DHandle<Continuous> {
     /// let x = model.add_set_variable("x", object_type, set).unwrap();
     /// let y = model.add_element_variable("y", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.product_x(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.08);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.08,
+    /// );
     /// ```
     #[inline]
     pub fn product_x<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -875,9 +1046,15 @@ impl Table2DHandle<Continuous> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.product_y(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.06);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.06,
+    /// );
     /// ```
     #[inline]
     pub fn product_y<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -907,9 +1084,15 @@ impl Table2DHandle<Continuous> {
     /// let x = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.product(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.012);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.012,
+    /// );
     /// ```
     #[inline]
     pub fn product<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -940,9 +1123,15 @@ impl Table2DHandle<Continuous> {
     /// let x = model.add_set_variable("x", object_type, set).unwrap();
     /// let y = model.add_element_variable("y", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.max_x(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.4);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.4,
+    /// );
     /// ```
     #[inline]
     pub fn max_x<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -973,9 +1162,15 @@ impl Table2DHandle<Continuous> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.max_y(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.3);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.3,
+    /// );
     /// ```
     #[inline]
     pub fn max_y<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -1005,9 +1200,15 @@ impl Table2DHandle<Continuous> {
     /// let x = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.max(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.5,
+    /// );
     /// ```
     #[inline]
     pub fn max<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -1038,9 +1239,15 @@ impl Table2DHandle<Continuous> {
     /// let x = model.add_set_variable("x", object_type, set).unwrap();
     /// let y = model.add_element_variable("y", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.min_x(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.2,
+    /// );
     /// ```
     #[inline]
     pub fn min_x<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -1071,9 +1278,15 @@ impl Table2DHandle<Continuous> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.min_y(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.2,
+    /// );
     /// ```
     #[inline]
     pub fn min_y<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -1103,9 +1316,15 @@ impl Table2DHandle<Continuous> {
     /// let x = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.min(x, y);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.2,
+    /// );
     /// ```
     #[inline]
     pub fn min<T, U>(&self, x: T, y: U) -> ContinuousExpression
@@ -1142,9 +1361,15 @@ impl Table3DHandle<Continuous> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.element(variable, variable + 1, 1);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.5);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.5,
+    /// );
     /// ```
     #[inline]
     pub fn element<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
@@ -1182,12 +1407,23 @@ impl Table3DHandle<Continuous> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.sum(set_variable, element_variable, 1);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 1.0);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1.0,
+    /// );
     ///
     /// let expression = table.sum(set, set_variable, set_variable);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 4.4);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     4.4,
+    /// );
     /// ```
     #[inline]
     pub fn sum<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
@@ -1226,12 +1462,24 @@ impl Table3DHandle<Continuous> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.product(set_variable, element_variable, 1);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.21);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.21,
+    /// );
     ///
     /// let expression = table.product(set, set_variable, set_variable);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.0036288);
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.0036288,
+    /// );
     /// ```
     #[inline]
     pub fn product<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
@@ -1270,12 +1518,23 @@ impl Table3DHandle<Continuous> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.max(set_variable, element_variable, 1);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.7);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.7,
+    /// );
     ///
     /// let expression = table.max(set, set_variable, set_variable);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.9);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.9,
+    /// );
     /// ```
     #[inline]
     pub fn max<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
@@ -1314,12 +1573,23 @@ impl Table3DHandle<Continuous> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.min(set_variable, element_variable, 1);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.3);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.3,
+    /// );
     ///
     /// let expression = table.min(set, set_variable, set_variable);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.2);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.2,
+    /// );
     /// ```
     #[inline]
     pub fn min<T, U, V>(&self, x: T, y: U, z: V) -> ContinuousExpression
@@ -1353,6 +1623,7 @@ impl TableHandle<Continuous> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ElementExpression::from(variable),
@@ -1361,7 +1632,12 @@ impl TableHandle<Continuous> {
     ///     ElementExpression::from(0),
     /// ];
     /// let expression = table.element(indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 0.1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.1,
+    /// );
     /// ```
     #[inline]
     pub fn element<T>(&self, index: Vec<T>) -> ContinuousExpression
@@ -1389,6 +1665,7 @@ impl TableHandle<Continuous> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(set),
@@ -1397,7 +1674,12 @@ impl TableHandle<Continuous> {
     ///     ArgumentExpression::from(0),
     /// ];
     /// let expression = table.sum(indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 0.1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry
+    ///     ),
+    ///     0.1,
+    /// );
     /// ```
     #[inline]
     pub fn sum<T>(&self, index: Vec<T>) -> ContinuousExpression
@@ -1429,6 +1711,7 @@ impl TableHandle<Continuous> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(set),
@@ -1437,7 +1720,12 @@ impl TableHandle<Continuous> {
     ///     ArgumentExpression::from(0),
     /// ];
     /// let expression = table.product(indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 0.0);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.0,
+    /// );
     /// ```
     #[inline]
     pub fn product<T>(&self, index: Vec<T>) -> ContinuousExpression
@@ -1469,6 +1757,7 @@ impl TableHandle<Continuous> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(set),
@@ -1477,7 +1766,12 @@ impl TableHandle<Continuous> {
     ///     ArgumentExpression::from(0),
     /// ];
     /// let expression = table.max(indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 0.1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.1,
+    /// );
     /// ```
     #[inline]
     pub fn max<T>(&self, index: Vec<T>) -> ContinuousExpression
@@ -1509,6 +1803,7 @@ impl TableHandle<Continuous> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(set),
@@ -1517,7 +1812,12 @@ impl TableHandle<Continuous> {
     ///     ArgumentExpression::from(0),
     /// ];
     /// let expression = table.min(indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 0.0);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.0,
+    /// );
     /// ```
     #[inline]
     pub fn min<T>(&self, index: Vec<T>) -> ContinuousExpression
@@ -1744,13 +2044,25 @@ impl ContinuousExpression {
     /// let mut model = Model::default();
     /// let variable = model.add_continuous_variable("variable", 0.1).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = ContinuousExpression::from(variable);
-    /// assert_relative_eq!(expression.eval(&state, &model.table_registry), 0.1);
+    /// assert_relative_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0.1,
+    /// );
     /// ```
     #[inline]
-    pub fn eval<U: StateInterface>(&self, state: &U, registry: &TableRegistry) -> Continuous {
-        self.eval_inner(None, state, registry)
+    pub fn eval<U: StateInterface>(
+        &self,
+        state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Continuous {
+        self.eval_inner(None, state, function_cache, state_functions, registry)
     }
 
     /// Returns the evaluation result of a cost expression.
@@ -1767,79 +2079,133 @@ impl ContinuousExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = ContinuousExpression::Cost + 0.1;
-    /// assert_relative_eq!(expression.eval_cost(0.1, &state, &model.table_registry), 0.2);
+    /// assert_relative_eq!(
+    ///     expression.eval_cost(
+    ///         0.1,
+    ///         &state,
+    ///         &mut function_cache,
+    ///         &model.state_functions,
+    ///         &model.table_registry,
+    ///     ),
+    ///     0.2,
+    /// );
     /// ```
     #[inline]
     pub fn eval_cost<U: StateInterface>(
         &self,
         cost: Continuous,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Continuous {
-        self.eval_inner(Some(cost), state, registry)
+        self.eval_inner(Some(cost), state, function_cache, state_functions, registry)
     }
 
     fn eval_inner<U: StateInterface>(
         &self,
         cost: Option<Continuous>,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Continuous {
         match self {
             Self::Constant(x) => *x,
             Self::Variable(i) => state.get_continuous_variable(*i),
             Self::ResourceVariable(i) => state.get_continuous_resource_variable(*i),
+            Self::StateFunction(i) => {
+                function_cache.get_continuous_value(*i, state, state_functions, registry)
+            }
             Self::Cost => cost.unwrap(),
-            Self::UnaryOperation(op, x) => op.eval(x.eval_inner(cost, state, registry)),
-            Self::ContinuousUnaryOperation(op, x) => op.eval(x.eval_inner(cost, state, registry)),
-            Self::Round(op, x) => op.eval(x.eval_inner(cost, state, registry)),
+            Self::UnaryOperation(op, x) => {
+                op.eval(x.eval_inner(cost, state, function_cache, state_functions, registry))
+            }
+            Self::ContinuousUnaryOperation(op, x) => {
+                op.eval(x.eval_inner(cost, state, function_cache, state_functions, registry))
+            }
+            Self::Round(op, x) => {
+                op.eval(x.eval_inner(cost, state, function_cache, state_functions, registry))
+            }
             Self::BinaryOperation(op, a, b) => {
-                let a = a.eval_inner(cost, state, registry);
-                let b = b.eval_inner(cost, state, registry);
+                let a = a.eval_inner(cost, state, function_cache, state_functions, registry);
+                let b = b.eval_inner(cost, state, function_cache, state_functions, registry);
                 op.eval(a, b)
             }
             Self::ContinuousBinaryOperation(op, a, b) => {
-                let a = a.eval_inner(cost, state, registry);
-                let b = b.eval_inner(cost, state, registry);
+                let a = a.eval_inner(cost, state, function_cache, state_functions, registry);
+                let b = b.eval_inner(cost, state, function_cache, state_functions, registry);
                 op.eval(a, b)
             }
             Self::Cardinality(SetExpression::Reference(expression)) => {
-                let f = |i| state.get_set_variable(i);
-                let set = expression.eval(state, registry, &f, &registry.set_tables);
+                let set = expression.eval(state, function_cache, state_functions, registry);
                 set.count_ones(..) as Continuous
             }
-            Self::Cardinality(set) => set.eval(state, registry).count_ones(..) as Continuous,
-            Self::Table(t) => t.eval(state, registry, &registry.continuous_tables),
+            Self::Cardinality(SetExpression::StateFunction(i)) => {
+                let set = function_cache.get_set_value(*i, state, state_functions, registry);
+                set.count_ones(..) as Continuous
+            }
+            Self::Cardinality(set) => set
+                .eval(state, function_cache, state_functions, registry)
+                .count_ones(..) as Continuous,
+            Self::Table(t) => t.eval(
+                state,
+                function_cache,
+                state_functions,
+                registry,
+                &registry.continuous_tables,
+            ),
             Self::If(condition, x, y) => {
-                if condition.eval(state, registry) {
-                    x.eval_inner(cost, state, registry)
+                if condition.eval(state, function_cache, state_functions, registry) {
+                    x.eval_inner(cost, state, function_cache, state_functions, registry)
                 } else {
-                    y.eval_inner(cost, state, registry)
+                    y.eval_inner(cost, state, function_cache, state_functions, registry)
                 }
             }
-            Self::FromInteger(x) => Continuous::from(cost.map_or_else(
-                || x.eval(state, registry),
-                |cost| x.eval_cost(cost as Integer, state, registry),
-            )),
+            Self::FromInteger(x) => Continuous::from(if let Some(cost) = cost {
+                x.eval_cost(
+                    cost as Integer,
+                    state,
+                    function_cache,
+                    state_functions,
+                    registry,
+                )
+            } else {
+                x.eval(state, function_cache, state_functions, registry)
+            }),
             Self::Length(VectorExpression::Reference(expression)) => {
-                let f = |i| state.get_vector_variable(i);
-                let vector = expression.eval(state, registry, &f, &registry.vector_tables);
+                let vector = expression.eval(state, function_cache, state_functions, registry);
                 vector.len() as Continuous
             }
-            Self::Length(vector) => vector.eval(state, registry).len() as Continuous,
+            Self::Length(vector) => vector
+                .eval(state, function_cache, state_functions, registry)
+                .len() as Continuous,
             Self::Last(vector) => match vector.as_ref() {
                 ContinuousVectorExpression::Constant(vector) => *vector.last().unwrap(),
-                vector => *vector.eval_inner(cost, state, registry).last().unwrap(),
+                vector => *vector
+                    .eval_inner(cost, state, function_cache, state_functions, registry)
+                    .last()
+                    .unwrap(),
             },
             Self::At(vector, i) => match vector.as_ref() {
-                ContinuousVectorExpression::Constant(vector) => vector[i.eval(state, registry)],
-                vector => vector.eval_inner(cost, state, registry)[i.eval(state, registry)],
+                ContinuousVectorExpression::Constant(vector) => {
+                    vector[i.eval(state, function_cache, state_functions, registry)]
+                }
+                vector => vector.eval_inner(cost, state, function_cache, state_functions, registry)
+                    [i.eval(state, function_cache, state_functions, registry)],
             },
             Self::Reduce(op, vector) => match vector.as_ref() {
                 ContinuousVectorExpression::Constant(vector) => op.eval(vector),
-                vector => op.eval(&vector.eval_inner(cost, state, registry)),
+                vector => op.eval(&vector.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    state_functions,
+                    registry,
+                )),
             },
         }
     }
@@ -1933,6 +2299,7 @@ mod tests {
     use crate::state::*;
     use crate::table_data::TableInterface;
     use crate::variable_type::*;
+    use approx::assert_relative_eq;
     use rustc_hash::FxHashMap;
 
     #[test]
@@ -7420,9 +7787,14 @@ mod tests {
     #[test]
     fn constant_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousExpression::Constant(1.0);
-        assert_eq!(expression.eval(&state, &registry), 1.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1.0
+        );
     }
 
     #[test]
@@ -7434,9 +7806,14 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousExpression::Variable(0);
-        assert_eq!(expression.eval(&state, &registry), 0.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            0.0
+        );
     }
 
     #[test]
@@ -7448,88 +7825,179 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousExpression::ResourceVariable(0);
-        assert_eq!(expression.eval(&state, &registry), 0.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            0.0
+        );
+    }
+
+    #[test]
+    fn state_function_eval() {
+        let mut state_metadata = StateMetadata::default();
+        let v = state_metadata.add_continuous_variable("v");
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_continuous_function("f", v + 1);
+        assert!(f.is_ok());
+        let f = f.unwrap();
+        let g = state_functions.add_continuous_function("g", v + 2);
+        assert!(g.is_ok());
+        let g = g.unwrap();
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                continuous_variables: vec![0.0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+
+        assert_relative_eq!(
+            f.eval(&state, &mut function_cache, &state_functions, &registry),
+            1.0
+        );
+
+        assert_relative_eq!(
+            g.eval(&state, &mut function_cache, &state_functions, &registry),
+            2.0
+        );
+
+        assert_relative_eq!(
+            f.eval(&state, &mut function_cache, &state_functions, &registry),
+            1.0
+        );
+        assert_relative_eq!(
+            g.eval(&state, &mut function_cache, &state_functions, &registry),
+            2.0
+        );
     }
 
     #[test]
     fn eval_cost() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousExpression::Cost;
-        assert_eq!(expression.eval_cost(10.0, &state, &registry), 10.0);
+        assert_eq!(
+            expression.eval_cost(
+                10.0,
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            10.0
+        );
     }
 
     #[test]
     #[should_panic]
     fn eval_cost_panic() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousExpression::Cost;
-        expression.eval(&state, &registry);
+        expression.eval(&state, &mut function_cache, &state_functions, &registry);
     }
 
     #[test]
     fn unary_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousExpression::UnaryOperation(
             UnaryOperator::Abs,
             Box::new(ContinuousExpression::Constant(-1.0)),
         );
-        assert_eq!(expression.eval(&state, &registry), 1.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1.0
+        );
     }
 
     #[test]
     fn continuous_unary_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousExpression::ContinuousUnaryOperation(
             ContinuousUnaryOperator::Sqrt,
             Box::new(ContinuousExpression::Constant(4.0)),
         );
-        assert_eq!(expression.eval(&state, &registry), 2.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            2.0
+        );
     }
 
     #[test]
     fn round_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousExpression::Round(
             CastOperator::Floor,
             Box::new(ContinuousExpression::Constant(2.5)),
         );
-        assert_eq!(expression.eval(&state, &registry), 2.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            2.0
+        );
     }
 
     #[test]
     fn binary_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(ContinuousExpression::Constant(1.0)),
             Box::new(ContinuousExpression::Constant(2.0)),
         );
-        assert_eq!(expression.eval(&state, &registry), 3.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            3.0
+        );
     }
 
     #[test]
     fn continuous_binary_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousExpression::ContinuousBinaryOperation(
             ContinuousBinaryOperator::Pow,
             Box::new(ContinuousExpression::Constant(2.0)),
             Box::new(ContinuousExpression::Constant(2.0)),
         );
-        assert_eq!(expression.eval(&state, &registry), 4.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            4.0
+        );
     }
 
     #[test]
     fn cardinality_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let mut set = Set::with_capacity(5);
         set.insert(1);
@@ -7537,31 +8005,46 @@ mod tests {
         let expression = ContinuousExpression::Cardinality(SetExpression::Reference(
             ReferenceExpression::Constant(set),
         ));
-        assert_eq!(expression.eval(&state, &registry), 2.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            2.0
+        );
     }
 
     #[test]
     fn length_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousExpression::Length(VectorExpression::Reference(
             ReferenceExpression::Constant(vec![1, 4]),
         ));
-        assert_eq!(expression.eval(&state, &registry), 2.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            2.0
+        );
     }
 
     #[test]
     fn table_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression =
             ContinuousExpression::Table(Box::new(NumericTableExpression::Constant(0.0)));
-        assert_eq!(expression.eval(&state, &registry), 0.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            0.0
+        );
     }
 
     #[test]
     fn if_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
 
         let expression = ContinuousExpression::If(
@@ -7569,60 +8052,86 @@ mod tests {
             Box::new(ContinuousExpression::Constant(1.0)),
             Box::new(ContinuousExpression::Constant(2.0)),
         );
-        assert_eq!(expression.eval(&state, &registry), 1.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1.0
+        );
 
         let expression = ContinuousExpression::If(
             Box::new(Condition::Constant(false)),
             Box::new(ContinuousExpression::Constant(1.0)),
             Box::new(ContinuousExpression::Constant(2.0)),
         );
-        assert_eq!(expression.eval(&state, &registry), 2.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            2.0
+        );
     }
 
     #[test]
     fn from_integer_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
 
         let expression =
             ContinuousExpression::FromInteger(Box::new(IntegerExpression::Constant(1)));
-        assert_eq!(expression.eval(&state, &registry), 1.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1.0
+        );
     }
 
     #[test]
     fn last_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
 
         let expression =
             ContinuousExpression::Last(Box::new(ContinuousVectorExpression::Constant(vec![
                 1.0, 2.0, 3.0,
             ])));
-        assert_eq!(expression.eval(&state, &registry), 3.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            3.0
+        );
     }
 
     #[test]
     fn at_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
 
         let expression = ContinuousExpression::At(
             Box::new(ContinuousVectorExpression::Constant(vec![1.0, 2.0, 3.0])),
             ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &registry), 1.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1.0
+        );
     }
 
     #[test]
     fn reduce_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
 
         let expression = ContinuousExpression::Reduce(
             ReduceOperator::Sum,
             Box::new(ContinuousVectorExpression::Constant(vec![1.0, 2.0, 3.0])),
         );
-        assert_eq!(expression.eval(&state, &registry), 6.0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            6.0
+        );
     }
 
     #[test]

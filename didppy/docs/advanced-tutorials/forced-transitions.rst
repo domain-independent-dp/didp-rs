@@ -97,15 +97,16 @@ Before defining forced transitions, let's model the other parts of the formulati
         [d[s] * sum(c[a] for a in scene_to_actors[s]) for s in range(n)]
     )
 
+    came_to_location = scene_to_actors_table.union(remaining.complement())
+    standby = scene_to_actors_table.union(remaining)
+    on_location = model.add_set_state_fun(came_to_location & standby)
+
     for s in range(n):
-        already_shot = remaining.complement()
-        came_to_location = scene_to_actors_table.union(already_shot)
-        standby = scene_to_actors_table.union(remaining)
-        on_location = scene_to_actors_table[s] | (came_to_location & standby)
+        on_location_s = scene_to_actors_table[s] | on_location
 
         shoot = dp.Transition(
             name="shoot {}".format(s),
-            cost=d[s] * actor_to_cost[on_location] + dp.IntExpr.state_cost(),
+            cost=d[s] * actor_to_cost[on_location_s] + dp.IntExpr.state_cost(),
             effects=[(remaining, remaining.remove(s))],
             preconditions=[remaining.contains(s)],
         )
@@ -128,6 +129,12 @@ Therefore, :code:`scene_to_actors_table.union(remaining)` corresponds to :math:`
 The union and intersection of two sets can be represented by the bitwise OR operator :code:`|` and AND operator :code:`&`.
 In addition, the operators :code:`-` and :code:`^` can be used to take the difference and symmetric difference of two sets, respectively.
 
+We use a state function :code:`on_location` to represent :math:`\left( \bigcup_{s' \in S \setminus Q} A_{s'} \cap \bigcup_{s' \in Q } A_{s'}  \right)` by calling :meth:`~didppy.Model.add_set_state_fun`.
+A state function is a function of a state defined by an expression.
+It is useful to represent information implied by state variables.
+A solver can cache the value of a state function to avoid redundant computation if it is used in multiple places.
+Computing :math:`\left( \bigcup_{s' \in S \setminus Q} A_{s'} \cap \bigcup_{s' \in Q } A_{s'}  \right)` requires linear time in the number of scenes, which is not cheap, so it is better to use a state function in this case.
+
 Defining Forced Transitions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -142,22 +149,18 @@ Because which :math:`s` satisfies the condition is unknown, we need to define a 
 .. code-block:: python
 
     for s in range(n):
-        already_shot = remaining.complement()
-        came_to_location = scene_to_actors_table.union(already_shot)
-        standby = scene_to_actors_table.union(remaining)
-
         shoot = dp.Transition(
             name="forced shoot {}".format(s),
             cost=scene_to_min_cost[s] + dp.IntExpr.state_cost(),
             effects=[(remaining, remaining.remove(s))],
             preconditions=[
                 remaining.contains(s),
-                scene_to_actors_table[s] == (came_to_location & standby),
+                scene_to_actors_table[s] == on_location
             ],
         )
         model.add_transition(shoot, forced=True)
 
-Now, we have an additional precondition, :code:`scene_to_actors_table[s] == (came_to_location & standby)`, which corresponds to :math:`A_s = \bigcup_{s' \in S \setminus Q} A_{s'} \cap \bigcup_{s' \in Q} A_{s'}`.
+Now, we have an additional precondition, :code:`scene_to_actors_table[s] == on_location`, which corresponds to :math:`A_s = \bigcup_{s' \in S \setminus Q} A_{s'} \cap \bigcup_{s' \in Q} A_{s'}`.
 When registering this transition to the model, we use the argument :code:`forced=True` to indicate that this transition is a forced transition.
 
 Ordinarily, DIDPPy takes the minimum (or maximum) :code:`cost` over all transitions whose preconditions are satisfied. 

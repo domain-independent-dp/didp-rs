@@ -4,6 +4,7 @@ mod base_case_parser;
 pub mod expression_parser;
 mod grounded_condition_parser;
 mod parse_expression_from_yaml;
+mod state_function_parser;
 mod state_parser;
 mod table_registry_parser;
 mod transition_parser;
@@ -21,7 +22,7 @@ use dypdl::expression::{
     VectorExpression,
 };
 use dypdl::variable_type::Element;
-use dypdl::{CostType, GroundedCondition, Model, ModelErr, ReduceFunction};
+use dypdl::{CostType, GroundedCondition, Model, ModelErr, ReduceFunction, StateFunctions};
 use rustc_hash::FxHashMap;
 use std::error::Error;
 use yaml_rust::Yaml;
@@ -41,6 +42,7 @@ pub fn load_integer_expression_from_yaml(
     parse_expression_from_yaml::parse_integer_from_yaml(
         value,
         &model.state_metadata,
+        &model.state_functions,
         &model.table_registry,
         parameters,
     )
@@ -61,6 +63,7 @@ pub fn load_continuous_expression_from_yaml(
     parse_expression_from_yaml::parse_continuous_from_yaml(
         value,
         &model.state_metadata,
+        &model.state_functions,
         &model.table_registry,
         parameters,
     )
@@ -81,6 +84,7 @@ pub fn load_element_expression_from_yaml(
     parse_expression_from_yaml::parse_element_from_yaml(
         value,
         &model.state_metadata,
+        &model.state_functions,
         &model.table_registry,
         parameters,
     )
@@ -101,6 +105,7 @@ pub fn load_set_expression_from_yaml(
     parse_expression_from_yaml::parse_set_from_yaml(
         value,
         &model.state_metadata,
+        &model.state_functions,
         &model.table_registry,
         parameters,
     )
@@ -121,6 +126,7 @@ pub fn load_vector_expression_from_yaml(
     parse_expression_from_yaml::parse_vector_from_yaml(
         value,
         &model.state_metadata,
+        &model.state_functions,
         &model.table_registry,
         parameters,
     )
@@ -215,6 +221,15 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
         &state_metadata,
     )?;
 
+    let state_functions = match domain.get(&Yaml::from_str("state_functions")) {
+        Some(value) => state_function_parser::load_state_functions_from_yaml(
+            value,
+            &state_metadata,
+            &table_registry,
+        )?,
+        None => StateFunctions::default(),
+    };
+
     let mut constraints = Vec::new();
     if let Some(value) = domain.get(&Yaml::from_str("constraints")) {
         let array = util::get_array(value)?;
@@ -223,6 +238,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
             let conditions = load_grounded_conditions_from_yaml(
                 constraint,
                 &state_metadata,
+                &state_functions,
                 &table_registry,
                 &parameters,
             )?;
@@ -237,6 +253,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
             let conditions = load_grounded_conditions_from_yaml(
                 constraint,
                 &state_metadata,
+                &state_functions,
                 &table_registry,
                 &parameters,
             )?;
@@ -257,6 +274,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
             let base_case = base_case_parser::load_base_case_from_yaml(
                 base_case,
                 &state_metadata,
+                &state_functions,
                 &table_registry,
                 &cost_type,
             )?;
@@ -268,6 +286,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
             let base_case = base_case_parser::load_base_case_from_yaml(
                 base_case,
                 &state_metadata,
+                &state_functions,
                 &table_registry,
                 &cost_type,
             )?;
@@ -304,6 +323,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
             let (transition, forced, backward) = load_transitions_from_yaml(
                 transition,
                 &state_metadata,
+                &state_functions,
                 &table_registry,
                 &cost_type,
             )?;
@@ -325,6 +345,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
             let (transition, forced, backward) = load_transitions_from_yaml(
                 transition,
                 &state_metadata,
+                &state_functions,
                 &table_registry,
                 &cost_type,
             )?;
@@ -353,6 +374,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                     let expression = parse_expression_from_yaml::parse_integer_from_yaml(
                         bound,
                         &state_metadata,
+                        &state_functions,
                         &table_registry,
                         &parameters,
                     )?;
@@ -364,6 +386,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                     let expression = parse_expression_from_yaml::parse_continuous_from_yaml(
                         bound,
                         &state_metadata,
+                        &state_functions,
                         &table_registry,
                         &parameters,
                     )?;
@@ -382,6 +405,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                     let expression = parse_expression_from_yaml::parse_integer_from_yaml(
                         bound,
                         &state_metadata,
+                        &state_functions,
                         &table_registry,
                         &parameters,
                     )?;
@@ -393,6 +417,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                     let expression = parse_expression_from_yaml::parse_continuous_from_yaml(
                         bound,
                         &state_metadata,
+                        &state_functions,
                         &table_registry,
                         &parameters,
                     )?;
@@ -408,6 +433,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
         state_metadata,
         target,
         table_registry,
+        state_functions,
         state_constraints: constraints,
         base_cases,
         base_states,
@@ -471,6 +497,7 @@ mod tests {
     use super::*;
     use dypdl::expression::*;
     use dypdl::variable_type::*;
+    use dypdl::AddEffect;
     use dypdl::Table;
     use dypdl::{
         BaseCase, CostExpression, Effect, ResourceVariables, SignatureVariables, State,
@@ -1368,6 +1395,89 @@ table_values:
         assert_eq!(model.cost_type, expected.cost_type);
         assert_eq!(model.forward_transitions, expected.forward_transitions);
         assert_eq!(model.backward_transitions, expected.backward_transitions);
+        assert_eq!(model, expected);
+    }
+
+    #[test]
+    fn model_load_from_yaml_with_state_functions_ok() {
+        let domain = r"
+state_variables:
+        - name: v1
+          type: integer
+        - name: v2
+          type: integer
+state_functions:
+        - name: f1
+          type: integer
+          expression: (+ v1 v2)
+        - name: f2
+          type: integer
+          expression: (* f1 f1)
+transitions:
+        - name: increase
+          cost: (+ cost 1)
+          effect:
+              v1: (+ v1 f2)
+              v2: (+ v2 1)
+base_cases:
+        - [(>= v1 10)]
+";
+
+        let problem = r"
+target:
+        v1: 0
+        v2: 0
+";
+
+        let domain = yaml_rust::YamlLoader::load_from_str(domain);
+        println!("{:?}", domain);
+        assert!(domain.is_ok());
+        let domain = domain.unwrap();
+        assert_eq!(domain.len(), 1);
+        let domain = &domain[0];
+
+        let problem = yaml_rust::YamlLoader::load_from_str(problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+        assert_eq!(problem.len(), 1);
+        let problem = &problem[0];
+
+        let model = load_model_from_yaml(domain, problem);
+        assert!(model.is_ok());
+        let model = model.unwrap();
+
+        let mut expected = Model::default();
+
+        let result = expected.add_integer_variable("v1", 0);
+        assert!(result.is_ok());
+        let v1 = result.unwrap();
+        let result = expected.add_integer_variable("v2", 0);
+        assert!(result.is_ok());
+        let v2 = result.unwrap();
+
+        let result = expected.add_integer_state_function("f1", v1 + v2);
+        assert!(result.is_ok());
+        let f1 = result.unwrap();
+        let result = expected.add_integer_state_function("f2", f1.clone() * f1);
+        assert!(result.is_ok());
+        let f2 = result.unwrap();
+
+        let mut transition = Transition::new("increase");
+        transition.set_cost(IntegerExpression::Cost + 1);
+        let result = transition.add_effect(v1, v1 + f2);
+        assert!(result.is_ok());
+        let result = transition.add_effect(v2, v2 + 1);
+        assert!(result.is_ok());
+        let result = expected.add_forward_transition(transition);
+        assert!(result.is_ok());
+
+        let result = expected.add_base_case(vec![Condition::comparison_i(
+            ComparisonOperator::Ge,
+            v1,
+            10,
+        )]);
+        assert!(result.is_ok());
+
         assert_eq!(model, expected);
     }
 

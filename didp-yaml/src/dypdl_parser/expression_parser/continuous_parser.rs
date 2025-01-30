@@ -11,13 +11,14 @@ use dypdl::expression::{
     UnaryOperator,
 };
 use dypdl::variable_type::{Continuous, Element};
-use dypdl::{StateMetadata, TableRegistry};
+use dypdl::{StateFunctions, StateMetadata, TableRegistry};
 use rustc_hash::FxHashMap;
 use std::str;
 
 pub fn parse_expression<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<(ContinuousExpression, &'a [String]), ParseErr> {
@@ -33,6 +34,7 @@ pub fn parse_expression<'a>(
                 name,
                 rest,
                 metadata,
+                functions,
                 registry,
                 parameters,
                 &registry.continuous_tables,
@@ -42,6 +44,7 @@ pub fn parse_expression<'a>(
                 name,
                 rest,
                 metadata,
+                functions,
                 registry,
                 parameters,
                 &registry.integer_tables,
@@ -53,47 +56,52 @@ pub fn parse_expression<'a>(
                     rest,
                 ))
             } else if name == "length" {
-                parse_length(rest, metadata, registry, parameters)
+                parse_length(rest, metadata, functions, registry, parameters)
             } else if name == "last" {
                 let (vector, rest) = continuous_vector_parser::parse_expression(
-                    rest, metadata, registry, parameters,
+                    rest, metadata, functions, registry, parameters,
                 )?;
                 let rest = util::parse_closing(rest)?;
                 Ok((ContinuousExpression::Last(Box::new(vector)), rest))
             } else if name == "at" {
                 let (vector, rest) = continuous_vector_parser::parse_expression(
-                    rest, metadata, registry, parameters,
+                    rest, metadata, functions, registry, parameters,
                 )?;
-                let (i, rest) =
-                    element_parser::parse_expression(rest, metadata, registry, parameters)?;
+                let (i, rest) = element_parser::parse_expression(
+                    rest, metadata, functions, registry, parameters,
+                )?;
                 let rest = util::parse_closing(rest)?;
                 Ok((ContinuousExpression::At(Box::new(vector), i), rest))
-            } else if let Ok((vector, rest)) =
-                continuous_vector_parser::parse_expression(rest, metadata, registry, parameters)
-            {
+            } else if let Ok((vector, rest)) = continuous_vector_parser::parse_expression(
+                rest, metadata, functions, registry, parameters,
+            ) {
                 let rest = util::parse_closing(rest)?;
                 Ok((parse_reduce(name, vector)?, rest))
             } else if name == "if" {
-                let (condition, rest) =
-                    condition_parser::parse_expression(rest, metadata, registry, parameters)?;
-                let (x, rest) = parse_expression(rest, metadata, registry, parameters)?;
-                let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
+                let (condition, rest) = condition_parser::parse_expression(
+                    rest, metadata, functions, registry, parameters,
+                )?;
+                let (x, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
+                let (y, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
                 let rest = util::parse_closing(rest)?;
                 Ok((
                     ContinuousExpression::If(Box::new(condition), Box::new(x), Box::new(y)),
                     rest,
                 ))
             } else if name == "continuous" {
-                parse_from_integer(rest, metadata, registry, parameters)
-            } else if let Ok(result) = parse_round(name, rest, metadata, registry, parameters) {
+                parse_from_integer(rest, metadata, functions, registry, parameters)
+            } else if let Ok(result) =
+                parse_round(name, rest, metadata, functions, registry, parameters)
+            {
                 Ok(result)
             } else {
-                let (x, rest) = parse_expression(rest, metadata, registry, parameters)?;
+                let (x, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
                 let (expression, rest) =
                     if let Ok(expression) = parse_unary_operation(name, x.clone()) {
                         (expression, rest)
                     } else {
-                        let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
+                        let (y, rest) =
+                            parse_expression(rest, metadata, functions, registry, parameters)?;
                         (parse_binary_operation(name, x, y)?, rest)
                     };
                 let rest = util::parse_closing(rest)?;
@@ -101,9 +109,9 @@ pub fn parse_expression<'a>(
             }
         }
         ")" => Err(ParseErr::new("unexpected `)`".to_string())),
-        "|" => parse_cardinality(rest, metadata, registry, parameters),
+        "|" => parse_cardinality(rest, metadata, functions, registry, parameters),
         _ => {
-            let expression = parse_continuous_atom(token, metadata, registry)?;
+            let expression = parse_continuous_atom(token, metadata, functions, registry)?;
             Ok((expression, rest))
         }
     }
@@ -157,11 +165,12 @@ fn parse_unary_operation(
 fn parse_from_integer<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<(ContinuousExpression, &'a [String]), ParseErr> {
     let (expression, rest) =
-        integer_parser::parse_expression(tokens, metadata, registry, parameters)?;
+        integer_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     Ok((
         ContinuousExpression::FromInteger(Box::new(expression)),
@@ -173,6 +182,7 @@ fn parse_round<'a>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<(ContinuousExpression, &'a [String]), ParseErr> {
@@ -183,7 +193,7 @@ fn parse_round<'a>(
         "trunc" => CastOperator::Trunc,
         _ => return Err(ParseErr::new(format!("no such unary operator `{}`", name))),
     };
-    let (expression, rest) = parse_expression(tokens, metadata, registry, parameters)?;
+    let (expression, rest) = parse_expression(tokens, metadata, functions, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     Ok((ContinuousExpression::Round(op, Box::new(expression)), rest))
 }
@@ -246,11 +256,12 @@ fn parse_binary_operation(
 fn parse_cardinality<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<(ContinuousExpression, &'a [String]), ParseErr> {
     let (expression, rest) =
-        element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
+        element_parser::parse_set_expression(tokens, metadata, functions, registry, parameters)?;
     let (token, rest) = rest
         .split_first()
         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
@@ -266,11 +277,12 @@ fn parse_cardinality<'a>(
 fn parse_length<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<(ContinuousExpression, &'a [String]), ParseErr> {
     let (expression, rest) =
-        element_parser::parse_vector_expression(tokens, metadata, registry, parameters)?;
+        element_parser::parse_vector_expression(tokens, metadata, functions, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     Ok((ContinuousExpression::Length(expression), rest))
 }
@@ -278,6 +290,7 @@ fn parse_length<'a>(
 fn parse_continuous_atom(
     token: &str,
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
 ) -> Result<ContinuousExpression, ParseErr> {
     if let Some(v) = registry.continuous_tables.name_to_constant.get(token) {
@@ -296,6 +309,8 @@ fn parse_continuous_atom(
         Ok(ContinuousExpression::FromInteger(Box::new(
             IntegerExpression::ResourceVariable(*i),
         )))
+    } else if let Ok(expression) = functions.get_continuous_function(token) {
+        Ok(expression)
     } else if token == "cost" {
         Ok(ContinuousExpression::Cost)
     } else {
@@ -530,46 +545,47 @@ mod tests {
     #[test]
     fn parse_continuous_atom_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["cost", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, ContinuousExpression::Cost);
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["cf0", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, ContinuousExpression::Constant(0.0));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["c1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, ContinuousExpression::Variable(1));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["cr1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, ContinuousExpression::ResourceVariable(1));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["f0", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, ContinuousExpression::Constant(0.0));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["i1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -579,7 +595,7 @@ mod tests {
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["ir1", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -589,14 +605,14 @@ mod tests {
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["11.5", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, ContinuousExpression::Constant(11.5));
         assert_eq!(rest, &tokens[1..]);
 
         let tokens: Vec<String> = ["11", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, ContinuousExpression::Constant(11.0));
@@ -606,17 +622,38 @@ mod tests {
     #[test]
     fn parse_continuous_atom_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["e0", "1", ")"].iter().map(|x| x.to_string()).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_continuous_state_function_ok() {
+        let metadata = StateMetadata::default();
+        let registry = TableRegistry::default();
+        let parameters = FxHashMap::default();
+
+        let mut functions = StateFunctions::default();
+        let result = functions.add_continuous_function("sf", ContinuousExpression::Constant(1.0));
+        assert!(result.is_ok());
+        let expected = result.unwrap();
+
+        let tokens: Vec<String> = ["sf", "1", ")"].iter().map(|x| x.to_string()).collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, expected);
+        assert_eq!(rest, &tokens[1..]);
     }
 
     #[test]
     fn parse_continuous_table_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -624,7 +661,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -650,6 +687,7 @@ mod tests {
     #[test]
     fn parse_continuous_table_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -657,13 +695,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_from_integer_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -671,7 +710,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -684,6 +723,7 @@ mod tests {
     #[test]
     fn parse_from_integer_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -691,13 +731,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_continuous_unary_operator_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -705,7 +746,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -721,7 +762,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -737,7 +778,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -753,7 +794,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -769,7 +810,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -785,7 +826,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -801,6 +842,7 @@ mod tests {
     #[test]
     fn parse_continuous_unary_operator_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -808,13 +850,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_continuous_if_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -822,7 +865,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -839,6 +882,7 @@ mod tests {
     #[test]
     fn parse_continuous_if_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -846,27 +890,28 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "if", "0.0", "c0", ")", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "if", "0.0", "0.0", "c0", ")", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_continuous_binary_operation_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -874,7 +919,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -891,7 +936,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -908,7 +953,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -925,7 +970,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -942,7 +987,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -959,7 +1004,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -976,7 +1021,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -993,7 +1038,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1010,7 +1055,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1027,45 +1072,47 @@ mod tests {
     #[test]
     fn parse_continuous_binary_operation_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
         let tokens = Vec::new();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "+", "0.0", "c0", "c1", ")", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "+", "0.0", ")", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "^", "0.0", "c0", ")", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_continuous_cardinality_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["|", "s2", "|", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1080,33 +1127,35 @@ mod tests {
     #[test]
     fn parse_continuous_cardinality_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["|", "e2", "|", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["|", "s2", "s0", "|", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_continuous_length_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["(", "length", "v0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1121,19 +1170,21 @@ mod tests {
     #[test]
     fn parse_continuous_length_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["(", "length", "s0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_continuous_last_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = [
@@ -1150,7 +1201,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1165,19 +1216,21 @@ mod tests {
     #[test]
     fn parse_continuous_last_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["(", "last", "(", "vector", "0", "1", ")", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_continuous_at() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = [
@@ -1195,7 +1248,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1211,6 +1264,7 @@ mod tests {
     #[test]
     fn parse_continuous_at_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1218,27 +1272,28 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "at", "(", "continuous-vector", "0", "1", ")", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "at", "(", "vector", "0", "1", ")", "0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_continuous_reduce_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1256,7 +1311,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1282,7 +1337,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1308,7 +1363,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1334,7 +1389,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1350,6 +1405,7 @@ mod tests {
     #[test]
     fn parse_continuous_reduce_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1357,7 +1413,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -1374,21 +1430,21 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "reduce-max", "(", "vector", "0", "1", ")", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "reduce-min", "(", "vector", "0", "1", ")", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -1405,7 +1461,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 }

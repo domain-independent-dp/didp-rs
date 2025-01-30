@@ -1583,6 +1583,422 @@ impl ModelPy {
         }
     }
 
+    /// get_set_state_fun
+    ///
+    /// Gets a set state function by a name.
+    ///
+    /// Parameters
+    /// ----------
+    /// name: str
+    ///     Name of a function.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The function.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If no such function.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> model.add_set_state_fun(var.add(2), name="fun")
+    /// >>> fun = model.get_set_state_fun("fun")
+    /// >>> fun.eval(model.target_state, model)
+    /// {0, 1, 2}
+    fn get_set_state_fun(&self, name: &str) -> PyResult<SetExprPy> {
+        match self.0.get_set_state_function(name) {
+            Ok(fun) => Ok(fun.into()),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// add_set_state_fun
+    ///
+    /// Adds a set state function.
+    ///
+    /// Parameters
+    /// ----------
+    /// expr: SetExpr
+    ///     Expression defining the function.
+    /// name: str or None, default: None
+    ///     Name of the function.
+    ///     If :code`None`, :code:`__set_state_fun_{id}` is used where :code:`{id}` is the id of the function.
+    ///
+    /// Returns
+    /// -------
+    /// SetExpr
+    ///     The function.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If :code:`name` is already used.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_set_var(object_type=obj, target=[0, 1])
+    /// >>> fun = model.add_set_state_fun(var.add(2))
+    /// >>> fun.eval(model.target_state, model)
+    /// {0, 1, 2}
+    #[pyo3(signature = (expr, name=None))]
+    fn add_set_state_fun(&mut self, expr: SetExprPy, name: Option<&str>) -> PyResult<SetExprPy> {
+        let name = name.map_or_else(
+            || {
+                let n = self.0.state_functions.set_functions.len();
+                format!("__set_state_fun_{}", n)
+            },
+            String::from,
+        );
+        match self.0.add_set_state_function(name, expr.into()) {
+            Ok(fun) => Ok(fun.into()),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// get_element_state_fun
+    ///
+    /// Gets an element state function by a name.
+    ///
+    /// Parameters
+    /// ----------
+    /// name: str
+    ///     Name of a function.
+    ///
+    /// Returns
+    /// -------
+    /// ElementExpr
+    ///     The function.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If no such function.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_element_var(object_type=obj, target=0)
+    /// >>> model.add_element_state_fun(var + 1, name="fun")
+    /// >>> fun = model.get_element_state_fun("fun")
+    /// >>> fun.eval(model.target_state, model)
+    /// 1
+    fn get_element_state_fun(&self, name: &str) -> PyResult<ElementExprPy> {
+        match self.0.get_element_state_function(name) {
+            Ok(fun) => Ok(fun.into()),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// add_element_state_fun
+    ///
+    /// Adds an element state function.
+    ///
+    /// Parameters
+    /// ----------
+    /// expr: ElementExpr
+    ///     Expression defining the function.
+    /// name: str or None, default: None
+    ///     Name of the function.
+    ///     If :code`None`, :code:`__element_state_fun_{id}` is used where :code:`{id}` is the id of the function.
+    ///
+    /// Returns
+    /// -------
+    /// ElementExpr
+    ///     The function.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If :code:`name` is already used.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> obj = model.add_object_type(number=4)
+    /// >>> var = model.add_element_var(object_type=obj, target=0)
+    /// >>> fun = model.add_element_state_fun(var + 1)
+    /// >>> fun.eval(model.target_state, model)
+    /// 1
+    #[pyo3(signature = (expr, name=None))]
+    fn add_element_state_fun(
+        &mut self,
+        expr: ElementExprPy,
+        name: Option<&str>,
+    ) -> PyResult<ElementExprPy> {
+        let name = name.map_or_else(
+            || {
+                let n = self.0.state_functions.element_functions.len();
+                format!("__element_state_fun_{}", n)
+            },
+            String::from,
+        );
+        match self.0.add_element_state_function(name, expr.into()) {
+            Ok(fun) => Ok(fun.into()),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// get_int_state_fun
+    ///
+    /// Gets an integer state function by a name.
+    ///
+    /// Parameters
+    /// ----------
+    /// name: str
+    ///     Name of a function.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The function.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If no such function.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=0)
+    /// >>> model.add_int_state_fun(var + 1, name="fun")
+    /// >>> fun = model.get_int_state_fun("fun")
+    /// >>> fun.eval(model.target_state, model)
+    /// 1
+    fn get_int_state_fun(&self, name: &str) -> PyResult<IntExprPy> {
+        match self.0.get_integer_state_function(name) {
+            Ok(fun) => Ok(fun.into()),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// add_int_state_fun
+    ///
+    /// Adds an integer state function.
+    ///
+    /// Parameters
+    /// ----------
+    /// expr: IntExpr
+    ///     Expression defining the function.
+    /// name: str or None, default: None
+    ///     Name of the function.
+    ///     If :code`None`, :code:`__int_state_fun_{id}` is used where :code:`{id}` is the id of the function.
+    ///
+    /// Returns
+    /// -------
+    /// IntExpr
+    ///     The function.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If :code:`name` is already used.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=0)
+    /// >>> fun = model.add_int_state_fun(var + 1)
+    /// >>> fun.eval(model.target_state, model)
+    /// 1
+    #[pyo3(signature = (expr, name=None))]
+    fn add_int_state_fun(&mut self, expr: IntExprPy, name: Option<&str>) -> PyResult<IntExprPy> {
+        let name = name.map_or_else(
+            || {
+                let n = self.0.state_functions.integer_functions.len();
+                format!("__int_state_fun_{}", n)
+            },
+            String::from,
+        );
+        match self.0.add_integer_state_function(name, expr.into()) {
+            Ok(fun) => Ok(fun.into()),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// get_float_state_fun
+    ///
+    /// Gets a continuous state function by a name.
+    ///
+    /// Parameters
+    /// ----------
+    /// name: str
+    ///     Name of a function.
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The function.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If no such function.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_float_var(target=0.0)
+    /// >>> model.add_float_state_fun(var + 1, name="fun")
+    /// >>> fun = model.get_float_state_fun("fun")
+    /// >>> fun.eval(model.target_state, model)
+    /// 1.0
+    fn get_float_state_fun(&self, name: &str) -> PyResult<FloatExprPy> {
+        match self.0.get_continuous_state_function(name) {
+            Ok(fun) => Ok(fun.into()),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// add_float_state_fun
+    ///
+    /// Adds a continuous state function.
+    ///
+    /// Parameters
+    /// ----------
+    /// expr: FloatExpr
+    ///     Expression defining the function.
+    /// name: str or None, default: None
+    ///     Name of the function.
+    ///     If :code`None`, :code:`__float_state_fun_{id}` is used where :code:`{id}` is the id of the function.
+    ///
+    /// Returns
+    /// -------
+    /// FloatExpr
+    ///     The function.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If :code:`name` is already used.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_float_var(target=0.0)
+    /// >>> fun = model.add_float_state_fun(var + 1)
+    /// >>> fun.eval(model.target_state, model)
+    /// 1.0
+    #[pyo3(signature = (expr, name=None))]
+    fn add_float_state_fun(
+        &mut self,
+        expr: FloatExprPy,
+        name: Option<&str>,
+    ) -> PyResult<FloatExprPy> {
+        let name = name.map_or_else(
+            || {
+                let n = self.0.state_functions.continuous_functions.len();
+                format!("__float_state_fun_{}", n)
+            },
+            String::from,
+        );
+        match self.0.add_continuous_state_function(name, expr.into()) {
+            Ok(fun) => Ok(fun.into()),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// get_bool_state_fun
+    ///
+    /// Gets a boolean state function by a name.
+    ///
+    /// Parameters
+    /// ----------
+    /// name: str
+    ///     Name of a function.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///     The function.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If no such function.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=0)
+    /// >>> model.add_bool_state_fun(var < 1, name="fun")
+    /// >>> fun = model.get_bool_state_fun("fun")
+    /// >>> fun.eval(model.target_state, model)
+    /// True
+    fn get_bool_state_fun(&self, name: &str) -> PyResult<ConditionPy> {
+        match self.0.get_boolean_state_function(name) {
+            Ok(fun) => Ok(fun.into()),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
+    /// add_bool_state_fun
+    ///
+    /// Adds a boolean state function.
+    ///
+    /// Parameters
+    /// ----------
+    /// expr: Condition
+    ///     Expression defining the function.
+    /// name: str or None, default: None
+    ///     Name of the function.
+    ///     If :code`None`, :code:`__bool_state_fun_{id}` is used where :code:`{id}` is the id of the function.
+    ///
+    /// Returns
+    /// -------
+    /// Condition
+    ///     The function.
+    ///
+    /// Raises
+    /// ------
+    /// RuntimeError
+    ///     If :code:`name` is already used.
+    ///
+    /// Examples
+    /// --------
+    /// >>> import didppy as dp
+    /// >>> model = dp.Model()
+    /// >>> var = model.add_int_var(target=0)
+    /// >>> fun = model.add_bool_state_fun(var < 1)
+    /// >>> fun.eval(model.target_state, model)
+    /// True
+    #[pyo3(signature = (expr, name=None))]
+    fn add_bool_state_fun(
+        &mut self,
+        expr: ConditionPy,
+        name: Option<&str>,
+    ) -> PyResult<ConditionPy> {
+        let name = name.map_or_else(
+            || {
+                let n = self.0.state_functions.boolean_functions.len();
+                format!("__bool_state_fun_{}", n)
+            },
+            String::from,
+        );
+        match self.0.add_boolean_state_function(name, expr.into()) {
+            Ok(fun) => Ok(fun.into()),
+            Err(err) => Err(PyRuntimeError::new_err(err.to_string())),
+        }
+    }
+
     /// list of Condition : State constraints.   
     #[getter]
     fn state_constrs(&self) -> Vec<ConditionPy> {
@@ -1649,7 +2065,10 @@ impl ModelPy {
     /// >>> model.check_state_constr(model.target_state)
     /// True
     fn check_state_constr(&self, state: &state::StatePy) -> bool {
-        self.0.check_constraints(state.inner_as_ref())
+        let mut function_cache = StateFunctionCache::new(&self.0.state_functions);
+
+        self.0
+            .check_constraints(state.inner_as_ref(), &mut function_cache)
     }
 
     /// list of tuple of list of Conditions and IntExpr or FloatExpr : Base cases with their cost expressions.
@@ -1752,7 +2171,9 @@ impl ModelPy {
     /// >>> model.is_base(model.target_state)
     /// True
     fn is_base(&self, state: &state::StatePy) -> bool {
-        self.0.is_base(state.inner_as_ref())
+        let mut function_cache = StateFunctionCache::new(&self.0.state_functions);
+
+        self.0.is_base(state.inner_as_ref(), &mut function_cache)
     }
 
     /// Evaluates the cost of a base state.
@@ -1781,14 +2202,16 @@ impl ModelPy {
     /// >>> model.eval_base_cost(model.target_state)
     /// 2
     fn eval_base_cost(&self, state: &state::StatePy) -> Option<IntOrFloat> {
+        let mut function_cache = StateFunctionCache::new(&self.0.state_functions);
+
         match self.0.cost_type {
             CostType::Integer => self
                 .0
-                .eval_base_cost(state.inner_as_ref())
+                .eval_base_cost(state.inner_as_ref(), &mut function_cache)
                 .map(IntOrFloat::Int),
             CostType::Continuous => self
                 .0
-                .eval_base_cost::<OrderedContinuous, _>(state.inner_as_ref())
+                .eval_base_cost::<OrderedContinuous, _>(state.inner_as_ref(), &mut function_cache)
                 .map(|x| IntOrFloat::Float(x.to_continuous())),
         }
     }
@@ -1964,14 +2387,16 @@ impl ModelPy {
     /// >>> model.eval_dual_bound(model.target_state)
     /// 4
     fn eval_dual_bound(&self, state: &state::StatePy) -> Option<IntOrFloat> {
+        let mut function_cache = StateFunctionCache::new(&self.0.state_functions);
+
         match self.0.cost_type {
             CostType::Integer => self
                 .0
-                .eval_dual_bound(state.inner_as_ref())
+                .eval_dual_bound(state.inner_as_ref(), &mut function_cache)
                 .map(IntOrFloat::Int),
             CostType::Continuous => self
                 .0
-                .eval_dual_bound::<_, OrderedContinuous>(state.inner_as_ref())
+                .eval_dual_bound::<_, OrderedContinuous>(state.inner_as_ref(), &mut function_cache)
                 .map(|x| IntOrFloat::Float(x.to_continuous())),
         }
     }

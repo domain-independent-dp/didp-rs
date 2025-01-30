@@ -25,6 +25,7 @@ dual_bounds:
   - [Table](#table)
   - [Parameter](#parameter)
   - [Variable](#variable)
+  - [State Function](#state-function)
   - [Arithmetic Operations](#arithmetic-operations)
   - [if](#if)
 - [Set Expression](#set-expression)
@@ -33,6 +34,7 @@ dual_bounds:
   - [Table or Dictionary](#table-or-dictionary)
   - [Table or Dictionary Reduce](#table-or-dictionary-reduce)
   - [Variable](#variable-1)
+  - [State Function](#state-function-1)
   - [complement](#complement)
   - [union](#union)
   - [intersection](#intersection)
@@ -41,25 +43,28 @@ dual_bounds:
   - [remove](#remove)
   - [if](#if-1)
 - [Integer Expression](#integer-expression)
-  - [Immediate Value](#immediate-value-1)
+  - [Immediate Value](#immediate-value-2)
   - [Table or Dictionary](#table-or-dictionary-1)
   - [Table or Dictionary Reduce](#table-or-dictionary-reduce-1)
-  - [Variable](#variable-1)
+  - [Variable](#variable-2)
+  - [State Function](#state-function-2)
   - [Arithmetic Operations](#arithmetic-operations-1)
   - [Rounding](#rounding)
   - [Cardinality](#cardinality)
   - [if](#if-2)
 - [Continuous Expression](#continuous-expression)
-  - [Immediate Value](#immediate-value-2)
+  - [Immediate Value](#immediate-value-3)
   - [Table or Dictionary](#table-or-dictionary-2)
   - [Table or Dictionary Reduce](#table-or-dictionary-reduce-2)
-  - [Variable](#variable-2)
+  - [Variable](#variable-3)
+  - [State Function](#state-function-3)
   - [Arithmetic Operations](#arithmetic-operations-2)
   - [Rounding](#rounding-1)
   - [Cardinality](#cardinality-1)
   - [if](#if-3)
 - [Condition](#condition)
   - [Table or Dictionary](#table-or-dictionary-3)
+  - [State Function](#state-function-4)
   - [Arithmetic Comparison](#arithmetic-comparison)
   - [Set Comparison](#set-comparison)
   - [is_in](#is_in)
@@ -103,6 +108,14 @@ Parameter are defined with `forall` in conditions and `parameters` in transition
 ```
 
 It returns element the value of element variable `<variable name>`.
+
+### State Function
+
+```
+<state function name>
+```
+
+It returns the value of element state function `<state function name>`.
 
 ### Arithmetic Operations
 
@@ -178,6 +191,14 @@ For example, suppose that a table named `table1` is 3-dimensional.
 ```
 
 It returns element the value of element variable `<variable name>`.
+
+### State Function
+
+```
+<state function name>
+```
+
+It returns the value of set state function `<state function name>`.
 
 ### complement
 
@@ -275,6 +296,14 @@ For example, suppose that a table named `table1` is 3-dimensional.
 <variable name>
 ```
 
+### State Function
+
+```
+<state function name>
+```
+
+It returns the value of integer state function `<state function name>`.
+
 It returns the value of integer variable `<variable name>`.
 
 ### Arithmetic Operations
@@ -369,6 +398,15 @@ For example, suppose that a table named `table1` is 3-dimensional.
 It returns the value of continuous variable `<variable name>`.
 An integer variable can also be used in a continuous expression.
 
+### State Function
+
+```
+<state function name>
+```
+
+It returns the value of continuous state function `<state function name>`.
+An integer state function can also be used in a continuous expression.
+
 ### Arithmetic Operations
 
 ```
@@ -439,6 +477,14 @@ Also, conditions are used in element, set, and numeric expressions with `if`.
 It returns a value in table `<table name>` or dictionary `<dictionary name>` with indices `<element expression 1>` to `<element expression k>`.
 The `type` of the table must be `bool`.
 The number of element expressions must be the same as `args` of the table.
+
+### State Function
+
+```
+<state function name>
+```
+
+It returns the value of bool state function `<state function name>`.
 
 ### Arithmetic Comparison
 

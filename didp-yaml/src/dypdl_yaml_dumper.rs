@@ -8,6 +8,7 @@ use yaml_rust::{yaml::Hash, Yaml};
 
 mod base_case_to_yaml;
 mod expression_to_string;
+mod state_function_to_yaml;
 mod state_to_yaml;
 mod table_to_yaml;
 mod to_yaml;
@@ -134,6 +135,16 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
         state_to_yaml(&model.target, state_metadata)?,
     );
 
+    let state_functions = &model.state_functions;
+
+    if let Some(state_functions_yaml) = state_function_to_yaml::state_functions_to_yaml(
+        state_metadata,
+        state_functions,
+        table_registry,
+    )? {
+        domain_hash.insert(Yaml::from_str("state_functions"), state_functions_yaml);
+    }
+
     // The transitions field
     let mut transitions = Array::new();
     for t in &model.forward_transitions {
@@ -142,6 +153,7 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
             true,
             false,
             state_metadata,
+            state_functions,
             table_registry,
         )?);
     }
@@ -151,6 +163,7 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
             true,
             true,
             state_metadata,
+            state_functions,
             table_registry,
         )?);
     }
@@ -160,6 +173,7 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
             false,
             false,
             state_metadata,
+            state_functions,
             table_registry,
         )?);
     }
@@ -169,6 +183,7 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
             false,
             true,
             state_metadata,
+            state_functions,
             table_registry,
         )?);
     }
@@ -180,7 +195,12 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
     // The base cases field
     let mut base_cases = Array::new();
     for bc in &model.base_cases {
-        base_cases.push(base_case_to_yaml(bc, state_metadata, table_registry)?);
+        base_cases.push(base_case_to_yaml(
+            bc,
+            state_metadata,
+            state_functions,
+            table_registry,
+        )?);
     }
     if !base_cases.is_empty() {
         problem_hash.insert(Yaml::from_str("base_cases"), Yaml::Array(base_cases));
@@ -189,9 +209,11 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
     // The constraints field
     let mut constraints = Array::new();
     for c in &model.state_constraints {
-        constraints.push(Yaml::String(
-            Condition::from(c.clone()).to_yaml_string(state_metadata, table_registry)?,
-        ));
+        constraints.push(Yaml::String(Condition::from(c.clone()).to_yaml_string(
+            state_metadata,
+            state_functions,
+            table_registry,
+        )?));
     }
     if !constraints.is_empty() {
         problem_hash.insert(Yaml::from_str("constraints"), Yaml::Array(constraints));
@@ -200,9 +222,11 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
     // The dual bound field
     let mut dual_bounds = Array::new();
     for db in &model.dual_bounds {
-        dual_bounds.push(Yaml::String(
-            db.to_yaml_string(state_metadata, table_registry)?,
-        ))
+        dual_bounds.push(Yaml::String(db.to_yaml_string(
+            state_metadata,
+            state_functions,
+            table_registry,
+        )?))
     }
     if !dual_bounds.is_empty() {
         problem_hash.insert(Yaml::from_str("dual_bounds"), Yaml::Array(dual_bounds));
@@ -297,6 +321,7 @@ mod tests {
     use super::*;
     use crate::dypdl_parser;
 
+    use dypdl::prelude::*;
     use dypdl::{Table, Table1D, Table2D, Table3D};
     use rustc_hash::FxHashMap;
 
@@ -420,6 +445,34 @@ mod tests {
                     assert_eq!(value.clone(), Yaml::from_str("0"));
                 }
             }
+        }
+    }
+
+    #[test]
+    fn model_with_state_functions_to_yaml_ok() {
+        let mut model = Model::default();
+        let result = model.add_integer_state_function("f1", IntegerExpression::from(0));
+        assert!(result.is_ok());
+
+        let yam_result = model_to_yaml(&model);
+        assert!(yam_result.is_ok());
+        let (domain_yaml, _) = yam_result.unwrap();
+
+        let expected = Yaml::Array(vec![Yaml::Hash({
+            let mut hash = Hash::new();
+            hash.insert(Yaml::from_str("name"), Yaml::from_str("f1"));
+            hash.insert(Yaml::from_str("type"), Yaml::from_str("integer"));
+            hash.insert(Yaml::from_str("expression"), Yaml::String("0".to_owned()));
+            hash
+        })]);
+
+        if let Yaml::Hash(hash) = domain_yaml {
+            let result = hash.get(&Yaml::from_str("state_functions"));
+            assert!(result.is_some());
+            let state_functions = result.unwrap();
+            assert_eq!(state_functions, &expected);
+        } else {
+            panic!("The domain yaml is not a hash");
         }
     }
 

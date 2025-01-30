@@ -3,6 +3,7 @@ use super::continuous_vector_parser;
 use super::element_parser;
 use super::integer_parser;
 use super::table_vector_parser;
+use super::table_vector_parser::ModelData;
 use super::util;
 use super::util::ParseErr;
 use dypdl::expression::{
@@ -10,13 +11,14 @@ use dypdl::expression::{
     UnaryOperator,
 };
 use dypdl::variable_type::{Element, Integer};
-use dypdl::{StateMetadata, TableRegistry};
+use dypdl::{StateFunctions, StateMetadata, TableRegistry};
 use rustc_hash::FxHashMap;
 use std::str;
 
 pub fn parse_expression<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(IntegerVectorExpression, &'a [String]), ParseErr> {
@@ -31,28 +33,35 @@ pub fn parse_expression<'a>(
             match &name[..] {
                 "integer-vector" => parse_integer_vector_constant(rest, registry),
                 "reverse" => {
-                    let (vector, rest) = parse_expression(rest, metadata, registry, parameters)?;
+                    let (vector, rest) =
+                        parse_expression(rest, metadata, functions, registry, parameters)?;
                     let rest = util::parse_closing(rest)?;
                     Ok((IntegerVectorExpression::Reverse(Box::new(vector)), rest))
                 }
                 "push" => {
-                    let (v, rest) =
-                        integer_parser::parse_expression(rest, metadata, registry, parameters)?;
-                    let (vector, rest) = parse_expression(rest, metadata, registry, parameters)?;
+                    let (v, rest) = integer_parser::parse_expression(
+                        rest, metadata, functions, registry, parameters,
+                    )?;
+                    let (vector, rest) =
+                        parse_expression(rest, metadata, functions, registry, parameters)?;
                     let rest = util::parse_closing(rest)?;
                     Ok((IntegerVectorExpression::Push(v, Box::new(vector)), rest))
                 }
                 "pop" => {
-                    let (vector, rest) = parse_expression(rest, metadata, registry, parameters)?;
+                    let (vector, rest) =
+                        parse_expression(rest, metadata, functions, registry, parameters)?;
                     let rest = util::parse_closing(rest)?;
                     Ok((IntegerVectorExpression::Pop(Box::new(vector)), rest))
                 }
                 "set" => {
-                    let (v, rest) =
-                        integer_parser::parse_expression(rest, metadata, registry, parameters)?;
-                    let (vector, rest) = parse_expression(rest, metadata, registry, parameters)?;
-                    let (i, rest) =
-                        element_parser::parse_expression(rest, metadata, registry, parameters)?;
+                    let (v, rest) = integer_parser::parse_expression(
+                        rest, metadata, functions, registry, parameters,
+                    )?;
+                    let (vector, rest) =
+                        parse_expression(rest, metadata, functions, registry, parameters)?;
+                    let (i, rest) = element_parser::parse_expression(
+                        rest, metadata, functions, registry, parameters,
+                    )?;
                     let rest = util::parse_closing(rest)?;
                     Ok((IntegerVectorExpression::Set(v, Box::new(vector), i), rest))
                 }
@@ -64,6 +73,7 @@ pub fn parse_expression<'a>(
                         name,
                         rest,
                         metadata,
+                        functions,
                         registry,
                         parameters,
                         &registry.integer_tables,
@@ -74,10 +84,13 @@ pub fn parse_expression<'a>(
                     }
                 }
                 "if" => {
-                    let (condition, rest) =
-                        condition_parser::parse_expression(rest, metadata, registry, parameters)?;
-                    let (x, rest) = parse_expression(rest, metadata, registry, parameters)?;
-                    let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
+                    let (condition, rest) = condition_parser::parse_expression(
+                        rest, metadata, functions, registry, parameters,
+                    )?;
+                    let (x, rest) =
+                        parse_expression(rest, metadata, functions, registry, parameters)?;
+                    let (y, rest) =
+                        parse_expression(rest, metadata, functions, registry, parameters)?;
                     let rest = util::parse_closing(rest)?;
                     Ok((
                         IntegerVectorExpression::If(Box::new(condition), Box::new(x), Box::new(y)),
@@ -92,24 +105,24 @@ pub fn parse_expression<'a>(
                         "table-min-vector" => ReduceOperator::Min,
                         _ => {
                             return if let Ok(result) = parse_vector_from_continuous(
-                                name, rest, metadata, registry, parameters,
+                                name, rest, metadata, functions, registry, parameters,
                             ) {
                                 Ok(result)
                             } else if let Ok(result) = parse_vector_unary_operation(
-                                name, rest, metadata, registry, parameters,
+                                name, rest, metadata, functions, registry, parameters,
                             ) {
                                 Ok(result)
-                            } else if let Ok((x, y, rest)) =
-                                parse_integer_and_vector(rest, metadata, registry, parameters)
-                            {
+                            } else if let Ok((x, y, rest)) = parse_integer_and_vector(
+                                rest, metadata, functions, registry, parameters,
+                            ) {
                                 Ok((parse_vector_binary_operation_x(name, x, y)?, rest))
-                            } else if let Ok((x, y, rest)) =
-                                parse_vector_and_integer(rest, metadata, registry, parameters)
-                            {
+                            } else if let Ok((x, y, rest)) = parse_vector_and_integer(
+                                rest, metadata, functions, registry, parameters,
+                            ) {
                                 Ok((parse_vector_binary_operation_y(name, x, y)?, rest))
-                            } else if let Ok((x, y, rest)) =
-                                parse_vector_and_vector(rest, metadata, registry, parameters)
-                            {
+                            } else if let Ok((x, y, rest)) = parse_vector_and_vector(
+                                rest, metadata, functions, registry, parameters,
+                            ) {
                                 Ok((parse_vector_operation(name, x, y)?, rest))
                             } else {
                                 Err(ParseErr::new(format!("could not parse `{:?}`", tokens)))
@@ -119,12 +132,16 @@ pub fn parse_expression<'a>(
                     let (name, rest) = rest
                         .split_first()
                         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
+                    let model_data = ModelData {
+                        metadata,
+                        functions,
+                        registry,
+                    };
                     if let Some((expression, rest)) = table_vector_parser::parse_reduce_expression(
                         name,
                         rest,
                         op,
-                        metadata,
-                        registry,
+                        model_data,
                         parameters,
                         &registry.integer_tables,
                     )? {
@@ -172,10 +189,11 @@ fn parse_vector_unary_operation<'a>(
     name: &str,
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<(IntegerVectorExpression, &'a [String]), ParseErr> {
-    let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
+    let (x, rest) = parse_expression(tokens, metadata, functions, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     match name {
         "abs" => Ok((
@@ -190,6 +208,7 @@ fn parse_vector_from_continuous<'a>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<(IntegerVectorExpression, &'a [String]), ParseErr> {
@@ -199,8 +218,9 @@ fn parse_vector_from_continuous<'a>(
         "round" => CastOperator::Round,
         _ => return Err(ParseErr::new(format!("no such unary operator `{}`", name))),
     };
-    let (expression, rest) =
-        continuous_vector_parser::parse_expression(tokens, metadata, registry, parameters)?;
+    let (expression, rest) = continuous_vector_parser::parse_expression(
+        tokens, metadata, functions, registry, parameters,
+    )?;
     let rest = util::parse_closing(rest)?;
     Ok((
         IntegerVectorExpression::FromContinuous(op, Box::new(expression)),
@@ -211,11 +231,13 @@ fn parse_vector_from_continuous<'a>(
 fn parse_vector_and_integer<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<(IntegerVectorExpression, IntegerExpression, &'a [String]), ParseErr> {
-    let (vector, rest) = parse_expression(tokens, metadata, registry, parameters)?;
-    let (integer, rest) = integer_parser::parse_expression(rest, metadata, registry, parameters)?;
+    let (vector, rest) = parse_expression(tokens, metadata, functions, registry, parameters)?;
+    let (integer, rest) =
+        integer_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     Ok((vector, integer, rest))
 }
@@ -223,11 +245,13 @@ fn parse_vector_and_integer<'a>(
 fn parse_integer_and_vector<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<(IntegerExpression, IntegerVectorExpression, &'a [String]), ParseErr> {
-    let (integer, rest) = integer_parser::parse_expression(tokens, metadata, registry, parameters)?;
-    let (vector, rest) = parse_expression(rest, metadata, registry, parameters)?;
+    let (integer, rest) =
+        integer_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
+    let (vector, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     Ok((integer, vector, rest))
 }
@@ -235,6 +259,7 @@ fn parse_integer_and_vector<'a>(
 fn parse_vector_and_vector<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<
@@ -245,8 +270,8 @@ fn parse_vector_and_vector<'a>(
     ),
     ParseErr,
 > {
-    let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
-    let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
+    let (x, rest) = parse_expression(tokens, metadata, functions, registry, parameters)?;
+    let (y, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     Ok((x, y, rest))
 }
@@ -607,6 +632,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_constant_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -614,7 +640,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, IntegerVectorExpression::Constant(vec![]));
@@ -624,7 +650,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, IntegerVectorExpression::Constant(vec![0, 1, 0]));
@@ -634,6 +660,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_constant_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -641,27 +668,28 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "integer-vector", "0.0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "integer-vector", "cf0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_integer_vector_reverse_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -680,7 +708,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -695,6 +723,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_reverse_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -702,13 +731,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_integer_vector_push_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -728,7 +758,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -744,6 +774,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_push_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -762,14 +793,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "push", "1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -778,7 +809,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -797,7 +828,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -816,13 +847,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_integer_vector_pop_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -841,7 +873,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -856,6 +888,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_pop_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -863,13 +896,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_integer_vector_set_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -890,7 +924,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -907,6 +941,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_set_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -926,14 +961,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "set", "1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -942,7 +977,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -962,7 +997,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -982,13 +1017,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_integer_vector_unary_operation_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1007,7 +1043,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1023,6 +1059,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_unary_operation_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1041,13 +1078,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_integer_vector_from_continuous_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1066,7 +1104,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1093,7 +1131,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1120,7 +1158,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1136,6 +1174,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_from_continuous_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1154,13 +1193,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_integer_vector_binary_operation_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1180,7 +1220,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1209,7 +1249,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1238,7 +1278,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1267,7 +1307,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1296,7 +1336,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1325,7 +1365,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1354,7 +1394,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1383,7 +1423,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1412,7 +1452,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1441,7 +1481,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1470,7 +1510,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1499,7 +1539,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1528,7 +1568,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1557,7 +1597,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1574,6 +1614,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_binary_operation_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1592,14 +1633,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "-", "1", "1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -1618,7 +1659,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -1637,14 +1678,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "-", "1", "1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -1663,7 +1704,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -1682,13 +1723,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_integer_vector_if_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1710,7 +1752,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1727,6 +1769,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_if_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1748,14 +1791,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "if", "true", "(", "integer-vector", "0", ")", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -1777,13 +1820,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_integer_vector_operation_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1806,7 +1850,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1838,7 +1882,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1870,7 +1914,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1902,7 +1946,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1934,7 +1978,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1966,7 +2010,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1998,7 +2042,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -2015,6 +2059,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_operation_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -2037,7 +2082,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -2059,13 +2104,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_integer_vector_table_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -2086,7 +2132,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -2119,7 +2165,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -2153,7 +2199,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -2187,7 +2233,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -2221,7 +2267,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -2242,6 +2288,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_table_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -2249,70 +2296,70 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-vector", "cf2", "v0", "v0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-vector", "cf2", "v0", "0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-vector", "cf2", "0", "v0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-vector", "cf2", "0", "v0", "0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-sum-vector", "cf2", "v0", "s0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-sum-vector", "cf2", "s0", "v0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-sum-vector", "cf2", "s0", "v0", "0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-product-vector", "cf2", "v0", "s0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-product-vector", "cf2", "s0", "v0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -2328,49 +2375,49 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-max-vector", "cf2", "v0", "s0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-max-vector", "cf2", "s0", "v0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-max-vector", "cf2", "s0", "v0", "0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-min-vector", "cf2", "v0", "s0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-min-vector", "cf2", "s0", "v0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "table-min-vector", "cf2", "s0", "v0", "0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 }

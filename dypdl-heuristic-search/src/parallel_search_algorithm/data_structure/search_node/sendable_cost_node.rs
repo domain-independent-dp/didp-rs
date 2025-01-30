@@ -5,7 +5,7 @@ use crate::search_algorithm::data_structure::{
 };
 use crate::search_algorithm::{BfsNode, StateInRegistry};
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ReduceFunction, Transition, TransitionInterface};
+use dypdl::{StateFunctionCache, Model, ReduceFunction, Transition, TransitionInterface};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::sync::atomic;
@@ -79,7 +79,9 @@ where
     ///
     /// let state = model.target.clone();
     /// let cost = 0;
-    /// let node = SendableCostNode::<_>::generate_root_node(state, cost, &model);
+    /// let node = SendableCostNode::<_>::generate_root_node(
+    ///     state, cost, &model,
+    /// );
     /// assert_eq!(node.state(), &StateInRegistry::from(model.target.clone()));
     /// assert_eq!(node.cost(&model), cost);
     /// assert!(!node.is_closed());
@@ -95,6 +97,8 @@ where
     }
 
     /// Generates a successor node given a transition and a DyPDL model.
+    ///
+    /// `function_cache` is not cleared and updated by this node.
     ///
     /// Returns `None` if the successor state is pruned by a state constraint.
     ///
@@ -123,9 +127,18 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
-    /// let expected_state: StateInRegistry<_> = transition.apply(&model.target, &model.table_registry);
+    /// let mut function_cache_for_expected = StateFunctionCache::new(&model.state_functions);;
+    /// let expected_state: StateInRegistry<_> = transition.apply(
+    ///     &model.target,
+    ///     &mut function_cache_for_expected,
+    ///     &model.state_functions,
+    ///     &model.table_registry,
+    /// );
     ///
-    /// let node = node.generate_successor_node(Arc::new(transition.clone()), &model);
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let node = node.generate_successor_node(
+    ///     Arc::new(transition.clone()), &mut function_cache, &model,
+    /// );
     /// assert!(node.is_some());
     /// let node = node.unwrap();
     /// assert_eq!(node.state(), &expected_state);
@@ -133,16 +146,28 @@ where
     /// assert!(!node.is_closed());
     /// assert_eq!(node.transitions(), vec![transition]);
     /// ```
-    pub fn generate_successor_node(&self, transition: Arc<V>, model: &Model) -> Option<Self> {
+    pub fn generate_successor_node(
+        &self,
+        transition: Arc<V>,
+        function_cache: &mut StateFunctionCache,
+        model: &Model,
+    ) -> Option<Self> {
         let cost = self.cost(model);
-        let (state, cost) =
-            model.generate_successor_state(&self.state, cost, transition.as_ref(), None)?;
+        let (state, cost) = model.generate_successor_state(
+            &self.state,
+            function_cache,
+            cost,
+            transition.as_ref(),
+            None,
+        )?;
         let transitions = Arc::new(ArcChain::new(self.transitions.clone(), transition));
 
         Some(SendableCostNode::new(state, cost, model, Some(transitions)))
     }
 
     /// Generates a successor node given a transition and inserts it into a state registry.
+    ///
+    /// `function_cache` is not cleared and updated by this node.
     ///
     /// Returns the successor node and whether a new entry is generated or not.
     /// If the successor node dominates an existing non-closed node in the registry, the second return value is `false`.
@@ -177,11 +202,16 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
+    ///
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry<_> = transition.apply(
-    ///     &model.target, &model.table_registry,
+    ///     &model.target, &mut function_cache, &model.state_functions, &model.table_registry,
     /// );
     ///
-    /// let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let result = node.insert_successor_node(
+    ///     Arc::new(transition.clone()), &mut function_cache, &registry,
+    /// );
     /// assert!(result.is_some());
     /// let (node, generated) = result.unwrap();
     /// assert!(generated);
@@ -193,11 +223,13 @@ where
     pub fn insert_successor_node(
         &self,
         transition: Arc<V>,
+        function_cache: &mut StateFunctionCache,
         registry: &ConcurrentStateRegistry<T, Self>,
     ) -> Option<(Arc<SendableCostNode<T, V>>, bool)> {
         let model = registry.model();
         let (state, cost) = model.generate_successor_state(
             self.state(),
+            function_cache,
             self.cost(model),
             transition.as_ref(),
             None,
@@ -507,11 +539,21 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let mut expected_state: StateInRegistry<_> =
-            transition.apply(&state, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut expected_state: StateInRegistry<_> = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
         let node = SendableCostNode::generate_root_node(state, 0, &model);
 
-        let successor = node.generate_successor_node(Arc::new(transition.clone()), &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let successor = node.generate_successor_node(
+            Arc::new(transition.clone()),
+            &mut function_cache,
+            &model,
+        );
         assert!(successor.is_some());
         let mut successor = successor.unwrap();
         assert_eq!(successor.state(), &expected_state);
@@ -541,11 +583,21 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let mut expected_state: StateInRegistry<_> =
-            transition.apply(&state, &model.table_registry);
-        let node = SendableCostNode::generate_root_node(state, 0, &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut expected_state: StateInRegistry<_> = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
 
-        let successor = node.generate_successor_node(Arc::new(transition.clone()), &model);
+        let node = SendableCostNode::generate_root_node(state, 0, &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let successor = node.generate_successor_node(
+            Arc::new(transition.clone()),
+            &mut function_cache,
+            &model,
+        );
         assert!(successor.is_some());
         let mut successor = successor.unwrap();
         assert_eq!(successor.state(), &expected_state);
@@ -579,7 +631,9 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let result = node.generate_successor_node(Arc::new(transition), &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result =
+            node.generate_successor_node(Arc::new(transition), &mut function_cache, &model);
         assert_eq!(result, None);
     }
 
@@ -605,12 +659,24 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let expected_state: StateInRegistry<_> = transition.apply(&state, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry<_> = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
         let node = SendableCostNode::generate_root_node(state, 0, &model);
         let result = registry.insert(node.clone());
         assert!(result.information.is_some());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Arc::new(transition.clone()),
+            &mut function_cache,
+            &registry,
+        );
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.state(), &expected_state);
@@ -644,12 +710,24 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let expected_state: StateInRegistry<_> = transition.apply(&state, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry<_> = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
         let node = SendableCostNode::generate_root_node(state, 0, &model);
         let result = registry.insert(node.clone());
         assert!(result.information.is_some());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Arc::new(transition.clone()),
+            &mut function_cache,
+            &registry,
+        );
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.state(), &expected_state);
@@ -687,7 +765,9 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let result = node.insert_successor_node(Arc::new(transition), &registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result =
+            node.insert_successor_node(Arc::new(transition), &mut function_cache, &registry);
         assert_eq!(result, None);
         assert!(!node.is_closed());
     }
@@ -710,7 +790,14 @@ mod tests {
         assert!(result.is_ok());
 
         let state = StateInRegistry::from(model.target.clone());
-        let expected_state: StateInRegistry<_> = transition.apply(&state, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry<_> = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
         let node = SendableCostNode::generate_root_node(state, 0, &model);
         let registry =
             ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model.clone()));
@@ -720,7 +807,12 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Arc::new(transition.clone()),
+            &mut function_cache,
+            &registry,
+        );
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.state(), &expected_state);
@@ -751,7 +843,14 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = StateInRegistry::from(model.target.clone());
-        let expected_state: StateInRegistry<_> = transition.apply(&state, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state: StateInRegistry<_> = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
         let node = SendableCostNode::generate_root_node(state, 0, &model);
         let registry =
             ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model.clone()));
@@ -761,7 +860,12 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Arc::new(transition.clone()),
+            &mut function_cache,
+            &registry,
+        );
         assert!(result.is_some());
         let (successor, generated) = result.unwrap();
         assert_eq!(successor.state(), &expected_state);
@@ -800,7 +904,12 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Arc::new(transition.clone()),
+            &mut function_cache,
+            &registry,
+        );
         assert!(result.is_none());
     }
 
@@ -831,7 +940,12 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let result = node.insert_successor_node(Arc::new(transition.clone()), &registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.insert_successor_node(
+            Arc::new(transition.clone()),
+            &mut function_cache,
+            &registry,
+        );
         assert!(result.is_none());
     }
 
@@ -855,14 +969,17 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
-        let node2 = node1.generate_successor_node(Arc::new(transition), &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let node2 =
+            node1.generate_successor_node(Arc::new(transition), &mut function_cache, &model);
         assert!(node2.is_some());
         let node2 = Arc::new(node2.unwrap());
 
         let mut transition = Transition::default();
         transition.set_cost(IntegerExpression::Cost + 1);
         let registry = ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model));
-        let result = node1.insert_successor_node(Arc::new(transition), &registry);
+        let result =
+            node1.insert_successor_node(Arc::new(transition), &mut function_cache, &registry);
         assert!(result.is_some());
         let (node3, _) = result.unwrap();
 
@@ -896,14 +1013,17 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
-        let node2 = node1.generate_successor_node(Arc::new(transition), &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let node2 =
+            node1.generate_successor_node(Arc::new(transition), &mut function_cache, &model);
         assert!(node2.is_some());
         let node2 = Arc::new(node2.unwrap());
 
         let mut transition = Transition::default();
         transition.set_cost(IntegerExpression::Cost + 1);
         let registry = ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model));
-        let result = node1.insert_successor_node(Arc::new(transition), &registry);
+        let result =
+            node1.insert_successor_node(Arc::new(transition), &mut function_cache, &registry);
         assert!(result.is_some());
         let (node3, _) = result.unwrap();
 

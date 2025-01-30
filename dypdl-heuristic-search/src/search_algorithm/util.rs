@@ -123,7 +123,9 @@ where
 /// use dypdl_heuristic_search::search_algorithm::{
 ///     FNode, StateInRegistry, get_solution_cost_and_suffix,
 /// };
-/// use dypdl_heuristic_search::search_algorithm::data_structure::GetTransitions;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::{
+///     GetTransitions, ParentAndChildStateFunctionCache,
+/// };
 /// use dypdl_heuristic_search::search_algorithm::util::update_solution;
 /// use std::rc::Rc;
 ///
@@ -135,19 +137,32 @@ where
 /// transition.add_effect(var, var + 1).unwrap();
 /// transition.set_cost(IntegerExpression::Cost + 1);
 ///
-/// let h_evaluator = |_: &StateInRegistry| Some(0);
+/// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+/// let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &StateInRegistry| g + h;
 /// let node = FNode::<_>::generate_root_node(
-///     model.target.clone(), 0, &model, &h_evaluator, &f_evaluator, None,
+///     model.target.clone(),
+///     &mut function_cache.parent,
+///     0,
+///     &model,
+///     &h_evaluator,
+///     &f_evaluator,
+///     None,
 /// ).unwrap();
 /// let node = node.generate_successor_node(
-///     Rc::new(transition.clone()), &model, &h_evaluator, &f_evaluator, None,
+///     Rc::new(transition.clone()),
+///     &mut function_cache,
+///     &model,
+///     &h_evaluator,
+///     &f_evaluator,
+///     None,
 /// ).unwrap();
 ///
 /// let suffix = [transition.clone(), transition.clone()];
 /// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
+/// function_cache.parent.clear();
 /// let (cost, suffix) = get_solution_cost_and_suffix(
-///     &model, &node, &suffix, base_cost_evaluator,
+///     &model, &node, &suffix, base_cost_evaluator, &mut function_cache,
 /// ).unwrap();
 /// let time = 0.0;
 ///
@@ -231,7 +246,9 @@ pub fn update_bound_if_better<T, V>(
 
 #[cfg(test)]
 mod tests {
-    use super::super::data_structure::{FNode, StateInRegistry};
+    use super::super::data_structure::{
+        FNode, ParentAndChildStateFunctionCache, StateInRegistry,
+    };
     use super::*;
     use dypdl::prelude::*;
     use std::rc::Rc;
@@ -252,10 +269,12 @@ mod tests {
         transition.add_effect(var, var + 1).unwrap();
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let node = FNode::<_>::generate_root_node(
             model.target.clone(),
+            &mut function_cache.parent,
             0,
             &model,
             &h_evaluator,
@@ -266,6 +285,7 @@ mod tests {
         let node = node
             .generate_successor_node(
                 Rc::new(transition.clone()),
+                &mut function_cache,
                 &model,
                 &h_evaluator,
                 &f_evaluator,
@@ -309,10 +329,12 @@ mod tests {
         transition.add_effect(var, var + 1).unwrap();
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let node = FNode::<_>::generate_root_node(
             model.target.clone(),
+            &mut function_cache.parent,
             0,
             &model,
             &h_evaluator,
@@ -323,6 +345,7 @@ mod tests {
         let node = node
             .generate_successor_node(
                 Rc::new(transition.clone()),
+                &mut function_cache,
                 &model,
                 &h_evaluator,
                 &f_evaluator,

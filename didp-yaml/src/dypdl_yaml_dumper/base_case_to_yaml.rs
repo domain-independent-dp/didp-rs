@@ -1,5 +1,5 @@
 use dypdl::expression::Condition;
-use dypdl::{BaseCase, StateMetadata, TableRegistry};
+use dypdl::{BaseCase, StateFunctions, StateMetadata, TableRegistry};
 
 use yaml_rust::yaml::Array;
 use yaml_rust::{yaml::Hash, Yaml};
@@ -9,6 +9,7 @@ use super::ToYamlString;
 pub fn base_case_to_yaml(
     bc: &BaseCase,
     state_metadata: &StateMetadata,
+    state_functions: &StateFunctions,
     table_registry: &TableRegistry,
 ) -> Result<Yaml, &'static str> {
     // The base case is a Hash if it has a cost, otherwise it is an Array.
@@ -17,14 +18,17 @@ pub fn base_case_to_yaml(
         let mut condition_array = Array::new();
         for condition in &bc.conditions {
             condition_array.push(Yaml::String(
-                Condition::from(condition.clone())
-                    .to_yaml_string(state_metadata, table_registry)?,
+                Condition::from(condition.clone()).to_yaml_string(
+                    state_metadata,
+                    state_functions,
+                    table_registry,
+                )?,
             ));
         }
         condition_hash.insert(Yaml::from_str("conditions"), Yaml::Array(condition_array));
         condition_hash.insert(
             Yaml::from_str("cost"),
-            Yaml::String(cost.to_yaml_string(state_metadata, table_registry)?),
+            Yaml::String(cost.to_yaml_string(state_metadata, state_functions, table_registry)?),
         );
 
         Ok(Yaml::Hash(condition_hash))
@@ -32,8 +36,11 @@ pub fn base_case_to_yaml(
         let mut condition_array = Array::new();
         for condition in &bc.conditions {
             condition_array.push(Yaml::String(
-                Condition::from(condition.clone())
-                    .to_yaml_string(state_metadata, table_registry)?,
+                Condition::from(condition.clone()).to_yaml_string(
+                    state_metadata,
+                    state_functions,
+                    table_registry,
+                )?,
             ));
         }
         Ok(Yaml::Array(condition_array))
@@ -42,7 +49,7 @@ pub fn base_case_to_yaml(
 
 #[cfg(test)]
 mod tests {
-    use dypdl::{expression::Condition, Model, StateMetadata, TableRegistry};
+    use dypdl::{expression::Condition, Model, StateFunctions, StateMetadata, TableRegistry};
     use yaml_rust::{yaml::Hash, Yaml};
 
     use super::base_case_to_yaml;
@@ -57,6 +64,7 @@ mod tests {
         let dumped_yaml = base_case_to_yaml(
             base_case,
             &StateMetadata::default(),
+            &StateFunctions::default(),
             &TableRegistry::default(),
         );
         assert!(
@@ -86,6 +94,7 @@ mod tests {
         let dumped_yaml = base_case_to_yaml(
             base_case,
             &StateMetadata::default(),
+            &StateFunctions::default(),
             &TableRegistry::default(),
         );
         assert!(

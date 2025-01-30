@@ -1,5 +1,6 @@
 use super::element_expression::ElementExpression;
 use crate::state::StateInterface;
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
 use crate::variable_type::Element;
@@ -33,22 +34,33 @@ impl<T: Clone> TableExpression<T> {
     pub fn eval<'a, U: StateInterface>(
         &'a self,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &'a TableRegistry,
         tables: &'a TableData<T>,
     ) -> &'a T {
         match self {
             Self::Constant(value) => value,
-            Self::Table1D(i, x) => tables.tables_1d[*i].get(x.eval(state, registry)),
-            Self::Table2D(i, x, y) => {
-                tables.tables_2d[*i].get(x.eval(state, registry), y.eval(state, registry))
-            }
+            Self::Table1D(i, x) => tables.tables_1d[*i].get(x.eval(
+                state,
+                function_cache,
+                state_functions,
+                registry,
+            )),
+            Self::Table2D(i, x, y) => tables.tables_2d[*i].get(
+                x.eval(state, function_cache, state_functions, registry),
+                y.eval(state, function_cache, state_functions, registry),
+            ),
             Self::Table3D(i, x, y, z) => tables.tables_3d[*i].get(
-                x.eval(state, registry),
-                y.eval(state, registry),
-                z.eval(state, registry),
+                x.eval(state, function_cache, state_functions, registry),
+                y.eval(state, function_cache, state_functions, registry),
+                z.eval(state, function_cache, state_functions, registry),
             ),
             Self::Table(i, args) => {
-                let args: Vec<Element> = args.iter().map(|x| x.eval(state, registry)).collect();
+                let args: Vec<Element> = args
+                    .iter()
+                    .map(|x| x.eval(state, function_cache, state_functions, registry))
+                    .collect();
                 tables.tables[*i].get(&args)
             }
         }
@@ -200,10 +212,18 @@ mod tests {
     fn table_constant_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
 
         let expression = TableExpression::Constant(1);
         assert_eq!(
-            *expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.element_tables
+            ),
             1
         );
     }
@@ -212,14 +232,28 @@ mod tests {
     fn table_1d_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let expression = TableExpression::Table1D(0, ElementExpression::Constant(0));
         assert_eq!(
-            *expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.element_tables
+            ),
             1
         );
         let expression = TableExpression::Table1D(0, ElementExpression::Constant(1));
         assert_eq!(
-            *expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.element_tables
+            ),
             0
         );
     }
@@ -228,13 +262,21 @@ mod tests {
     fn table_2d_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let expression = TableExpression::Table2D(
             0,
             ElementExpression::Constant(0),
             ElementExpression::Constant(0),
         );
         assert_eq!(
-            *expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.element_tables
+            ),
             1
         );
         let expression = TableExpression::Table2D(
@@ -243,7 +285,13 @@ mod tests {
             ElementExpression::Constant(1),
         );
         assert_eq!(
-            *expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.element_tables
+            ),
             0
         );
     }
@@ -252,6 +300,8 @@ mod tests {
     fn table_3d_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let expression = TableExpression::Table3D(
             0,
             ElementExpression::Constant(0),
@@ -259,7 +309,13 @@ mod tests {
             ElementExpression::Constant(0),
         );
         assert_eq!(
-            *expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.element_tables
+            ),
             1
         );
         let expression = TableExpression::Table3D(
@@ -269,7 +325,13 @@ mod tests {
             ElementExpression::Constant(1),
         );
         assert_eq!(
-            *expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.element_tables
+            ),
             0
         );
     }
@@ -278,6 +340,8 @@ mod tests {
     fn table_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let expression = TableExpression::Table(
             0,
             vec![
@@ -288,7 +352,13 @@ mod tests {
             ],
         );
         assert_eq!(
-            *expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.element_tables
+            ),
             1
         );
         let expression = TableExpression::Table(
@@ -301,7 +371,13 @@ mod tests {
             ],
         );
         assert_eq!(
-            *expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.element_tables
+            ),
             0
         );
         let expression = TableExpression::Table(
@@ -314,7 +390,13 @@ mod tests {
             ],
         );
         assert_eq!(
-            *expression.eval(&state, &registry, &registry.element_tables),
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.element_tables
+            ),
             0
         );
     }

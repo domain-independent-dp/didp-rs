@@ -17,6 +17,7 @@ use yaml_rust::Yaml;
 pub fn load_grounded_conditions_from_yaml(
     value: &Yaml,
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<Vec<GroundedCondition>, Box<dyn Error>> {
@@ -28,6 +29,7 @@ pub fn load_grounded_conditions_from_yaml(
             let condition = expression_parser::parse_condition(
                 condition.clone(),
                 metadata,
+                functions,
                 registry,
                 parameters,
             )?;
@@ -54,6 +56,7 @@ pub fn load_grounded_conditions_from_yaml(
                         let condition = expression_parser::parse_condition(
                             condition.clone(),
                             metadata,
+                            functions,
                             registry,
                             &parameters,
                         )?;
@@ -67,7 +70,7 @@ pub fn load_grounded_conditions_from_yaml(
                 }
                 None => {
                     let condition = expression_parser::parse_condition(
-                        condition, metadata, registry, parameters,
+                        condition, metadata, functions, registry, parameters,
                     )?;
                     Ok(vec![GroundedCondition::from(condition.simplify(registry))])
                 }
@@ -99,6 +102,8 @@ mod tests {
         let result = metadata.add_element_variable(String::from("e0"), ob);
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let mut registry = TableRegistry::default();
         let result = registry.add_table_1d(String::from("b1"), vec![true, false]);
         assert!(result.is_ok());
@@ -118,8 +123,13 @@ condition: (and (is_in e0 s0) true)
         let condition = &condition[0];
         let parameters = FxHashMap::default();
 
-        let conditions =
-            load_grounded_conditions_from_yaml(condition, &metadata, &registry, &parameters);
+        let conditions = load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_ok());
         let expected = vec![GroundedCondition {
             elements_in_set_variable: Vec::new(),
@@ -138,8 +148,13 @@ condition: (and (is_in e0 s0) true)
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
         let parameters = FxHashMap::default();
-        let conditions =
-            load_grounded_conditions_from_yaml(condition, &metadata, &registry, &parameters);
+        let conditions = load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_ok());
         assert_eq!(conditions.unwrap(), expected);
 
@@ -151,8 +166,13 @@ condition: (and (is_in e0 s0) true)
         let condition = &condition[0];
         let mut parameters = FxHashMap::default();
         parameters.insert(String::from("a"), 0);
-        let conditions =
-            load_grounded_conditions_from_yaml(condition, &metadata, &registry, &parameters);
+        let conditions = load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_ok());
         let expected = vec![GroundedCondition {
             elements_in_set_variable: Vec::new(),
@@ -177,8 +197,13 @@ forall:
         let condition = &condition[0];
         let parameters = FxHashMap::default();
 
-        let conditions =
-            load_grounded_conditions_from_yaml(condition, &metadata, &registry, &parameters);
+        let conditions = load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_ok());
         let expected = vec![
             GroundedCondition {
@@ -206,8 +231,13 @@ forall:
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
 
-        let conditions =
-            load_grounded_conditions_from_yaml(condition, &metadata, &registry, &parameters);
+        let conditions = load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_ok());
         let expected = vec![
             GroundedCondition {
@@ -243,6 +273,8 @@ forall:
         let result = metadata.add_element_variable(String::from("e0"), ob);
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let mut registry = TableRegistry::default();
         let result = registry.add_table_1d(String::from("b1"), vec![true, false]);
         assert!(result.is_ok());
@@ -262,8 +294,13 @@ conddition: (is_in e0 s0)
         let condition = &condition[0];
         let parameters = FxHashMap::default();
 
-        let conditions =
-            load_grounded_conditions_from_yaml(condition, &metadata, &registry, &parameters);
+        let conditions = load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_err());
 
         let condition = r"
@@ -278,8 +315,13 @@ forall:
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
 
-        let conditions =
-            load_grounded_conditions_from_yaml(condition, &metadata, &registry, &parameters);
+        let conditions = load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_err());
 
         let condition = r"
@@ -293,8 +335,13 @@ forall:
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
 
-        let conditions =
-            load_grounded_conditions_from_yaml(condition, &metadata, &registry, &parameters);
+        let conditions = load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_err());
 
         let condition = r"
@@ -309,8 +356,13 @@ forall:
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
 
-        let conditions =
-            load_grounded_conditions_from_yaml(condition, &metadata, &registry, &parameters);
+        let conditions = load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_err());
 
         let condition = r"
@@ -324,8 +376,13 @@ forall:
         assert_eq!(condition.len(), 1);
         let condition = &condition[0];
 
-        let conditions =
-            load_grounded_conditions_from_yaml(condition, &metadata, &registry, &parameters);
+        let conditions = load_grounded_conditions_from_yaml(
+            condition,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+        );
         assert!(conditions.is_err());
     }
 }

@@ -15,6 +15,7 @@ To solve a problem using the DyPDL solver, you need to create three files, `doma
   - [state_variables](#state_variables)
   - [tables](#tables)
   - [dictionaries](#dictionaries)
+  - [state_functions](#state_functions)
   - [constraints](#constraints)
   - [base_cases](#base_cases)
   - [reduce](#reduce)
@@ -203,6 +204,24 @@ For a set dictionary default value, the items in the list must be from `0` to `n
 It represents the default value of the constants, which is used if the value is not defined with the [`dictionary_values`](#dictionary_values) key in the problem file.
 
 Using dictionaries are not recommended when tables can be used instead.
+
+### state_functions
+
+`state_functions` is optional, and the value is a list of maps describing a state function.
+A state function is defined by an expression and can be accessed from expressions just as a state variable.
+Each map has the following keys:
+
+- `name`
+- `type`
+- `expression`
+
+`name` is required, and the value is a string describing the name of the state function.
+`type` is required, and the value is either of `set`, `element`, `integer`, `continuous`, or `bool`.
+It represents the type of the state function.
+
+`expression` is required, and the value is a string describing an expression defining the state function.
+For the syntax of an expression, see [the expression guide](./expression-guide.md).
+The type of the expression must match `type`.
 
 ### constraints
 

@@ -12,6 +12,7 @@ use rustc_hash::FxHashMap;
 pub fn parse_expression<'a, 'b>(
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
+    functions: &'b dypdl::StateFunctions,
     registry: &'b dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(Condition, &'a [String]), ParseErr> {
@@ -27,13 +28,14 @@ pub fn parse_expression<'a, 'b>(
                 name,
                 rest,
                 metadata,
+                functions,
                 registry,
                 parameters,
                 &registry.bool_tables,
             )? {
                 Ok((Condition::Table(Box::new(expression)), rest))
             } else {
-                parse_operation(name, rest, metadata, registry, parameters)
+                parse_operation(name, rest, metadata, functions, registry, parameters)
             }
         }
         "true" => Ok((Condition::Constant(true), rest)),
@@ -41,6 +43,8 @@ pub fn parse_expression<'a, 'b>(
         key => {
             if let Some(value) = registry.bool_tables.name_to_constant.get(key) {
                 Ok((Condition::Constant(*value), rest))
+            } else if let Ok(condition) = functions.get_boolean_function(key) {
+                Ok((condition, rest))
             } else {
                 Err(ParseErr::new(format!("unexpected token: `{}`", token)))
             }
@@ -52,32 +56,36 @@ fn parse_operation<'a, 'b>(
     name: &'a str,
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
+    functions: &'b dypdl::StateFunctions,
     registry: &'b dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(Condition, &'a [String]), ParseErr> {
     match name {
         "not" => {
-            let (condition, rest) = parse_expression(tokens, metadata, registry, parameters)?;
+            let (condition, rest) =
+                parse_expression(tokens, metadata, functions, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Not(Box::new(condition)), rest))
         }
         "and" => {
-            let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
+            let (x, rest) = parse_expression(tokens, metadata, functions, registry, parameters)?;
+            let (y, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::And(Box::new(x), Box::new(y)), rest))
         }
         "or" => {
-            let (x, rest) = parse_expression(tokens, metadata, registry, parameters)?;
-            let (y, rest) = parse_expression(rest, metadata, registry, parameters)?;
+            let (x, rest) = parse_expression(tokens, metadata, functions, registry, parameters)?;
+            let (y, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Or(Box::new(x), Box::new(y)), rest))
         }
         "is_in" => {
-            let (element, rest) =
-                element_parser::parse_expression(tokens, metadata, registry, parameters)?;
-            let (set, rest) =
-                element_parser::parse_set_expression(rest, metadata, registry, parameters)?;
+            let (element, rest) = element_parser::parse_expression(
+                tokens, metadata, functions, registry, parameters,
+            )?;
+            let (set, rest) = element_parser::parse_set_expression(
+                rest, metadata, functions, registry, parameters,
+            )?;
             let rest = util::parse_closing(rest)?;
             Ok((
                 Condition::Set(Box::new(SetCondition::IsIn(element, set))),
@@ -85,12 +93,13 @@ fn parse_operation<'a, 'b>(
             ))
         }
         "is_empty" => {
-            let (set, rest) =
-                element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
+            let (set, rest) = element_parser::parse_set_expression(
+                tokens, metadata, functions, registry, parameters,
+            )?;
             let rest = util::parse_closing(rest)?;
             Ok((Condition::Set(Box::new(SetCondition::IsEmpty(set))), rest))
         }
-        _ => parse_comparison(name, tokens, metadata, registry, parameters),
+        _ => parse_comparison(name, tokens, metadata, functions, registry, parameters),
     }
 }
 
@@ -98,10 +107,11 @@ fn parse_comparison<'a, 'b>(
     operator: &'a str,
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
+    functions: &'b dypdl::StateFunctions,
     registry: &'b dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(Condition, &'a [String]), ParseErr> {
-    if let Ok((x, y, rest)) = parse_ss(tokens, metadata, registry, parameters) {
+    if let Ok((x, y, rest)) = parse_ss(tokens, metadata, functions, registry, parameters) {
         match operator {
             "=" => Ok((Condition::Set(Box::new(SetCondition::IsEqual(x, y))), rest)),
             "!=" => Ok((
@@ -124,17 +134,19 @@ fn parse_comparison<'a, 'b>(
             "<" => ComparisonOperator::Lt,
             _ => return Err(ParseErr::new(format!("no such operator `{}`", operator))),
         };
-        if let Ok((x, y, rest)) = parse_ii(tokens, metadata, registry, parameters) {
+        if let Ok((x, y, rest)) = parse_ii(tokens, metadata, functions, registry, parameters) {
             Ok((
                 Condition::ComparisonI(operator, Box::new(x), Box::new(y)),
                 rest,
             ))
-        } else if let Ok((x, y, rest)) = parse_cc(tokens, metadata, registry, parameters) {
+        } else if let Ok((x, y, rest)) = parse_cc(tokens, metadata, functions, registry, parameters)
+        {
             Ok((
                 Condition::ComparisonC(operator, Box::new(x), Box::new(y)),
                 rest,
             ))
-        } else if let Ok((x, y, rest)) = parse_ee(tokens, metadata, registry, parameters) {
+        } else if let Ok((x, y, rest)) = parse_ee(tokens, metadata, functions, registry, parameters)
+        {
             Ok((
                 Condition::ComparisonE(operator, Box::new(x), Box::new(y)),
                 rest,
@@ -151,11 +163,14 @@ fn parse_comparison<'a, 'b>(
 fn parse_ss<'a, 'b>(
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
+    functions: &'b dypdl::StateFunctions,
     registry: &'b dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(SetExpression, SetExpression, &'a [String]), ParseErr> {
-    let (x, rest) = element_parser::parse_set_expression(tokens, metadata, registry, parameters)?;
-    let (y, rest) = element_parser::parse_set_expression(rest, metadata, registry, parameters)?;
+    let (x, rest) =
+        element_parser::parse_set_expression(tokens, metadata, functions, registry, parameters)?;
+    let (y, rest) =
+        element_parser::parse_set_expression(rest, metadata, functions, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     Ok((x, y, rest))
 }
@@ -163,11 +178,14 @@ fn parse_ss<'a, 'b>(
 fn parse_ii<'a, 'b>(
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
+    functions: &'b dypdl::StateFunctions,
     registry: &'b dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(IntegerExpression, IntegerExpression, &'a [String]), ParseErr> {
-    let (x, rest) = integer_parser::parse_expression(tokens, metadata, registry, parameters)?;
-    let (y, rest) = integer_parser::parse_expression(rest, metadata, registry, parameters)?;
+    let (x, rest) =
+        integer_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
+    let (y, rest) =
+        integer_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     Ok((x, y, rest))
 }
@@ -175,11 +193,14 @@ fn parse_ii<'a, 'b>(
 fn parse_cc<'a, 'b>(
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
+    functions: &'b dypdl::StateFunctions,
     registry: &'b dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(ContinuousExpression, ContinuousExpression, &'a [String]), ParseErr> {
-    let (x, rest) = continuous_parser::parse_expression(tokens, metadata, registry, parameters)?;
-    let (y, rest) = continuous_parser::parse_expression(rest, metadata, registry, parameters)?;
+    let (x, rest) =
+        continuous_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
+    let (y, rest) =
+        continuous_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     Ok((x, y, rest))
 }
@@ -187,11 +208,14 @@ fn parse_cc<'a, 'b>(
 fn parse_ee<'a, 'b>(
     tokens: &'a [String],
     metadata: &'b dypdl::StateMetadata,
+    functions: &'b dypdl::StateFunctions,
     registry: &'b dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(ElementExpression, ElementExpression, &'a [String]), ParseErr> {
-    let (x, rest) = element_parser::parse_expression(tokens, metadata, registry, parameters)?;
-    let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
+    let (x, rest) =
+        element_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
+    let (y, rest) =
+        element_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
     let rest = util::parse_closing(rest)?;
     Ok((x, y, rest))
 }
@@ -325,6 +349,7 @@ mod tests {
     #[test]
     fn parse_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -332,37 +357,38 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "+", "2", "s0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn pare_constant_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["f0", ")"].iter().map(|x| String::from(*x)).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, _) = result.unwrap();
         assert_eq!(expression, Condition::Constant(true));
 
         let tokens: Vec<String> = ["true", ")"].iter().map(|x| String::from(*x)).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, _) = result.unwrap();
         assert_eq!(expression, Condition::Constant(true));
 
         let tokens: Vec<String> = ["false", ")"].iter().map(|x| String::from(*x)).collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, _) = result.unwrap();
         assert_eq!(expression, Condition::Constant(false));
@@ -371,6 +397,7 @@ mod tests {
     #[test]
     fn parse_table_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = [
@@ -379,7 +406,7 @@ mod tests {
         .iter()
         .map(|x| String::from(*x))
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -400,6 +427,7 @@ mod tests {
     #[test]
     fn parse_table_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = [
@@ -408,20 +436,39 @@ mod tests {
         .iter()
         .map(|x| String::from(*x))
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_function_ok() {
+        let metadata = dypdl::StateMetadata::default();
+        let registry = dypdl::TableRegistry::default();
+        let parameters = generate_parameters();
+
+        let mut functions = dypdl::StateFunctions::default();
+        let result = functions.add_boolean_function("sf", Condition::Constant(true));
+        assert!(result.is_ok());
+        let expected = result.unwrap();
+
+        let tokens: Vec<String> = ["sf", ")"].iter().map(|x| x.to_string()).collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, _) = result.unwrap();
+        assert_eq!(expression, expected);
     }
 
     #[test]
     fn parse_not_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["(", "not", "(", "is_empty", "s0", ")", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -436,6 +483,7 @@ mod tests {
     #[test]
     fn parse_not_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -443,14 +491,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "not", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -459,13 +507,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_and_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = [
@@ -474,7 +523,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -494,6 +543,7 @@ mod tests {
     #[test]
     fn parse_and_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -501,14 +551,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "and", "(", "is_empty", "s0", ")", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -518,13 +568,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_or_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = [
@@ -533,7 +584,7 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -553,6 +604,7 @@ mod tests {
     #[test]
     fn parse_or_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -560,14 +612,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "or", "(", "is_empty", "s0", ")", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = [
@@ -577,13 +629,14 @@ mod tests {
         .iter()
         .map(|x| x.to_string())
         .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_lt_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -591,7 +644,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -608,13 +661,14 @@ mod tests {
     #[test]
     fn parse_is_in_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["(", "is_in", "2", "s0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -630,6 +684,7 @@ mod tests {
     #[test]
     fn parse_is_in_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -637,41 +692,42 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_in", "0", "e1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_in", "0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_in", "0", "s1", "s2", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_is_equal_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["(", "=", "s0", "s1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -687,6 +743,7 @@ mod tests {
     #[test]
     fn parse_is_equal_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -694,34 +751,35 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "=", "s0", "e1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "=", "s0", "s1", "s2", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_is_not_equal_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["(", "!=", "s0", "s1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -737,6 +795,7 @@ mod tests {
     #[test]
     fn parse_is_not_equal_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -744,34 +803,35 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "!=", "s0", "e1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "!=", "s0", "s1", "s2", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_is_subset_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["(", "is_subset", "s0", "s1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -787,6 +847,7 @@ mod tests {
     #[test]
     fn parse_is_subset_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -794,27 +855,28 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_subset", "s0", "e1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_subset", "s0", "s1", "s2", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_is_set_comparison_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -822,20 +884,21 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_is_empty_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let tokens: Vec<String> = ["(", "is_empty", "s0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -850,6 +913,7 @@ mod tests {
     #[test]
     fn parse_is_empty_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -857,20 +921,21 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "is_empty", "s0", "s1", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_comparison_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -878,7 +943,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -895,7 +960,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -912,7 +977,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -929,7 +994,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -946,7 +1011,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -963,7 +1028,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -980,7 +1045,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -997,7 +1062,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1014,7 +1079,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1031,7 +1096,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1048,7 +1113,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1065,7 +1130,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1082,7 +1147,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1099,7 +1164,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1116,7 +1181,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1133,7 +1198,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1150,7 +1215,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1167,7 +1232,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -1184,6 +1249,7 @@ mod tests {
     #[test]
     fn parse_comparison_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -1191,21 +1257,21 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "==", "1.5", "e0", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
         let tokens: Vec<String> = ["(", "==", "e0", "1.5", ")", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_expression(&tokens, &metadata, &registry, &parameters);
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 }

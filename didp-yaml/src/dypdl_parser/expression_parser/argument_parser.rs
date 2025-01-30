@@ -1,25 +1,26 @@
 use super::element_parser;
 use super::util::ParseErr;
 use dypdl::expression::ArgumentExpression;
-use dypdl::{StateMetadata, TableRegistry};
+use dypdl::{StateFunctions, StateMetadata, TableRegistry};
 use rustc_hash::FxHashMap;
 
 pub fn parse_argument<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(ArgumentExpression, &'a [String]), ParseErr> {
     if let Ok((element, rest)) =
-        element_parser::parse_expression(tokens, metadata, registry, parameters)
+        element_parser::parse_expression(tokens, metadata, functions, registry, parameters)
     {
         Ok((ArgumentExpression::Element(element), rest))
     } else if let Ok((set, rest)) =
-        element_parser::parse_set_expression(tokens, metadata, registry, parameters)
+        element_parser::parse_set_expression(tokens, metadata, functions, registry, parameters)
     {
         Ok((ArgumentExpression::Set(set), rest))
     } else if let Ok((vector, rest)) =
-        element_parser::parse_vector_expression(tokens, metadata, registry, parameters)
+        element_parser::parse_vector_expression(tokens, metadata, functions, registry, parameters)
     {
         Ok((ArgumentExpression::Vector(vector), rest))
     } else {
@@ -33,6 +34,7 @@ pub fn parse_argument<'a>(
 pub fn parse_multiple_arguments<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(Vec<ArgumentExpression>, &'a [String]), ParseErr> {
@@ -45,7 +47,7 @@ pub fn parse_multiple_arguments<'a>(
         if next_token == ")" {
             return Ok((args, rest));
         }
-        let (expression, new_xs) = parse_argument(xs, metadata, registry, parameters)?;
+        let (expression, new_xs) = parse_argument(xs, metadata, functions, registry, parameters)?;
         args.push(expression);
         xs = new_xs;
     }
@@ -235,6 +237,7 @@ mod tests {
     #[test]
     fn parse_argument_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -242,7 +245,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
+        let result = parse_argument(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -255,7 +258,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
+        let result = parse_argument(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -268,7 +271,7 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
+        let result = parse_argument(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (expression, rest) = result.unwrap();
         assert_eq!(
@@ -283,6 +286,7 @@ mod tests {
     #[test]
     fn parse_argument_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -290,13 +294,14 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_argument(&tokens, &metadata, &registry, &parameters);
+        let result = parse_argument(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_multiple_arguments_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -304,7 +309,8 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_multiple_arguments(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_multiple_arguments(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
         let (result, rest) = result.unwrap();
         assert_eq!(
@@ -324,6 +330,7 @@ mod tests {
     #[test]
     fn parse_multiple_arguments_argument_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -331,13 +338,15 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_multiple_arguments(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_multiple_arguments(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_multiple_arguments_no_closing_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -345,7 +354,8 @@ mod tests {
             .iter()
             .map(|x| x.to_string())
             .collect();
-        let result = parse_multiple_arguments(&tokens, &metadata, &registry, &parameters);
+        let result =
+            parse_multiple_arguments(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 }

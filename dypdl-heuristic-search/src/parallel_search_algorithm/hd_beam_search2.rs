@@ -3,8 +3,8 @@ use super::hd_search_statistics::HdSearchStatistics;
 use crate::search_algorithm::data_structure::{exceed_bound, Beam};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
-    get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
-    StateRegistry,
+    data_structure::ParentAndChildStateFunctionCache, get_solution_cost_and_suffix,
+    BeamSearchParameters, BfsNode, SearchInput, Solution, StateRegistry,
 };
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use dypdl::{variable_type, Model, TransitionInterface};
@@ -61,12 +61,14 @@ use std::{cmp, mem, thread};
 /// let model = Arc::new(model);
 ///
 /// let state = model.target.clone();
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 /// let cost = 0;
-/// let h_evaluator = |_: &_| Some(0);
+/// let h_evaluator = |_: &_, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
 /// let node = FNodeMessage::generate_root_node(
 ///     state,
+///     &mut function_cache,
 ///     cost,
 ///     &model,
 ///     &h_evaluator,
@@ -82,9 +84,10 @@ use std::{cmp, mem, thread};
 ///     solution_suffix: &[],
 /// };
 /// let transition_evaluator =
-///     move |node: &FNode<_, _, _, _, _>, transition, primal_bound| {
+///     move |node: &FNode<_, _, _, _, _>, transition, cache: &mut _, primal_bound| {
 ///         node.generate_sendable_successor_node(
 ///             transition,
+///             cache,
 ///             &model,
 ///             &h_evaluator,
 ///             &f_evaluator,
@@ -114,7 +117,9 @@ where
     N: BfsNode<T, V>,
     N: From<M>,
     M: Clone + SearchNodeMessage,
-    E: Fn(&N, Arc<V>, Option<T>) -> Option<M> + Send + Sync,
+    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<M>
+        + Send
+        + Sync,
     B: Fn(T, T) -> T + Send + Sync,
     V: TransitionInterface + Clone + Default + Send + Sync,
 {
@@ -297,7 +302,7 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
     N: BfsNode<T, V>,
     N: From<M>,
     M: Clone + SearchNodeMessage,
-    E: Fn(&N, Arc<V>, Option<T>) -> Option<M>,
+    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<M>,
     B: Fn(T, T) -> T,
     V: TransitionInterface + Clone + Default,
 {
@@ -343,6 +348,9 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
             }
         }
     }
+
+    let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+    let mut applicable_transitions = Vec::new();
 
     let mut expanded = 0;
     let mut layer_index = 0;
@@ -422,7 +430,7 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
                                 }
                             }
                         }
-                        
+
                         if opened == threads - 1 {
                             if let Some(value) = previous_layer_dual_bound {
                                 if exceed_bound(model, value, primal_bound) {
@@ -446,11 +454,14 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
                             }
                         }
 
+                        function_cache.parent.clear();
+
                         if let Some((cost, suffix)) = get_solution_cost_and_suffix(
                             model,
                             &*node,
                             suffix,
                             &base_cost_evaluator,
+                            &mut function_cache,
                         ) {
                             if !exceed_bound(model, cost, primal_bound) {
                                 primal_bound = Some(cost);
@@ -469,11 +480,19 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
                         }
 
                         expanded += 1;
+                        generator.generate_applicable_transitions(
+                            node.state(),
+                            &mut function_cache.parent,
+                            &mut applicable_transitions,
+                        );
 
-                        for transition in generator.applicable_transitions(node.state()) {
-                            if let Some(successor) =
-                                transition_evaluator(&node, transition, primal_bound)
-                            {
+                        for transition in applicable_transitions.drain(..) {
+                            if let Some(successor) = transition_evaluator(
+                                &node,
+                                transition,
+                                &mut function_cache,
+                                primal_bound,
+                            ) {
                                 let sent_to = successor.assign_thread(threads);
 
                                 if sent_to == id {

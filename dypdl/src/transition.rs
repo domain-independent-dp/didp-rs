@@ -8,6 +8,7 @@ use crate::state::{
     ContinuousResourceVariable, ContinuousVariable, ElementResourceVariable, ElementVariable,
     IntegerResourceVariable, IntegerVariable, SetVariable, State, StateInterface, VectorVariable,
 };
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry;
 use crate::util::ModelErr;
 use crate::variable_type::{Continuous, Element, FromNumeric, Numeric};
@@ -77,19 +78,31 @@ impl CostExpression {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("x", 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = CostExpression::from(IntegerExpression::from(variable));
-    /// assert_eq!(expression.eval::<Integer, _>(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval::<Integer, _>(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     pub fn eval<T: Numeric, U: StateInterface>(
         &self,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &table_registry::TableRegistry,
     ) -> T {
         match self {
-            Self::Integer(expression) => T::from(expression.eval(state, registry)),
-            Self::Continuous(expression) => T::from(expression.eval(state, registry)),
+            Self::Integer(expression) => {
+                T::from(expression.eval(state, function_cache, state_functions, registry))
+            }
+            Self::Continuous(expression) => {
+                T::from(expression.eval(state, function_cache, state_functions, registry))
+            }
         }
     }
 
@@ -106,23 +119,39 @@ impl CostExpression {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("x", 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = CostExpression::from(variable + IntegerExpression::Cost);
-    /// assert_eq!(expression.eval_cost(1, &state, &model.table_registry), 3);
+    /// assert_eq!(
+    ///     expression.eval_cost(
+    ///         1, &state, &mut function_cache, &model.state_functions, &model.table_registry
+    ///     ),
+    ///     3,
+    /// );
     /// ```
     pub fn eval_cost<T: Numeric, U: StateInterface>(
         &self,
         cost: T,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &table_registry::TableRegistry,
     ) -> T {
         match self {
-            Self::Integer(expression) => {
-                T::from(expression.eval_cost(FromNumeric::from(cost), state, registry))
-            }
-            Self::Continuous(expression) => {
-                T::from(expression.eval_cost(FromNumeric::from(cost), state, registry))
-            }
+            Self::Integer(expression) => T::from(expression.eval_cost(
+                FromNumeric::from(cost),
+                state,
+                function_cache,
+                state_functions,
+                registry,
+            )),
+            Self::Continuous(expression) => T::from(expression.eval_cost(
+                FromNumeric::from(cost),
+                state,
+                function_cache,
+                state_functions,
+                registry,
+            )),
         }
     }
 
@@ -145,6 +174,8 @@ pub trait TransitionInterface {
     fn is_applicable<T: StateInterface>(
         &self,
         state: &T,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &table_registry::TableRegistry,
     ) -> bool;
 
@@ -152,6 +183,8 @@ pub trait TransitionInterface {
     fn apply<S: StateInterface, T: From<State>>(
         &self,
         state: &S,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &table_registry::TableRegistry,
     ) -> T;
 
@@ -160,6 +193,8 @@ pub trait TransitionInterface {
         &self,
         cost: U,
         state: &T,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &table_registry::TableRegistry,
     ) -> U;
 }
@@ -202,21 +237,36 @@ impl TransitionInterface for Transition {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("x", 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let mut transition = Transition::new("transition");
-    /// assert!(transition.is_applicable(&state, &model.table_registry));
+    /// assert!(
+    ///     transition.is_applicable(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     ///
     /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);;
     /// transition.add_precondition(condition);
-    /// assert!(transition.is_applicable(&state, &model.table_registry));
+    /// assert!(
+    ///     transition.is_applicable(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     ///
     /// let condition = Condition::comparison_i(ComparisonOperator::Le, variable, 1);;
     /// transition.add_precondition(condition);
-    /// assert!(!transition.is_applicable(&state, &model.table_registry));
+    /// assert!(
+    ///     !transition.is_applicable(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     /// ```
     fn is_applicable<S: StateInterface>(
         &self,
         state: &S,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &table_registry::TableRegistry,
     ) -> bool {
         for (i, v) in &self.elements_in_set_variable {
@@ -231,7 +281,7 @@ impl TransitionInterface for Transition {
         }
         self.preconditions
             .iter()
-            .all(|c| c.is_satisfied(state, registry))
+            .all(|c| c.is_satisfied(state, function_cache, state_functions, registry))
     }
 
     /// Returns the transitioned state.
@@ -248,19 +298,24 @@ impl TransitionInterface for Transition {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("x", 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let mut transition = Transition::new("transition");
     /// transition.add_effect(variable, variable + 1);
-    /// let state: State = transition.apply(&state, &model.table_registry);
+    /// let state: State = transition.apply(
+    ///     &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    /// );
     /// assert_eq!(state.get_integer_variable(variable.id()), 3);
     /// ```
     #[inline]
     fn apply<S: StateInterface, T: From<State>>(
         &self,
         state: &S,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &table_registry::TableRegistry,
     ) -> T {
-        state.apply_effect(&self.effect, registry)
+        state.apply_effect(&self.effect, function_cache, state_functions, registry)
     }
 
     /// Returns the evaluation result of the cost expression.
@@ -277,19 +332,28 @@ impl TransitionInterface for Transition {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("x", 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + variable);
-    /// assert_eq!(transition.eval_cost(1, &state, &model.table_registry), 3);
+    /// assert_eq!(
+    ///     transition.eval_cost(
+    ///         1, &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     3,
+    /// );
     /// ```
     #[inline]
     fn eval_cost<T: Numeric, S: StateInterface>(
         &self,
         cost: T,
         state: &S,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &table_registry::TableRegistry,
     ) -> T {
-        self.cost.eval_cost(cost, state, registry)
+        self.cost
+            .eval_cost(cost, state, function_cache, state_functions, registry)
     }
 }
 
@@ -355,6 +419,7 @@ impl Transition {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("x", 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let mut transition = Transition::new("transition");
     /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);;
@@ -362,7 +427,11 @@ impl Transition {
     ///
     /// let preconditions = transition.get_preconditions();
     /// assert_eq!(preconditions.len(), 1);
-    /// assert!(preconditions[0].eval(&state, &model.table_registry));
+    /// assert!(
+    ///     preconditions[0].eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     )
+    /// );
     /// ```
     pub fn get_preconditions(&self) -> Vec<Condition> {
         let mut result = Vec::with_capacity(
@@ -645,6 +714,8 @@ mod tests {
     #[test]
     fn cost_expression_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
 
         let expression = CostExpression::Integer(IntegerExpression::BinaryOperation(
@@ -652,19 +723,33 @@ mod tests {
             Box::new(IntegerExpression::Constant(1)),
             Box::new(IntegerExpression::Constant(1)),
         ));
-        assert_eq!(expression.eval_cost(0, &state, &registry), 2);
+        assert_eq!(
+            expression.eval_cost(0, &state, &mut function_cache, &state_functions, &registry),
+            2
+        );
 
         let expression = CostExpression::Continuous(ContinuousExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(ContinuousExpression::Constant(1.0)),
             Box::new(ContinuousExpression::Constant(1.0)),
         ));
-        assert_eq!(expression.eval_cost(0.0, &state, &registry), 2.0);
+        assert_eq!(
+            expression.eval_cost(
+                0.0,
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            2.0
+        );
     }
 
     #[test]
     fn cost_expression_eval_cost() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
 
         let expression = CostExpression::Integer(IntegerExpression::BinaryOperation(
@@ -672,14 +757,26 @@ mod tests {
             Box::new(IntegerExpression::Cost),
             Box::new(IntegerExpression::Constant(1)),
         ));
-        assert_eq!(expression.eval_cost(0, &state, &registry), 1);
+        assert_eq!(
+            expression.eval_cost(0, &state, &mut function_cache, &state_functions, &registry),
+            1
+        );
 
         let expression = CostExpression::Continuous(ContinuousExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(ContinuousExpression::Cost),
             Box::new(ContinuousExpression::Constant(1.0)),
         ));
-        assert_eq!(expression.eval_cost(0.0, &state, &registry), 1.0);
+        assert_eq!(
+            expression.eval_cost(
+                0.0,
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            1.0
+        );
     }
 
     #[test]
@@ -713,6 +810,8 @@ mod tests {
     #[test]
     fn applicable() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let set_condition = grounded_condition::GroundedCondition {
             condition: Condition::Set(Box::new(SetCondition::IsIn(
@@ -736,7 +835,7 @@ mod tests {
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
-        assert!(transition.is_applicable(&state, &registry));
+        assert!(transition.is_applicable(&state, &mut function_cache, &state_functions, &registry));
 
         let transition = Transition {
             name: String::from(""),
@@ -745,13 +844,15 @@ mod tests {
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
-        assert!(transition.is_applicable(&state, &registry));
+        assert!(transition.is_applicable(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
     fn not_applicable() {
         let state = generate_state();
         let registry = generate_registry();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let set_condition = grounded_condition::GroundedCondition {
             condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(0),
@@ -774,7 +875,7 @@ mod tests {
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
-        assert!(transition.is_applicable(&state, &registry));
+        assert!(transition.is_applicable(&state, &mut function_cache, &state_functions, &registry));
 
         let transition = Transition {
             name: String::from(""),
@@ -783,7 +884,12 @@ mod tests {
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
-        assert!(!transition.is_applicable(&state, &registry));
+        assert!(!transition.is_applicable(
+            &state,
+            &mut function_cache,
+            &state_functions,
+            &registry
+        ));
 
         let transition = Transition {
             name: String::from(""),
@@ -792,12 +898,19 @@ mod tests {
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
-        assert!(!transition.is_applicable(&state, &registry));
+        assert!(!transition.is_applicable(
+            &state,
+            &mut function_cache,
+            &state_functions,
+            &registry
+        ));
     }
 
     #[test]
     fn apply_effects() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let set_effect1 = SetExpression::SetElementOperation(
             SetElementOperator::Add,
@@ -914,13 +1027,16 @@ mod tests {
                 continuous_variables: vec![5.0, 2.5, 6.0],
             },
         };
-        let successor: State = transition.apply(&state, &registry);
+        let successor: State =
+            transition.apply(&state, &mut function_cache, &state_functions, &registry);
         assert_eq!(successor, expected);
     }
 
     #[test]
     fn eval_cost() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
 
         let transition = Transition {
@@ -931,7 +1047,10 @@ mod tests {
             )),
             ..Default::default()
         };
-        assert_eq!(transition.eval_cost(0, &state, &registry), 1);
+        assert_eq!(
+            transition.eval_cost(0, &state, &mut function_cache, &state_functions, &registry),
+            1
+        );
 
         let transition = Transition {
             cost: CostExpression::Continuous(ContinuousExpression::BinaryOperation(
@@ -941,7 +1060,16 @@ mod tests {
             )),
             ..Default::default()
         };
-        assert_eq!(transition.eval_cost(0.0, &state, &registry), 1.0);
+        assert_eq!(
+            transition.eval_cost(
+                0.0,
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            1.0
+        );
     }
 
     #[test]

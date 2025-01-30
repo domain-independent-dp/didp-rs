@@ -1,4 +1,4 @@
-use crate::{model::TransitionPy, model::StatePy, ModelPy};
+use crate::{model::StatePy, model::TransitionPy, ModelPy};
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{Search, Solution};
@@ -56,7 +56,6 @@ pub struct SolutionPy {
 
 #[pymethods]
 impl SolutionPy {
-
     /// Applies transitions in the solution to the model's target state.
     ///
     /// Parameters
@@ -75,9 +74,11 @@ impl SolutionPy {
     ///     If preconditions are invalid.
     fn state(&self, model: &ModelPy) -> StatePy {
         let mut next = model.target_state();
-        for t in self.transitions.iter(){
+
+        for t in self.transitions.iter() {
             next = t.apply(&mut next, model)
         }
+
         next
     }
 }

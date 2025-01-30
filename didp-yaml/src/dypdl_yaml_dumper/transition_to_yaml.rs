@@ -1,5 +1,5 @@
 use super::ToYamlString;
-use dypdl::{StateMetadata, TableRegistry, Transition};
+use dypdl::{StateFunctions, StateMetadata, TableRegistry, Transition};
 use yaml_rust::yaml::Array;
 use yaml_rust::{yaml::Hash, Yaml};
 
@@ -8,6 +8,7 @@ pub fn transition_to_yaml(
     forward: bool,
     forced: bool,
     state_metadata: &StateMetadata,
+    state_functions: &StateFunctions,
     table_registry: &TableRegistry,
 ) -> Result<Yaml, &'static str> {
     let mut hash = Hash::new();
@@ -24,7 +25,7 @@ pub fn transition_to_yaml(
             for (var_index, expr) in &all_effects . $( $effect_field ).+ {
                 effect_yaml_hash.insert(
                     Yaml::from_str(&state_metadata . $( $variable_field ).+ [*var_index]),
-                    Yaml::String(expr.to_yaml_string(state_metadata, table_registry)?),
+                    Yaml::String(expr.to_yaml_string(state_metadata, state_functions, table_registry)?),
                 );
             }
         }
@@ -44,17 +45,20 @@ pub fn transition_to_yaml(
     // Insert the transition cost.
     hash.insert(
         Yaml::from_str("cost"),
-        Yaml::String(t.cost.to_yaml_string(state_metadata, table_registry)?),
+        Yaml::String(
+            t.cost
+                .to_yaml_string(state_metadata, state_functions, table_registry)?,
+        ),
     );
 
     // Insert the transition preconditions.
     let mut preconditions = Array::new();
     for precond in &t.get_preconditions() {
-        preconditions.push(Yaml::String(
-            precond
-                .clone()
-                .to_yaml_string(state_metadata, table_registry)?,
-        ));
+        preconditions.push(Yaml::String(precond.clone().to_yaml_string(
+            state_metadata,
+            state_functions,
+            table_registry,
+        )?));
     }
     hash.insert(Yaml::from_str("preconditions"), Yaml::Array(preconditions));
 
@@ -84,7 +88,7 @@ pub fn transition_to_yaml(
 #[cfg(test)]
 mod tests {
     use dypdl::expression::{BinaryOperator, Condition, IntegerExpression};
-    use dypdl::{Effect, GroundedCondition, TableRegistry, Transition};
+    use dypdl::{Effect, GroundedCondition, StateFunctions, TableRegistry, Transition};
     use rustc_hash::FxHashMap;
     use yaml_rust::yaml::Hash;
     use yaml_rust::Yaml;
@@ -217,6 +221,7 @@ mod tests {
             true,
             false,
             &state_metadata,
+            &StateFunctions::default(),
             &TableRegistry::default(),
         );
         assert!(result_yaml.is_ok());

@@ -12,13 +12,19 @@ use std::error::Error;
 fn load_conditions_from_array(
     array: &Vec<yaml_rust::Yaml>,
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
 ) -> Result<Vec<GroundedCondition>, Box<dyn Error>> {
     let parameters = FxHashMap::default();
     let mut conditions = Vec::new();
     for condition in array {
-        let condition =
-            load_grounded_conditions_from_yaml(condition, metadata, registry, &parameters)?;
+        let condition = load_grounded_conditions_from_yaml(
+            condition,
+            metadata,
+            functions,
+            registry,
+            &parameters,
+        )?;
         for c in condition {
             match c.condition {
                 Condition::Constant(false)
@@ -40,6 +46,7 @@ fn load_conditions_from_array(
 fn load_base_case_from_hash(
     map: &LinkedHashMap<yaml_rust::Yaml, yaml_rust::Yaml>,
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     cost_type: &CostType,
 ) -> Result<BaseCase, Box<dyn Error>> {
@@ -50,17 +57,24 @@ fn load_base_case_from_hash(
 
     if let Some(array) = map.get(&CONDITIONS_KEY) {
         let array = util::get_array(array)?;
-        let conditions = load_conditions_from_array(array, metadata, registry)?;
+        let conditions = load_conditions_from_array(array, metadata, functions, registry)?;
         let parameters = FxHashMap::default();
 
         match map.get(&COST_KEY) {
             Some(cost) => match cost_type {
                 CostType::Integer => {
-                    let cost = parse_integer_from_yaml(cost, metadata, registry, &parameters)?;
+                    let cost =
+                        parse_integer_from_yaml(cost, metadata, functions, registry, &parameters)?;
                     Ok(BaseCase::with_cost(conditions, cost))
                 }
                 CostType::Continuous => {
-                    let cost = parse_continuous_from_yaml(cost, metadata, registry, &parameters)?;
+                    let cost = parse_continuous_from_yaml(
+                        cost,
+                        metadata,
+                        functions,
+                        registry,
+                        &parameters,
+                    )?;
                     Ok(BaseCase::with_cost(conditions, cost.simplify(registry)))
                 }
             },
@@ -79,15 +93,18 @@ fn load_base_case_from_hash(
 pub fn load_base_case_from_yaml(
     value: &yaml_rust::Yaml,
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     cost_type: &CostType,
 ) -> Result<BaseCase, Box<dyn Error>> {
     match value {
         yaml_rust::Yaml::Array(array) => {
-            let conditions = load_conditions_from_array(array, metadata, registry)?;
+            let conditions = load_conditions_from_array(array, metadata, functions, registry)?;
             Ok(BaseCase::from(conditions))
         }
-        yaml_rust::Yaml::Hash(map) => load_base_case_from_hash(map, metadata, registry, cost_type),
+        yaml_rust::Yaml::Hash(map) => {
+            load_base_case_from_hash(map, metadata, functions, registry, cost_type)
+        }
         _ => Err(util::YamlContentErr::new(format!("expected Array, found `{:?}`", value)).into()),
     }
 }
@@ -170,6 +187,8 @@ mod tests {
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let registry = TableRegistry::default();
 
         let expected = BaseCase::from(vec![GroundedCondition {
@@ -185,7 +204,8 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_ok());
         assert_eq!(base_case.unwrap(), expected);
     }
@@ -202,6 +222,8 @@ mod tests {
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let registry = TableRegistry::default();
 
         let expected = BaseCase::from(vec![GroundedCondition {
@@ -217,7 +239,8 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_ok());
         assert_eq!(base_case.unwrap(), expected);
     }
@@ -234,6 +257,8 @@ mod tests {
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let registry = TableRegistry::default();
 
         let base_case = yaml_rust::YamlLoader::load_from_str(
@@ -242,7 +267,8 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_ok());
         let expected = BaseCase::from(vec![GroundedCondition {
             condition: Condition::Constant(false),
@@ -264,6 +290,8 @@ mod tests {
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let registry = TableRegistry::default();
 
         let expected = BaseCase::from(vec![GroundedCondition {
@@ -280,7 +308,8 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_ok());
         assert_eq!(base_case.unwrap(), expected);
     }
@@ -296,6 +325,8 @@ mod tests {
         assert!(result.is_ok());
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
+
+        let functions = StateFunctions::default();
 
         let registry = TableRegistry::default();
 
@@ -317,7 +348,8 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_ok());
         assert_eq!(base_case.unwrap(), expected);
     }
@@ -333,6 +365,8 @@ mod tests {
         assert!(result.is_ok());
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
+
+        let functions = StateFunctions::default();
 
         let registry = TableRegistry::default();
 
@@ -354,7 +388,8 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_ok());
         assert_eq!(base_case.unwrap(), expected);
     }
@@ -371,13 +406,16 @@ mod tests {
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let registry = TableRegistry::default();
 
         let base_case = yaml_rust::YamlLoader::load_from_str(r"(>= i0 0)");
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_err());
     }
 
@@ -393,13 +431,16 @@ mod tests {
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let registry = TableRegistry::default();
 
         let base_case = yaml_rust::YamlLoader::load_from_str(r"[(>= i0 0), (= i0 i0), (= 1 2)]");
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_err());
     }
 
@@ -415,13 +456,16 @@ mod tests {
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let registry = TableRegistry::default();
 
         let base_case = yaml_rust::YamlLoader::load_from_str(r"{ cost: i0 }");
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_err());
     }
 
@@ -437,6 +481,8 @@ mod tests {
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let registry = TableRegistry::default();
 
         let base_case =
@@ -444,7 +490,8 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_err());
     }
 
@@ -460,6 +507,8 @@ mod tests {
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let registry = TableRegistry::default();
 
         let base_case =
@@ -467,7 +516,8 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_err());
     }
 
@@ -483,6 +533,8 @@ mod tests {
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let registry = TableRegistry::default();
 
         let base_case =
@@ -490,7 +542,8 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_err());
     }
 
@@ -506,6 +559,8 @@ mod tests {
         let result = metadata.add_integer_variable(String::from("i0"));
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let registry = TableRegistry::default();
 
         let base_case = yaml_rust::YamlLoader::load_from_str(
@@ -514,7 +569,8 @@ mod tests {
         assert!(base_case.is_ok());
         let base_case = base_case.unwrap();
         assert_eq!(base_case.len(), 1);
-        let base_case = load_base_case_from_yaml(&base_case[0], &metadata, &registry, &cost_type);
+        let base_case =
+            load_base_case_from_yaml(&base_case[0], &metadata, &functions, &registry, &cost_type);
         assert!(base_case.is_err());
     }
 

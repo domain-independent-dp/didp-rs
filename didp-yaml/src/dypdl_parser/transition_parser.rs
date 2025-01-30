@@ -7,7 +7,9 @@ use super::state_parser::ground_parameters_from_yaml;
 use crate::util;
 use dypdl::expression;
 use dypdl::variable_type::Element;
-use dypdl::{CostExpression, CostType, Effect, StateMetadata, TableRegistry, Transition};
+use dypdl::{
+    CostExpression, CostType, Effect, StateFunctions, StateMetadata, TableRegistry, Transition,
+};
 use lazy_static::lazy_static;
 use rustc_hash::FxHashMap;
 use std::error::Error;
@@ -26,6 +28,7 @@ type TransitionsWithFlags = (Vec<Transition>, bool, bool);
 pub fn load_transitions_from_yaml(
     value: &Yaml,
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     cost_type: &CostType,
 ) -> Result<TransitionsWithFlags, Box<dyn Error>> {
@@ -87,6 +90,7 @@ pub fn load_transitions_from_yaml(
                     let conditions = grounded_condition_parser::load_grounded_conditions_from_yaml(
                         condition,
                         metadata,
+                        functions,
                         registry,
                         &parameters,
                     )?;
@@ -108,22 +112,30 @@ pub fn load_transitions_from_yaml(
             None => Vec::new(),
         };
         let effect = match effect {
-            Some(effect) => load_effect_from_yaml(effect, metadata, registry, &parameters)?,
+            Some(effect) => {
+                load_effect_from_yaml(effect, metadata, functions, registry, &parameters)?
+            }
             None => Effect::default(),
         };
         let cost = match cost_type {
             CostType::Integer => {
                 let expression = match lifted_cost {
-                    Some(cost) => parse_integer_from_yaml(cost, metadata, registry, &parameters)?,
+                    Some(cost) => {
+                        parse_integer_from_yaml(cost, metadata, functions, registry, &parameters)?
+                    }
                     None => expression::IntegerExpression::Cost,
                 };
                 CostExpression::Integer(expression.simplify(registry))
             }
             CostType::Continuous => {
                 let expression = match lifted_cost {
-                    Some(cost) => {
-                        parse_continuous_from_yaml(cost, metadata, registry, &parameters)?
-                    }
+                    Some(cost) => parse_continuous_from_yaml(
+                        cost,
+                        metadata,
+                        functions,
+                        registry,
+                        &parameters,
+                    )?,
                     None => expression::ContinuousExpression::Cost,
                 };
                 CostExpression::Continuous(expression.simplify(registry))
@@ -169,6 +181,7 @@ pub fn load_transitions_from_yaml(
 fn load_effect_from_yaml(
     value: &Yaml,
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<Effect, Box<dyn Error>> {
@@ -185,29 +198,37 @@ fn load_effect_from_yaml(
         let variable = util::get_string(variable)?;
         if let Some(i) = metadata.name_to_set_variable.get(&variable) {
             let effect = util::get_string(effect)?;
-            let effect = expression_parser::parse_set(effect, metadata, registry, parameters)?;
+            let effect =
+                expression_parser::parse_set(effect, metadata, functions, registry, parameters)?;
             set_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_vector_variable.get(&variable) {
             let effect = util::get_string(effect)?;
-            let effect = expression_parser::parse_vector(effect, metadata, registry, parameters)?;
+            let effect =
+                expression_parser::parse_vector(effect, metadata, functions, registry, parameters)?;
             vector_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_element_variable.get(&variable) {
-            let effect = parse_element_from_yaml(effect, metadata, registry, parameters)?;
+            let effect =
+                parse_element_from_yaml(effect, metadata, functions, registry, parameters)?;
             element_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_element_resource_variable.get(&variable) {
-            let effect = parse_element_from_yaml(effect, metadata, registry, parameters)?;
+            let effect =
+                parse_element_from_yaml(effect, metadata, functions, registry, parameters)?;
             element_resource_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_integer_variable.get(&variable) {
-            let effect = parse_integer_from_yaml(effect, metadata, registry, parameters)?;
+            let effect =
+                parse_integer_from_yaml(effect, metadata, functions, registry, parameters)?;
             integer_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_integer_resource_variable.get(&variable) {
-            let effect = parse_integer_from_yaml(effect, metadata, registry, parameters)?;
+            let effect =
+                parse_integer_from_yaml(effect, metadata, functions, registry, parameters)?;
             integer_resource_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_continuous_variable.get(&variable) {
-            let effect = parse_continuous_from_yaml(effect, metadata, registry, parameters)?;
+            let effect =
+                parse_continuous_from_yaml(effect, metadata, functions, registry, parameters)?;
             continuous_effects.push((*i, effect.simplify(registry)));
         } else if let Some(i) = metadata.name_to_continuous_resource_variable.get(&variable) {
-            let effect = parse_continuous_from_yaml(effect, metadata, registry, parameters)?;
+            let effect =
+                parse_continuous_from_yaml(effect, metadata, functions, registry, parameters)?;
             continuous_resource_effects.push((*i, effect.simplify(registry)));
         } else {
             return Err(
@@ -327,6 +348,7 @@ mod tests {
     #[test]
     fn load_transition_only_precondition_integer_from_yaml_ok() {
         let metadata = create_metadata();
+        let functions = StateFunctions::default();
         let registry = create_registry();
         let cost_type = CostType::Integer;
 
@@ -339,7 +361,8 @@ preconditions: [(>= (f2 0 1) 10)]
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
@@ -353,6 +376,7 @@ preconditions: [(>= (f2 0 1) 10)]
     #[test]
     fn load_transition_only_precondition_continuous_from_yaml_ok() {
         let metadata = create_metadata();
+        let functions = StateFunctions::default();
         let registry = create_registry();
         let cost_type = CostType::Continuous;
 
@@ -365,7 +389,8 @@ preconditions: [(>= (f2 0 1) 10)]
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
@@ -379,6 +404,7 @@ preconditions: [(>= (f2 0 1) 10)]
     #[test]
     fn load_transition_integer_from_yaml_ok() {
         let metadata = create_metadata();
+        let functions = StateFunctions::default();
         let registry = create_registry();
         let cost_type = CostType::Integer;
 
@@ -393,7 +419,8 @@ cost: 0
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
@@ -410,6 +437,7 @@ cost: 0
     #[test]
     fn load_transition_continuous_from_yaml_ok() {
         let metadata = create_metadata();
+        let functions = StateFunctions::default();
         let registry = create_registry();
         let cost_type = CostType::Continuous;
 
@@ -424,7 +452,8 @@ cost: 0
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         let expected = vec![Transition {
             name: String::from("transition"),
             preconditions: Vec::new(),
@@ -441,6 +470,7 @@ cost: 0
     #[test]
     fn load_transition_integer_string_from_yaml_ok() {
         let metadata = create_metadata();
+        let functions = StateFunctions::default();
         let registry = create_registry();
         let cost_type = CostType::Integer;
 
@@ -454,7 +484,8 @@ cost: '0'
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_ok());
         let expected = vec![Transition {
             name: String::from("transition"),
@@ -472,6 +503,7 @@ cost: '0'
     #[test]
     fn load_transition_non_forced_from_yaml_ok() {
         let metadata = create_metadata();
+        let functions = StateFunctions::default();
         let registry = create_registry();
         let cost_type = CostType::Integer;
 
@@ -486,7 +518,8 @@ forced: false
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_ok());
         let expected = vec![Transition {
             name: String::from("transition"),
@@ -504,6 +537,7 @@ forced: false
     #[test]
     fn load_transition_forced_from_yaml_ok() {
         let metadata = create_metadata();
+        let functions = StateFunctions::default();
         let registry = create_registry();
         let cost_type = CostType::Integer;
 
@@ -518,7 +552,8 @@ forced: true
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_ok());
         let expected = vec![Transition {
             name: String::from("transition"),
@@ -536,6 +571,7 @@ forced: true
     #[test]
     fn load_transition_forward_forced_from_yaml_ok() {
         let metadata = create_metadata();
+        let functions = StateFunctions::default();
         let registry = create_registry();
         let cost_type = CostType::Integer;
 
@@ -550,7 +586,8 @@ direction: forward
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_ok());
         let expected = vec![Transition {
             name: String::from("transition"),
@@ -568,6 +605,7 @@ direction: forward
     #[test]
     fn load_transition_backward_from_yaml_ok() {
         let metadata = create_metadata();
+        let functions = StateFunctions::default();
         let registry = create_registry();
         let cost_type = CostType::Integer;
 
@@ -582,7 +620,8 @@ direction: backward
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_ok());
         let expected = vec![Transition {
             name: String::from("transition"),
@@ -600,6 +639,7 @@ direction: backward
     #[test]
     fn load_transition_multiple_effects_from_yaml_ok() {
         let metadata = create_metadata();
+        let functions = StateFunctions::default();
         let registry = create_registry();
         let cost_type = CostType::Integer;
 
@@ -624,7 +664,8 @@ cost: (+ cost (f1 e))
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_ok());
         let expected = vec![
             Transition {
@@ -732,6 +773,7 @@ cost: (+ cost (f1 e))
     #[test]
     fn load_transition_multiple_set_and_vector_effects_from_yaml_ok() {
         let metadata = create_metadata();
+        let functions = StateFunctions::default();
         let registry = create_registry();
         let cost_type = CostType::Integer;
 
@@ -761,7 +803,8 @@ cost: (+ cost (f1 e))
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_ok());
         let expected = vec![
             Transition {
@@ -1045,6 +1088,8 @@ cost: (+ cost (f1 e))
         let result = metadata.add_continuous_resource_variable(String::from("cr3"), false);
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let mut registry = TableRegistry::default();
         let result = registry.add_table_1d(String::from("f1"), vec![10, 20, 30]);
         assert!(result.is_ok());
@@ -1073,7 +1118,8 @@ cost: (+ cost (f1 e))
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_err());
 
         let transition = r"
@@ -1093,7 +1139,8 @@ cost: (+ cost (f1 e))
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_err());
 
         let transition = r"
@@ -1116,7 +1163,8 @@ cost: (+ cost (f1 e))
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_err());
 
         let transition = r"
@@ -1130,7 +1178,8 @@ forced: fasle
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_err());
 
         let transition = r"
@@ -1144,7 +1193,8 @@ direction: both
         let transition = transition.unwrap();
         assert_eq!(transition.len(), 1);
         let transition = &transition[0];
-        let transitions = load_transitions_from_yaml(transition, &metadata, &registry, &cost_type);
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
         assert!(transitions.is_err());
     }
 
@@ -1219,6 +1269,8 @@ direction: both
         let result = metadata.add_continuous_resource_variable(String::from("cr3"), false);
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let mut registry = TableRegistry::default();
         let result = registry.add_table_1d(String::from("f1"), vec![10, 20, 30]);
         assert!(result.is_ok());
@@ -1244,7 +1296,7 @@ direction: both
         let effect = effect.unwrap();
         assert_eq!(effect.len(), 1);
         let effect = &effect[0];
-        let effect = load_effect_from_yaml(effect, &metadata, &registry, &parameters);
+        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
         assert!(effect.is_ok());
         let expected = Effect {
             set_effects: vec![(
@@ -1345,6 +1397,8 @@ direction: both
         let result = metadata.add_continuous_resource_variable(String::from("cr3"), false);
         assert!(result.is_ok());
 
+        let functions = StateFunctions::default();
+
         let mut registry = TableRegistry::default();
         let result = registry.add_table_1d(String::from("f1"), vec![10, 20, 30]);
         assert!(result.is_ok());
@@ -1370,7 +1424,7 @@ direction: both
         let effect = effect.unwrap();
         assert_eq!(effect.len(), 1);
         let effect = &effect[0];
-        let effect = load_effect_from_yaml(effect, &metadata, &registry, &parameters);
+        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
         assert!(effect.is_err());
 
         let mut parameters = FxHashMap::default();
@@ -1390,7 +1444,7 @@ direction: both
         let effect = effect.unwrap();
         assert_eq!(effect.len(), 1);
         let effect = &effect[0];
-        let effect = load_effect_from_yaml(effect, &metadata, &registry, &parameters);
+        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
         assert!(effect.is_err());
 
         let effect = r"
@@ -1408,7 +1462,7 @@ direction: both
         let effect = effect.unwrap();
         assert_eq!(effect.len(), 1);
         let effect = &effect[0];
-        let effect = load_effect_from_yaml(effect, &metadata, &registry, &parameters);
+        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
         assert!(effect.is_err());
 
         let effect = r"
@@ -1425,7 +1479,7 @@ direction: both
         let effect = effect.unwrap();
         assert_eq!(effect.len(), 1);
         let effect = &effect[0];
-        let effect = load_effect_from_yaml(effect, &metadata, &registry, &parameters);
+        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
         assert!(effect.is_err());
     }
 }

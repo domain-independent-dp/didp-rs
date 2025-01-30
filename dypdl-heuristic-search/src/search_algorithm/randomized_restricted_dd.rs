@@ -1,5 +1,7 @@
 use super::beam_search::BeamSearchParameters;
-use super::data_structure::{exceed_bound, BfsNode, StateRegistry, TransitionWithId};
+use super::data_structure::{
+    exceed_bound, BfsNode, ParentAndChildStateFunctionCache, StateRegistry, TransitionWithId,
+};
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{SearchInput, Solution};
 use super::util;
@@ -64,12 +66,14 @@ pub struct RandomizedRestrictedDDParameters<'a, T, V: TransitionInterface> {
 /// let model = Rc::new(model);
 ///
 /// let state = model.target.clone();
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 /// let cost = 0;
-/// let h_evaluator = |_: &_| Some(0);
+/// let h_evaluator = |_: &_, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
 /// let node = FNode::<_, TransitionWithId>::generate_root_node(
 ///     state,
+///     &mut function_cache,
 ///     cost,
 ///     &model,
 ///     &h_evaluator,
@@ -83,9 +87,10 @@ pub struct RandomizedRestrictedDDParameters<'a, T, V: TransitionInterface> {
 ///     solution_suffix: &[],
 /// };
 /// let transition_evaluator =
-///     move |node: &FNode<_, TransitionWithId>, transition, registry: &mut _, primal_bound| {
+///     move |node: &FNode<_, TransitionWithId>, transition, cache: &mut _, registry: &mut _, primal_bound| {
 ///         node.insert_successor_node(
 ///             transition,
+///             cache,
 ///             registry,
 ///             &h_evaluator,
 ///             &f_evaluator,
@@ -116,6 +121,7 @@ where
     E: FnMut(
         &N,
         Rc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
         &mut StateRegistry<T, N>,
         Option<T>,
     ) -> Option<(Rc<N>, bool)>,
@@ -157,6 +163,9 @@ where
         registry.clear();
     }
 
+    let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+    let mut applicable_transitions = Vec::new();
+
     let mut expanded = 0;
     let mut generated = 1;
     let mut pruned = false;
@@ -175,9 +184,15 @@ where
                 }
             }
 
-            if let Some((cost, suffix)) =
-                get_solution_cost_and_suffix(model, &*node, suffix, &mut base_cost_evaluator)
-            {
+            function_cache.parent.clear();
+
+            if let Some((cost, suffix)) = get_solution_cost_and_suffix(
+                model,
+                &*node,
+                suffix,
+                &mut base_cost_evaluator,
+                &mut function_cache,
+            ) {
                 if !exceed_bound(model, cost, primal_bound) {
                     primal_bound = Some(cost);
                     incumbent = Some((node, cost, suffix));
@@ -222,11 +237,20 @@ where
             }
 
             expanded += 1;
+            generator.generate_applicable_transitions(
+                node.state(),
+                &mut function_cache.parent,
+                &mut applicable_transitions,
+            );
 
-            for transition in generator.applicable_transitions(node.state()) {
-                if let Some((successor, new_generated)) =
-                    transition_evaluator(&node, transition, &mut registry, primal_bound)
-                {
+            for transition in applicable_transitions.drain(..) {
+                if let Some((successor, new_generated)) = transition_evaluator(
+                    &node,
+                    transition,
+                    &mut function_cache,
+                    &mut registry,
+                    primal_bound,
+                ) {
                     if let Some(bound) = successor.bound(model) {
                         if !exceed_bound(model, bound, layer_dual_bound) {
                             layer_dual_bound = Some(bound);

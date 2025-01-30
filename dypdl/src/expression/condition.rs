@@ -5,6 +5,7 @@ use super::set_expression::SetExpression;
 use super::table_expression::TableExpression;
 use super::{set_condition, SetCondition};
 use crate::state::{SetVariable, StateInterface};
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
 use std::ops;
@@ -45,6 +46,8 @@ impl ComparisonOperator {
 pub enum Condition {
     /// Constant.
     Constant(bool),
+    /// State function index.
+    StateFunction(usize),
     /// Not x.
     Not(Box<Condition>),
     /// x and b.
@@ -85,14 +88,25 @@ pub enum Condition {
 /// let mut model = Model::default();
 /// let variable = model.add_integer_variable("variable", 1).unwrap();
 /// let state = model.target.clone();
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 ///
 /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 1);
 /// let expression: IntegerExpression = condition.if_then_else(variable, 0);
-/// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+/// assert_eq!(
+///     expression.eval(
+///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+///     ),
+///     1,
+/// );
 ///
 /// let condition = Condition::comparison_i(ComparisonOperator::Gt, variable, 1);
 /// let expression: IntegerExpression = condition.if_then_else(variable, IntegerExpression::from(0));
-/// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+/// assert_eq!(
+///     expression.eval(
+///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+///     ),
+///     0,
+/// );
 /// ```
 pub trait IfThenElse<T> {
     /// Returns an if-then-else expression, which returns `a` if this condition holds and `b` otherwise.
@@ -121,10 +135,15 @@ impl ops::Not for Condition {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 1).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let condition = Condition::comparison_i(ComparisonOperator::Gt, variable, 1);
     /// let condition = !condition;
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     )
+    /// );
     /// ```
     #[inline]
     fn not(self) -> Self::Output {
@@ -145,11 +164,16 @@ impl ops::BitAnd for Condition {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 1).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
     /// let b = Condition::comparison_i(ComparisonOperator::Le, variable, 2);
     /// let condition = a & b;
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     )
+    /// );
     /// ```
     #[inline]
     fn bitand(self, rhs: Self) -> Self::Output {
@@ -170,11 +194,16 @@ impl ops::BitOr for Condition {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 1).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let a = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
     /// let b = Condition::comparison_i(ComparisonOperator::Lt, variable, 1);
     /// let condition = a | b;
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     )
+    /// );
     /// ```
     #[inline]
     fn bitor(self, rhs: Self) -> Self::Output {
@@ -194,9 +223,14 @@ impl Condition {
     /// let object_type = model.add_object_type("object_type", 4).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let condition = Condition::comparison_e(ComparisonOperator::Gt, variable, 0);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     )
+    /// );
     /// ```
     #[inline]
     pub fn comparison_e<T, U>(op: ComparisonOperator, lhs: T, rhs: U) -> Self
@@ -222,9 +256,14 @@ impl Condition {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 2).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let condition = Condition::comparison_i(ComparisonOperator::Gt, variable, 0);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     )
+    /// );
     /// ```
     pub fn comparison_i<T, U>(op: ComparisonOperator, lhs: T, rhs: U) -> Self
     where
@@ -249,9 +288,14 @@ impl Condition {
     /// let mut model = Model::default();
     /// let variable = model.add_continuous_resource_variable("variable", true, 0.5).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let condition = Condition::comparison_c(ComparisonOperator::Gt, variable, 0);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     )
+    /// );
     /// ```
     pub fn comparison_c<T, U>(op: ComparisonOperator, lhs: T, rhs: U) -> Self
     where
@@ -277,11 +321,16 @@ impl SetExpression {
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object_type", 4).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let expression = SetExpression::from(set);
     /// let condition = expression.contains(0);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     )
+    /// );
     #[inline]
     pub fn contains<T>(self, element: T) -> Condition
     where
@@ -303,12 +352,17 @@ impl SetExpression {
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object_type", 4).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let a = model.create_set(object_type, &[0, 1]).unwrap();
     /// let a = SetExpression::from(a);
     /// let b = model.create_set(object_type, &[0, 1]).unwrap();
     /// let condition = a.is_equal(b);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     #[inline]
     pub fn is_equal<T>(self, set: T) -> Condition
     where
@@ -330,12 +384,17 @@ impl SetExpression {
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object_type", 4).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let a = model.create_set(object_type, &[0, 1]).unwrap();
     /// let a = SetExpression::from(a);
     /// let b = model.create_set(object_type, &[1, 2]).unwrap();
     /// let condition = a.is_not_equal(b);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     )
+    /// );
     #[inline]
     pub fn is_not_equal<T>(self, set: T) -> Condition
     where
@@ -357,12 +416,17 @@ impl SetExpression {
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object_type", 4).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let a = model.create_set(object_type, &[0, 1]).unwrap();
     /// let a = SetExpression::from(a);
     /// let b = model.create_set(object_type, &[0, 1, 2]).unwrap();
     /// let condition = a.is_subset(b);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     #[inline]
     pub fn is_subset<T>(self, set: T) -> Condition
     where
@@ -384,11 +448,16 @@ impl SetExpression {
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object_type", 4).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let set = model.create_set(object_type, &[]).unwrap();
     /// let expression = SetExpression::from(set);
     /// let condition = expression.is_empty();
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     #[inline]
     pub fn is_empty(self) -> Condition {
         Condition::Set(Box::new(SetCondition::IsEmpty(self)))
@@ -408,9 +477,14 @@ impl SetVariable {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let condition = variable.contains(0);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     #[inline]
     pub fn contains<T>(self, element: T) -> Condition
     where
@@ -435,9 +509,14 @@ impl SetVariable {
     /// let a = model.add_set_variable("a", object_type, a).unwrap();
     /// let b = model.create_set(object_type, &[0, 1]).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let condition = a.is_equal(b);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     #[inline]
     pub fn is_equal<T>(self, set: T) -> Condition
     where
@@ -462,9 +541,14 @@ impl SetVariable {
     /// let a = model.add_set_variable("a", object_type, a).unwrap();
     /// let b = model.create_set(object_type, &[1, 2]).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let condition = a.is_not_equal(b);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     #[inline]
     pub fn is_not_equal<T>(self, set: T) -> Condition
     where
@@ -489,9 +573,14 @@ impl SetVariable {
     /// let a = model.add_set_variable("a", object_type, a).unwrap();
     /// let b = model.create_set(object_type, &[0, 1, 2]).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let condition = a.is_not_equal(b);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     #[inline]
     pub fn is_subset<T>(self, set: T) -> Condition
     where
@@ -515,9 +604,14 @@ impl SetVariable {
     /// let set = model.create_set(object_type, &[]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let condition = variable.is_empty();
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     #[inline]
     pub fn is_empty(self) -> Condition {
         Condition::Set(Box::new(SetCondition::IsEmpty(SetExpression::from(self))))
@@ -537,9 +631,14 @@ impl Table1DHandle<bool> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.element(variable);
-    /// assert!(expression.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     )
+    /// );
     /// ```
     #[inline]
     pub fn element<T>(&self, x: T) -> Condition
@@ -569,9 +668,14 @@ impl Table2DHandle<bool> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.element(variable, 1);
-    /// assert!(expression.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     #[inline]
     pub fn element<T, U>(&self, x: T, y: U) -> Condition
     where
@@ -605,9 +709,14 @@ impl Table3DHandle<bool> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.element(variable, variable + 1, 1);
-    /// assert!(expression.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     /// ```
     #[inline]
     pub fn element<T, U, V>(&self, x: T, y: U, z: V) -> Condition
@@ -640,6 +749,7 @@ impl TableHandle<bool> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ElementExpression::from(variable),
@@ -648,7 +758,11 @@ impl TableHandle<bool> {
     ///     ElementExpression::from(0),
     /// ];
     /// let expression = table.element(indices);
-    /// assert!(expression.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     )
+    /// );
     /// ```
     #[inline]
     pub fn element<T>(&self, indices: Vec<T>) -> Condition
@@ -675,27 +789,58 @@ impl Condition {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 1).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let condition = Condition::comparison_i(ComparisonOperator::Ge, variable, 0);
-    /// assert!(condition.eval(&state, &model.table_registry));
+    /// assert!(
+    ///     condition.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// );
     /// ```
-    pub fn eval<T: StateInterface>(&self, state: &T, registry: &TableRegistry) -> bool {
+    pub fn eval<T: StateInterface>(
+        &self,
+        state: &T,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> bool {
         match self {
             Self::Constant(value) => *value,
-            Self::Not(condition) => !condition.eval(state, registry),
-            Self::And(x, y) => x.eval(state, registry) && y.eval(state, registry),
-            Self::Or(x, y) => x.eval(state, registry) || y.eval(state, registry),
-            Self::ComparisonE(op, x, y) => {
-                op.eval(x.eval(state, registry), y.eval(state, registry))
+            Self::StateFunction(i) => {
+                function_cache.get_boolean_value(*i, state, state_functions, registry)
             }
-            Self::ComparisonI(op, x, y) => {
-                op.eval(x.eval(state, registry), y.eval(state, registry))
+            Self::Not(condition) => {
+                !condition.eval(state, function_cache, state_functions, registry)
             }
-            Self::ComparisonC(op, x, y) => {
-                op.eval(x.eval(state, registry), y.eval(state, registry))
+            Self::And(x, y) => {
+                x.eval(state, function_cache, state_functions, registry)
+                    && y.eval(state, function_cache, state_functions, registry)
             }
-            Self::Set(set) => set.eval(state, registry),
-            Self::Table(table) => *table.eval(state, registry, &registry.bool_tables),
+            Self::Or(x, y) => {
+                x.eval(state, function_cache, state_functions, registry)
+                    || y.eval(state, function_cache, state_functions, registry)
+            }
+            Self::ComparisonE(op, x, y) => op.eval(
+                x.eval(state, function_cache, state_functions, registry),
+                y.eval(state, function_cache, state_functions, registry),
+            ),
+            Self::ComparisonI(op, x, y) => op.eval(
+                x.eval(state, function_cache, state_functions, registry),
+                y.eval(state, function_cache, state_functions, registry),
+            ),
+            Self::ComparisonC(op, x, y) => op.eval(
+                x.eval(state, function_cache, state_functions, registry),
+                y.eval(state, function_cache, state_functions, registry),
+            ),
+            Self::Set(set) => set.eval(state, function_cache, state_functions, registry),
+            Self::Table(table) => *table.eval(
+                state,
+                function_cache,
+                state_functions,
+                registry,
+                &registry.bool_tables,
+            ),
         }
     }
 
@@ -757,6 +902,21 @@ impl Condition {
                     ComparisonOperator::Le,
                     ElementExpression::ResourceVariable(x),
                     ElementExpression::ResourceVariable(y),
+                )
+                | (
+                    ComparisonOperator::Eq,
+                    ElementExpression::StateFunction(x),
+                    ElementExpression::StateFunction(y),
+                )
+                | (
+                    ComparisonOperator::Ge,
+                    ElementExpression::StateFunction(x),
+                    ElementExpression::StateFunction(y),
+                )
+                | (
+                    ComparisonOperator::Le,
+                    ElementExpression::StateFunction(x),
+                    ElementExpression::StateFunction(y),
                 ) if x == y => Self::Constant(true),
                 (op, x, y) => Self::ComparisonE(op.clone(), Box::new(x), Box::new(y)),
             },
@@ -793,6 +953,21 @@ impl Condition {
                     ComparisonOperator::Le,
                     IntegerExpression::ResourceVariable(x),
                     IntegerExpression::ResourceVariable(y),
+                )
+                | (
+                    ComparisonOperator::Eq,
+                    IntegerExpression::StateFunction(x),
+                    IntegerExpression::StateFunction(y),
+                )
+                | (
+                    ComparisonOperator::Ge,
+                    IntegerExpression::StateFunction(x),
+                    IntegerExpression::StateFunction(y),
+                )
+                | (
+                    ComparisonOperator::Le,
+                    IntegerExpression::StateFunction(x),
+                    IntegerExpression::StateFunction(y),
                 ) if x == y => Self::Constant(true),
                 (op, x, y) => Self::ComparisonI(op.clone(), Box::new(x), Box::new(y)),
             },
@@ -829,6 +1004,21 @@ impl Condition {
                     ComparisonOperator::Le,
                     ContinuousExpression::ResourceVariable(x),
                     ContinuousExpression::ResourceVariable(y),
+                )
+                | (
+                    ComparisonOperator::Eq,
+                    ContinuousExpression::StateFunction(x),
+                    ContinuousExpression::StateFunction(y),
+                )
+                | (
+                    ComparisonOperator::Ge,
+                    ContinuousExpression::StateFunction(x),
+                    ContinuousExpression::StateFunction(y),
+                )
+                | (
+                    ComparisonOperator::Le,
+                    ContinuousExpression::StateFunction(x),
+                    ContinuousExpression::StateFunction(y),
                 ) if x == y => Self::Constant(true),
                 (op, x, y) => Self::ComparisonC(op.clone(), Box::new(x), Box::new(y)),
             },
@@ -1153,125 +1343,179 @@ mod tests {
     #[test]
     fn constant_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = Condition::Constant(true);
-        assert!(expression.eval(&state, &registry));
+        assert!(expression.eval(&state, &mut function_cache, &state_functions, &registry));
         let expression = Condition::Constant(false);
-        assert!(!expression.eval(&state, &registry));
+        assert!(!expression.eval(&state, &mut function_cache, &state_functions, &registry));
+    }
+
+    #[test]
+    fn state_function_eval() {
+        let mut state_metadata = StateMetadata::default();
+        let v = state_metadata.add_integer_variable("v");
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions
+            .add_boolean_function("f", Condition::comparison_i(ComparisonOperator::Eq, v, 0));
+        assert!(f.is_ok());
+        let f = f.unwrap();
+        let g = state_functions
+            .add_boolean_function("g", Condition::comparison_i(ComparisonOperator::Ne, v, 0));
+        assert!(g.is_ok());
+        let g = g.unwrap();
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+
+        assert!(f.eval(&state, &mut function_cache, &state_functions, &registry));
+
+        assert!(!g.eval(&state, &mut function_cache, &state_functions, &registry));
+
+        assert!(f.eval(&state, &mut function_cache, &state_functions, &registry));
+        assert!(!g.eval(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
     fn not_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = Condition::Not(Box::new(Condition::Constant(false)));
-        assert!(expression.eval(&state, &registry));
+        assert!(expression.eval(&state, &mut function_cache, &state_functions, &registry));
         let expression = Condition::Not(Box::new(Condition::Constant(true)));
-        assert!(!expression.eval(&state, &registry));
+        assert!(!expression.eval(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
     fn and_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = Condition::And(
             Box::new(Condition::Constant(true)),
             Box::new(Condition::Constant(true)),
         );
-        assert!(expression.eval(&state, &registry));
+        assert!(expression.eval(&state, &mut function_cache, &state_functions, &registry));
         let expression = Condition::And(
             Box::new(Condition::Constant(true)),
             Box::new(Condition::Constant(false)),
         );
-        assert!(!expression.eval(&state, &registry));
+        assert!(!expression.eval(&state, &mut function_cache, &state_functions, &registry));
         let expression = Condition::And(
             Box::new(Condition::Constant(false)),
             Box::new(Condition::Constant(true)),
         );
-        assert!(!expression.eval(&state, &registry));
+        assert!(!expression.eval(&state, &mut function_cache, &state_functions, &registry));
         let expression = Condition::And(
             Box::new(Condition::Constant(false)),
             Box::new(Condition::Constant(false)),
         );
-        assert!(!expression.eval(&state, &registry));
+        assert!(!expression.eval(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
     fn or_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = Condition::Or(
             Box::new(Condition::Constant(true)),
             Box::new(Condition::Constant(true)),
         );
-        assert!(expression.eval(&state, &registry));
+        assert!(expression.eval(&state, &mut function_cache, &state_functions, &registry));
         let expression = Condition::Or(
             Box::new(Condition::Constant(true)),
             Box::new(Condition::Constant(false)),
         );
-        assert!(expression.eval(&state, &registry));
+        assert!(expression.eval(&state, &mut function_cache, &state_functions, &registry));
         let expression = Condition::Or(
             Box::new(Condition::Constant(false)),
             Box::new(Condition::Constant(true)),
         );
-        assert!(expression.eval(&state, &registry));
+        assert!(expression.eval(&state, &mut function_cache, &state_functions, &registry));
         let expression = Condition::Or(
             Box::new(Condition::Constant(false)),
             Box::new(Condition::Constant(false)),
         );
-        assert!(!expression.eval(&state, &registry));
+        assert!(!expression.eval(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
     fn comparison_e_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = Condition::ComparisonE(
             ComparisonOperator::Eq,
             Box::new(ElementExpression::Constant(0)),
             Box::new(ElementExpression::Constant(0)),
         );
-        assert!(expression.eval(&state, &registry));
+        assert!(expression.eval(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
     fn comparison_i_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = Condition::ComparisonI(
             ComparisonOperator::Eq,
             Box::new(IntegerExpression::Constant(0)),
             Box::new(IntegerExpression::Constant(0)),
         );
-        assert!(expression.eval(&state, &registry));
+        assert!(expression.eval(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
     fn comparison_c_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = Condition::ComparisonC(
             ComparisonOperator::Eq,
             Box::new(ContinuousExpression::Constant(0.0)),
             Box::new(ContinuousExpression::Constant(0.0)),
         );
-        assert!(expression.eval(&state, &registry));
+        assert!(expression.eval(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
     fn set_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = Condition::Set(Box::new(SetCondition::Constant(true)));
-        assert!(expression.eval(&state, &registry));
+        assert!(expression.eval(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
     fn table_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = Condition::Table(Box::new(TableExpression::Constant(true)));
-        assert!(expression.eval(&state, &registry));
+        assert!(expression.eval(&state, &mut function_cache, &state_functions, &registry));
     }
 
     #[test]
@@ -1540,6 +1784,53 @@ mod tests {
     }
 
     #[test]
+    fn comparison_e_same_state_function_simplify() {
+        let mut state_metadata = StateMetadata::default();
+        let ob = state_metadata.add_object_type("ob", 3);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = state_metadata.add_element_variable("v", ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_element_function("f", v + 1);
+        assert!(f.is_ok());
+        let f = f.unwrap();
+
+        let registry = TableRegistry::default();
+
+        let condition = Condition::comparison_e(ComparisonOperator::Eq, f.clone(), f);
+
+        assert_eq!(condition.simplify(&registry), Condition::Constant(true));
+    }
+
+    #[test]
+    fn comparison_e_different_state_functions_simplify() {
+        let mut state_metadata = StateMetadata::default();
+        let ob = state_metadata.add_object_type("ob", 3);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = state_metadata.add_element_variable("v", ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_element_function("f", v + 1);
+        assert!(f.is_ok());
+        let f = f.unwrap();
+        let g = state_functions.add_element_function("g", v + 2);
+        assert!(g.is_ok());
+        let g = g.unwrap();
+
+        let registry = TableRegistry::default();
+
+        let condition = Condition::comparison_e(ComparisonOperator::Eq, f, g);
+
+        assert_eq!(condition.simplify(&registry), condition);
+    }
+
+    #[test]
     fn comparison_i_simplify() {
         let registry = TableRegistry::default();
         let expression = Condition::ComparisonI(
@@ -1593,6 +1884,47 @@ mod tests {
     }
 
     #[test]
+    fn comparison_i_same_state_function_simplify() {
+        let mut state_metadata = StateMetadata::default();
+        let v = state_metadata.add_integer_variable("v");
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_integer_function("f", v + 1);
+        assert!(f.is_ok());
+        let f = f.unwrap();
+
+        let registry = TableRegistry::default();
+
+        let condition = Condition::comparison_i(ComparisonOperator::Eq, f.clone(), f);
+
+        assert_eq!(condition.simplify(&registry), Condition::Constant(true));
+    }
+
+    #[test]
+    fn comparison_i_different_state_functions_simplify() {
+        let mut state_metadata = StateMetadata::default();
+        let v = state_metadata.add_integer_variable("v");
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_integer_function("f", v + 1);
+        assert!(f.is_ok());
+        let f = f.unwrap();
+        let g = state_functions.add_integer_function("g", v + 2);
+        assert!(g.is_ok());
+        let g = g.unwrap();
+
+        let registry = TableRegistry::default();
+
+        let condition = Condition::comparison_i(ComparisonOperator::Eq, f, g);
+
+        assert_eq!(condition.simplify(&registry), condition);
+    }
+
+    #[test]
     fn comparison_c_simplify() {
         let registry = TableRegistry::default();
         let expression = Condition::ComparisonC(
@@ -1643,6 +1975,47 @@ mod tests {
             Box::new(ContinuousExpression::ResourceVariable(1)),
         );
         assert_eq!(expression.simplify(&registry), expression);
+    }
+
+    #[test]
+    fn comparison_c_same_state_function_simplify() {
+        let mut state_metadata = StateMetadata::default();
+        let v = state_metadata.add_continuous_variable("v");
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_continuous_function("f", v + 1);
+        assert!(f.is_ok());
+        let f = f.unwrap();
+
+        let registry = TableRegistry::default();
+
+        let condition = Condition::comparison_c(ComparisonOperator::Eq, f.clone(), f);
+
+        assert_eq!(condition.simplify(&registry), Condition::Constant(true));
+    }
+
+    #[test]
+    fn comparison_c_different_state_functions_simplify() {
+        let mut state_metadata = StateMetadata::default();
+        let v = state_metadata.add_continuous_variable("v");
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_continuous_function("f", v + 1);
+        assert!(f.is_ok());
+        let f = f.unwrap();
+        let g = state_functions.add_continuous_function("g", v + 2);
+        assert!(g.is_ok());
+        let g = g.unwrap();
+
+        let registry = TableRegistry::default();
+
+        let condition = Condition::comparison_c(ComparisonOperator::Eq, f, g);
+
+        assert_eq!(condition.simplify(&registry), condition);
     }
 
     #[test]

@@ -26,12 +26,13 @@ pub use util::ParseErr;
 pub fn parse_integer(
     text: String,
     metadata: &dypdl::StateMetadata,
+    functions: &dypdl::StateFunctions,
     registry: &dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<expression::IntegerExpression, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
-        integer_parser::parse_expression(&tokens, metadata, registry, parameters)?;
+        integer_parser::parse_expression(&tokens, metadata, functions, registry, parameters)?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -52,12 +53,13 @@ pub fn parse_integer(
 pub fn parse_continuous(
     text: String,
     metadata: &dypdl::StateMetadata,
+    functions: &dypdl::StateFunctions,
     registry: &dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<expression::ContinuousExpression, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
-        continuous_parser::parse_expression(&tokens, metadata, registry, parameters)?;
+        continuous_parser::parse_expression(&tokens, metadata, functions, registry, parameters)?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -78,12 +80,13 @@ pub fn parse_continuous(
 pub fn parse_element(
     text: String,
     metadata: &dypdl::StateMetadata,
+    functions: &dypdl::StateFunctions,
     registry: &dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<expression::ElementExpression, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
-        element_parser::parse_expression(&tokens, metadata, registry, parameters)?;
+        element_parser::parse_expression(&tokens, metadata, functions, registry, parameters)?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -104,12 +107,13 @@ pub fn parse_element(
 pub fn parse_set(
     text: String,
     metadata: &dypdl::StateMetadata,
+    functions: &dypdl::StateFunctions,
     registry: &dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<expression::SetExpression, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
-        element_parser::parse_set_expression(&tokens, metadata, registry, parameters)?;
+        element_parser::parse_set_expression(&tokens, metadata, functions, registry, parameters)?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -130,12 +134,14 @@ pub fn parse_set(
 pub fn parse_vector(
     text: String,
     metadata: &dypdl::StateMetadata,
+    functions: &dypdl::StateFunctions,
     registry: &dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<expression::VectorExpression, ParseErr> {
     let tokens = tokenize(text);
-    let (expression, rest) =
-        element_parser::parse_vector_expression(&tokens, metadata, registry, parameters)?;
+    let (expression, rest) = element_parser::parse_vector_expression(
+        &tokens, metadata, functions, registry, parameters,
+    )?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -156,12 +162,13 @@ pub fn parse_vector(
 pub fn parse_condition(
     text: String,
     metadata: &dypdl::StateMetadata,
+    functions: &dypdl::StateFunctions,
     registry: &dypdl::TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<expression::Condition, ParseErr> {
     let tokens = tokenize(text);
     let (expression, rest) =
-        condition_parser::parse_expression(&tokens, metadata, registry, parameters)?;
+        condition_parser::parse_expression(&tokens, metadata, functions, registry, parameters)?;
     if rest.is_empty() {
         Ok(expression)
     } else {
@@ -341,101 +348,111 @@ mod tests {
     #[test]
     fn parse_set_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "(union (intersection s0 (difference s2 (add 2 s3))) (remove 1 s1))".to_string();
-        let result = parse_set(text, &metadata, &registry, &parameters);
+        let result = parse_set(text, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
     }
 
     #[test]
     fn parse_set_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "s0)".to_string();
-        let result = parse_set(text, &metadata, &registry, &parameters);
+        let result = parse_set(text, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_integer_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "n0".to_string();
-        let result = parse_integer(text, &metadata, &registry, &parameters);
+        let result = parse_integer(text, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
     }
 
     #[test]
     fn parse_integer_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "n0)".to_string();
-        let result = parse_integer(text, &metadata, &registry, &parameters);
+        let result = parse_integer(text, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_continuous_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "c0".to_string();
-        let result = parse_continuous(text, &metadata, &registry, &parameters);
+        let result = parse_continuous(text, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
     }
 
     #[test]
     fn parse_continuous_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "c0)".to_string();
-        let result = parse_continuous(text, &metadata, &registry, &parameters);
+        let result = parse_continuous(text, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_element_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "e0".to_string();
-        let result = parse_element(text, &metadata, &registry, &parameters);
+        let result = parse_element(text, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
     }
 
     #[test]
     fn parse_element_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "e0)".to_string();
-        let result = parse_element(text, &metadata, &registry, &parameters);
+        let result = parse_element(text, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
     #[test]
     fn parse_condition_ok() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "(not (and (and (and (> n0 2) (is_subset s0 s1)) (is_empty s0)) (or (< 1 n1) (is_in 2 s0))))"
             .to_string();
-        let result = parse_condition(text, &metadata, &registry, &parameters);
+        let result = parse_condition(text, &metadata, &functions, &registry, &parameters);
         assert!(result.is_ok());
     }
 
     #[test]
     fn parse_condition_err() {
         let metadata = generate_metadata();
+        let functions = dypdl::StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
         let text = "(is_empty s[0]))".to_string();
-        let result = parse_condition(text, &metadata, &registry, &parameters);
+        let result = parse_condition(text, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 

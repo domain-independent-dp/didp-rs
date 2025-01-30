@@ -458,8 +458,14 @@ impl TransitionPy {
     /// >>> t.is_applicable(model.target_state, model)
     /// True
     fn is_applicable(&self, state: &StatePy, model: &ModelPy) -> bool {
-        self.0
-            .is_applicable(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
+        self.0.is_applicable(
+            state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
+            &model.inner_as_ref().table_registry,
+        )
     }
 
     /// Applies the transition to the given state.
@@ -490,9 +496,16 @@ impl TransitionPy {
     /// >>> state = t.apply(model.target_state, model)
     /// >>> state[var]
     /// 5
+    #[pyo3(signature = (state, model))]
     pub fn apply(&self, state: &mut StatePy, model: &ModelPy) -> StatePy {
-        self.0
-            .apply(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
+        self.0.apply(
+            state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
+            &model.inner_as_ref().table_registry,
+        )
     }
 
     /// Evaluates the cost of the transition in the given state.
@@ -532,11 +545,15 @@ impl TransitionPy {
         state: &StatePy,
         model: &ModelPy,
     ) -> PyResult<IntOrFloat> {
+        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
         if model.float_cost() {
             let cost = cost.extract()?;
             Ok(IntOrFloat::Float(self.0.eval_cost(
                 cost,
                 state.inner_as_ref(),
+                &mut function_cache,
+                &model.inner_as_ref().state_functions,
                 &model.inner_as_ref().table_registry,
             )))
         } else {
@@ -544,6 +561,8 @@ impl TransitionPy {
             Ok(IntOrFloat::Int(self.0.eval_cost(
                 cost,
                 state.inner_as_ref(),
+                &mut function_cache,
+                &model.inner_as_ref().state_functions,
                 &model.inner_as_ref().table_registry,
             )))
         }

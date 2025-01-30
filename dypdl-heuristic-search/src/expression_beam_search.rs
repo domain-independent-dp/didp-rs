@@ -1,10 +1,10 @@
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
-    beam_search, BeamSearchParameters, CustomFNode, Search, SearchInput, Solution,
+    beam_search, BeamSearchParameters, CustomFNode, FNodeEvaluators, Search, SearchInput, Solution,
     SuccessorGenerator,
 };
-use dypdl::variable_type;
 use dypdl::CostType;
+use dypdl::{variable_type, StateFunctionCache};
 use std::error::Error;
 use std::fmt;
 use std::rc::Rc;
@@ -139,13 +139,18 @@ where
             false,
         );
 
-        let h_evaluator = |state: &_| {
+        let h_evaluator = |state: &_, cache: &mut _| {
             Some(
                 self.custom_expression_parameters
                     .h_expression
                     .as_ref()
                     .map_or(U::zero(), |expression| {
-                        expression.eval(state, &self.model.table_registry)
+                        expression.eval(
+                            state,
+                            cache,
+                            &self.model.state_functions,
+                            &self.model.table_registry,
+                        )
                     }),
             )
         };
@@ -154,13 +159,18 @@ where
                 .f_evaluator_type
                 .eval(g, h)
         };
+        let evaluators = FNodeEvaluators {
+            h: &h_evaluator,
+            f: &f_evaluator,
+        };
+        let mut function_cache = StateFunctionCache::new(&self.model.state_functions);
         let node = CustomFNode::generate_root_node(
             self.model.target.clone(),
+            &mut function_cache,
             T::zero(),
             &self.model,
             U::zero(),
-            &h_evaluator,
-            &f_evaluator,
+            evaluators,
             self.custom_expression_parameters.maximize,
         );
         let input = SearchInput {
@@ -168,12 +178,16 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = |node: &CustomFNode<_, _>, transition, _| {
+        let transition_evaluator = |node: &CustomFNode<_, _>, transition, cache: &mut _, _| {
+            let evaluators = FNodeEvaluators {
+                h: &h_evaluator,
+                f: &f_evaluator,
+            };
             node.generate_successor_node(
                 transition,
+                cache,
                 &self.model,
-                &h_evaluator,
-                &f_evaluator,
+                evaluators,
                 self.custom_expression_parameters.maximize,
             )
         };
