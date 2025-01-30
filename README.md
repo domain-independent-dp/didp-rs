@@ -1,8 +1,8 @@
+# Domain-Independent Dynamic Programming (DIDP)
+
 [![minimum rustc 1.65](https://img.shields.io/badge/rustc-1.65+-blue.svg)](https://rust-lang.github.io/rfcs/2495-min-rust-version.html)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-# Domain-Independent Dynamic Programming (DIDP)
 
 This repository is a Rust implementation of Dynamic Programming Description Language (DyPDL) and its solvers for Domain-Independent Dynamic Programming (DIDP).
 
@@ -32,7 +32,7 @@ Follow the instruction on the official webpage: <https://www.rust-lang.org/tools
 
 ### Run Tests
 
-```
+```bash
 cargo test --no-default-features
 ```
 
