@@ -25,8 +25,7 @@ rustc-hash = "2.1"
 yaml-rust = "0.4"
 
 [dependencies.pyo3]
-# 0.23 has many breaking changes, so we stick with 0.22 for now.
-version = "0.22"
+version = "0.23"
 
 [features]
 extension-module = ["pyo3/extension-module"]
@@ -34,4 +33,4 @@ abi3 = ["pyo3/abi3-py37"]
 default = ["extension-module", "abi3"]
 
 [build-dependencies]
-pyo3-build-config = "0.22"
+pyo3-build-config = "0.23"

@@ -366,7 +366,7 @@ fn restrict<T, N, V>(
                 false
             };
 
-        if must_keep || rng.gen::<f64>() < keep_probability {
+        if must_keep || rng.random::<f64>() < keep_probability {
             beam.swap(frontier, k);
             frontier += 1;
         }

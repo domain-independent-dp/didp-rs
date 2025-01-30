@@ -15,14 +15,13 @@ repository = "https://github.com/domain-independent-dp/didp-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ordered-float = "4.2"
+ordered-float = "4.6"
 dypdl = { path = "../dypdl", version = "0.8.0" }
 rustc-hash = "2.1"
 dashmap = "6.1"
 rayon = "1.10"
 crossbeam-channel = "0.5"
 bus = "2.4"
-rand = "0.8"
-rand_pcg = "0.3"
-rand_distr = "0.4"
+rand = "0.9"
+rand_pcg = "0.9"
 smallvec = "1.13"

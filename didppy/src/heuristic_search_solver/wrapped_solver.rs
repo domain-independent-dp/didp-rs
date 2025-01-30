@@ -4,21 +4,12 @@ use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{Search, Solution};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 
-#[derive(FromPyObject, Debug, PartialEq, Clone, Copy)]
+#[derive(FromPyObject, Debug, PartialEq, Clone, Copy, IntoPyObject)]
 pub enum WrappedCost {
-    #[pyo3(transparent, annotation = "int")]
+    #[pyo3(transparent)]
     Int(Integer),
-    #[pyo3(transparent, annotation = "float")]
+    #[pyo3(transparent)]
     Float(Continuous),
-}
-
-impl IntoPy<Py<PyAny>> for WrappedCost {
-    fn into_py(self, py: Python<'_>) -> Py<PyAny> {
-        match self {
-            Self::Int(value) => value.into_py(py),
-            Self::Float(value) => value.into_py(py),
-        }
-    }
 }
 
 /// Solution returned by a heuristic search solver.
