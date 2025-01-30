@@ -1,13 +1,14 @@
 [package]
 name = "didppy"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 rust-version = "1.65"
 description = "Python interface for Dynamic Programming Description Language (DyPDL) and DyPDL solvers."
 license = "MIT OR Apache-2.0"
 authors = [
-    "Ryo Kuroiwa <ryo.kuroiwa@mail.utoronto.ca>",
+    "Ryo Kuroiwa <kuroiwa@nii.ac.jp>",
     "Yuxiao (Jasper) Chen <yuxiao.chen@mail.utoronto.ca>",
+    "Anubhav Singh <anubhav.singh@utoronto.ca>",
 ]
 homepage = "https://didp.ai"
 repository = "https://github.com/domain-independent-dp/didp-rs"
@@ -19,7 +20,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 dypdl = { path = "../dypdl", version = "0.8.0" }
-dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.8.0" }
+dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.9.0" }
 didp-yaml = { path = "../didp-yaml", version = "0.8.0" }
 rustc-hash = "2.1"
 yaml-rust = "0.4"
