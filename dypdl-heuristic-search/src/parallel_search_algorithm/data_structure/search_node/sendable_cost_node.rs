@@ -5,7 +5,7 @@ use crate::search_algorithm::data_structure::{
 };
 use crate::search_algorithm::{BfsNode, StateInRegistry};
 use dypdl::variable_type::Numeric;
-use dypdl::{StateFunctionCache, Model, ReduceFunction, Transition, TransitionInterface};
+use dypdl::{Model, ReduceFunction, StateFunctionCache, Transition, TransitionInterface};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::sync::atomic;
@@ -429,11 +429,10 @@ mod tests {
         assert!(variable.is_ok());
         let state = model.target.clone();
         let mut expected_state = StateInRegistry::from(state.clone());
-        let mut node =
-            SendableCostNode::<_>::generate_root_node(state, Integer::max_value(), &model);
+        let mut node = SendableCostNode::<_>::generate_root_node(state, Integer::MAX, &model);
         assert_eq!(node.state(), &expected_state);
         assert_eq!(node.state_mut(), &mut expected_state);
-        assert_eq!(node.cost(&model), Integer::max_value());
+        assert_eq!(node.cost(&model), Integer::MAX);
         assert_eq!(node.bound(&model), None);
         assert!(!node.is_closed());
         assert_eq!(node.transitions(), vec![]);
@@ -447,11 +446,10 @@ mod tests {
         assert!(variable.is_ok());
         let state = model.target.clone();
         let mut expected_state = StateInRegistry::from(state.clone());
-        let mut node =
-            SendableCostNode::<_>::generate_root_node(state, Integer::min_value(), &model);
+        let mut node = SendableCostNode::<_>::generate_root_node(state, Integer::MIN, &model);
         assert_eq!(node.state(), &expected_state);
         assert_eq!(node.state_mut(), &mut expected_state);
-        assert_eq!(node.cost(&model), Integer::min_value());
+        assert_eq!(node.cost(&model), Integer::MIN);
         assert_eq!(node.bound(&model), None);
         assert!(!node.is_closed());
         assert_eq!(node.transitions(), vec![]);
@@ -482,11 +480,10 @@ mod tests {
         assert!(variable.is_ok());
         let state = model.target.clone();
         let mut expected_state = StateInRegistry::from(state.clone());
-        let mut node =
-            SendableCostNode::<_>::generate_root_node(state, Integer::max_value(), &model);
+        let mut node = SendableCostNode::<_>::generate_root_node(state, Integer::MAX, &model);
         assert_eq!(node.state(), &expected_state);
         assert_eq!(node.state_mut(), &mut expected_state);
-        assert_eq!(node.cost(&model), Integer::max_value());
+        assert_eq!(node.cost(&model), Integer::MAX);
         assert_eq!(node.bound(&model), None);
         assert!(!node.is_closed());
         assert_eq!(node.transitions(), vec![]);
@@ -500,11 +497,10 @@ mod tests {
         assert!(variable.is_ok());
         let state = model.target.clone();
         let mut expected_state = StateInRegistry::from(state.clone());
-        let mut node =
-            SendableCostNode::<_>::generate_root_node(state, Integer::min_value(), &model);
+        let mut node = SendableCostNode::<_>::generate_root_node(state, Integer::MIN, &model);
         assert_eq!(node.state(), &expected_state);
         assert_eq!(node.state_mut(), &mut expected_state);
-        assert_eq!(node.cost(&model), Integer::min_value());
+        assert_eq!(node.cost(&model), Integer::MIN);
         assert_eq!(node.bound(&model), None);
         assert!(!node.is_closed());
         assert_eq!(node.transitions(), vec![]);
@@ -549,11 +545,8 @@ mod tests {
         let node = SendableCostNode::generate_root_node(state, 0, &model);
 
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
-        let successor = node.generate_successor_node(
-            Arc::new(transition.clone()),
-            &mut function_cache,
-            &model,
-        );
+        let successor =
+            node.generate_successor_node(Arc::new(transition.clone()), &mut function_cache, &model);
         assert!(successor.is_some());
         let mut successor = successor.unwrap();
         assert_eq!(successor.state(), &expected_state);
@@ -593,11 +586,8 @@ mod tests {
 
         let node = SendableCostNode::generate_root_node(state, 0, &model);
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
-        let successor = node.generate_successor_node(
-            Arc::new(transition.clone()),
-            &mut function_cache,
-            &model,
-        );
+        let successor =
+            node.generate_successor_node(Arc::new(transition.clone()), &mut function_cache, &model);
         assert!(successor.is_some());
         let mut successor = successor.unwrap();
         assert_eq!(successor.state(), &expected_state);

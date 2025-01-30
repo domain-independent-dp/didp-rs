@@ -271,7 +271,7 @@ where
     }
 }
 
-impl<'a, T, N, B, V, D, R, K> Search<T> for Cabs<'a, T, N, B, V, D, R, K>
+impl<T, N, B, V, D, R, K> Search<T> for Cabs<'_, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display + Ord,
     <T as str::FromStr>::Err: fmt::Debug,

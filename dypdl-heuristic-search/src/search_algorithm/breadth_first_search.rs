@@ -209,7 +209,7 @@ where
     }
 }
 
-impl<'a, T, N, E, B, V> Search<T> for BreadthFirstSearch<'a, T, N, E, B, V>
+impl<T, N, E, B, V> Search<T> for BreadthFirstSearch<'_, T, N, E, B, V>
 where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,
     N: BfsNode<T, V>,

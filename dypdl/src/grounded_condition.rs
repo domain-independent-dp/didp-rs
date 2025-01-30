@@ -107,7 +107,7 @@ impl From<GroundedCondition> for Condition {
             }
         }
 
-        condition.unwrap_or_else(|| Condition::Constant(false))
+        condition.unwrap_or(Condition::Constant(false))
     }
 }
 

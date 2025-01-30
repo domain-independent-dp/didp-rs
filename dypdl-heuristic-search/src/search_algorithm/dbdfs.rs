@@ -238,7 +238,7 @@ where
     }
 }
 
-impl<'a, T, N, E, B, V> Search<T> for Dbdfs<'a, T, N, E, B, V>
+impl<T, N, E, B, V> Search<T> for Dbdfs<'_, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,

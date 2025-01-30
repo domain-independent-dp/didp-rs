@@ -24,7 +24,7 @@ where
     phantom: std::marker::PhantomData<T>,
 }
 
-impl<'a, T, I> Iterator for BeamDrain<'a, T, I>
+impl<T, I> Iterator for BeamDrain<'_, T, I>
 where
     T: Numeric,
     I: StateInformation<T>,

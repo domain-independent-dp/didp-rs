@@ -421,14 +421,14 @@ mod tests {
         assert!(v2.is_ok());
 
         let mut state = StateInRegistry::from(model.target.clone());
-        let cost = Integer::max_value();
+        let cost = Integer::MAX;
         let transition_chain = None;
 
         let mut node = CostNode::<_>::new(state.clone(), cost, &model, transition_chain);
-        assert_eq!(node.priority, Integer::min_value());
+        assert_eq!(node.priority, Integer::MIN);
         assert_eq!(node.state(), &state);
         assert_eq!(node.state_mut(), &mut state);
-        assert_eq!(node.cost(&model), Integer::max_value());
+        assert_eq!(node.cost(&model), Integer::MAX);
         assert_eq!(node.bound(&model), None);
         assert!(!node.is_closed());
         assert_eq!(node.transitions(), vec![]);
@@ -446,14 +446,14 @@ mod tests {
         assert!(v2.is_ok());
 
         let mut state = StateInRegistry::from(model.target.clone());
-        let cost = Integer::min_value();
+        let cost = Integer::MIN;
         let transition_chain = None;
 
         let mut node = CostNode::<_>::new(state.clone(), cost, &model, transition_chain);
-        assert_eq!(node.priority, Integer::max_value());
+        assert_eq!(node.priority, Integer::MAX);
         assert_eq!(node.state(), &state);
         assert_eq!(node.state_mut(), &mut state);
-        assert_eq!(node.cost(&model), Integer::min_value());
+        assert_eq!(node.cost(&model), Integer::MIN);
         assert_eq!(node.bound(&model), None);
         assert!(!node.is_closed());
         assert_eq!(node.transitions(), vec![]);
@@ -496,14 +496,14 @@ mod tests {
         assert!(v2.is_ok());
 
         let mut state = StateInRegistry::from(model.target.clone());
-        let cost = Integer::max_value();
+        let cost = Integer::MAX;
         let transition_chain = None;
 
         let mut node = CostNode::<_>::new(state.clone(), cost, &model, transition_chain);
-        assert_eq!(node.priority, Integer::max_value());
+        assert_eq!(node.priority, Integer::MAX);
         assert_eq!(node.state(), &state);
         assert_eq!(node.state_mut(), &mut state);
-        assert_eq!(node.cost(&model), Integer::max_value());
+        assert_eq!(node.cost(&model), Integer::MAX);
         assert_eq!(node.bound(&model), None);
         assert!(!node.is_closed());
         assert_eq!(node.transitions(), vec![]);
@@ -521,14 +521,14 @@ mod tests {
         assert!(v2.is_ok());
 
         let mut state = StateInRegistry::from(model.target.clone());
-        let cost = Integer::min_value();
+        let cost = Integer::MIN;
         let transition_chain = None;
 
         let mut node = CostNode::<_>::new(state.clone(), cost, &model, transition_chain);
-        assert_eq!(node.priority, Integer::min_value());
+        assert_eq!(node.priority, Integer::MIN);
         assert_eq!(node.state(), &state);
         assert_eq!(node.state_mut(), &mut state);
-        assert_eq!(node.cost(&model), Integer::min_value());
+        assert_eq!(node.cost(&model), Integer::MIN);
         assert_eq!(node.bound(&model), None);
         assert!(!node.is_closed());
         assert_eq!(node.transitions(), vec![]);
@@ -785,8 +785,7 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
-        let result =
-            node.generate_successor_node(Rc::new(transition), &mut function_cache, &model);
+        let result = node.generate_successor_node(Rc::new(transition), &mut function_cache, &model);
         assert_eq!(result, None);
     }
 

@@ -283,7 +283,7 @@ pub struct Trace<'a, S, U, T> {
     function_cache: StateFunctionCache,
 }
 
-impl<'a, S, U, T> Iterator for Trace<'a, S, U, T>
+impl<S, U, T> Iterator for Trace<'_, S, U, T>
 where
     S: StateInterface + From<State> + Clone,
     U: Numeric,
