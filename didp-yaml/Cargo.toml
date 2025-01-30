@@ -24,7 +24,7 @@ num-traits = "0.2"
 lazy_static = "1.5"
 approx = "0.5"
 serde = { version = "1.0", features = ["derive"] }
-serde_yml = "0.0"
+serde_yml = "0.0.12"
 itertools = "0.14"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
