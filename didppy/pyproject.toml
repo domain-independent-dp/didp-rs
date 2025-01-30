@@ -11,21 +11,16 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 
-[project.optoinal-dependencies]
-dev = [
-    "pytest",
-    "flake8",
-    "black",
-    "isort",
-]
+[project.optional-dependencies]
+dev = ["pytest", "flake8", "black", "isort"]
 
 [tool.isort]
 profile = 'black'
 src_paths = ['tests', 'examples']
 line_length = 88
 
+[tool.flake8]
+max-line-length = 88
+
 [tool.pytest.ini_options]
-addopts = [
-    "--import-mode=importlib",
-    "--color=yes",
-]
+addopts = ["--import-mode=importlib", "--color=yes"]
