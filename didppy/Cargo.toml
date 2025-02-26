@@ -19,9 +19,9 @@ name = "didppy"
 crate-type = ["cdylib"]
 
 [dependencies]
-dypdl = { path = "../dypdl", version = "0.8.0" }
+dypdl = { path = "../dypdl", version = "0.9.0" }
 dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.9.0" }
-didp-yaml = { path = "../didp-yaml", version = "0.8.0" }
+didp-yaml = { path = "../didp-yaml", version = "0.9.0" }
 rustc-hash = "2.1"
 yaml-rust = "0.4"
 
