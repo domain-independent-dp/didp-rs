@@ -1,13 +1,14 @@
 [package]
 name = "dypdl"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 rust-version = "1.65"
 description = "Libarary for Dynamic Programming Description Language (DyPDL)."
 license = "MIT OR Apache-2.0"
 authors = [
-    "Ryo Kuroiwa <ryo.kuroiwa@mail.utoronto.ca>",
+    "Ryo Kuroiwa <kuroiwa@nii.ac.jp>",
     "Yuxiao (Jasper) Chen <yuxiao.chen@mail.utoronto.ca>",
+    "Anubhav Singh <anubhav.singh@utoronto.ca>",
 ]
 homepage = "https://didp.ai"
 repository = "https://github.com/domain-independent-dp/didp-rs"
@@ -15,7 +16,7 @@ repository = "https://github.com/domain-independent-dp/didp-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ordered-float = "4.2"
+ordered-float = "5.0"
 # While 0.4 is not the latest version, we tentatively use it because we observed some slowdown with 0.5.7.
 fixedbitset = "0.4"
 approx = "0.5"

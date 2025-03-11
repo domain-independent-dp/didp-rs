@@ -131,7 +131,7 @@ where
     phantom: PhantomData<N>,
 }
 
-impl<'a, T, N, E, B, V> BestFirstSearch<'a, T, N, E, B, V>
+impl<T, N, E, B, V> BestFirstSearch<'_, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,
@@ -148,7 +148,7 @@ where
 {
     /// Creates a new best-first search solver.
     pub fn new(
-        input: SearchInput<'a, N, V>,
+        input: SearchInput<N, V>,
         transition_evaluator: E,
         base_cost_evaluator: B,
         parameters: Parameters<T>,
@@ -200,7 +200,7 @@ where
     }
 }
 
-impl<'a, T, N, E, B, V> Search<T> for BestFirstSearch<'a, T, N, E, B, V>
+impl<T, N, E, B, V> Search<T> for BestFirstSearch<'_, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,

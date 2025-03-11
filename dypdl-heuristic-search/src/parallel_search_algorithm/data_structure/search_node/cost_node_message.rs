@@ -5,7 +5,7 @@ use crate::search_algorithm::data_structure::{
 };
 use crate::search_algorithm::CostNode;
 use dypdl::variable_type::Numeric;
-use dypdl::{StateFunctionCache, Model, ReduceFunction, Transition, TransitionInterface};
+use dypdl::{Model, ReduceFunction, StateFunctionCache, Transition, TransitionInterface};
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -256,9 +256,9 @@ mod tests {
         assert!(variable.is_ok());
         let state = StateWithHashableSignatureVariables::from(model.target.clone());
         let expected_state = state.clone();
-        let node = CostNodeMessage::<_>::new(state, Integer::max_value(), &model, None);
+        let node = CostNodeMessage::<_>::new(state, Integer::MAX, &model, None);
         assert_eq!(node.state, expected_state);
-        assert_eq!(node.priority, Integer::min_value());
+        assert_eq!(node.priority, Integer::MIN);
         assert_eq!(node.transitions, None);
     }
 
@@ -270,9 +270,9 @@ mod tests {
         assert!(variable.is_ok());
         let state = StateWithHashableSignatureVariables::from(model.target.clone());
         let expected_state = state.clone();
-        let node = CostNodeMessage::<_>::new(state, Integer::min_value(), &model, None);
+        let node = CostNodeMessage::<_>::new(state, Integer::MIN, &model, None);
         assert_eq!(node.state, expected_state);
-        assert_eq!(node.priority, Integer::max_value());
+        assert_eq!(node.priority, Integer::MAX);
         assert_eq!(node.transitions, None);
     }
 
@@ -298,9 +298,9 @@ mod tests {
         assert!(variable.is_ok());
         let state = StateWithHashableSignatureVariables::from(model.target.clone());
         let expected_state = state.clone();
-        let node = CostNodeMessage::<_>::new(state, Integer::max_value(), &model, None);
+        let node = CostNodeMessage::<_>::new(state, Integer::MAX, &model, None);
         assert_eq!(node.state, expected_state);
-        assert_eq!(node.priority, Integer::max_value());
+        assert_eq!(node.priority, Integer::MAX);
         assert_eq!(node.transitions, None);
     }
 
@@ -312,9 +312,9 @@ mod tests {
         assert!(variable.is_ok());
         let state = StateWithHashableSignatureVariables::from(model.target.clone());
         let expected_state = state.clone();
-        let node = CostNodeMessage::<_>::new(state, Integer::min_value(), &model, None);
+        let node = CostNodeMessage::<_>::new(state, Integer::MIN, &model, None);
         assert_eq!(node.state, expected_state);
-        assert_eq!(node.priority, Integer::min_value());
+        assert_eq!(node.priority, Integer::MIN);
         assert_eq!(node.transitions, None);
     }
 

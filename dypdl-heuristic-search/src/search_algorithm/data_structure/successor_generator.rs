@@ -83,8 +83,7 @@ where
     end: bool,
 }
 
-impl<'a, 'b, T, U, R, S: dypdl::StateInterface> Iterator
-    for ApplicableTransitions<'a, 'b, T, U, R, S>
+impl<T, U, R, S: dypdl::StateInterface> Iterator for ApplicableTransitions<'_, '_, T, U, R, S>
 where
     T: TransitionInterface,
     U: Deref<Target = T> + Clone,

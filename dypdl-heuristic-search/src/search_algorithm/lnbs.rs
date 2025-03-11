@@ -7,7 +7,7 @@ use super::rollout::get_trace;
 use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::{print_primal_bound, update_bound_if_better, TimeKeeper};
 use dypdl::{variable_type, Model, ReduceFunction, Transition, TransitionInterface};
-use rand::distributions::WeightedIndex;
+use rand::distr::weighted::WeightedIndex;
 use rand::prelude::*;
 use rand_pcg::Pcg64Mcg;
 use rustc_hash::FxHashMap;
@@ -570,7 +570,7 @@ where
                 if self.depth_exhausted[i] || (i < last && *depth >= last_depth) {
                     None
                 } else {
-                    let score = self.rng.gen::<f64>();
+                    let score = self.rng.random::<f64>();
 
                     Some((score, (i, *depth)))
                 }

@@ -85,7 +85,7 @@ where
 impl SolutionToDump {
     /// Output the solution to a file.
     pub fn dump_to_file(&self, filename: &str) -> Result<(), Box<dyn Error>> {
-        let solution = serde_yaml::to_string(self)?;
+        let solution = serde_yml::to_string(self)?;
         fs::write(filename, solution)?;
         Ok(())
     }

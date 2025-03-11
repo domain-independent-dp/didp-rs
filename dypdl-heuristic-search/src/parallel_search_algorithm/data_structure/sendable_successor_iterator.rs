@@ -1,6 +1,6 @@
 use crate::search_algorithm::{
-    data_structure::HashableSignatureVariables,
-    data_structure::ParentAndChildStateFunctionCache, BfsNode, SuccessorGenerator,
+    data_structure::HashableSignatureVariables, data_structure::ParentAndChildStateFunctionCache,
+    BfsNode, SuccessorGenerator,
 };
 use crate::ConcurrentStateRegistry;
 use dypdl::variable_type::Numeric;
@@ -59,7 +59,7 @@ where
     }
 }
 
-impl<'a, T, N, E, V> Iterator for SendableSuccessorIterator<'a, T, N, E, V>
+impl<T, N, E, V> Iterator for SendableSuccessorIterator<'_, T, N, E, V>
 where
     T: Numeric + Display,
     N: BfsNode<T, V, Arc<HashableSignatureVariables>>,
