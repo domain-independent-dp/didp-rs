@@ -1,6 +1,7 @@
-use crate::search_algorithm::data_structure::HashableSignatureVariables;
-use crate::search_algorithm::BfsNode;
-use crate::search_algorithm::SuccessorGenerator;
+use crate::search_algorithm::{
+    data_structure::HashableSignatureVariables, data_structure::ParentAndChildStateFunctionCache,
+    BfsNode, SuccessorGenerator,
+};
 use crate::ConcurrentStateRegistry;
 use dypdl::variable_type::Numeric;
 use dypdl::{Model, TransitionInterface};
@@ -12,13 +13,14 @@ pub struct SendableSuccessorIterator<'a, T, N, E, V>
 where
     T: Numeric + Display,
     N: BfsNode<T, V, Arc<HashableSignatureVariables>>,
-    E: Fn(&N, Arc<V>, Option<T>) -> Option<N>,
+    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<N>,
     V: TransitionInterface + Clone,
 {
     node: Arc<N>,
     generator: &'a SuccessorGenerator<V, Arc<V>, Arc<Model>>,
     evaluator: E,
     registry: &'a ConcurrentStateRegistry<T, N>,
+    function_cache: ParentAndChildStateFunctionCache,
     primal_bound: Option<T>,
     iter: std::slice::Iter<'a, Arc<V>>,
     forced: bool,
@@ -29,7 +31,7 @@ impl<'a, T, N, E, V> SendableSuccessorIterator<'a, T, N, E, V>
 where
     T: Numeric + Display,
     N: BfsNode<T, V, Arc<HashableSignatureVariables>>,
-    E: Fn(&N, Arc<V>, Option<T>) -> Option<N>,
+    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<N>,
     V: TransitionInterface + Clone,
 {
     /// Creates a new iterator.
@@ -40,11 +42,15 @@ where
         registry: &'a ConcurrentStateRegistry<T, N>,
         primal_bound: Option<T>,
     ) -> Self {
+        let function_cache =
+            ParentAndChildStateFunctionCache::new(&generator.model.state_functions);
+
         Self {
             node,
             generator,
             evaluator,
             registry,
+            function_cache,
             primal_bound,
             iter: generator.forced_transitions.iter(),
             forced: true,
@@ -53,11 +59,11 @@ where
     }
 }
 
-impl<'a, T, N, E, V> Iterator for SendableSuccessorIterator<'a, T, N, E, V>
+impl<T, N, E, V> Iterator for SendableSuccessorIterator<'_, T, N, E, V>
 where
     T: Numeric + Display,
     N: BfsNode<T, V, Arc<HashableSignatureVariables>>,
-    E: Fn(&N, Arc<V>, Option<T>) -> Option<N>,
+    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<N>,
     V: TransitionInterface + Clone,
 {
     type Item = Arc<N>;
@@ -69,14 +75,22 @@ where
 
         match self.iter.next() {
             Some(op) => {
-                if op.is_applicable(self.node.state(), &self.generator.model.table_registry) {
+                if op.is_applicable(
+                    self.node.state(),
+                    &mut self.function_cache.parent,
+                    &self.generator.model.state_functions,
+                    &self.generator.model.table_registry,
+                ) {
                     if self.forced {
                         self.end = true;
                     }
 
-                    if let Some(successor) =
-                        (self.evaluator)(&self.node, op.clone(), self.primal_bound)
-                    {
+                    if let Some(successor) = (self.evaluator)(
+                        &self.node,
+                        op.clone(),
+                        &mut self.function_cache,
+                        self.primal_bound,
+                    ) {
                         let result = self.registry.insert(successor);
 
                         for d in result.dominated {
@@ -137,7 +151,14 @@ mod tests {
         let result = transition.add_effect(var, var + 2);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 2);
-        let result = model.generate_successor_state(&model.target, 0, &transition, None);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = model.generate_successor_state(
+            &model.target,
+            &mut function_cache,
+            0,
+            &transition,
+            None,
+        );
         assert!(result.is_some());
         let (expected_state, expected_cost) = result.unwrap();
         let result = model.add_forward_forced_transition(transition);
@@ -173,10 +194,12 @@ mod tests {
             false,
         );
 
-        let h_evaluator = |_: &_| Some(0);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g: Integer, h: Integer, _: &_| g + h;
         let node = SendableFNode::<_>::generate_root_node(
             model.target.clone(),
+            &mut function_cache,
             0,
             &model,
             h_evaluator,
@@ -188,10 +211,12 @@ mod tests {
         let registry = ConcurrentStateRegistry::new(model.clone());
         let evaluator = |node: &SendableFNode<_>,
                          transition: Arc<Transition>,
+                         cache: &mut _,
                          primal_bound: Option<Integer>| {
             SendableFNode::generate_successor_node(
                 node,
                 transition,
+                cache,
                 &model,
                 h_evaluator,
                 f_evaluator,
@@ -237,7 +262,14 @@ mod tests {
         let result = transition.add_effect(var, var + 3);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 3);
-        let result = model.generate_successor_state(&model.target, 0, &transition, None);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = model.generate_successor_state(
+            &model.target,
+            &mut function_cache,
+            0,
+            &transition,
+            None,
+        );
         assert!(result.is_some());
         let (expected_state1, expected_cost1) = result.unwrap();
         let result = model.add_forward_transition(transition);
@@ -248,7 +280,14 @@ mod tests {
         let result = transition.add_effect(var, var + 4);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 4);
-        let result = model.generate_successor_state(&model.target, 0, &transition, None);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = model.generate_successor_state(
+            &model.target,
+            &mut function_cache,
+            0,
+            &transition,
+            None,
+        );
         assert!(result.is_some());
         let (expected_state2, expected_cost2) = result.unwrap();
         let result = model.add_forward_transition(transition);
@@ -260,10 +299,12 @@ mod tests {
             false,
         );
 
-        let h_evaluator = |_: &_| Some(0);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g: Integer, h: Integer, _: &_| g + h;
         let node = SendableFNode::<_>::generate_root_node(
             model.target.clone(),
+            &mut function_cache,
             0,
             &model,
             h_evaluator,
@@ -275,10 +316,12 @@ mod tests {
         let registry = ConcurrentStateRegistry::new(model.clone());
         let evaluator = |node: &SendableFNode<_>,
                          transition: Arc<Transition>,
+                         cache: &mut _,
                          primal_bound: Option<Integer>| {
             SendableFNode::generate_successor_node(
                 node,
                 transition,
+                cache,
                 &model,
                 h_evaluator,
                 f_evaluator,
@@ -325,10 +368,12 @@ mod tests {
             false,
         );
 
-        let h_evaluator = |_: &_| Some(0);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g: Integer, h: Integer, _: &_| g + h;
         let node = SendableFNode::<_>::generate_root_node(
             model.target.clone(),
+            &mut function_cache,
             0,
             &model,
             h_evaluator,
@@ -341,10 +386,12 @@ mod tests {
         let registry = ConcurrentStateRegistry::new(model.clone());
         let evaluator = |node: &SendableFNode<_>,
                          transition: Arc<Transition>,
+                         cache: &mut _,
                          primal_bound: Option<Integer>| {
             SendableFNode::generate_successor_node(
                 node,
                 transition,
+                cache,
                 &model,
                 h_evaluator,
                 f_evaluator,

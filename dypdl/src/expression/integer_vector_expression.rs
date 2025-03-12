@@ -4,6 +4,7 @@ use super::element_expression::ElementExpression;
 use super::integer_expression::IntegerExpression;
 use super::numeric_operator::{BinaryOperator, CastOperator, UnaryOperator};
 use super::table_vector_expression::TableVectorExpression;
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::state::StateInterface;
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Continuous, Integer};
@@ -64,8 +65,14 @@ impl IntegerVectorExpression {
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<U: StateInterface>(&self, state: &U, registry: &TableRegistry) -> Vec<Integer> {
-        self.eval_inner(None, state, registry)
+    pub fn eval<U: StateInterface>(
+        &self,
+        state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Vec<Integer> {
+        self.eval_inner(None, state, function_cache, state_functions, registry)
     }
 
     /// Returns the evaluation result of a cost expression.
@@ -77,76 +84,113 @@ impl IntegerVectorExpression {
         &self,
         cost: Integer,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Vec<Integer> {
-        self.eval_inner(Some(cost), state, registry)
+        self.eval_inner(
+            Some(cost),
+            state,
+            function_cache,
+            state_functions,
+            registry,
+        )
     }
 
     pub fn eval_inner<U: StateInterface>(
         &self,
         cost: Option<Integer>,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Vec<Integer> {
         match self {
             Self::Constant(vector) => vector.clone(),
             Self::Reverse(vector) => {
-                let mut vector = vector.eval_inner(cost, state, registry);
+                let mut vector =
+                    vector.eval_inner(cost, state, function_cache, state_functions, registry);
                 vector.reverse();
                 vector
             }
             Self::Push(value, vector) => {
-                let mut vector = vector.eval_inner(cost, state, registry);
-                vector.push(value.eval(state, registry));
+                let mut vector =
+                    vector.eval_inner(cost, state, function_cache, state_functions, registry);
+                vector.push(value.eval(state, function_cache, state_functions, registry));
                 vector
             }
             Self::Pop(vector) => {
-                let mut vector = vector.eval_inner(cost, state, registry);
+                let mut vector =
+                    vector.eval_inner(cost, state, function_cache, state_functions, registry);
                 vector.pop();
                 vector
             }
             Self::Set(value, vector, i) => {
-                let mut vector = vector.eval_inner(cost, state, registry);
-                vector[i.eval(state, registry)] = value.eval(state, registry);
+                let mut vector =
+                    vector.eval_inner(cost, state, function_cache, state_functions, registry);
+                vector[i.eval(state, function_cache, state_functions, registry)] =
+                    value.eval(state, function_cache, state_functions, registry);
                 vector
             }
-            Self::UnaryOperation(op, x) => op.eval_vector(x.eval_inner(cost, state, registry)),
+            Self::UnaryOperation(op, x) => op.eval_vector(x.eval_inner(
+                cost,
+                state,
+                function_cache,
+                state_functions,
+                registry,
+            )),
             Self::BinaryOperationX(op, x, y) => op.eval_operation_x(
-                cost.map_or_else(
-                    || x.eval(state, registry),
-                    |cost| x.eval_cost(cost, state, registry),
-                ),
-                y.eval_inner(cost, state, registry),
+                if let Some(cost) = cost {
+                    x.eval_cost(cost, state, function_cache, state_functions, registry)
+                } else {
+                    x.eval(state, function_cache, state_functions, registry)
+                },
+                y.eval_inner(cost, state, function_cache, state_functions, registry),
             ),
             Self::BinaryOperationY(op, x, y) => op.eval_operation_y(
-                x.eval_inner(cost, state, registry),
-                cost.map_or_else(
-                    || y.eval(state, registry),
-                    |cost| y.eval_cost(cost, state, registry),
-                ),
+                x.eval_inner(cost, state, function_cache, state_functions, registry),
+                if let Some(cost) = cost {
+                    y.eval_cost(cost, state, function_cache, state_functions, registry)
+                } else {
+                    y.eval(state, function_cache, state_functions, registry)
+                },
             ),
             Self::VectorOperation(op, x, y) => match (x.as_ref(), y.as_ref()) {
-                (Self::Constant(x), y) => {
-                    op.eval_vector_operation_in_y(x, y.eval_inner(cost, state, registry))
-                }
-                (x, Self::Constant(y)) => {
-                    op.eval_vector_operation_in_x(x.eval_inner(cost, state, registry), y)
-                }
+                (Self::Constant(x), y) => op.eval_vector_operation_in_y(
+                    x,
+                    y.eval_inner(cost, state, function_cache, state_functions, registry),
+                ),
+                (x, Self::Constant(y)) => op.eval_vector_operation_in_x(
+                    x.eval_inner(cost, state, function_cache, state_functions, registry),
+                    y,
+                ),
                 (x, y) => op.eval_vector_operation_in_y(
-                    &x.eval_inner(cost, state, registry),
-                    y.eval_inner(cost, state, registry),
+                    &x.eval_inner(cost, state, function_cache, state_functions, registry),
+                    y.eval_inner(cost, state, function_cache, state_functions, registry),
                 ),
             },
-            Self::Table(expression) => expression.eval(state, registry, &registry.integer_tables),
+            Self::Table(expression) => expression.eval(
+                state,
+                function_cache,
+                state_functions,
+                registry,
+                &registry.integer_tables,
+            ),
             Self::If(condition, x, y) => {
-                if condition.eval(state, registry) {
-                    x.eval_inner(cost, state, registry)
+                if condition.eval(state, function_cache, state_functions, registry) {
+                    x.eval_inner(cost, state, function_cache, state_functions, registry)
                 } else {
-                    y.eval_inner(cost, state, registry)
+                    y.eval_inner(cost, state, function_cache, state_functions, registry)
                 }
             }
             Self::FromContinuous(op, x) => op
-                .eval_vector(x.eval_inner(cost.map(Continuous::from), state, registry))
+                .eval_vector(x.eval_inner(
+                    cost.map(Continuous::from),
+                    state,
+                    function_cache,
+                    state_functions,
+                    registry,
+                ))
                 .into_iter()
                 .map(|x| x as Integer)
                 .collect(),
@@ -263,99 +307,189 @@ mod tests {
     #[test]
     fn constant_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerVectorExpression::Constant(vec![0, 1]);
-        assert_eq!(expression.eval(&state, &registry), vec![0, 1]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![0, 1]
+        );
     }
 
     #[test]
     fn reverse_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression =
             IntegerVectorExpression::Reverse(Box::new(IntegerVectorExpression::Constant(vec![
                 0, 1,
             ])));
-        assert_eq!(expression.eval(&state, &registry), vec![1, 0]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![1, 0]
+        );
     }
 
     #[test]
     fn push_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerVectorExpression::Push(
             IntegerExpression::Constant(2),
             Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![0, 1, 2]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![0, 1, 2]
+        );
     }
 
     #[test]
     fn pop_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression =
             IntegerVectorExpression::Pop(Box::new(IntegerVectorExpression::Constant(vec![0, 1])));
-        assert_eq!(expression.eval(&state, &registry), vec![0]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![0]
+        );
     }
 
     #[test]
     fn set_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerVectorExpression::Set(
             IntegerExpression::Constant(2),
             Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
             ElementExpression::Constant(1),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![0, 2]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![0, 2]
+        );
     }
 
     #[test]
     fn unary_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerVectorExpression::UnaryOperation(
             UnaryOperator::Abs,
             Box::new(IntegerVectorExpression::Constant(vec![1, -1])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![1, 1]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![1, 1]
+        );
     }
 
     #[test]
     fn binary_operation_x_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerVectorExpression::BinaryOperationX(
             BinaryOperator::Add,
             IntegerExpression::Constant(2),
             Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2, 3]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![2, 3]
+        );
     }
 
     #[test]
     fn binary_operation_y_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerVectorExpression::BinaryOperationY(
             BinaryOperator::Add,
             Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
             IntegerExpression::Constant(2),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2, 3]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![2, 3]
+        );
     }
 
     #[test]
     fn vector_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerVectorExpression::VectorOperation(
             BinaryOperator::Add,
             Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
             Box::new(IntegerVectorExpression::Constant(vec![2, 3])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2, 4]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![2, 4]
+        );
         let expression = IntegerVectorExpression::VectorOperation(
             BinaryOperator::Add,
             Box::new(IntegerVectorExpression::Constant(vec![0])),
@@ -363,7 +497,15 @@ mod tests {
                 IntegerVectorExpression::Constant(vec![2, 3]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![2]
+        );
         let expression = IntegerVectorExpression::VectorOperation(
             BinaryOperator::Add,
             Box::new(IntegerVectorExpression::Pop(Box::new(
@@ -373,45 +515,91 @@ mod tests {
                 IntegerVectorExpression::Constant(vec![2, 3]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![2]
+        );
     }
 
     #[test]
     fn table_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression =
             IntegerVectorExpression::Table(Box::new(TableVectorExpression::Constant(vec![0, 1])));
-        assert_eq!(expression.eval(&state, &registry), vec![0, 1]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![0, 1]
+        );
     }
 
     #[test]
     fn if_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerVectorExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
             Box::new(IntegerVectorExpression::Constant(vec![2, 3])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![0, 1]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![0, 1]
+        );
         let expression = IntegerVectorExpression::If(
             Box::new(Condition::Constant(false)),
             Box::new(IntegerVectorExpression::Constant(vec![0, 1])),
             Box::new(IntegerVectorExpression::Constant(vec![2, 3])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2, 3]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![2, 3]
+        );
     }
 
     #[test]
     fn from_continuous_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerVectorExpression::FromContinuous(
             CastOperator::Ceil,
             Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![0, 1]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![0, 1]
+        );
     }
 
     #[test]

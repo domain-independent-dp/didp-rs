@@ -6,6 +6,7 @@ use super::set_reduce_expression::{SetReduceExpression, SetReduceOperator};
 use super::table_expression::TableExpression;
 use super::vector_expression::VectorExpression;
 use crate::state::{ElementResourceVariable, ElementVariable, SetVariable, StateInterface};
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Element, Set};
@@ -16,6 +17,8 @@ use std::ops;
 pub enum SetExpression {
     /// Reference to a constant or a variable.
     Reference(ReferenceExpression<Set>),
+    /// State function index.
+    StateFunction(usize),
     /// Complement set.
     Complement(Box<SetExpression>),
     /// Operation on two sets.
@@ -84,12 +87,18 @@ impl ops::Not for SetExpression {
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object", 4).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     ///
     /// let expression = SetExpression::from(set);
     /// let expression = !expression;
     /// let expected = model.create_set(object_type, &[2, 3]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     fn not(self) -> Self::Output {
@@ -112,10 +121,16 @@ impl ops::Not for SetVariable {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = !variable;
     /// let expected = model.create_set(object_type, &[2, 3]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     fn not(self) -> Self::Output {
@@ -136,6 +151,7 @@ impl ops::BitOr for SetExpression {
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object", 4).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let a = model.create_set(object_type, &[0, 1]).unwrap();
     /// let a = SetExpression::from(a);
@@ -143,7 +159,12 @@ impl ops::BitOr for SetExpression {
     /// let b = SetExpression::from(b);
     /// let expression = a | b;
     /// let expected = model.create_set(object_type, &[0, 1, 2]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     fn bitor(self, rhs: Self) -> Self::Output {
@@ -164,6 +185,7 @@ impl ops::Sub for SetExpression {
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object", 4).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let a = model.create_set(object_type, &[0, 1]).unwrap();
     /// let a = SetExpression::from(a);
@@ -171,7 +193,12 @@ impl ops::Sub for SetExpression {
     /// let b = SetExpression::from(b);
     /// let expression = a - b;
     /// let expected = model.create_set(object_type, &[0]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
@@ -192,6 +219,7 @@ impl ops::BitAnd for SetExpression {
     /// let mut model = Model::default();
     /// let object_type = model.add_object_type("object", 4).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let a = model.create_set(object_type, &[0, 1]).unwrap();
     /// let a = SetExpression::from(a);
@@ -199,7 +227,12 @@ impl ops::BitAnd for SetExpression {
     /// let b = SetExpression::from(b);
     /// let expression = a & b;
     /// let expected = model.create_set(object_type, &[1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     fn bitand(self, rhs: Self) -> Self::Output {
@@ -219,14 +252,20 @@ impl ops::BitAnd for SetExpression {
 /// let set = model.create_set(object_type, &[0, 1]).unwrap();
 /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
 /// let state = model.target.clone();
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 ///
 /// let expression = variable.add(2);
 /// let expected = model.create_set(object_type, &[0, 1, 2]).unwrap();
-/// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+/// assert_eq!(expression.eval(&state, &mut function_cache, &model.state_functions, &model.table_registry), expected);
 ///
 /// let expression = variable.remove(1);
 /// let expected = model.create_set(object_type, &[0]).unwrap();
-/// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+/// assert_eq!(
+///     expression.eval(
+///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+///     ),
+///     expected,
+/// );
 /// ```
 pub trait SetElementOperation<Rhs> {
     /// Returns a set expression, where an element is added.
@@ -250,9 +289,15 @@ impl Table1DHandle<Set> {
     /// let table = model.add_table_1d("table", vec![a.clone(), b]).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.element(variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), a);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     a,
+    /// );
     /// ```
     #[inline]
     pub fn element<T>(&self, x: T) -> SetExpression
@@ -281,10 +326,16 @@ impl Table1DHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.union(capacity, variable);
     /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     pub fn union<T>(&self, capacity: usize, x: T) -> SetExpression
@@ -315,10 +366,16 @@ impl Table1DHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.intersection(capacity, variable);
     /// let expected = model.create_set(object_type, &[0]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     pub fn intersection<T>(&self, capacity: usize, x: T) -> SetExpression
@@ -349,10 +406,16 @@ impl Table1DHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.symmetric_difference(capacity, variable);
     /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     #[inline]
     pub fn symmetric_difference<T>(&self, capacity: usize, x: T) -> SetExpression
     where
@@ -382,9 +445,15 @@ impl Table2DHandle<Set> {
     /// let table = model.add_table_2d("table", vec![vec![a.clone(), b.clone()], vec![b, a.clone()]]).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.element(variable, 0);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), a);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     a,
+    /// );
     /// ```
     #[inline]
     pub fn element<T, U>(&self, x: T, y: U) -> SetExpression
@@ -413,14 +482,25 @@ impl Table2DHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.union(capacity, variable, 0);
     /// let expected = model.create_set(object_type, &[1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     ///
     /// let expression = table.union(capacity, variable, variable);
     /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     pub fn union<T, U>(&self, capacity: usize, x: T, y: U) -> SetExpression
@@ -451,14 +531,25 @@ impl Table2DHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.intersection(capacity, variable, 0);
     /// let expected = model.create_set(object_type, &[1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     ///
     /// let expression = table.intersection(capacity, variable, variable);
     /// let expected = model.create_set(object_type, &[]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     pub fn intersection<T, U>(&self, capacity: usize, x: T, y: U) -> SetExpression
@@ -489,14 +580,25 @@ impl Table2DHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.symmetric_difference(capacity, variable, 0);
     /// let expected = model.create_set(object_type, &[]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     ///
     /// let expression = table.symmetric_difference(capacity, variable, variable);
     /// let expected = model.create_set(object_type, &[]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     pub fn symmetric_difference<T, U>(&self, capacity: usize, x: T, y: U) -> SetExpression
@@ -535,9 +637,15 @@ impl Table3DHandle<Set> {
     /// ).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.element(variable, variable + 1, 1);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), a);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     a,
+    /// );
     /// ```
     #[inline]
     pub fn element<T, U, V>(&self, x: T, y: U, z: V) -> SetExpression
@@ -576,14 +684,25 @@ impl Table3DHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.union(capacity, variable, 0, 0);
     /// let expected = model.create_set(object_type, &[1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(    
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     ///
     /// let expression = table.union(capacity, variable, variable, variable);
     /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     pub fn union<T, U, V>(&self, capacity: usize, x: T, y: U, z: V) -> SetExpression
@@ -624,14 +743,25 @@ impl Table3DHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.intersection(capacity, variable, 0, 0);
     /// let expected = model.create_set(object_type, &[1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     ///
     /// let expression = table.intersection(capacity, variable, variable, variable);
     /// let expected = model.create_set(object_type, &[]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),  
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     pub fn intersection<T, U, V>(&self, capacity: usize, x: T, y: U, z: V) -> SetExpression
@@ -672,14 +802,25 @@ impl Table3DHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.symmetric_difference(capacity, variable, 0, 0);
     /// let expected = model.create_set(object_type, &[]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     ///
     /// let expression = table.symmetric_difference(capacity, variable, variable, variable);
     /// let expected = model.create_set(object_type, &[]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     pub fn symmetric_difference<T, U, V>(&self, capacity: usize, x: T, y: U, z: V) -> SetExpression
@@ -718,6 +859,7 @@ impl TableHandle<Set> {
     /// let table = model.add_table("table", map, b).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ElementExpression::from(variable),
@@ -726,7 +868,12 @@ impl TableHandle<Set> {
     ///     ElementExpression::from(0),
     /// ];
     /// let expression = table.element(indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), a);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     a,
+    /// );
     /// ```
     #[inline]
     pub fn element<T>(&self, indices: Vec<T>) -> SetExpression
@@ -761,6 +908,7 @@ impl TableHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(variable),
@@ -770,7 +918,12 @@ impl TableHandle<Set> {
     /// ];
     /// let expression = table.union(capacity, indices);
     /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(variable),
@@ -780,7 +933,12 @@ impl TableHandle<Set> {
     /// ];
     /// let expression = table.union(capacity, indices);
     /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     pub fn union<T>(&self, capacity: usize, indices: Vec<T>) -> SetExpression
@@ -817,6 +975,7 @@ impl TableHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(variable),
@@ -826,7 +985,12 @@ impl TableHandle<Set> {
     /// ];
     /// let expression = table.intersection(capacity, indices);
     /// let expected = model.create_set(object_type, &[]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(variable),
@@ -836,7 +1000,12 @@ impl TableHandle<Set> {
     /// ];
     /// let expression = table.intersection(capacity, indices);
     /// let expected = model.create_set(object_type, &[]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     pub fn intersection<T>(&self, capacity: usize, indices: Vec<T>) -> SetExpression
@@ -873,6 +1042,7 @@ impl TableHandle<Set> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(variable),
@@ -882,7 +1052,12 @@ impl TableHandle<Set> {
     /// ];
     /// let expression = table.symmetric_difference(capacity, indices);
     /// let expected = model.create_set(object_type, &[0, 1]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(variable),
@@ -892,7 +1067,12 @@ impl TableHandle<Set> {
     /// ];
     /// let expression = table.symmetric_difference(capacity, indices);
     /// let expected = model.create_set(object_type, &[]).unwrap();
-    /// assert_eq!(expression.eval(&state, &model.table_registry), expected);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     expected,
+    /// );
     /// ```
     #[inline]
     pub fn symmetric_difference<T>(&self, capacity: usize, indices: Vec<T>) -> SetExpression
@@ -1017,49 +1197,72 @@ impl SetExpression {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set.clone()).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = SetExpression::from(variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), set);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     set,
+    /// );
     /// ```
-    pub fn eval<T: StateInterface>(&self, state: &T, registry: &TableRegistry) -> Set {
+    pub fn eval<T: StateInterface>(
+        &self,
+        state: &T,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Set {
         match self {
-            Self::Reference(expression) => {
-                let f = |i| state.get_set_variable(i);
-                expression
-                    .eval(state, registry, &f, &registry.set_tables)
-                    .clone()
-            }
+            Self::Reference(expression) => expression
+                .eval(state, function_cache, state_functions, registry)
+                .clone(),
+            Self::StateFunction(i) => function_cache
+                .get_set_value(*i, state, state_functions, registry)
+                .clone(),
             Self::Complement(set) => {
-                let mut set = set.eval(state, registry);
+                let mut set = set.eval(state, function_cache, state_functions, registry);
                 set.toggle_range(..);
                 set
             }
             Self::SetOperation(op, x, y) => match (op, x.as_ref(), y.as_ref()) {
                 (op, x, SetExpression::Reference(y)) => {
-                    let x = x.eval(state, registry);
-                    let f = |i| state.get_set_variable(i);
-                    let y = y.eval(state, registry, &f, &registry.set_tables);
+                    let x = x.eval(state, function_cache, state_functions, registry);
+                    let y = y.eval(state, function_cache, state_functions, registry);
                     Self::eval_set_operation(op, x, y)
                 }
                 (SetOperator::Intersection, SetExpression::Reference(x), y)
                 | (SetOperator::Union, SetExpression::Reference(x), y) => {
-                    let f = |i| state.get_set_variable(i);
-                    let x = x.eval(state, registry, &f, &registry.set_tables);
-                    let y = y.eval(state, registry);
+                    let y = y.eval(state, function_cache, state_functions, registry);
+                    let x = x.eval(state, function_cache, state_functions, registry);
+                    Self::eval_set_operation(op, y, x)
+                }
+                (op, x, SetExpression::StateFunction(i)) => {
+                    let x = x.eval(state, function_cache, state_functions, registry);
+                    let y = function_cache.get_set_value(*i, state, state_functions, registry);
+                    Self::eval_set_operation(op, x, y)
+                }
+                (SetOperator::Intersection, SetExpression::StateFunction(i), y)
+                | (SetOperator::Union, SetExpression::StateFunction(i), y) => {
+                    let y = y.eval(state, function_cache, state_functions, registry);
+                    let x = function_cache.get_set_value(*i, state, state_functions, registry);
                     Self::eval_set_operation(op, y, x)
                 }
                 (op, x, y) => {
-                    let x = x.eval(state, registry);
-                    let y = y.eval(state, registry);
+                    let x = x.eval(state, function_cache, state_functions, registry);
+                    let y = y.eval(state, function_cache, state_functions, registry);
                     Self::eval_set_operation(op, x, &y)
                 }
             },
             Self::SetElementOperation(op, element, set) => {
-                let set = set.eval(state, registry);
-                let element = element.eval(state, registry);
+                let set = set.eval(state, function_cache, state_functions, registry);
+                let element = element.eval(state, function_cache, state_functions, registry);
                 Self::eval_set_element_operation(op, element, set)
             }
-            Self::Reduce(expression) => expression.eval(state, registry),
+            Self::Reduce(expression) => {
+                expression.eval(state, function_cache, state_functions, registry)
+            }
             Self::FromVector(capacity, vector) => match vector.as_ref() {
                 VectorExpression::Reference(ReferenceExpression::Constant(vector)) => {
                     let mut set = Set::with_capacity(*capacity);
@@ -1069,17 +1272,17 @@ impl SetExpression {
                 vector => {
                     let mut set = Set::with_capacity(*capacity);
                     vector
-                        .eval(state, registry)
+                        .eval(state, function_cache, state_functions, registry)
                         .into_iter()
                         .for_each(|v| set.insert(v));
                     set
                 }
             },
             Self::If(condition, x, y) => {
-                if condition.eval(state, registry) {
-                    x.eval(state, registry)
+                if condition.eval(state, function_cache, state_functions, registry) {
+                    x.eval(state, function_cache, state_functions, registry)
                 } else {
-                    y.eval(state, registry)
+                    y.eval(state, function_cache, state_functions, registry)
                 }
             }
         }
@@ -1103,28 +1306,34 @@ impl SetExpression {
                 Self::Complement(expression) => *expression,
                 expression => Self::Complement(Box::new(expression)),
             },
-            Self::SetOperation(op, x, y) => match (x.simplify(registry), y.simplify(registry)) {
-                (
-                    Self::Reference(ReferenceExpression::Constant(x)),
-                    Self::Reference(ReferenceExpression::Constant(y)),
-                ) => Self::Reference(ReferenceExpression::Constant(Self::eval_set_operation(
-                    op, x, &y,
-                ))),
-                (
-                    Self::Reference(ReferenceExpression::Variable(x)),
-                    Self::Reference(ReferenceExpression::Variable(y)),
-                ) if x == y => match op {
-                    SetOperator::Union | SetOperator::Intersection => {
-                        Self::Reference(ReferenceExpression::Variable(x))
+            Self::SetOperation(op, x, y) => {
+                match (op, x.simplify(registry), y.simplify(registry)) {
+                    (
+                        op,
+                        Self::Reference(ReferenceExpression::Constant(x)),
+                        Self::Reference(ReferenceExpression::Constant(y)),
+                    ) => Self::Reference(ReferenceExpression::Constant(Self::eval_set_operation(
+                        op, x, &y,
+                    ))),
+                    (
+                        SetOperator::Union,
+                        Self::Reference(ReferenceExpression::Variable(x)),
+                        Self::Reference(ReferenceExpression::Variable(y)),
+                    )
+                    | (
+                        SetOperator::Intersection,
+                        Self::Reference(ReferenceExpression::Variable(x)),
+                        Self::Reference(ReferenceExpression::Variable(y)),
+                    ) if x == y => Self::Reference(ReferenceExpression::Variable(x)),
+                    (SetOperator::Union, Self::StateFunction(x), Self::StateFunction(y))
+                    | (SetOperator::Intersection, Self::StateFunction(x), Self::StateFunction(y))
+                        if x == y =>
+                    {
+                        Self::StateFunction(x)
                     }
-                    SetOperator::Difference => Self::SetOperation(
-                        SetOperator::Difference,
-                        Box::new(Self::Reference(ReferenceExpression::Variable(x))),
-                        Box::new(Self::Reference(ReferenceExpression::Variable(y))),
-                    ),
-                },
-                (x, y) => Self::SetOperation(op.clone(), Box::new(x), Box::new(y)),
-            },
+                    (op, x, y) => Self::SetOperation(op.clone(), Box::new(x), Box::new(y)),
+                }
+            }
             Self::SetElementOperation(op, element, set) => {
                 match (set.simplify(registry), element.simplify(registry)) {
                     (
@@ -1159,6 +1368,7 @@ impl SetExpression {
                     Box::new(y.simplify(registry)),
                 ),
             },
+            _ => self.clone(),
         }
     }
 
@@ -2498,6 +2708,8 @@ mod tests {
     #[test]
     fn set_if_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let mut s1 = Set::with_capacity(3);
         s1.insert(1);
@@ -2512,7 +2724,10 @@ mod tests {
                 s0.clone(),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry), s1);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            s1
+        );
         let expression = SetExpression::If(
             Box::new(Condition::Constant(false)),
             Box::new(SetExpression::Reference(ReferenceExpression::Constant(s1))),
@@ -2520,45 +2735,116 @@ mod tests {
                 s0.clone(),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry), s0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            s0
+        );
     }
 
     #[test]
     fn set_reference_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
         let expression = SetExpression::Reference(ReferenceExpression::Constant(set.clone()));
-        assert_eq!(expression.eval(&state, &registry), set);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            set
+        );
         let expression = SetExpression::Reference(ReferenceExpression::Variable(0));
         assert_eq!(
-            expression.eval(&state, &registry),
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
             state.signature_variables.set_variables[0]
         );
         let expression = SetExpression::Reference(ReferenceExpression::Table(
             TableExpression::Table1D(0, ElementExpression::Constant(0)),
         ));
-        assert_eq!(expression.eval(&state, &registry), set);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            set
+        );
+    }
+
+    #[test]
+    fn set_state_function_eval() {
+        let mut state_metadata = StateMetadata::default();
+        let ob = state_metadata.add_object_type("ob", 3);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = state_metadata.add_set_variable("v", ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_set_function("f", v.add(1));
+        assert!(f.is_ok());
+        let f = f.unwrap();
+        let g = state_functions.add_set_function("g", v.add(2));
+        assert!(g.is_ok());
+        let g = g.unwrap();
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![Set::with_capacity(3)],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+
+        let mut expected1 = Set::with_capacity(3);
+        expected1.insert(1);
+        assert_eq!(
+            f.eval(&state, &mut function_cache, &state_functions, &registry),
+            expected1,
+        );
+
+        let mut expected2 = Set::with_capacity(3);
+        expected2.insert(2);
+        assert_eq!(
+            g.eval(&state, &mut function_cache, &state_functions, &registry),
+            expected2,
+        );
+
+        assert_eq!(
+            f.eval(&state, &mut function_cache, &state_functions, &registry),
+            expected1,
+        );
+        assert_eq!(
+            g.eval(&state, &mut function_cache, &state_functions, &registry),
+            expected2,
+        );
     }
 
     #[test]
     fn set_complement_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let expression = SetExpression::Complement(Box::new(SetExpression::Reference(
             ReferenceExpression::Variable(0),
         )));
         let mut set = Set::with_capacity(3);
         set.insert(1);
-        assert_eq!(expression.eval(&state, &registry), set);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            set
+        );
     }
 
     #[test]
     fn set_union_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let expression = SetExpression::SetOperation(
             SetOperator::Union,
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
@@ -2568,15 +2854,94 @@ mod tests {
         set.insert(0);
         set.insert(1);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &registry), set);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            set
+        );
         let expression = SetExpression::SetOperation(
             SetOperator::Union,
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         assert_eq!(
-            expression.eval(&state, &registry),
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
             state.signature_variables.set_variables[0]
+        );
+    }
+
+    #[test]
+    fn set_union_state_variable_x_eval() {
+        let mut state_metadata = StateMetadata::default();
+        let ob = state_metadata.add_object_type("ob", 3);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = state_metadata.add_set_variable("v", ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_set_function("f", v.add(1));
+        assert!(f.is_ok());
+        let f = f.unwrap();
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![Set::with_capacity(3)],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+
+        let expression = f.clone() | !f;
+
+        let mut expected = Set::with_capacity(3);
+        expected.insert(0);
+        expected.insert(1);
+        expected.insert(2);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expected,
+        );
+    }
+
+    #[test]
+    fn set_union_state_variable_y_eval() {
+        let mut state_metadata = StateMetadata::default();
+        let ob = state_metadata.add_object_type("ob", 3);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = state_metadata.add_set_variable("v", ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_set_function("f", v.add(1));
+        assert!(f.is_ok());
+        let f = f.unwrap();
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![Set::with_capacity(3)],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+
+        let expression = !f.clone() | f;
+
+        let mut expected = Set::with_capacity(3);
+        expected.insert(0);
+        expected.insert(1);
+        expected.insert(2);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expected,
         );
     }
 
@@ -2584,6 +2949,8 @@ mod tests {
     fn set_difference_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let expression = SetExpression::SetOperation(
             SetOperator::Difference,
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
@@ -2591,19 +2958,63 @@ mod tests {
         );
         let mut set = Set::with_capacity(3);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &registry), set);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            set
+        );
         let expression = SetExpression::SetOperation(
             SetOperator::Difference,
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
-        assert_eq!(expression.eval(&state, &registry), Set::with_capacity(3));
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            Set::with_capacity(3)
+        );
+    }
+
+    #[test]
+    fn set_difference_state_variable_y_eval() {
+        let mut state_metadata = StateMetadata::default();
+        let ob = state_metadata.add_object_type("ob", 3);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = state_metadata.add_set_variable("v", ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_set_function("f", v.add(1));
+        assert!(f.is_ok());
+        let f = f.unwrap();
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![Set::with_capacity(3)],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+
+        let expression = f.add(0).add(1) - v.add(0);
+
+        let mut expected = Set::with_capacity(3);
+        expected.insert(1);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expected,
+        );
     }
 
     #[test]
     fn set_intersect_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let expression = SetExpression::SetOperation(
             SetOperator::Intersection,
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
@@ -2611,22 +3022,99 @@ mod tests {
         );
         let mut set = Set::with_capacity(3);
         set.insert(0);
-        assert_eq!(expression.eval(&state, &registry), set);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            set
+        );
         let expression = SetExpression::SetOperation(
             SetOperator::Intersection,
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         assert_eq!(
-            expression.eval(&state, &registry),
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
             state.signature_variables.set_variables[0]
         );
+    }
+
+    #[test]
+    fn set_intersect_state_variable_x_eval() {
+        let mut state_metadata = StateMetadata::default();
+        let ob = state_metadata.add_object_type("ob", 3);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = state_metadata.add_set_variable("v", ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_set_function("f", v.add(1).add(2));
+        assert!(f.is_ok());
+        let f = f.unwrap();
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![Set::with_capacity(3)],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+
+        let expression = f.clone() & v.add(0).add(1);
+
+        let mut expected = Set::with_capacity(3);
+        expected.insert(1);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expected,
+        );
+    }
+
+    #[test]
+    fn set_intersect_state_variable_y_eval() {
+        let mut state_metadata = StateMetadata::default();
+        let ob = state_metadata.add_object_type("ob", 3);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = state_metadata.add_set_variable("v", ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_set_function("f", v.add(1).add(2));
+        assert!(f.is_ok());
+        let f = f.unwrap();
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![Set::with_capacity(3)],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+
+        let expression = f & v.add(0).add(1);
+
+        let mut expected = Set::with_capacity(3);
+        expected.insert(1);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            expected
+        )
     }
 
     #[test]
     fn set_add_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
             ElementExpression::Constant(1),
@@ -2636,14 +3124,17 @@ mod tests {
         set.insert(0);
         set.insert(1);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &registry), set);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            set
+        );
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Add,
             ElementExpression::Constant(0),
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         assert_eq!(
-            expression.eval(&state, &registry),
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
             state.signature_variables.set_variables[0]
         );
     }
@@ -2652,6 +3143,8 @@ mod tests {
     fn set_remove_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
             ElementExpression::Constant(2),
@@ -2659,14 +3152,17 @@ mod tests {
         );
         let mut set = Set::with_capacity(3);
         set.insert(0);
-        assert_eq!(expression.eval(&state, &registry), set);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            set
+        );
         let expression = SetExpression::SetElementOperation(
             SetElementOperator::Remove,
             ElementExpression::Constant(1),
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
         );
         assert_eq!(
-            expression.eval(&state, &registry),
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
             state.signature_variables.set_variables[0]
         );
     }
@@ -2674,6 +3170,8 @@ mod tests {
     #[test]
     fn set_reduce_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry {
             set_tables: TableData {
                 tables: vec![Table::new(
@@ -2728,21 +3226,26 @@ mod tests {
                 )),
             ],
         ));
-        assert_eq!(expression.eval(&state, &registry), {
-            let mut set = Set::with_capacity(5);
-            set.insert(0);
-            set.insert(1);
-            set.insert(2);
-            set.insert(3);
-            set.insert(4);
-            set
-        });
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            {
+                let mut set = Set::with_capacity(5);
+                set.insert(0);
+                set.insert(1);
+                set.insert(2);
+                set.insert(3);
+                set.insert(4);
+                set
+            }
+        );
     }
 
     #[test]
     fn set_from_vector_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let expression = SetExpression::FromVector(
             3,
             Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
@@ -2752,7 +3255,10 @@ mod tests {
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(1);
-        assert_eq!(expression.eval(&state, &registry), set);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            set
+        );
         let expression = SetExpression::FromVector(
             3,
             Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
@@ -2762,7 +3268,10 @@ mod tests {
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
-        assert_eq!(expression.eval(&state, &registry), set);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            set
+        );
     }
 
     #[test]

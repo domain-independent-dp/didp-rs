@@ -7,7 +7,7 @@ use super::rollout::get_trace;
 use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::{print_primal_bound, update_bound_if_better, TimeKeeper};
 use dypdl::{variable_type, Model, ReduceFunction, Transition, TransitionInterface};
-use rand::distributions::WeightedIndex;
+use rand::distr::weighted::WeightedIndex;
 use rand::prelude::*;
 use rand_pcg::Pcg64Mcg;
 use rustc_hash::FxHashMap;
@@ -81,16 +81,17 @@ pub struct LnbsParameters<T> {
 /// model.add_forward_transition(increment.clone()).unwrap();
 /// let model = Rc::new(model);
 ///
-/// let h_evaluator = |_: &_| Some(0);
+/// let h_evaluator = |_: &_, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
 /// let successor_generator = SuccessorGenerator::<TransitionWithId>::from_model(
 ///     model.clone(), false,
 /// );
 /// let t_model = model.clone();
-/// let transition_evaluator = move |node: &FNode<_, _>, transition, primal_bound| {
+/// let transition_evaluator = move |node: &FNode<_, _>, transition, cache: &mut _, primal_bound| {
 ///     node.generate_successor_node(
 ///         transition,
+///         cache,
 ///         &t_model,
 ///         &h_evaluator,
 ///         &f_evaluator,
@@ -102,8 +103,11 @@ pub struct LnbsParameters<T> {
 ///     beam_search(input, &transition_evaluator, base_cost_evaluator, parameters)
 /// };
 /// let node_generator = |state, cost| {
+///     let mut function_cache = StateFunctionCache::new(&model.state_functions);
+///
 ///     FNode::generate_root_node(
 ///         state,
+///         &mut function_cache,
 ///         cost,
 ///         &model,
 ///         &h_evaluator,
@@ -566,7 +570,7 @@ where
                 if self.depth_exhausted[i] || (i < last && *depth >= last_depth) {
                     None
                 } else {
-                    let score = self.rng.gen::<f64>();
+                    let score = self.rng.random::<f64>();
 
                     Some((score, (i, *depth)))
                 }

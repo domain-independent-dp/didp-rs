@@ -6,7 +6,7 @@ use dypdl::expression::{
     ArgumentExpression, ReduceOperator, TableVectorExpression, VectorOrElementExpression,
 };
 use dypdl::variable_type::{Element, Numeric};
-use dypdl::{StateMetadata, TableData, TableRegistry};
+use dypdl::{StateFunctions, StateMetadata, TableData, TableRegistry};
 use rustc_hash::FxHashMap;
 use std::str;
 
@@ -16,18 +16,20 @@ pub fn parse_expression<'a, T: Numeric>(
     name: &str,
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
     tables: &TableData<T>,
 ) -> Result<NumericVectorTableReturnType<'a, T>, ParseErr> {
     if let Some(i) = tables.name_to_table_1d.get(name) {
-        let (x, rest) =
-            element_parser::parse_vector_expression(tokens, metadata, registry, parameters)?;
+        let (x, rest) = element_parser::parse_vector_expression(
+            tokens, metadata, functions, registry, parameters,
+        )?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((TableVectorExpression::Table1D(*i, x), rest)))
     } else if let Some(i) = tables.name_to_table_2d.get(name) {
-        let (x, rest) = parse_vector_or_element(tokens, metadata, registry, parameters)?;
-        let (y, rest) = parse_vector_or_element(rest, metadata, registry, parameters)?;
+        let (x, rest) = parse_vector_or_element(tokens, metadata, functions, registry, parameters)?;
+        let (y, rest) = parse_vector_or_element(rest, metadata, functions, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         match (x, y) {
             (VectorOrElementExpression::Vector(x), VectorOrElementExpression::Vector(y)) => {
@@ -45,13 +47,13 @@ pub fn parse_expression<'a, T: Numeric>(
             ))),
         }
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let (x, rest) = parse_vector_or_element(tokens, metadata, registry, parameters)?;
-        let (y, rest) = parse_vector_or_element(rest, metadata, registry, parameters)?;
-        let (z, rest) = parse_vector_or_element(rest, metadata, registry, parameters)?;
+        let (x, rest) = parse_vector_or_element(tokens, metadata, functions, registry, parameters)?;
+        let (y, rest) = parse_vector_or_element(rest, metadata, functions, registry, parameters)?;
+        let (z, rest) = parse_vector_or_element(rest, metadata, functions, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((TableVectorExpression::Table3D(*i, x, y, z), rest)))
     } else if let Some(i) = tables.name_to_table.get(name) {
-        let (args, rest) = parse_args(tokens, metadata, registry, parameters)?;
+        let (args, rest) = parse_args(tokens, metadata, functions, registry, parameters)?;
         Ok(Some((TableVectorExpression::Table(*i, args), rest)))
     } else {
         Ok(None)
@@ -61,6 +63,7 @@ pub fn parse_expression<'a, T: Numeric>(
 fn parse_args<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(Vec<VectorOrElementExpression>, &'a [String]), ParseErr> {
@@ -73,7 +76,8 @@ fn parse_args<'a>(
         if next_token == ")" {
             return Ok((args, rest));
         }
-        let (expression, new_xs) = parse_vector_or_element(xs, metadata, registry, parameters)?;
+        let (expression, new_xs) =
+            parse_vector_or_element(xs, metadata, functions, registry, parameters)?;
         args.push(expression);
         xs = new_xs;
     }
@@ -82,15 +86,16 @@ fn parse_args<'a>(
 fn parse_vector_or_element<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(VectorOrElementExpression, &'a [String]), ParseErr> {
     if let Ok((element, rest)) =
-        element_parser::parse_expression(tokens, metadata, registry, parameters)
+        element_parser::parse_expression(tokens, metadata, functions, registry, parameters)
     {
         Ok((VectorOrElementExpression::Element(element), rest))
     } else if let Ok((vector, rest)) =
-        element_parser::parse_vector_expression(tokens, metadata, registry, parameters)
+        element_parser::parse_vector_expression(tokens, metadata, functions, registry, parameters)
     {
         Ok((VectorOrElementExpression::Vector(vector), rest))
     } else {
@@ -101,18 +106,30 @@ fn parse_vector_or_element<'a>(
     }
 }
 
+#[derive(Clone)]
+pub struct ModelData<'a> {
+    pub metadata: &'a StateMetadata,
+    pub functions: &'a StateFunctions,
+    pub registry: &'a TableRegistry,
+}
+
 pub fn parse_reduce_expression<'a, T: Numeric>(
     name: &str,
     tokens: &'a [String],
     op: ReduceOperator,
-    metadata: &StateMetadata,
-    registry: &TableRegistry,
+    model_data: ModelData,
     parameters: &FxHashMap<String, Element>,
     tables: &TableData<T>,
 ) -> Result<NumericVectorTableReturnType<'a, T>, ParseErr> {
+    let metadata = model_data.metadata;
+    let functions = model_data.functions;
+    let registry = model_data.registry;
+
     if let Some(i) = tables.name_to_table_2d.get(name) {
-        let (x, rest) = argument_parser::parse_argument(tokens, metadata, registry, parameters)?;
-        let (y, rest) = argument_parser::parse_argument(rest, metadata, registry, parameters)?;
+        let (x, rest) =
+            argument_parser::parse_argument(tokens, metadata, functions, registry, parameters)?;
+        let (y, rest) =
+            argument_parser::parse_argument(rest, metadata, functions, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         match (x, y) {
             (ArgumentExpression::Vector(x), ArgumentExpression::Set(y)) => Ok(Some((
@@ -129,16 +146,19 @@ pub fn parse_reduce_expression<'a, T: Numeric>(
             ))),
         }
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let (x, rest) = argument_parser::parse_argument(tokens, metadata, registry, parameters)?;
-        let (y, rest) = argument_parser::parse_argument(rest, metadata, registry, parameters)?;
-        let (z, rest) = argument_parser::parse_argument(rest, metadata, registry, parameters)?;
+        let (x, rest) =
+            argument_parser::parse_argument(tokens, metadata, functions, registry, parameters)?;
+        let (y, rest) =
+            argument_parser::parse_argument(rest, metadata, functions, registry, parameters)?;
+        let (z, rest) =
+            argument_parser::parse_argument(rest, metadata, functions, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((
             TableVectorExpression::Table3DReduce(op, *i, x, y, z),
             rest,
         )))
     } else if let Some(i) = tables.name_to_table.get(name) {
-        let (args, rest) = parse_sum_args(tokens, metadata, registry, parameters)?;
+        let (args, rest) = parse_sum_args(tokens, metadata, functions, registry, parameters)?;
         Ok(Some((
             TableVectorExpression::TableReduce(op, *i, args),
             rest,
@@ -151,6 +171,7 @@ pub fn parse_reduce_expression<'a, T: Numeric>(
 fn parse_sum_args<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(Vec<ArgumentExpression>, &'a [String]), ParseErr> {
@@ -164,7 +185,7 @@ fn parse_sum_args<'a>(
             return Ok((args, rest));
         }
         let (expression, new_xs) =
-            argument_parser::parse_argument(xs, metadata, registry, parameters)?;
+            argument_parser::parse_argument(xs, metadata, functions, registry, parameters)?;
         args.push(expression);
         xs = new_xs;
     }
@@ -391,6 +412,7 @@ mod tests {
     #[test]
     fn parse_integer_vector_table_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -402,6 +424,7 @@ mod tests {
             "f5",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -418,6 +441,7 @@ mod tests {
             "f1",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -445,6 +469,7 @@ mod tests {
             "f2",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -471,6 +496,7 @@ mod tests {
             "f2",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -497,6 +523,7 @@ mod tests {
             "f2",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -523,6 +550,7 @@ mod tests {
             "f3",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -552,6 +580,7 @@ mod tests {
             "f4",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -580,6 +609,7 @@ mod tests {
     #[test]
     fn parse_expression_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
@@ -588,6 +618,7 @@ mod tests {
             "f1",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -599,6 +630,7 @@ mod tests {
             "f2",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -613,6 +645,7 @@ mod tests {
             "f2",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -627,6 +660,7 @@ mod tests {
             "f3",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -641,6 +675,7 @@ mod tests {
             "f3",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -655,6 +690,7 @@ mod tests {
             "f4",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -665,7 +701,13 @@ mod tests {
     #[test]
     fn parse_sum_expression_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
+        let model_data = ModelData {
+            metadata: &metadata,
+            functions: &functions,
+            registry: &registry,
+        };
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["(", "vector", "0", "1", ")", "s0", ")", ")"]
@@ -676,8 +718,7 @@ mod tests {
             "f6",
             &tokens,
             ReduceOperator::Sum,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -693,8 +734,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Sum,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -721,8 +761,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Sum,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -749,8 +788,7 @@ mod tests {
             "f3",
             &tokens,
             ReduceOperator::Sum,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -780,8 +818,7 @@ mod tests {
             "f4",
             &tokens,
             ReduceOperator::Sum,
-            &metadata,
-            &registry,
+            model_data,
             &parameters,
             &registry.integer_tables,
         );
@@ -812,7 +849,13 @@ mod tests {
     #[test]
     fn parse_sum_expression_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
+        let model_data = ModelData {
+            metadata: &metadata,
+            functions: &functions,
+            registry: &registry,
+        };
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["0", "1", ")", ")"].iter().map(|x| x.to_string()).collect();
@@ -820,8 +863,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Sum,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -835,8 +877,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Sum,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -850,8 +891,7 @@ mod tests {
             "f3",
             &tokens,
             ReduceOperator::Sum,
-            &metadata,
-            &registry,
+            model_data,
             &parameters,
             &registry.integer_tables,
         );
@@ -861,7 +901,13 @@ mod tests {
     #[test]
     fn parse_product_expression_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
+        let model_data = ModelData {
+            metadata: &metadata,
+            functions: &functions,
+            registry: &registry,
+        };
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["(", "vector", "0", "1", ")", "s0", ")", ")"]
@@ -872,8 +918,7 @@ mod tests {
             "f6",
             &tokens,
             ReduceOperator::Product,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -889,8 +934,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Product,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -917,8 +961,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Product,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -945,8 +988,7 @@ mod tests {
             "f3",
             &tokens,
             ReduceOperator::Product,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -976,8 +1018,7 @@ mod tests {
             "f4",
             &tokens,
             ReduceOperator::Product,
-            &metadata,
-            &registry,
+            model_data,
             &parameters,
             &registry.integer_tables,
         );
@@ -1008,7 +1049,13 @@ mod tests {
     #[test]
     fn parse_product_expression_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
+        let model_data = ModelData {
+            metadata: &metadata,
+            functions: &functions,
+            registry: &registry,
+        };
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["0", "1", ")", ")"].iter().map(|x| x.to_string()).collect();
@@ -1016,8 +1063,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Product,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1031,8 +1077,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Product,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1046,8 +1091,7 @@ mod tests {
             "f3",
             &tokens,
             ReduceOperator::Product,
-            &metadata,
-            &registry,
+            model_data,
             &parameters,
             &registry.integer_tables,
         );
@@ -1057,7 +1101,13 @@ mod tests {
     #[test]
     fn parse_max_expression_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
+        let model_data = ModelData {
+            metadata: &metadata,
+            functions: &functions,
+            registry: &registry,
+        };
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["(", "vector", "0", "1", ")", "s0", ")", ")"]
@@ -1068,8 +1118,7 @@ mod tests {
             "f6",
             &tokens,
             ReduceOperator::Max,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1085,8 +1134,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Max,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1113,8 +1161,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Max,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1141,8 +1188,7 @@ mod tests {
             "f3",
             &tokens,
             ReduceOperator::Max,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1172,8 +1218,7 @@ mod tests {
             "f4",
             &tokens,
             ReduceOperator::Max,
-            &metadata,
-            &registry,
+            model_data,
             &parameters,
             &registry.integer_tables,
         );
@@ -1204,7 +1249,13 @@ mod tests {
     #[test]
     fn parse_max_expression_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
+        let model_data = ModelData {
+            metadata: &metadata,
+            functions: &functions,
+            registry: &registry,
+        };
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["0", "1", ")", ")"].iter().map(|x| x.to_string()).collect();
@@ -1212,8 +1263,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Max,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1227,8 +1277,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Max,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1242,8 +1291,7 @@ mod tests {
             "f3",
             &tokens,
             ReduceOperator::Max,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1253,7 +1301,13 @@ mod tests {
     #[test]
     fn parse_min_expression_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
+        let model_data = ModelData {
+            metadata: &metadata,
+            functions: &functions,
+            registry: &registry,
+        };
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["(", "vector", "0", "1", ")", "s0", ")", ")"]
@@ -1264,8 +1318,7 @@ mod tests {
             "f6",
             &tokens,
             ReduceOperator::Min,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1281,8 +1334,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Min,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1309,8 +1361,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Min,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1337,8 +1388,7 @@ mod tests {
             "f3",
             &tokens,
             ReduceOperator::Min,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1368,8 +1418,7 @@ mod tests {
             "f4",
             &tokens,
             ReduceOperator::Min,
-            &metadata,
-            &registry,
+            model_data,
             &parameters,
             &registry.integer_tables,
         );
@@ -1400,7 +1449,13 @@ mod tests {
     #[test]
     fn parse_min_expression_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let registry = generate_registry();
+        let model_data = ModelData {
+            metadata: &metadata,
+            functions: &functions,
+            registry: &registry,
+        };
         let parameters = generate_parameters();
 
         let tokens: Vec<String> = ["0", "1", ")", ")"].iter().map(|x| x.to_string()).collect();
@@ -1408,8 +1463,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Min,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1423,8 +1477,7 @@ mod tests {
             "f2",
             &tokens,
             ReduceOperator::Min,
-            &metadata,
-            &registry,
+            model_data.clone(),
             &parameters,
             &registry.integer_tables,
         );
@@ -1438,8 +1491,7 @@ mod tests {
             "f3",
             &tokens,
             ReduceOperator::Min,
-            &metadata,
-            &registry,
+            model_data,
             &parameters,
             &registry.integer_tables,
         );

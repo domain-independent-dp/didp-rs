@@ -28,6 +28,10 @@ tables:
     object: job
     args:
       - job
+state_functions:
+  - name: current_time
+    type: integer
+    expression: (sum processing_time scheduled)
 transitions:
   - name: schedule
     parameters:
@@ -36,7 +40,7 @@ transitions:
     cost: >
       (+ cost
          (* (w i)
-            (max 0 (- (+ (sum processing_time scheduled) (processing_time i))
+            (max 0 (- (+ current_time (processing_time i))
                       (d i)))))
     effect:
       scheduled: (add i scheduled)

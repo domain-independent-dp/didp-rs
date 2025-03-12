@@ -16,12 +16,16 @@ tables:
     object: customer
     args:
       - customer
+state_functions:
+  - name: opened_and_remaining
+    type: set
+    expression: (intersection opened remaining)
 transitions:
   - name: close
     parameters:
       - name: c
         object: remaining
-    cost: (max cost |(union (intersection opened remaining) (difference (neighbors c) opened))|)
+    cost: (max cost |(union opened_and_remaining (difference (neighbors c) opened))|)
     effect:
       remaining: (remove c remaining)
       opened: (union opened (neighbors c))

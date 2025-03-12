@@ -27,6 +27,7 @@ pub fn load_custom_cost_expressions(
                     CostExpression::Integer(expression_parser::parse_integer(
                         expression.clone(),
                         &model.state_metadata,
+                        &model.state_functions,
                         &model.table_registry,
                         &parameters,
                     )?)
@@ -35,6 +36,7 @@ pub fn load_custom_cost_expressions(
                     CostExpression::Continuous(expression_parser::parse_continuous(
                         expression.clone(),
                         &model.state_metadata,
+                        &model.state_functions,
                         &model.table_registry,
                         &parameters,
                     )?)
@@ -66,6 +68,7 @@ pub fn load_custom_cost_expressions(
                     CostExpression::Integer(expression_parser::parse_integer(
                         expression.clone(),
                         &model.state_metadata,
+                        &model.state_functions,
                         &model.table_registry,
                         &parameters,
                     )?)
@@ -74,6 +77,7 @@ pub fn load_custom_cost_expressions(
                     CostExpression::Continuous(expression_parser::parse_continuous(
                         expression.clone(),
                         &model.state_metadata,
+                        &model.state_functions,
                         &model.table_registry,
                         &parameters,
                     )?)

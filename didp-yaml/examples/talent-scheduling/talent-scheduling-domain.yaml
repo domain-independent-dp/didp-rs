@@ -26,6 +26,10 @@ tables:
     type: integer
     args:
       - scene
+state_functions:
+  - name: on_location
+    type: set
+    expression: (intersection (union scene_to_actors remaining) (union scene_to_actors ~remaining))
 transitions:
   - name: shoot
     parameters:
@@ -34,9 +38,7 @@ transitions:
     cost: >
       (+ cost
          (* (duration s)
-            (sum actor_to_cost (union (scene_to_actors s)
-                                   (intersection (union scene_to_actors remaining)
-                                                 (union scene_to_actors ~remaining))))))
+            (sum actor_to_cost (union (scene_to_actors s) on_location))))
     effect:
       remaining: (remove s remaining)
   - name: forced-shoot
@@ -49,7 +51,7 @@ transitions:
     effect:
       remaining: (remove s remaining)
     preconditions:
-      - (= (scene_to_actors s) (intersection (union scene_to_actors ~remaining) (union scene_to_actors remaining)))
+      - (= (scene_to_actors s) on_location)
 base_cases:
   - - (is_empty remaining)
 dual_bounds:

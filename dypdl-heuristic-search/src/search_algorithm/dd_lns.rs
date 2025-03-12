@@ -1,6 +1,7 @@
 use super::beam_search::BeamSearchParameters;
 use super::data_structure::{
-    exceed_bound, BfsNode, StateInRegistry, StateRegistry, TransitionMutex, TransitionWithId,
+    exceed_bound, BfsNode, ParentAndChildStateFunctionCache, StateInRegistry, StateRegistry,
+    TransitionMutex, TransitionWithId,
 };
 use super::neighborhood_search::NeighborhoodSearchInput;
 use super::randomized_restricted_dd::{randomized_restricted_dd, RandomizedRestrictedDDParameters};
@@ -67,14 +68,15 @@ pub struct DdLnsParameters<T> {
 /// model.add_forward_transition(increment.clone()).unwrap();
 /// let model = Rc::new(model);
 ///
-/// let h_evaluator = |_: &_| Some(0);
+/// let h_evaluator = |_: &_, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
 /// let successor_generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
 /// let transition_evaluator =
-///     move |node: &FNode<_, _>, transition, registry: &mut _, primal_bound| {
+///     move |node: &FNode<_, _>, transition, cache: &mut _, registry: &mut _, primal_bound| {
 ///         node.insert_successor_node(
 ///             transition,
+///             cache,
 ///             registry,
 ///             &h_evaluator,
 ///             &f_evaluator,
@@ -83,8 +85,11 @@ pub struct DdLnsParameters<T> {
 ///     };
 /// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
 /// let node_generator = |state, cost| {
+///     let mut function_cache = StateFunctionCache::new(&model.state_functions);
+///
 ///     FNode::generate_root_node(
 ///         state,
+///         &mut function_cache,
 ///         cost,
 ///         &model,
 ///         &h_evaluator,
@@ -147,6 +152,7 @@ where
     E: FnMut(
         &N,
         Rc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
         &mut StateRegistry<T, N>,
         Option<T>,
     ) -> Option<(Rc<N>, bool)>,
@@ -174,6 +180,7 @@ where
     E: FnMut(
         &N,
         Rc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
         &mut StateRegistry<T, N>,
         Option<T>,
     ) -> Option<(Rc<N>, bool)>,
@@ -370,6 +377,7 @@ where
     E: FnMut(
         &N,
         Rc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
         &mut StateRegistry<T, N>,
         Option<T>,
     ) -> Option<(Rc<N>, bool)>,

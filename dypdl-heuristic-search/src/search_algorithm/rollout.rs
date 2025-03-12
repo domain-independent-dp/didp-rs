@@ -1,7 +1,7 @@
-use super::data_structure::StateInformation;
+use super::data_structure::{ParentAndChildStateFunctionCache, StateInformation};
 use super::StateInRegistry;
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, State, StateInterface, TransitionInterface};
+use dypdl::{Model, State, StateFunctionCache, StateInterface, TransitionInterface};
 use std::fmt::Debug;
 use std::hash::Hash;
 
@@ -26,6 +26,8 @@ where
 
 /// Returns the result of a rollout.
 ///
+/// `function_cache.parent` is not cleared and updated by `node.state()` and `function_cache.child` is cleared and used while rolling out.
+///
 /// Returns `None` if the rollout fails,
 /// e.g., if a transition is not applicable or a state constraint is violated.
 ///
@@ -37,7 +39,9 @@ where
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::search_algorithm::rollout;
+/// use dypdl_heuristic_search::search_algorithm::{
+///     data_structure::ParentAndChildStateFunctionCache, rollout,
+/// };
 ///
 /// let mut model = Model::default();
 /// let variable = model.add_integer_variable("variable", 1).unwrap();
@@ -59,19 +63,31 @@ where
 ///
 /// let transitions = [increment.clone(), double.clone(), increment.clone()];
 /// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-/// let expected_state: State = increment.apply(&state, &model.table_registry);
-/// let expected_state: State = double.apply(&expected_state, &model.table_registry);
-/// let result = rollout(&state, 0, &transitions, &base_cost_evaluator, &model).unwrap();
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let expected_state: State = increment.apply(
+///     &state, &mut function_cache, &model.state_functions, &model.table_registry,
+/// );
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let expected_state: State = double.apply(
+///     &expected_state, &mut function_cache, &model.state_functions, &model.table_registry,
+/// );
+/// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+/// let result = rollout(
+///     &state, &mut function_cache, 0, &transitions, &base_cost_evaluator, &model,
+/// ).unwrap();
 /// assert_eq!(result.state, Some(expected_state));
 /// assert_eq!(result.cost, 5);
 /// assert_eq!(result.transitions, &transitions[..2]);
 /// assert!(result.is_base);
 ///
 /// let transitions = [double.clone(), increment.clone()];
-/// assert_eq!(rollout(&state, 0, &transitions, base_cost_evaluator, &model), None);
+/// assert_eq!(
+///     rollout(&state, &mut function_cache, 0, &transitions, base_cost_evaluator, &model), None
+/// );
 /// ```
 pub fn rollout<'a, S, U, T, B>(
     state: &S,
+    function_cache: &mut ParentAndChildStateFunctionCache,
     cost: U,
     transitions: &'a [T],
     mut base_cost_evaluator: B,
@@ -83,7 +99,7 @@ where
     T: TransitionInterface,
     B: FnMut(U, U) -> U,
 {
-    if let Some(base_cost) = model.eval_base_cost(state) {
+    if let Some(base_cost) = model.eval_base_cost(state, &mut function_cache.parent) {
         return Some(RolloutResult {
             state: None,
             cost: base_cost_evaluator(cost, base_cost),
@@ -92,24 +108,51 @@ where
         });
     }
 
+    if transitions.is_empty() {
+        return Some(RolloutResult {
+            state: None,
+            cost,
+            transitions,
+            is_base: false,
+        });
+    }
+
     let mut current_state;
     let mut parent_state = state;
     let mut cost = cost;
+    function_cache.child.clear();
 
     for (i, t) in transitions.iter().enumerate() {
-        if !t.is_applicable(parent_state, &model.table_registry) {
+        if !t.is_applicable(
+            parent_state,
+            &mut function_cache.child,
+            &model.state_functions,
+            &model.table_registry,
+        ) {
             return None;
         }
 
-        let state = t.apply(parent_state, &model.table_registry);
+        let state = t.apply(
+            parent_state,
+            &mut function_cache.child,
+            &model.state_functions,
+            &model.table_registry,
+        );
 
-        if !model.check_constraints(&state) {
+        if !model.check_constraints(&state, &mut function_cache.child) {
             return None;
         }
 
-        cost = t.eval_cost(cost, parent_state, &model.table_registry);
+        cost = t.eval_cost(
+            cost,
+            parent_state,
+            &mut function_cache.child,
+            &model.state_functions,
+            &model.table_registry,
+        );
+        function_cache.child.clear();
 
-        if let Some(base_cost) = model.eval_base_cost(&state) {
+        if let Some(base_cost) = model.eval_base_cost(&state, &mut function_cache.child) {
             return Some(RolloutResult {
                 state: Some(state),
                 cost: base_cost_evaluator(cost, base_cost),
@@ -141,6 +184,8 @@ where
 
 /// Get the solution cost and suffix if the rollout of the transitions from the node succeeds.
 ///
+/// `function_cache.parent` is not cleared and updated by `node.state()` and `function_cache.child` is cleared and used while rolling out.
+///
 /// # Panics
 ///
 /// If expressions in the model or transitions are invalid.
@@ -151,6 +196,7 @@ where
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::Solution;
 /// use dypdl_heuristic_search::search_algorithm::{
+///     data_structure::ParentAndChildStateFunctionCache,
 ///     FNode, StateInRegistry, get_solution_cost_and_suffix,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::data_structure::GetTransitions;
@@ -165,19 +211,32 @@ where
 /// transition.add_effect(var, var + 1).unwrap();
 /// transition.set_cost(IntegerExpression::Cost + 1);
 ///
-/// let h_evaluator = |_: &StateInRegistry| Some(0);
+/// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+/// let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &StateInRegistry| g + h;
 /// let node = FNode::<_>::generate_root_node(
-///     model.target.clone(), 0, &model, &h_evaluator, &f_evaluator, None,
+///     model.target.clone(),
+///     &mut function_cache.parent,
+///     0,
+///     &model,
+///     &h_evaluator,
+///     &f_evaluator,
+///     None,
 /// ).unwrap();
 /// let node = node.generate_successor_node(
-///     Rc::new(transition.clone()), &model, &h_evaluator, &f_evaluator, None,
+///     Rc::new(transition.clone()),
+///     &mut function_cache,
+///     &model,
+///     &h_evaluator,
+///     &f_evaluator,
+///     None,
 /// ).unwrap();
 ///
 /// let suffix = [transition.clone(), transition.clone()];
 /// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
+/// function_cache.parent.clear();
 /// let (cost, suffix) = get_solution_cost_and_suffix(
-///     &model, &node, &suffix, base_cost_evaluator,
+///     &model, &node, &suffix, base_cost_evaluator, &mut function_cache,
 /// ).unwrap();
 ///
 /// assert_eq!(cost, 3);
@@ -188,6 +247,7 @@ pub fn get_solution_cost_and_suffix<'a, N, T, U, B, K>(
     node: &N,
     transitions: &'a [T],
     base_cost_evaluator: B,
+    function_cache: &mut ParentAndChildStateFunctionCache,
 ) -> Option<(U, &'a [T])>
 where
     N: StateInformation<U, K>,
@@ -199,6 +259,7 @@ where
 {
     let result = rollout(
         node.state(),
+        function_cache,
         node.cost(model),
         transitions,
         base_cost_evaluator,
@@ -219,9 +280,10 @@ pub struct Trace<'a, S, U, T> {
     transitions: &'a [T],
     model: &'a Model,
     i: usize,
+    function_cache: StateFunctionCache,
 }
 
-impl<'a, S, U, T> Iterator for Trace<'a, S, U, T>
+impl<S, U, T> Iterator for Trace<'_, S, U, T>
 where
     S: StateInterface + From<State> + Clone,
     U: Numeric,
@@ -237,12 +299,21 @@ where
         let result = Some((self.state.clone(), self.cost));
 
         if self.i < self.transitions.len() {
+            self.function_cache.clear();
+
             self.cost = self.transitions[self.i].eval_cost(
                 self.cost,
                 &self.state,
+                &mut self.function_cache,
+                &self.model.state_functions,
                 &self.model.table_registry,
             );
-            self.state = self.transitions[self.i].apply(&self.state, &self.model.table_registry);
+            self.state = self.transitions[self.i].apply(
+                &self.state,
+                &mut self.function_cache,
+                &self.model.state_functions,
+                &self.model.table_registry,
+            );
         }
 
         self.i += 1;
@@ -278,10 +349,16 @@ where
 /// let transitions = [increment.clone(), double.clone()];
 /// let mut iter = get_trace(&state, 0, &transitions, &model);
 ///
-/// let expected_state: State = increment.apply(&state, &model.table_registry);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let expected_state: State = increment.apply(
+///     &state, &mut function_cache, &model.state_functions, &model.table_registry,
+/// );
 /// assert_eq!(iter.next(), Some((expected_state.clone(), 2)));
 ///
-/// let expected_state: State = double.apply(&expected_state, &model.table_registry);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let expected_state: State = double.apply(
+///     &expected_state, &mut function_cache, &model.state_functions, &model.table_registry,
+/// );
 /// assert_eq!(iter.next(), Some((expected_state, 5)));
 ///
 /// assert_eq!(iter.next(), None);
@@ -297,8 +374,20 @@ where
     U: Numeric,
     T: TransitionInterface,
 {
-    let cost = transitions[0].eval_cost(cost, state, &model.table_registry);
-    let state = transitions[0].apply(state, &model.table_registry);
+    let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    let cost = transitions[0].eval_cost(
+        cost,
+        state,
+        &mut function_cache,
+        &model.state_functions,
+        &model.table_registry,
+    );
+    let state = transitions[0].apply(
+        state,
+        &mut function_cache,
+        &model.state_functions,
+        &model.table_registry,
+    );
 
     Trace {
         state,
@@ -306,6 +395,7 @@ where
         transitions: &transitions[1..],
         model,
         i: 0,
+        function_cache,
     }
 }
 
@@ -330,7 +420,15 @@ mod tests {
         let state = State::default();
         let transitions = Vec::<Transition>::default();
         let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-        let result = rollout(&state, 1, &transitions, base_cost_evaluator, &model);
+        let mut cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let result = rollout(
+            &state,
+            &mut cache,
+            1,
+            &transitions,
+            base_cost_evaluator,
+            &model,
+        );
         assert_eq!(
             result,
             Some(RolloutResult {
@@ -357,7 +455,15 @@ mod tests {
         let state = State::default();
         let transitions = Vec::<Transition>::default();
         let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-        let result = rollout(&state, 1, &transitions, base_cost_evaluator, &model);
+        let mut cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let result = rollout(
+            &state,
+            &mut cache,
+            1,
+            &transitions,
+            base_cost_evaluator,
+            &model,
+        );
         assert_eq!(
             result,
             Some(RolloutResult {
@@ -381,7 +487,15 @@ mod tests {
         let state = State::default();
         let transitions = Vec::<Transition>::default();
         let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-        let result = rollout(&state, 1, &transitions, base_cost_evaluator, &model);
+        let mut cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let result = rollout(
+            &state,
+            &mut cache,
+            1,
+            &transitions,
+            base_cost_evaluator,
+            &model,
+        );
         assert_eq!(
             result,
             Some(RolloutResult {
@@ -440,7 +554,15 @@ mod tests {
             },
         ];
         let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-        let result = rollout(&state, 1, &transitions, base_cost_evaluator, &model);
+        let mut cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let result = rollout(
+            &state,
+            &mut cache,
+            1,
+            &transitions,
+            base_cost_evaluator,
+            &model,
+        );
         assert_eq!(
             result,
             Some(RolloutResult {
@@ -508,7 +630,15 @@ mod tests {
             },
         ];
         let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-        let result = rollout(&state, 1, &transitions, base_cost_evaluator, &model);
+        let mut cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let result = rollout(
+            &state,
+            &mut cache,
+            1,
+            &transitions,
+            base_cost_evaluator,
+            &model,
+        );
         assert_eq!(
             result,
             Some(RolloutResult {
@@ -573,7 +703,15 @@ mod tests {
             },
         ];
         let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-        let result = rollout(&state, 1, &transitions, base_cost_evaluator, &model);
+        let mut cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let result = rollout(
+            &state,
+            &mut cache,
+            1,
+            &transitions,
+            base_cost_evaluator,
+            &model,
+        );
         assert_eq!(
             result,
             Some(RolloutResult {
@@ -603,7 +741,15 @@ mod tests {
             ..Default::default()
         }];
         let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-        let result = rollout(&state, 1, &transitions, base_cost_evaluator, &model);
+        let mut cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let result = rollout(
+            &state,
+            &mut cache,
+            1,
+            &transitions,
+            base_cost_evaluator,
+            &model,
+        );
         assert_eq!(result, None);
     }
 
@@ -619,7 +765,15 @@ mod tests {
         let state = State::default();
         let transitions = vec![Transition::default()];
         let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-        let result = rollout(&state, 1, &transitions, base_cost_evaluator, &model);
+        let mut cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let result = rollout(
+            &state,
+            &mut cache,
+            1,
+            &transitions,
+            base_cost_evaluator,
+            &model,
+        );
         assert_eq!(result, None);
     }
 
@@ -638,10 +792,12 @@ mod tests {
         transition.add_effect(var, var + 1).unwrap();
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &StateInRegistry| g + h;
         let node = FNode::<_>::generate_root_node(
             model.target.clone(),
+            &mut function_cache.parent,
             0,
             &model,
             &h_evaluator,
@@ -652,6 +808,7 @@ mod tests {
         let node = node.unwrap();
         let node = node.generate_successor_node(
             Rc::new(transition.clone()),
+            &mut function_cache,
             &model,
             &h_evaluator,
             &f_evaluator,
@@ -662,7 +819,14 @@ mod tests {
 
         let suffix = [transition.clone(), transition.clone()];
         let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-        let result = get_solution_cost_and_suffix(&model, &node, &suffix, base_cost_evaluator);
+        function_cache.parent.clear();
+        let result = get_solution_cost_and_suffix(
+            &model,
+            &node,
+            &suffix,
+            base_cost_evaluator,
+            &mut function_cache,
+        );
         assert!(result.is_some());
         let (cost, suffix) = result.unwrap();
         assert_eq!(cost, 3);
@@ -683,10 +847,12 @@ mod tests {
         transition.add_effect(var, var + 1).unwrap();
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let node = FNode::<_>::generate_root_node(
             model.target.clone(),
+            &mut function_cache.parent,
             0,
             &model,
             &h_evaluator,
@@ -697,6 +863,7 @@ mod tests {
         let node = node.unwrap();
         let node = node.generate_successor_node(
             Rc::new(transition.clone()),
+            &mut function_cache,
             &model,
             &h_evaluator,
             &f_evaluator,
@@ -707,7 +874,14 @@ mod tests {
 
         let suffix = [transition.clone(), transition.clone()];
         let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-        let result = get_solution_cost_and_suffix(&model, &node, &suffix, base_cost_evaluator);
+        function_cache.parent.clear();
+        let result = get_solution_cost_and_suffix(
+            &model,
+            &node,
+            &suffix,
+            base_cost_evaluator,
+            &mut function_cache,
+        );
         assert!(result.is_some());
         let (cost, suffix) = result.unwrap();
         assert_eq!(cost, 4);
@@ -729,10 +903,12 @@ mod tests {
         transition.add_effect(var, var + 1).unwrap();
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let h_evaluator = |_: &StateInRegistry| Some(0);
+        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &StateInRegistry| g + h;
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let node = FNode::<_>::generate_root_node(
             model.target.clone(),
+            &mut function_cache.parent,
             0,
             &model,
             &h_evaluator,
@@ -744,7 +920,13 @@ mod tests {
 
         let suffix = [transition.clone(), transition.clone()];
         let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-        let result = get_solution_cost_and_suffix(&model, &node, &suffix, base_cost_evaluator);
+        let result = get_solution_cost_and_suffix(
+            &model,
+            &node,
+            &suffix,
+            base_cost_evaluator,
+            &mut function_cache,
+        );
         assert!(result.is_none());
     }
 

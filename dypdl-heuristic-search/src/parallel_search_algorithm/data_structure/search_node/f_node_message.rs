@@ -2,11 +2,12 @@ use super::super::arc_chain::ArcChain;
 use super::cost_node_message::CostNodeMessage;
 use super::search_node_message::SearchNodeMessage;
 use crate::search_algorithm::data_structure::{
-    CreateTransitionChain, StateInformation, StateWithHashableSignatureVariables,
+    CreateTransitionChain, ParentAndChildStateFunctionCache, StateInformation,
+    StateWithHashableSignatureVariables,
 };
-use crate::search_algorithm::FNode;
+use crate::search_algorithm::{FNode, FNodeEvaluators};
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, Transition, TransitionInterface};
+use dypdl::{Model, StateFunctionCache, Transition, TransitionInterface};
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -69,11 +70,12 @@ where
     /// model.add_integer_variable("variable", 0).unwrap();
     ///
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let cost = 0;
-    /// let h_evaluator = |_: &_| Some(0);
+    /// let h_evaluator = |_: &_, _: &mut _| Some(0);
     /// let f_evaluator = |g, h, _: &_| g + h;
     /// let node = FNodeMessage::<_>::generate_root_node(
-    ///     state, cost, &model, &h_evaluator, &f_evaluator, None,
+    ///     state, &mut function_cache, cost, &model, &h_evaluator, &f_evaluator, None,
     /// );
     /// assert!(node.is_some());
     /// let node = FNode::from(node.unwrap());
@@ -85,6 +87,7 @@ where
     /// ```
     pub fn generate_root_node<S, H, F>(
         state: S,
+        function_cache: &mut StateFunctionCache,
         cost: T,
         model: &Model,
         h_evaluator: H,
@@ -93,16 +96,20 @@ where
     ) -> Option<Self>
     where
         StateWithHashableSignatureVariables: From<S>,
-        H: FnOnce(&StateWithHashableSignatureVariables) -> Option<T>,
+        H: FnOnce(&StateWithHashableSignatureVariables, &mut StateFunctionCache) -> Option<T>,
         F: FnOnce(T, T, &StateWithHashableSignatureVariables) -> T,
     {
         let state = StateWithHashableSignatureVariables::from(state);
+        let evaluators = FNodeEvaluators {
+            h: h_evaluator,
+            f: f_evaluator,
+        };
         let (h, f) = FNode::<T, V, Arc<V>, ArcChain<V>, Arc<ArcChain<V>>>::evaluate_state(
             &state,
+            function_cache,
             cost,
             model,
-            h_evaluator,
-            f_evaluator,
+            evaluators,
             primal_bound,
             None,
         )?;
@@ -123,6 +130,8 @@ where
     /// Generates a sendable successor node message given a transition, a DyPDL model, h- and f-evaluators,
     /// and a primal bound on the solution cost.
     ///
+    /// `function_cache.parent` is not cleared and updated by this node while `function_cache.child` is cleared and updated by the successor node if generated.
+    ///
     /// `h_evaluator` is a function that takes a state and returns the dual bound of the cost from the state.
     /// If `h_evaluator` returns `None`, the state is a dead-end, so the node is not generated.
     /// `f_evaluator` is a function that takes `cost`, the return value by `h_evaluator`, and the state and returns the dual bound of the cost of a solution extending the path to this node.
@@ -142,7 +151,7 @@ where
     /// use dypdl::prelude::*;
     /// use dypdl_heuristic_search::search_algorithm::{FNode, StateInRegistry};
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation,
+    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
     /// };
     /// use std::sync::Arc;
     ///
@@ -150,24 +159,37 @@ where
     /// let variable = model.add_integer_variable("variable", 0).unwrap();
     ///
     /// let state = model.target.clone();
+    /// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
     /// let cost = 0;
-    /// let h_evaluator = |_: &_| Some(0);
+    /// let h_evaluator = |_: &_, _: &mut _| Some(0);
     /// let f_evaluator = |g, h, _: &_| g + h;
     /// let node = FNode::<_, _, _, _, _>::generate_root_node(
-    ///     state, cost, &model, &h_evaluator, &f_evaluator, None,
+    ///     state,
+    ///     &mut function_cache.parent,
+    ///     cost,
+    ///     &model,
+    ///     &h_evaluator,
+    ///     &f_evaluator,
+    ///     None,
     /// ).unwrap();
     ///
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let mut function_cache_for_expected = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry = transition.apply(
-    ///     &model.target, &model.table_registry,
+    ///     &model.target, &mut function_cache_for_expected, &model.state_functions, &model.table_registry,
     /// );
     ///
-    /// let h_evaluator = |_: &_| Some(0);
+    /// let h_evaluator = |_: &_, _: &mut _| Some(0);
     /// let f_evaluator = |g, h, _: &_| g + h;
     /// let node = node.generate_sendable_successor_node(
-    ///     Arc::new(transition.clone()), &model, &h_evaluator, &f_evaluator, None,
+    ///     Arc::new(transition.clone()),
+    ///     &mut function_cache,
+    ///     &model,
+    ///     &h_evaluator,
+    ///     &f_evaluator,
+    ///     None,
     /// );
     /// assert!(node.is_some());
     /// let node = FNode::from(node.unwrap());
@@ -180,27 +202,33 @@ where
     pub fn generate_sendable_successor_node<H, F>(
         &self,
         transition: Arc<V>,
+        function_cache: &mut ParentAndChildStateFunctionCache,
         model: &Model,
         h_evaluator: H,
         f_evaluator: F,
         primal_bound: Option<T>,
     ) -> Option<FNodeMessage<T, V>>
     where
-        H: FnOnce(&StateWithHashableSignatureVariables) -> Option<T>,
+        H: FnOnce(&StateWithHashableSignatureVariables, &mut StateFunctionCache) -> Option<T>,
         F: FnOnce(T, T, &StateWithHashableSignatureVariables) -> T,
     {
         let (state, g) = model.generate_successor_state(
             self.state(),
+            &mut function_cache.parent,
             self.cost(model),
             transition.as_ref(),
             None,
         )?;
+        let evaluators = FNodeEvaluators {
+            h: h_evaluator,
+            f: f_evaluator,
+        };
         let (h, f) = Self::evaluate_state(
             &state,
+            &mut function_cache.child,
             g,
             model,
-            h_evaluator,
-            f_evaluator,
+            evaluators,
             primal_bound,
             None,
         )?;
@@ -276,10 +304,13 @@ mod tests {
         assert!(variable.is_ok());
         let state = model.target.clone();
         let expected_state = StateWithHashableSignatureVariables::from(state.clone());
-        let h_evaluator = |_: &_| Some(0);
+
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = FNodeMessage::<_>::generate_root_node(
             state,
+            &mut function_cache,
             1,
             &model,
             &h_evaluator,
@@ -303,10 +334,13 @@ mod tests {
         assert!(variable.is_ok());
         let state = model.target.clone();
         let expected_state = StateWithHashableSignatureVariables::from(state.clone());
-        let h_evaluator = |_: &_| Some(0);
+
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = FNodeMessage::<_>::generate_root_node(
             state,
+            &mut function_cache,
             1,
             &model,
             &h_evaluator,
@@ -329,10 +363,12 @@ mod tests {
         let variable = model.add_integer_variable("variable", 0);
         assert!(variable.is_ok());
         let state = model.target.clone();
-        let h_evaluator = |_: &_| Some(1);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(1);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = FNodeMessage::<_>::generate_root_node(
             state,
+            &mut function_cache,
             0,
             &model,
             &h_evaluator,
@@ -349,10 +385,12 @@ mod tests {
         let variable = model.add_integer_variable("variable", 0);
         assert!(variable.is_ok());
         let state = model.target.clone();
-        let h_evaluator = |_: &_| Some(1);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(1);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = FNodeMessage::<_>::generate_root_node(
             state,
+            &mut function_cache,
             0,
             &model,
             &h_evaluator,
@@ -368,10 +406,12 @@ mod tests {
         let variable = model.add_integer_variable("variable", 0);
         assert!(variable.is_ok());
         let state = model.target.clone();
-        let h_evaluator = |_: &_| None;
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| None;
         let f_evaluator = |g, h, _: &_| g + h;
         let node = FNodeMessage::<_>::generate_root_node(
             state,
+            &mut function_cache,
             0,
             &model,
             &h_evaluator,
@@ -400,17 +440,34 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let expected_state = transition.apply(&state, &model.table_registry);
-        let h_evaluator = |_: &_| Some(0);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
-        let node = FNode::generate_root_node(state, 0, &model, &h_evaluator, &f_evaluator, None);
+        let node = FNode::generate_root_node(
+            state,
+            &mut function_cache.parent,
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
         assert!(node.is_some());
         let node = node.unwrap();
 
-        let h_evaluator = |_: &_| Some(0);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let successor = node.generate_sendable_successor_node(
             Arc::new(transition.clone()),
+            &mut function_cache,
             &model,
             &h_evaluator,
             &f_evaluator,
@@ -448,17 +505,34 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let expected_state = transition.apply(&state, &model.table_registry);
-        let h_evaluator = |_: &_| Some(0);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
+
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
-        let node = FNode::generate_root_node(state, 0, &model, &h_evaluator, &f_evaluator, None);
+        let node = FNode::generate_root_node(
+            state,
+            &mut function_cache.parent,
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
         assert!(node.is_some());
         let node = node.unwrap();
 
-        let h_evaluator = |_: &_| Some(0);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let successor = node.generate_sendable_successor_node(
             Arc::new(transition.clone()),
+            &mut function_cache,
             &model,
             &h_evaluator,
             &f_evaluator,
@@ -491,9 +565,18 @@ mod tests {
         assert!(result.is_ok());
 
         let state = model.target.clone();
-        let h_evaluator = |_: &_| Some(0);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
-        let node = FNode::generate_root_node(state, 0, &model, &h_evaluator, &f_evaluator, None);
+        let node = FNode::generate_root_node(
+            state,
+            &mut function_cache.parent,
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
         assert!(node.is_some());
         let node = node.unwrap();
 
@@ -504,10 +587,11 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let h_evaluator = |_: &_| Some(0);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let result = node.generate_sendable_successor_node(
             Arc::new(transition),
+            &mut function_cache,
             &model,
             &h_evaluator,
             &f_evaluator,
@@ -528,10 +612,12 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = model.target.clone();
-        let h_evaluator = |_: &_| Some(0);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = FNode::<_, _, _, ArcChain<_>, _>::generate_root_node(
             state,
+            &mut function_cache.parent,
             0,
             &model,
             &h_evaluator,
@@ -550,6 +636,7 @@ mod tests {
 
         let result = node.generate_successor_node(
             Arc::new(transition),
+            &mut function_cache,
             &model,
             &h_evaluator,
             &f_evaluator,
@@ -570,9 +657,18 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = model.target.clone();
-        let h_evaluator = |_: &_| Some(0);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
-        let node = FNode::generate_root_node(state, 0, &model, &h_evaluator, &f_evaluator, None);
+        let node = FNode::generate_root_node(
+            state,
+            &mut function_cache.parent,
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
         assert!(node.is_some());
         let node = node.unwrap();
 
@@ -583,10 +679,11 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let h_evaluator = |_: &_| Some(0);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let result = node.generate_sendable_successor_node(
             Arc::new(transition),
+            &mut function_cache,
             &model,
             &h_evaluator,
             &f_evaluator,
@@ -606,9 +703,18 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = model.target.clone();
-        let h_evaluator = |_: &_| Some(0);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
-        let node = FNode::generate_root_node(state, 0, &model, &h_evaluator, &f_evaluator, None);
+        let node = FNode::generate_root_node(
+            state,
+            &mut function_cache.parent,
+            0,
+            &model,
+            &h_evaluator,
+            &f_evaluator,
+            None,
+        );
         assert!(node.is_some());
         let node = node.unwrap();
 
@@ -619,10 +725,11 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let h_evaluator = |_: &_| None;
+        let h_evaluator = |_: &_, _: &mut _| None;
         let f_evaluator = |g, h, _: &_| g + h;
         let result = node.generate_sendable_successor_node(
             Arc::new(transition),
+            &mut function_cache,
             &model,
             &h_evaluator,
             &f_evaluator,

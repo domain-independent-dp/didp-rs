@@ -1,8 +1,10 @@
+use crate::search_algorithm::data_structure::ParentAndChildStateFunctionCache;
+
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
     beam_search, Cabs, CabsParameters, CostNode, FNode, Search, SearchInput, SuccessorGenerator,
 };
-use dypdl::{variable_type, Transition};
+use dypdl::{variable_type, StateFunctionCache, Transition};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -73,11 +75,13 @@ where
     };
 
     if model.has_dual_bounds() {
+        let mut cache = StateFunctionCache::new(&model.state_functions);
         let h_model = model.clone();
-        let h_evaluator = move |state: &_| h_model.eval_dual_bound(state);
+        let h_evaluator = move |state: &_, cache: &mut _| h_model.eval_dual_bound(state, cache);
         let f_evaluator = move |g, h, _: &_| f_evaluator_type.eval(g, h);
         let node = FNode::generate_root_node(
             model.target.clone(),
+            &mut cache,
             cost,
             &model,
             &h_evaluator,
@@ -89,15 +93,17 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &FNode<_>, transition, primal_bound| {
-            node.generate_successor_node(
-                transition,
-                &model,
-                &h_evaluator,
-                &f_evaluator,
-                primal_bound,
-            )
-        };
+        let transition_evaluator =
+            move |node: &FNode<_>, transition, cache: &mut _, primal_bound| {
+                node.generate_successor_node(
+                    transition,
+                    cache,
+                    &model,
+                    &h_evaluator,
+                    &f_evaluator,
+                    primal_bound,
+                )
+            };
         let beam_search = move |input: &SearchInput<_, _>, parameters| {
             beam_search(
                 input,
@@ -114,8 +120,11 @@ where
             generator,
             solution_suffix: &[],
         };
-        let transition_evaluator = move |node: &CostNode<_>, transition, _| {
-            node.generate_successor_node(transition, &model)
+        let transition_evaluator = move |node: &CostNode<_>,
+                                         transition,
+                                         cache: &mut ParentAndChildStateFunctionCache,
+                                         _| {
+            node.generate_successor_node(transition, &mut cache.parent, &model)
         };
         let beam_search = move |input: &SearchInput<_, _>, parameters| {
             beam_search(

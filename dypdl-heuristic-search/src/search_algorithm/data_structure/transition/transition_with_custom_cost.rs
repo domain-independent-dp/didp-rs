@@ -1,7 +1,7 @@
 use super::super::successor_generator::SuccessorGenerator;
 use core::ops::Deref;
 use dypdl::variable_type::Numeric;
-use dypdl::{CostExpression, Transition, TransitionInterface};
+use dypdl::{CostExpression, StateFunctionCache, StateFunctions, Transition, TransitionInterface};
 use std::fmt::Debug;
 
 /// Transition with a customized cost expression.
@@ -18,18 +18,24 @@ impl TransitionInterface for TransitionWithCustomCost {
     fn is_applicable<S: dypdl::StateInterface>(
         &self,
         state: &S,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &dypdl::TableRegistry,
     ) -> bool {
-        self.transition.is_applicable(state, registry)
+        self.transition
+            .is_applicable(state, function_cache, state_functions, registry)
     }
 
     #[inline]
     fn apply<S: dypdl::StateInterface, T: From<dypdl::State>>(
         &self,
         state: &S,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &dypdl::TableRegistry,
     ) -> T {
-        self.transition.apply(state, registry)
+        self.transition
+            .apply(state, function_cache, state_functions, registry)
     }
 
     #[inline]
@@ -37,9 +43,12 @@ impl TransitionInterface for TransitionWithCustomCost {
         &self,
         cost: U,
         state: &T,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &dypdl::TableRegistry,
     ) -> U {
-        self.transition.eval_cost(cost, state, registry)
+        self.transition
+            .eval_cost(cost, state, function_cache, state_functions, registry)
     }
 }
 
@@ -129,7 +138,13 @@ mod tests {
             custom_cost: CostExpression::Integer(IntegerExpression::Cost + 2),
         };
         let state = model.target;
-        assert!(transition.is_applicable(&state, &model.table_registry));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert!(transition.is_applicable(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry
+        ));
     }
 
     #[test]
@@ -145,7 +160,13 @@ mod tests {
             transition,
             custom_cost: CostExpression::Integer(IntegerExpression::Cost + 2),
         };
-        assert!(transition.is_applicable(&model.target, &model.table_registry));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert!(transition.is_applicable(
+            &model.target,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry
+        ));
     }
 
     #[test]
@@ -165,7 +186,13 @@ mod tests {
             custom_cost: CostExpression::Integer(IntegerExpression::Cost + 2),
         };
 
-        let state: State = transition.apply(&model.target, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let state: State = transition.apply(
+            &model.target,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
         assert_eq!(state.get_integer_variable(0), 1);
         assert_eq!(state.get_integer_variable(1), 0);
     }
@@ -180,7 +207,14 @@ mod tests {
             transition,
             custom_cost: CostExpression::Integer(IntegerExpression::Cost + 2),
         };
-        let cost = transition.eval_cost(0, &model.target, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let cost = transition.eval_cost(
+            0,
+            &model.target,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
         assert_eq!(cost, 1);
     }
 

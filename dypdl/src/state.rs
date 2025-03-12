@@ -1,6 +1,7 @@
 use crate::effect;
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry;
-use crate::util::ModelErr;
+use crate::util::{self, ModelErr};
 use crate::variable_type::{Continuous, Element, Integer, Set, Vector};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Ordering;
@@ -99,6 +100,8 @@ pub trait StateInterface: Sized {
     fn apply_effect<T: From<State>>(
         &self,
         effect: &effect::Effect,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &table_registry::TableRegistry,
     ) -> T {
         let len = self.get_number_of_set_variables();
@@ -109,7 +112,7 @@ pub trait StateInterface: Sized {
                 set_variables.push(self.get_set_variable(i).clone());
                 i += 1;
             }
-            set_variables.push(e.1.eval(self, registry));
+            set_variables.push(e.1.eval(self, function_cache, state_functions, registry));
             i += 1;
         }
         while i < len {
@@ -125,7 +128,7 @@ pub trait StateInterface: Sized {
                 vector_variables.push(self.get_vector_variable(i).clone());
                 i += 1;
             }
-            vector_variables.push(e.1.eval(self, registry));
+            vector_variables.push(e.1.eval(self, function_cache, state_functions, registry));
             i += 1;
         }
         while i < len {
@@ -137,14 +140,14 @@ pub trait StateInterface: Sized {
             .map(|i| self.get_element_variable(i))
             .collect();
         for e in &effect.element_effects {
-            element_variables[e.0] = e.1.eval(self, registry);
+            element_variables[e.0] = e.1.eval(self, function_cache, state_functions, registry);
         }
 
         let mut integer_variables: Vec<Integer> = (0..self.get_number_of_integer_variables())
             .map(|i| self.get_integer_variable(i))
             .collect();
         for e in &effect.integer_effects {
-            integer_variables[e.0] = e.1.eval(self, registry);
+            integer_variables[e.0] = e.1.eval(self, function_cache, state_functions, registry);
         }
 
         let mut continuous_variables: Vec<Continuous> = (0..self
@@ -152,7 +155,7 @@ pub trait StateInterface: Sized {
             .map(|i| self.get_continuous_variable(i))
             .collect();
         for e in &effect.continuous_effects {
-            continuous_variables[e.0] = e.1.eval(self, registry);
+            continuous_variables[e.0] = e.1.eval(self, function_cache, state_functions, registry);
         }
 
         let mut element_resource_variables: Vec<usize> = (0..self
@@ -160,7 +163,8 @@ pub trait StateInterface: Sized {
             .map(|i| self.get_element_resource_variable(i))
             .collect();
         for e in &effect.element_resource_effects {
-            element_resource_variables[e.0] = e.1.eval(self, registry);
+            element_resource_variables[e.0] =
+                e.1.eval(self, function_cache, state_functions, registry);
         }
 
         let mut integer_resource_variables: Vec<Integer> = (0..self
@@ -168,7 +172,8 @@ pub trait StateInterface: Sized {
             .map(|i| self.get_integer_resource_variable(i))
             .collect();
         for e in &effect.integer_resource_effects {
-            integer_resource_variables[e.0] = e.1.eval(self, registry);
+            integer_resource_variables[e.0] =
+                e.1.eval(self, function_cache, state_functions, registry);
         }
 
         let mut continuous_resource_variables: Vec<Continuous> = (0..self
@@ -176,7 +181,8 @@ pub trait StateInterface: Sized {
             .map(|i| self.get_continuous_resource_variable(i))
             .collect();
         for e in &effect.continuous_resource_effects {
-            continuous_resource_variables[e.0] = e.1.eval(self, registry);
+            continuous_resource_variables[e.0] =
+                e.1.eval(self, function_cache, state_functions, registry);
         }
 
         T::from(State {
@@ -648,7 +654,7 @@ define_handle!(ContinuousVariable);
 define_handle!(ContinuousResourceVariable);
 
 /// Information about state variables.
-#[derive(Debug, PartialEq, Clone, Eq, Default)]
+#[derive(Debug, PartialEq, Clone, Default)]
 pub struct StateMetadata {
     /// Map from an object type id to the name.
     pub object_type_names: Vec<String>,
@@ -1227,7 +1233,7 @@ impl StateMetadata {
     /// If no such variable.
     #[inline]
     pub fn get_element_variable(&self, name: &str) -> Result<ElementVariable, ModelErr> {
-        let id = Self::get_variable(name, &self.name_to_element_variable)?;
+        let id = util::get_id(name, &self.name_to_element_variable)?;
         Ok(ElementVariable(id))
     }
 
@@ -1247,7 +1253,7 @@ impl StateMetadata {
         String: From<T>,
     {
         self.check_object(ob)?;
-        let id = Self::add_variable(
+        let id = util::add_name(
             name,
             &mut self.element_variable_names,
             &mut self.name_to_element_variable,
@@ -1266,7 +1272,7 @@ impl StateMetadata {
         &self,
         name: &str,
     ) -> Result<ElementResourceVariable, ModelErr> {
-        let id = Self::get_variable(name, &self.name_to_element_resource_variable)?;
+        let id = util::get_id(name, &self.name_to_element_resource_variable)?;
         Ok(ElementResourceVariable(id))
     }
 
@@ -1287,7 +1293,7 @@ impl StateMetadata {
         String: From<T>,
     {
         self.check_object(ob)?;
-        let id = Self::add_variable(
+        let id = util::add_name(
             name,
             &mut self.element_resource_variable_names,
             &mut self.name_to_element_resource_variable,
@@ -1304,7 +1310,7 @@ impl StateMetadata {
     /// If no such variable.
     #[inline]
     pub fn get_set_variable(&self, name: &str) -> Result<SetVariable, ModelErr> {
-        let id = Self::get_variable(name, &self.name_to_set_variable)?;
+        let id = util::get_id(name, &self.name_to_set_variable)?;
         Ok(SetVariable(id))
     }
 
@@ -1320,7 +1326,7 @@ impl StateMetadata {
         String: From<T>,
     {
         self.check_object(ob)?;
-        let id = Self::add_variable(
+        let id = util::add_name(
             name,
             &mut self.set_variable_names,
             &mut self.name_to_set_variable,
@@ -1336,7 +1342,7 @@ impl StateMetadata {
     /// If no such variable.
     #[inline]
     pub fn get_vector_variable(&self, name: &str) -> Result<VectorVariable, ModelErr> {
-        let id = Self::get_variable(name, &self.name_to_vector_variable)?;
+        let id = util::get_id(name, &self.name_to_vector_variable)?;
         Ok(VectorVariable(id))
     }
 
@@ -1356,7 +1362,7 @@ impl StateMetadata {
         String: From<T>,
     {
         self.check_object(ob)?;
-        let id = Self::add_variable(
+        let id = util::add_name(
             name,
             &mut self.vector_variable_names,
             &mut self.name_to_vector_variable,
@@ -1372,7 +1378,7 @@ impl StateMetadata {
     /// If no such variable.
     #[inline]
     pub fn get_integer_variable(&self, name: &str) -> Result<IntegerVariable, ModelErr> {
-        let id = Self::get_variable(name, &self.name_to_integer_variable)?;
+        let id = util::get_id(name, &self.name_to_integer_variable)?;
         Ok(IntegerVariable(id))
     }
 
@@ -1387,7 +1393,7 @@ impl StateMetadata {
     where
         String: From<T>,
     {
-        let id = Self::add_variable(
+        let id = util::add_name(
             name,
             &mut self.integer_variable_names,
             &mut self.name_to_integer_variable,
@@ -1405,7 +1411,7 @@ impl StateMetadata {
         &self,
         name: &str,
     ) -> Result<IntegerResourceVariable, ModelErr> {
-        let id = Self::get_variable(name, &self.name_to_integer_resource_variable)?;
+        let id = util::get_id(name, &self.name_to_integer_resource_variable)?;
         Ok(IntegerResourceVariable(id))
     }
 
@@ -1424,7 +1430,7 @@ impl StateMetadata {
     where
         String: From<T>,
     {
-        let id = Self::add_variable(
+        let id = util::add_name(
             name,
             &mut self.integer_resource_variable_names,
             &mut self.name_to_integer_resource_variable,
@@ -1440,7 +1446,7 @@ impl StateMetadata {
     /// If no such variable.
     #[inline]
     pub fn get_continuous_variable(&self, name: &str) -> Result<ContinuousVariable, ModelErr> {
-        let id = Self::get_variable(name, &self.name_to_continuous_variable)?;
+        let id = util::get_id(name, &self.name_to_continuous_variable)?;
         Ok(ContinuousVariable(id))
     }
 
@@ -1455,7 +1461,7 @@ impl StateMetadata {
     where
         String: From<T>,
     {
-        let id = Self::add_variable(
+        let id = util::add_name(
             name,
             &mut self.continuous_variable_names,
             &mut self.name_to_continuous_variable,
@@ -1473,7 +1479,7 @@ impl StateMetadata {
         &self,
         name: &str,
     ) -> Result<ContinuousResourceVariable, ModelErr> {
-        let id = Self::get_variable(name, &self.name_to_continuous_resource_variable)?;
+        let id = util::get_id(name, &self.name_to_continuous_resource_variable)?;
         Ok(ContinuousResourceVariable(id))
     }
 
@@ -1492,7 +1498,7 @@ impl StateMetadata {
     where
         String: From<T>,
     {
-        let id = Self::add_variable(
+        let id = util::add_name(
             name,
             &mut self.continuous_resource_variable_names,
             &mut self.name_to_continuous_resource_variable,
@@ -1510,40 +1516,6 @@ impl StateMetadata {
             )))
         } else {
             Ok(())
-        }
-    }
-
-    fn get_variable(
-        name: &str,
-        name_to_variable: &FxHashMap<String, usize>,
-    ) -> Result<usize, ModelErr> {
-        if let Some(id) = name_to_variable.get(name) {
-            Ok(*id)
-        } else {
-            Err(ModelErr::new(format!("no such variable `{}`", name)))
-        }
-    }
-
-    fn add_variable<T>(
-        name: T,
-        variable_names: &mut Vec<String>,
-        name_to_variable: &mut FxHashMap<String, usize>,
-    ) -> Result<usize, ModelErr>
-    where
-        String: From<T>,
-    {
-        let name = String::from(name);
-        match name_to_variable.entry(name) {
-            Entry::Vacant(e) => {
-                let id = variable_names.len();
-                variable_names.push(e.key().clone());
-                e.insert(id);
-                Ok(id)
-            }
-            Entry::Occupied(e) => Err(ModelErr::new(format!(
-                "variable `{}` already exists",
-                e.key()
-            ))),
         }
     }
 }
@@ -2126,6 +2098,9 @@ mod tests {
 
     #[test]
     fn apply_effect() {
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+
         let mut set1 = Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
@@ -2248,7 +2223,8 @@ mod tests {
                 continuous_variables: vec![5.0, 2.5, 6.0],
             },
         };
-        let successor: State = state.apply_effect(&effect, &registry);
+        let successor: State =
+            state.apply_effect(&effect, &mut function_cache, &state_functions, &registry);
         assert_eq!(successor, expected);
     }
 

@@ -5,27 +5,16 @@ use dypdl::StateInterface;
 use pyo3::prelude::*;
 use std::collections::HashSet;
 
-#[derive(FromPyObject, Debug, PartialEq, Clone)]
+#[derive(FromPyObject, Debug, PartialEq, Clone, IntoPyObject)]
 pub enum VariableValueUnion {
-    #[pyo3(transparent, annotation = "element")]
+    #[pyo3(transparent)]
     Element(variable_type::Element),
-    #[pyo3(transparent, annotation = "set")]
+    #[pyo3(transparent)]
     Set(HashSet<Element>),
-    #[pyo3(transparent, annotation = "int")]
+    #[pyo3(transparent)]
     Int(variable_type::Integer),
-    #[pyo3(transparent, annotation = "float")]
+    #[pyo3(transparent)]
     Float(variable_type::Continuous),
-}
-
-impl IntoPy<Py<PyAny>> for VariableValueUnion {
-    fn into_py(self, py: Python) -> Py<PyAny> {
-        match self {
-            VariableValueUnion::Element(var) => var.into_py(py),
-            VariableValueUnion::Set(var) => var.into_py(py),
-            VariableValueUnion::Int(var) => var.into_py(py),
-            VariableValueUnion::Float(var) => var.into_py(py),
-        }
-    }
 }
 
 /// DyPDL state.

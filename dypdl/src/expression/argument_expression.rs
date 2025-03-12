@@ -4,6 +4,7 @@ use super::set_expression::SetExpression;
 use super::util;
 use super::vector_expression::VectorExpression;
 use crate::state::{ElementResourceVariable, ElementVariable, SetVariable, StateInterface};
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Element, Set};
 
@@ -75,6 +76,8 @@ impl ArgumentExpression {
     pub fn eval_args<'a, I, U: StateInterface>(
         args: I,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Vec<Vec<Element>>
     where
@@ -86,25 +89,35 @@ impl ArgumentExpression {
                 ArgumentExpression::Set(set) => {
                     result = match set {
                         SetExpression::Reference(set) => {
-                            let f = |i| state.get_set_variable(i);
-                            let set = set.eval(state, registry, &f, &registry.set_tables);
+                            let set = set.eval(state, function_cache, state_functions, registry);
                             util::expand_vector_with_set(result, set)
                         }
-                        _ => util::expand_vector_with_set(result, &set.eval(state, registry)),
+                        SetExpression::StateFunction(i) => {
+                            let set =
+                                function_cache.get_set_value(*i, state, state_functions, registry);
+                            util::expand_vector_with_set(result, set)
+                        }
+                        _ => util::expand_vector_with_set(
+                            result,
+                            &set.eval(state, function_cache, state_functions, registry),
+                        ),
                     }
                 }
                 ArgumentExpression::Vector(vector) => {
                     result = match vector {
                         VectorExpression::Reference(vector) => {
-                            let f = |i| state.get_vector_variable(i);
-                            let vector = vector.eval(state, registry, &f, &registry.vector_tables);
+                            let vector =
+                                vector.eval(state, function_cache, state_functions, registry);
                             util::expand_vector_with_slice(result, vector)
                         }
-                        _ => util::expand_vector_with_slice(result, &vector.eval(state, registry)),
+                        _ => util::expand_vector_with_slice(
+                            result,
+                            &vector.eval(state, function_cache, state_functions, registry),
+                        ),
                     }
                 }
                 ArgumentExpression::Element(element) => {
-                    let element = element.eval(state, registry);
+                    let element = element.eval(state, function_cache, state_functions, registry);
                     result.iter_mut().for_each(|r| r.push(element));
                 }
             }
@@ -144,6 +157,7 @@ impl ArgumentExpression {
 mod tests {
     use super::super::condition::Condition;
     use super::super::reference_expression::ReferenceExpression;
+    use super::super::set_expression::SetElementOperation;
     use super::*;
     use crate::state::{SignatureVariables, State, StateMetadata};
 
@@ -322,6 +336,8 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let args = vec![
             ArgumentExpression::Element(ElementExpression::Constant(8)),
@@ -337,7 +353,13 @@ mod tests {
             ))),
         ];
         assert_eq!(
-            ArgumentExpression::eval_args(args.iter(), &state, &registry),
+            ArgumentExpression::eval_args(
+                args.iter(),
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
             vec![
                 vec![8, 0, 4, 2, 7],
                 vec![8, 0, 4, 2, 6],
@@ -360,6 +382,75 @@ mod tests {
     }
 
     #[test]
+    fn eval_args_with_state_function() {
+        let mut metadata = StateMetadata::default();
+        let ob = metadata.add_object_type("something", 10);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = metadata.add_set_variable("v", ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_set_function("f", v.remove(0).remove(1).add(4).add(5));
+        assert!(f.is_ok());
+        let f = f.unwrap();
+        let g = state_functions.add_set_function("g", v.remove(0).remove(1).add(6).add(7));
+        assert!(g.is_ok());
+        let g = g.unwrap();
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![{
+                    let mut set = Set::with_capacity(10);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let args = vec![
+            ElementExpression::from(8).into(),
+            v.into(),
+            f.into(),
+            v.remove(0).remove(1).add(2).add(3).into(),
+            g.into(),
+        ];
+        assert_eq!(
+            ArgumentExpression::eval_args(
+                args.iter(),
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![
+                vec![8, 0, 4, 2, 6],
+                vec![8, 0, 4, 2, 7],
+                vec![8, 0, 4, 3, 6],
+                vec![8, 0, 4, 3, 7],
+                vec![8, 0, 5, 2, 6],
+                vec![8, 0, 5, 2, 7],
+                vec![8, 0, 5, 3, 6],
+                vec![8, 0, 5, 3, 7],
+                vec![8, 1, 4, 2, 6],
+                vec![8, 1, 4, 2, 7],
+                vec![8, 1, 4, 3, 6],
+                vec![8, 1, 4, 3, 7],
+                vec![8, 1, 5, 2, 6],
+                vec![8, 1, 5, 2, 7],
+                vec![8, 1, 5, 3, 6],
+                vec![8, 1, 5, 3, 7],
+            ]
+        );
+    }
+
+    #[test]
     fn eval_empty_args() {
         let state = State {
             signature_variables: SignatureVariables {
@@ -374,6 +465,8 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let args = vec![
             ArgumentExpression::Element(ElementExpression::Constant(8)),
@@ -392,7 +485,13 @@ mod tests {
             ))),
         ];
         assert_eq!(
-            ArgumentExpression::eval_args(args.iter(), &state, &registry),
+            ArgumentExpression::eval_args(
+                args.iter(),
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
             Vec::<Vec<Element>>::new()
         );
     }

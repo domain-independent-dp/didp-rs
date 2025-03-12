@@ -1,7 +1,10 @@
 use super::super::successor_generator::SuccessorGenerator;
 use std::ops::Deref;
 
-use dypdl::{variable_type::Numeric, Transition, TransitionInterface};
+use dypdl::{
+    variable_type::Numeric, StateFunctionCache, StateFunctions, Transition,
+    TransitionInterface,
+};
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct TransitionWithId<T = Transition>
@@ -21,18 +24,24 @@ impl<T: TransitionInterface> TransitionInterface for TransitionWithId<T> {
     fn is_applicable<S: dypdl::StateInterface>(
         &self,
         state: &S,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &dypdl::TableRegistry,
     ) -> bool {
-        self.transition.is_applicable(state, registry)
+        self.transition
+            .is_applicable(state, function_cache, state_functions, registry)
     }
 
     #[inline]
     fn apply<S: dypdl::StateInterface, U: From<dypdl::State>>(
         &self,
         state: &S,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &dypdl::TableRegistry,
     ) -> U {
-        self.transition.apply(state, registry)
+        self.transition
+            .apply(state, function_cache, state_functions, registry)
     }
 
     #[inline]
@@ -40,9 +49,12 @@ impl<T: TransitionInterface> TransitionInterface for TransitionWithId<T> {
         &self,
         cost: U,
         state: &S,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &dypdl::TableRegistry,
     ) -> U {
-        self.transition.eval_cost(cost, state, registry)
+        self.transition
+            .eval_cost(cost, state, function_cache, state_functions, registry)
     }
 }
 
@@ -134,7 +146,13 @@ mod tests {
             id: 0,
         };
         let state = model.target;
-        assert!(transition.is_applicable(&state, &model.table_registry));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert!(transition.is_applicable(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry
+        ));
     }
 
     #[test]
@@ -151,7 +169,13 @@ mod tests {
             forced: false,
             id: 0,
         };
-        assert!(transition.is_applicable(&model.target, &model.table_registry));
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        assert!(transition.is_applicable(
+            &model.target,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry
+        ));
     }
 
     #[test]
@@ -172,7 +196,13 @@ mod tests {
             forced: false,
         };
 
-        let state: State = transition.apply(&model.target, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let state: State = transition.apply(
+            &model.target,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
         assert_eq!(state.get_integer_variable(0), 1);
         assert_eq!(state.get_integer_variable(1), 0);
     }
@@ -188,7 +218,14 @@ mod tests {
             id: 0,
             forced: false,
         };
-        let cost = transition.eval_cost(0, &model.target, &model.table_registry);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let cost = transition.eval_cost(
+            0,
+            &model.target,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
         assert_eq!(cost, 1);
     }
 

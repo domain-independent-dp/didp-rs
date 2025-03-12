@@ -6,7 +6,7 @@ use dypdl::expression::{
     ArgumentExpression, ElementExpression, NumericTableExpression, ReduceOperator,
 };
 use dypdl::variable_type::Numeric;
-use dypdl::{StateMetadata, TableData, TableRegistry};
+use dypdl::{StateFunctions, StateMetadata, TableData, TableRegistry};
 use rustc_hash::FxHashMap;
 use std::fmt;
 use std::str;
@@ -17,6 +17,7 @@ pub fn parse_expression<'a, T: Numeric>(
     name: &str,
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, usize>,
     tables: &TableData<T>,
@@ -25,22 +26,28 @@ where
     <T as str::FromStr>::Err: fmt::Debug,
 {
     if let Some(i) = tables.name_to_table_1d.get(name) {
-        let (x, rest) = element_parser::parse_expression(tokens, metadata, registry, parameters)?;
+        let (x, rest) =
+            element_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((NumericTableExpression::Table1D(*i, x), rest)))
     } else if let Some(i) = tables.name_to_table_2d.get(name) {
-        let (x, rest) = element_parser::parse_expression(tokens, metadata, registry, parameters)?;
-        let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
+        let (x, rest) =
+            element_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
+        let (y, rest) =
+            element_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((NumericTableExpression::Table2D(*i, x, y), rest)))
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let (x, rest) = element_parser::parse_expression(tokens, metadata, registry, parameters)?;
-        let (y, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
-        let (z, rest) = element_parser::parse_expression(rest, metadata, registry, parameters)?;
+        let (x, rest) =
+            element_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
+        let (y, rest) =
+            element_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
+        let (z, rest) =
+            element_parser::parse_expression(rest, metadata, functions, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((NumericTableExpression::Table3D(*i, x, y, z), rest)))
     } else if let Some(i) = tables.name_to_table.get(name) {
-        let (args, rest) = parse_args(tokens, metadata, registry, parameters)?;
+        let (args, rest) = parse_args(tokens, metadata, functions, registry, parameters)?;
         Ok(Some((NumericTableExpression::Table(*i, args), rest)))
     } else {
         let op = match name {
@@ -53,13 +60,19 @@ where
         let (name, rest) = tokens
             .split_first()
             .ok_or_else(|| ParseErr::new(String::from("could not get token")))?;
-        parse_reduce(name, rest, op, metadata, registry, parameters, tables)
+        let model_data = ModelData {
+            metadata,
+            functions,
+            registry,
+        };
+        parse_reduce(name, rest, op, model_data, parameters, tables)
     }
 }
 
 fn parse_args<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
+    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, usize>,
 ) -> Result<(Vec<ElementExpression>, &'a [String]), ParseErr> {
@@ -73,23 +86,32 @@ fn parse_args<'a>(
             return Ok((args, rest));
         }
         let (expression, new_xs) =
-            element_parser::parse_expression(xs, metadata, registry, parameters)?;
+            element_parser::parse_expression(xs, metadata, functions, registry, parameters)?;
         args.push(expression);
         xs = new_xs;
     }
+}
+
+struct ModelData<'a> {
+    metadata: &'a StateMetadata,
+    functions: &'a StateFunctions,
+    registry: &'a TableRegistry,
 }
 
 fn parse_reduce<'a, T: Numeric>(
     name: &str,
     tokens: &'a [String],
     op: ReduceOperator,
-    metadata: &StateMetadata,
-    registry: &TableRegistry,
+    model_data: ModelData,
     parameters: &FxHashMap<String, usize>,
     tables: &TableData<T>,
 ) -> Result<NumericTableParsingResult<'a, T>, ParseErr> {
+    let metadata = model_data.metadata;
+    let functions = model_data.functions;
+    let registry = model_data.registry;
+
     if let Some(i) = tables.name_to_table_1d.get(name) {
-        let (x, rest) = parse_argument(tokens, metadata, registry, parameters)?;
+        let (x, rest) = parse_argument(tokens, metadata, functions, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         match x {
             ArgumentExpression::Set(x) => Ok(Some((
@@ -106,8 +128,8 @@ fn parse_reduce<'a, T: Numeric>(
             ))),
         }
     } else if let Some(i) = tables.name_to_table_2d.get(name) {
-        let (x, rest) = parse_argument(tokens, metadata, registry, parameters)?;
-        let (y, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let (x, rest) = parse_argument(tokens, metadata, functions, registry, parameters)?;
+        let (y, rest) = parse_argument(rest, metadata, functions, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         match (x, y) {
             (ArgumentExpression::Set(x), ArgumentExpression::Set(y)) => Ok(Some((
@@ -148,16 +170,17 @@ fn parse_reduce<'a, T: Numeric>(
             ))),
         }
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
-        let (x, rest) = parse_argument(tokens, metadata, registry, parameters)?;
-        let (y, rest) = parse_argument(rest, metadata, registry, parameters)?;
-        let (z, rest) = parse_argument(rest, metadata, registry, parameters)?;
+        let (x, rest) = parse_argument(tokens, metadata, functions, registry, parameters)?;
+        let (y, rest) = parse_argument(rest, metadata, functions, registry, parameters)?;
+        let (z, rest) = parse_argument(rest, metadata, functions, registry, parameters)?;
         let rest = util::parse_closing(rest)?;
         Ok(Some((
             NumericTableExpression::Table3DReduce(op, *i, x, y, z),
             rest,
         )))
     } else if let Some(i) = tables.name_to_table.get(name) {
-        let (args, rest) = parse_multiple_arguments(tokens, metadata, registry, parameters)?;
+        let (args, rest) =
+            parse_multiple_arguments(tokens, metadata, functions, registry, parameters)?;
         Ok(Some((
             NumericTableExpression::TableReduce(op, *i, args),
             rest,
@@ -294,6 +317,7 @@ mod tests {
     #[test]
     fn parse_expression_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -305,6 +329,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -317,6 +342,7 @@ mod tests {
     #[test]
     fn parse_table_1d_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -328,6 +354,7 @@ mod tests {
             "f1",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -346,6 +373,7 @@ mod tests {
     #[test]
     fn parse_table_1d_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -354,6 +382,7 @@ mod tests {
             "f1",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -368,6 +397,7 @@ mod tests {
             "f1",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -378,6 +408,7 @@ mod tests {
     #[test]
     fn parse_table_1d_sum_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -389,6 +420,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -415,6 +447,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -437,6 +470,7 @@ mod tests {
     #[test]
     fn parse_table_1d_sum_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -448,6 +482,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -462,6 +497,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -476,6 +512,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -486,6 +523,7 @@ mod tests {
     #[test]
     fn parse_table_1d_product_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -497,6 +535,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -523,6 +562,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -545,6 +585,7 @@ mod tests {
     #[test]
     fn parse_table_1d_product_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -556,6 +597,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -570,6 +612,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -584,6 +627,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -594,6 +638,7 @@ mod tests {
     #[test]
     fn parse_table_1d_max_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -605,6 +650,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -631,6 +677,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -653,6 +700,7 @@ mod tests {
     #[test]
     fn parse_table_1d_max_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -664,6 +712,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -678,6 +727,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -692,6 +742,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -702,6 +753,7 @@ mod tests {
     #[test]
     fn parse_table_1d_min_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -713,6 +765,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -739,6 +792,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -761,6 +815,7 @@ mod tests {
     #[test]
     fn parse_table_1d_min_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -772,6 +827,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -786,6 +842,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -800,6 +857,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -810,6 +868,7 @@ mod tests {
     #[test]
     fn parse_table_2d_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -821,6 +880,7 @@ mod tests {
             "f2",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -843,6 +903,7 @@ mod tests {
     #[test]
     fn parse_table_2d_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -854,6 +915,7 @@ mod tests {
             "f2",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -864,6 +926,7 @@ mod tests {
     #[test]
     fn parse_table_2d_sum_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -875,6 +938,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -902,6 +966,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -929,6 +994,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -956,6 +1022,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -983,6 +1050,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1010,6 +1078,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1037,6 +1106,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1064,6 +1134,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1087,6 +1158,7 @@ mod tests {
     #[test]
     fn parse_table_2d_sum_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -1098,6 +1170,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1112,6 +1185,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1126,6 +1200,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1136,6 +1211,7 @@ mod tests {
     #[test]
     fn parse_table_2d_product_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -1147,6 +1223,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1174,6 +1251,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1201,6 +1279,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1228,6 +1307,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1255,6 +1335,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1282,6 +1363,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1309,6 +1391,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1336,6 +1419,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1359,6 +1443,7 @@ mod tests {
     #[test]
     fn parse_table_2d_product_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -1370,6 +1455,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1384,6 +1470,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1398,6 +1485,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1408,6 +1496,7 @@ mod tests {
     #[test]
     fn parse_table_2d_max_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -1419,6 +1508,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1446,6 +1536,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1473,6 +1564,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1500,6 +1592,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1527,6 +1620,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1554,6 +1648,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1581,6 +1676,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1608,6 +1704,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1631,6 +1728,7 @@ mod tests {
     #[test]
     fn parse_table_2d_max_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -1642,6 +1740,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1656,6 +1755,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1670,6 +1770,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1680,6 +1781,7 @@ mod tests {
     #[test]
     fn parse_table_2d_min_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -1691,6 +1793,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1718,6 +1821,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1745,6 +1849,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1772,6 +1877,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1799,6 +1905,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1826,6 +1933,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1853,6 +1961,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1880,6 +1989,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1903,6 +2013,7 @@ mod tests {
     #[test]
     fn parse_table_2d_min_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -1914,6 +2025,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1928,6 +2040,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1942,6 +2055,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1952,6 +2066,7 @@ mod tests {
     #[test]
     fn parse_table_3d_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -1963,6 +2078,7 @@ mod tests {
             "f3",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -1986,6 +2102,7 @@ mod tests {
     #[test]
     fn parse_table_3d_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -1997,6 +2114,7 @@ mod tests {
             "f3",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2007,6 +2125,7 @@ mod tests {
     #[test]
     fn parse_table_3d_sum_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2018,6 +2137,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2042,6 +2162,7 @@ mod tests {
     #[test]
     fn pares_table_3d_sum_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2053,6 +2174,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2063,6 +2185,7 @@ mod tests {
     #[test]
     fn parse_table_3d_product_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2074,6 +2197,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2098,6 +2222,7 @@ mod tests {
     #[test]
     fn pares_table_3d_product_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2109,6 +2234,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2119,6 +2245,7 @@ mod tests {
     #[test]
     fn parse_table_3d_max_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2130,6 +2257,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2154,6 +2282,7 @@ mod tests {
     #[test]
     fn pares_table_3d_max_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2165,6 +2294,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2175,6 +2305,7 @@ mod tests {
     #[test]
     fn parse_table_3d_min_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2186,6 +2317,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2210,6 +2342,7 @@ mod tests {
     #[test]
     fn pares_table_3d_min_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2221,6 +2354,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2231,6 +2365,7 @@ mod tests {
     #[test]
     fn parse_table_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2242,6 +2377,7 @@ mod tests {
             "f4",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2268,6 +2404,7 @@ mod tests {
     #[test]
     fn parse_table_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
         let tokens: Vec<String> = ["0", "1", "s0", "e1", ")", "i0", ")"]
@@ -2278,6 +2415,7 @@ mod tests {
             "f4",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2288,6 +2426,7 @@ mod tests {
     #[test]
     fn parse_table_sum_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2299,6 +2438,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2330,6 +2470,7 @@ mod tests {
     #[test]
     fn parse_table_sum_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2341,6 +2482,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2355,6 +2497,7 @@ mod tests {
             "sum",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2365,6 +2508,7 @@ mod tests {
     #[test]
     fn parse_table_product_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2376,6 +2520,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2407,6 +2552,7 @@ mod tests {
     #[test]
     fn parse_table_product_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2418,6 +2564,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2432,6 +2579,7 @@ mod tests {
             "product",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2442,6 +2590,7 @@ mod tests {
     #[test]
     fn parse_table_max_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2453,6 +2602,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2484,6 +2634,7 @@ mod tests {
     #[test]
     fn parse_table_max_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2495,6 +2646,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2509,6 +2661,7 @@ mod tests {
             "max",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2519,6 +2672,7 @@ mod tests {
     #[test]
     fn parse_table_min_ok() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2530,6 +2684,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2561,6 +2716,7 @@ mod tests {
     #[test]
     fn parse_table_min_err() {
         let metadata = generate_metadata();
+        let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
@@ -2572,6 +2728,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,
@@ -2586,6 +2743,7 @@ mod tests {
             "min",
             &tokens,
             &metadata,
+            &functions,
             &registry,
             &parameters,
             &registry.integer_tables,

@@ -4,6 +4,7 @@ use super::reference_expression::ReferenceExpression;
 use super::table_expression::TableExpression;
 use super::vector_expression::VectorExpression;
 use crate::state::{ElementResourceVariable, ElementVariable, StateInterface};
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::Element;
@@ -18,6 +19,8 @@ pub enum ElementExpression {
     Variable(usize),
     /// Resource variable index.
     ResourceVariable(usize),
+    /// State function index.
+    StateFunction(usize),
     /// Binary arithmetic operation.
     BinaryOperation(
         BinaryOperator,
@@ -79,11 +82,17 @@ impl ops::Add for ElementExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ElementExpression::from(2);
     /// let b = ElementExpression::from(3);
     /// let expression = a + b;
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     5,
+    /// );
     /// ```
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
@@ -103,11 +112,17 @@ impl ops::Sub for ElementExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ElementExpression::from(3);
     /// let b = ElementExpression::from(2);
     /// let expression = a - b;
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1,
+    /// );
     /// ```
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
@@ -127,11 +142,17 @@ impl ops::Mul for ElementExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ElementExpression::from(2);
     /// let b = ElementExpression::from(3);
     /// let expression = a * b;
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 6);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     6,
+    /// );
     /// ```
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
@@ -151,11 +172,17 @@ impl ops::Div for ElementExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ElementExpression::from(2);
     /// let b = ElementExpression::from(3);
     /// let expression = a / b;
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0,
+    /// );
     /// ```
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
@@ -175,11 +202,17 @@ impl ops::Rem for ElementExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ElementExpression::from(2);
     /// let b = ElementExpression::from(3);
     /// let expression = a % b;
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     fn rem(self, rhs: Self) -> Self::Output {
@@ -199,11 +232,17 @@ impl MaxMin for ElementExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ElementExpression::from(2);
     /// let b = ElementExpression::from(3);
     /// let expression = a.max(b);
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     3,
+    /// );
     /// ```
     #[inline]
     fn max(self, rhs: Self) -> Self::Output {
@@ -219,11 +258,17 @@ impl MaxMin for ElementExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = ElementExpression::from(2);
     /// let b = ElementExpression::from(3);
     /// let expression = a.min(b);
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     fn min(self, rhs: Self) -> Self::Output {
@@ -244,9 +289,15 @@ impl Table1DHandle<Element> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = Table1DHandle::<Element>::element(&table, variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1,
+    /// );
     /// ```
     #[inline]
     pub fn element<T>(&self, x: T) -> ElementExpression
@@ -273,9 +324,15 @@ impl Table2DHandle<Element> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = Table2DHandle::<Element>::element(&table, variable, 1);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0,
+    /// );
     /// ```
     #[inline]
     pub fn element<T, U>(&self, x: T, y: U) -> ElementExpression
@@ -307,9 +364,15 @@ impl Table3DHandle<Element> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = Table3DHandle::<Element>::element(&table, variable, variable + 1, 1);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1,
+    /// );
     /// ```
     #[inline]
     pub fn element<T, U, V>(&self, x: T, y: U, z: V) -> ElementExpression
@@ -342,6 +405,7 @@ impl TableHandle<Element> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ElementExpression::from(variable),
@@ -350,7 +414,12 @@ impl TableHandle<Element> {
     ///     ElementExpression::from(0),
     /// ];
     /// let expression = TableHandle::<Element>::element(&table, indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1,
+    /// );
     /// ```
     #[inline]
     pub fn element<T>(&self, indices: Vec<T>) -> ElementExpression
@@ -475,42 +544,64 @@ impl ElementExpression {
     /// let object_type = model.add_object_type("object_type", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 1).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = ElementExpression::from(variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1,
+    /// );
     /// ```
-    pub fn eval<T: StateInterface>(&self, state: &T, registry: &TableRegistry) -> Element {
+    pub fn eval<T: StateInterface>(
+        &self,
+        state: &T,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Element {
         match self {
             Self::Constant(x) => *x,
             Self::Variable(i) => state.get_element_variable(*i),
             Self::ResourceVariable(i) => state.get_element_resource_variable(*i),
-            Self::BinaryOperation(op, x, y) => {
-                op.eval(x.eval(state, registry), y.eval(state, registry))
+            Self::StateFunction(i) => {
+                function_cache.get_element_value(*i, state, state_functions, registry)
             }
+            Self::BinaryOperation(op, x, y) => op.eval(
+                x.eval(state, function_cache, state_functions, registry),
+                y.eval(state, function_cache, state_functions, registry),
+            ),
             Self::Last(vector) => match vector.as_ref() {
-                VectorExpression::Reference(vector) => {
-                    let f = |i| state.get_vector_variable(i);
-                    *vector
-                        .eval(state, registry, &f, &registry.vector_tables)
-                        .last()
-                        .unwrap()
-                }
-                vector => *vector.eval(state, registry).last().unwrap(),
+                VectorExpression::Reference(vector) => *vector
+                    .eval(state, function_cache, state_functions, registry)
+                    .last()
+                    .unwrap(),
+                vector => *vector
+                    .eval(state, function_cache, state_functions, registry)
+                    .last()
+                    .unwrap(),
             },
             Self::At(vector, i) => match vector.as_ref() {
                 VectorExpression::Reference(vector) => {
-                    let f = |i| state.get_vector_variable(i);
-                    vector.eval(state, registry, &f, &registry.vector_tables)
-                        [i.eval(state, registry)]
+                    vector.eval(state, function_cache, state_functions, registry)
+                        [i.eval(state, function_cache, state_functions, registry)]
                 }
-                vector => vector.eval(state, registry)[i.eval(state, registry)],
+                vector => vector.eval(state, function_cache, state_functions, registry)
+                    [i.eval(state, function_cache, state_functions, registry)],
             },
-            Self::Table(table) => *table.eval(state, registry, &registry.element_tables),
+            Self::Table(table) => *table.eval(
+                state,
+                function_cache,
+                state_functions,
+                registry,
+                &registry.element_tables,
+            ),
             Self::If(condition, x, y) => {
-                if condition.eval(state, registry) {
-                    x.eval(state, registry)
+                if condition.eval(state, function_cache, state_functions, registry) {
+                    x.eval(state, function_cache, state_functions, registry)
                 } else {
-                    y.eval(state, registry)
+                    y.eval(state, function_cache, state_functions, registry)
                 }
             }
         }
@@ -2269,52 +2360,128 @@ mod tests {
     #[test]
     fn element_constant_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = ElementExpression::Constant(2);
-        assert_eq!(expression.eval(&state, &registry), 2);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            2
+        );
     }
 
     #[test]
     fn element_variable_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = ElementExpression::Variable(0);
-        assert_eq!(expression.eval(&state, &registry), 1);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1
+        );
     }
 
     #[test]
     fn element_resource_variable_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = ElementExpression::ResourceVariable(0);
-        assert_eq!(expression.eval(&state, &registry), 2);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            2
+        );
+    }
+
+    #[test]
+    fn element_state_function_eval() {
+        let mut state_metadata = StateMetadata::default();
+        let ob = state_metadata.add_object_type("ob", 3);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let v = state_metadata.add_element_variable("v", ob);
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_element_function("f", v + 1);
+        assert!(f.is_ok());
+        let f = f.unwrap();
+        let g = state_functions.add_element_function("g", v + 2);
+        assert!(g.is_ok());
+        let g = g.unwrap();
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+
+        assert_eq!(
+            f.eval(&state, &mut function_cache, &state_functions, &registry),
+            1
+        );
+
+        assert_eq!(
+            g.eval(&state, &mut function_cache, &state_functions, &registry),
+            2
+        );
+
+        assert_eq!(
+            f.eval(&state, &mut function_cache, &state_functions, &registry),
+            1
+        );
+        assert_eq!(
+            g.eval(&state, &mut function_cache, &state_functions, &registry),
+            2
+        );
     }
 
     #[test]
     fn element_numeric_operation_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = ElementExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(ElementExpression::Variable(0)),
             Box::new(ElementExpression::Constant(1)),
         );
-        assert_eq!(expression.eval(&state, &registry), 2);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            2
+        );
     }
 
     #[test]
     fn element_last_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = ElementExpression::Last(Box::new(VectorExpression::Reference(
             ReferenceExpression::Constant(vec![0, 1]),
         )));
-        assert_eq!(expression.eval(&state, &registry), 1);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1
+        );
     }
 
     #[test]
     fn element_at_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = ElementExpression::At(
             Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
@@ -2322,33 +2489,49 @@ mod tests {
             ))),
             Box::new(ElementExpression::Constant(0)),
         );
-        assert_eq!(expression.eval(&state, &registry), 0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            0
+        );
     }
 
     #[test]
     fn element_table_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = ElementExpression::Table(Box::new(TableExpression::Constant(0)));
-        assert_eq!(expression.eval(&state, &registry), 0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            0
+        );
     }
 
     #[test]
     fn element_if_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = ElementExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(ElementExpression::Constant(1)),
             Box::new(ElementExpression::Constant(0)),
         );
-        assert_eq!(expression.eval(&state, &registry), 1);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1
+        );
         let expression = ElementExpression::If(
             Box::new(Condition::Constant(false)),
             Box::new(ElementExpression::Constant(1)),
             Box::new(ElementExpression::Constant(0)),
         );
-        assert_eq!(expression.eval(&state, &registry), 0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            0
+        );
     }
 
     #[test]

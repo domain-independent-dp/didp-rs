@@ -1,24 +1,15 @@
-use crate::model::TransitionPy;
+use crate::{model::StatePy, model::TransitionPy, ModelPy};
 use dypdl::prelude::*;
 use dypdl::variable_type::OrderedContinuous;
 use dypdl_heuristic_search::{Search, Solution};
 use pyo3::{exceptions::PyRuntimeError, prelude::*};
 
-#[derive(FromPyObject, Debug, PartialEq, Clone, Copy)]
+#[derive(FromPyObject, Debug, PartialEq, Clone, Copy, IntoPyObject)]
 pub enum WrappedCost {
-    #[pyo3(transparent, annotation = "int")]
+    #[pyo3(transparent)]
     Int(Integer),
-    #[pyo3(transparent, annotation = "float")]
+    #[pyo3(transparent)]
     Float(Continuous),
-}
-
-impl IntoPy<Py<PyAny>> for WrappedCost {
-    fn into_py(self, py: Python<'_>) -> Py<PyAny> {
-        match self {
-            Self::Int(value) => value.into_py(py),
-            Self::Float(value) => value.into_py(py),
-        }
-    }
 }
 
 /// Solution returned by a heuristic search solver.
@@ -52,6 +43,35 @@ pub struct SolutionPy {
     /// bool : Whether to exceed the time limit.
     #[pyo3(get)]
     pub time_out: bool,
+}
+
+#[pymethods]
+impl SolutionPy {
+    /// Applies transitions in the solution to the model's target state.
+    ///
+    /// Parameters
+    /// ----------
+    /// model: Model
+    ///     DyPDL model.
+    ///
+    /// Returns
+    /// -------
+    /// State
+    ///    The solution state after sequentially applying the transitions.
+    ///
+    /// Raises
+    /// ------
+    /// PanicException
+    ///     If preconditions are invalid.
+    fn state(&self, model: &ModelPy) -> StatePy {
+        let mut next = model.target_state();
+
+        for t in self.transitions.iter() {
+            next = t.apply(&mut next, model)
+        }
+
+        next
+    }
 }
 
 impl From<Solution<Integer>> for SolutionPy {

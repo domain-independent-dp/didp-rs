@@ -269,11 +269,18 @@ where
 /// let mut registry = StateRegistry::<_, FNode<_>>::new(model.clone());
 /// registry.reserve(2);
 ///
-/// let h_evaluator = |_: &StateInRegistry| Some(0);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &StateInRegistry| g + h;
 ///
 /// let node = FNode::generate_root_node(
-///     model.target.clone(), 0, &model, &h_evaluator, &f_evaluator, None,
+///     model.target.clone(),
+///     &mut function_cache,
+///     0,
+///     &model,
+///     &h_evaluator,   
+///     &f_evaluator,
+///     None,
 /// ).unwrap();
 /// assert_eq!(registry.get(node.state(), node.cost(&model)), None);
 /// let result = registry.insert(node.clone());
@@ -287,11 +294,21 @@ where
 /// assert_eq!(node.cost(&model), got.cost(&model));
 /// assert_eq!(node.bound(&model), got.bound(&model));
 ///
-/// let irrelevant: StateInRegistry = increment.apply(node.state(), &model.table_registry);
-/// let cost = increment.eval_cost(node.cost(&model), node.state(), &model.table_registry);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let irrelevant: StateInRegistry = increment.apply(
+///     node.state(), &mut function_cache, &model.state_functions, &model.table_registry,
+/// );
+/// let cost = increment.eval_cost(
+///     node.cost(&model),
+///     node.state(),
+///     &mut function_cache,
+///     &model.state_functions,
+///     &model.table_registry,
+/// );
 /// assert_eq!(registry.get(&irrelevant, cost), None);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 /// let irrelevant = FNode::generate_root_node(
-///     irrelevant, cost, &model, &h_evaluator, &f_evaluator, None,
+///     irrelevant, &mut function_cache, cost, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
 /// let result = registry.insert(irrelevant.clone());
 /// let information = result.information.unwrap();
@@ -300,24 +317,44 @@ where
 /// assert_eq!(information.bound(&model), irrelevant.bound(&model));
 /// assert!(result.dominated.is_empty());
 ///
-/// let dominated: StateInRegistry = increase_cost.apply(node.state(), &model.table_registry);
-/// let cost = consume.eval_cost(node.cost(&model), node.state(), &model.table_registry);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let dominated: StateInRegistry = increase_cost.apply(
+///     node.state(), &mut function_cache, &model.state_functions, &model.table_registry,
+/// );
+/// let cost = consume.eval_cost(
+///     node.cost(&model),
+///     node.state(),
+///     &mut function_cache,
+///     &model.state_functions,
+///     &model.table_registry,
+/// );
 /// let dominating = registry.get(&dominated, cost).unwrap();
 /// assert_eq!(dominating.state(), node.state());
 /// assert_eq!(dominating.cost(&model), node.cost(&model));
 /// assert_eq!(dominating.bound(&model), node.bound(&model));
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 /// let dominated = FNode::generate_root_node(
-///     dominated, cost, &model, &h_evaluator, &f_evaluator, None,
+///     dominated, &mut function_cache, cost, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
 /// let result = registry.insert(dominated);
 /// assert_eq!(result.information, None);
 /// assert!(result.dominated.is_empty());
 ///
-/// let dominating: StateInRegistry = produce.apply(node.state(), &model.table_registry);
-/// let cost = produce.eval_cost(node.cost(&model), node.state(), &model.table_registry);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+/// let dominating: StateInRegistry = produce.apply(
+///     node.state(), &mut function_cache, &model.state_functions, &model.table_registry,
+/// );
+/// let cost = produce.eval_cost(
+///     node.cost(&model),
+///     node.state(),
+///     &mut function_cache,
+///     &model.state_functions,
+///     &model.table_registry,
+/// );
 /// assert_eq!(registry.get(&dominating, cost), None);
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 /// let dominating = FNode::generate_root_node(
-///     dominating, cost, &model, &h_evaluator, &f_evaluator, None,
+///     dominating, &mut function_cache, cost, &model, &h_evaluator, &f_evaluator, None,
 /// ).unwrap();
 /// let result = registry.insert(dominating.clone());
 /// let information = result.information.unwrap();
@@ -1100,6 +1137,9 @@ mod tests {
 
     #[test]
     fn apply_effect() {
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+
         let mut set1 = Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
@@ -1227,7 +1267,12 @@ mod tests {
                 continuous_variables: vec![5.0, 2.5, 6.0],
             },
         };
-        let successor: StateInRegistry = state.apply_effect(&effect, &registry);
+        let successor: StateInRegistry = state.apply_effect(
+            &effect,
+            &mut function_cache,
+            &state_functions,
+            &registry,
+        );
         assert_eq!(successor, expected);
     }
 

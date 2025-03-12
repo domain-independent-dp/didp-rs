@@ -64,12 +64,14 @@ pub struct CabsParameters<T> {
 /// let model = Rc::new(model);
 ///
 /// let state = model.target.clone();
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 /// let cost = 0;
-/// let h_evaluator = |_: &_| Some(0);
+/// let h_evaluator = |_: &_, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
 /// let node = FNode::generate_root_node(
 ///     state,
+///     &mut function_cache,
 ///     cost,
 ///     &model,
 ///     &h_evaluator,
@@ -77,9 +79,10 @@ pub struct CabsParameters<T> {
 ///     primal_bound,
 /// );
 /// let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
-/// let transition_evaluator = move |node: &FNode<_>, transition, primal_bound| {
+/// let transition_evaluator = move |node: &FNode<_>, transition, cache: &mut _, primal_bound| {
 ///     node.generate_successor_node(
 ///         transition,
+///         cache,
 ///         &model,
 ///         &h_evaluator,
 ///         &f_evaluator,
@@ -268,7 +271,7 @@ where
     }
 }
 
-impl<'a, T, N, B, V, D, R, K> Search<T> for Cabs<'a, T, N, B, V, D, R, K>
+impl<T, N, B, V, D, R, K> Search<T> for Cabs<'_, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display + Ord,
     <T as str::FromStr>::Err: fmt::Debug,

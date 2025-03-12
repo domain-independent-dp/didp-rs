@@ -11,30 +11,18 @@ use super::state::StatePy;
 
 pyo3::create_exception!(module, DIDPPyException, pyo3::exceptions::PyException);
 
-#[derive(FromPyObject, Debug, PartialEq, Clone)]
+#[derive(FromPyObject, Debug, PartialEq, Clone, IntoPyObject)]
 pub enum ExprUnion {
-    #[pyo3(transparent, annotation = "ElementExpr")]
+    #[pyo3(transparent)]
     Element(ElementExprPy),
-    #[pyo3(transparent, annotation = "SetExpr")]
+    #[pyo3(transparent)]
     Set(SetExprPy),
-    #[pyo3(transparent, annotation = "IntExpr")]
+    #[pyo3(transparent)]
     Int(IntExprPy),
-    #[pyo3(transparent, annotation = "FloatExpr")]
+    #[pyo3(transparent)]
     Float(FloatExprPy),
-    #[pyo3(transparent, annotation = "Condition")]
+    #[pyo3(transparent)]
     Condition(ConditionPy),
-}
-
-impl IntoPy<Py<PyAny>> for ExprUnion {
-    fn into_py(self, py: Python<'_>) -> Py<PyAny> {
-        match self {
-            Self::Element(expr) => expr.into_py(py),
-            Self::Set(expr) => expr.into_py(py),
-            Self::Int(expr) => expr.into_py(py),
-            Self::Float(expr) => expr.into_py(py),
-            Self::Condition(expr) => expr.into_py(py),
-        }
-    }
 }
 
 #[derive(FromPyObject, Debug, PartialEq, Eq, Clone, Copy)]
@@ -270,8 +258,14 @@ impl ElementExprPy {
     /// >>> expr.eval(state, model)
     /// 1
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Element {
-        self.0
-            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
+        self.0.eval(
+            state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
+            &model.inner_as_ref().table_registry,
+        )
     }
 }
 
@@ -1115,9 +1109,16 @@ impl SetExprPy {
     /// >>> expr.eval(state, model)
     /// {0, 1}
     fn eval(&self, state: &StatePy, model: &ModelPy) -> HashSet<usize> {
+        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
         HashSet::from_iter(
             self.0
-                .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+                .eval(
+                    state.inner_as_ref(),
+                    &mut function_cache,
+                    &model.inner_as_ref().state_functions,
+                    &model.inner_as_ref().table_registry,
+                )
                 .ones(),
         )
     }
@@ -2186,19 +2187,10 @@ pub enum IntOrFloatUnion {
     Float(FloatUnion),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, IntoPyObject)]
 pub enum IntOrFloatExpr {
     Int(IntExprPy),
     Float(FloatExprPy),
-}
-
-impl IntoPy<Py<PyAny>> for IntOrFloatExpr {
-    fn into_py(self, py: Python<'_>) -> Py<PyAny> {
-        match self {
-            Self::Int(expr) => expr.into_py(py),
-            Self::Float(expr) => expr.into_py(py),
-        }
-    }
 }
 
 impl From<CostExpression> for IntOrFloatExpr {
@@ -2504,8 +2496,14 @@ impl IntExprPy {
     /// >>> expr.eval(state, model)
     /// 1
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Integer {
-        self.0
-            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
+        self.0.eval(
+            state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
+            &model.inner_as_ref().table_registry,
+        )
     }
 
     /// Evaluates the cost expression.
@@ -2539,9 +2537,13 @@ impl IntExprPy {
     /// >>> expr.eval_cost(1, state, model)
     /// 1
     fn eval_cost(&self, cost: Integer, state: &StatePy, model: &ModelPy) -> Integer {
+        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
         self.0.eval_cost(
             cost,
             state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
             &model.inner_as_ref().table_registry,
         )
     }
@@ -3319,8 +3321,14 @@ impl FloatExprPy {
     /// >>> expr.eval(state, model)
     /// 3.0
     fn eval(&self, state: &StatePy, model: &ModelPy) -> Continuous {
-        self.0
-            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
+        self.0.eval(
+            state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
+            &model.inner_as_ref().table_registry,
+        )
     }
 
     /// Evaluates the cost expression.
@@ -3354,9 +3362,13 @@ impl FloatExprPy {
     /// >>> expr.eval_cost(1.5, state, model)
     /// 3.0
     fn eval_cost(&self, cost: Continuous, state: &StatePy, model: &ModelPy) -> Continuous {
+        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
         self.0.eval_cost(
             cost,
             state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
             &model.inner_as_ref().table_registry,
         )
     }
@@ -4095,14 +4107,21 @@ impl ConditionPy {
     /// >>> condition.eval(state, model)
     /// True
     fn eval(&self, state: &StatePy, model: &ModelPy) -> bool {
-        self.0
-            .eval(state.inner_as_ref(), &model.inner_as_ref().table_registry)
+        let mut function_cache = StateFunctionCache::new(&model.inner_as_ref().state_functions);
+
+        self.0.eval(
+            state.inner_as_ref(),
+            &mut function_cache,
+            &model.inner_as_ref().state_functions,
+            &model.inner_as_ref().table_registry,
+        )
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pyo3::IntoPyObjectExt;
 
     #[test]
     fn element_expression_from_expr() {
@@ -10939,9 +10958,13 @@ mod tests {
         let x = IntExprPy(IntegerExpression::Constant(4));
         let y = IntExprPy(IntegerExpression::Constant(2));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            max(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            max(x, y)
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -10961,9 +10984,13 @@ mod tests {
         let x = FloatExprPy(ContinuousExpression::Constant(4.0));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            max(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            max(x, y)
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -10983,9 +11010,13 @@ mod tests {
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = ElementExprPy(ElementExpression::Constant(2));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            max(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            max(x, y)
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11005,9 +11036,13 @@ mod tests {
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            min(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            min(x, y)
         });
         assert!(result.is_err());
     }
@@ -11019,9 +11054,13 @@ mod tests {
         let x = IntExprPy(IntegerExpression::Constant(4));
         let y = IntExprPy(IntegerExpression::Constant(2));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            min(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            min(x, y)
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11041,9 +11080,13 @@ mod tests {
         let x = FloatExprPy(ContinuousExpression::Constant(4.0));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            min(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            min(x, y)
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11063,9 +11106,13 @@ mod tests {
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = ElementExprPy(ElementExpression::Constant(2));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            min(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            min(x, y)
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11085,9 +11132,13 @@ mod tests {
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            min(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            min(x, y)
         });
         assert!(result.is_err());
     }
@@ -11148,9 +11199,13 @@ mod tests {
         let y = IntExprPy(IntegerExpression::Constant(1));
         let condition = ConditionPy(Condition::Constant(true));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            condition.if_then_else(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            condition.if_then_else(x, y)
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11171,9 +11226,13 @@ mod tests {
         let y = FloatExprPy(ContinuousExpression::Constant(1.0));
         let condition = ConditionPy(Condition::Constant(true));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            condition.if_then_else(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            condition.if_then_else(x, y)
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11194,9 +11253,13 @@ mod tests {
         let y = ElementExprPy(ElementExpression::Constant(1));
         let condition = ConditionPy(Condition::Constant(true));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            condition.if_then_else(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            condition.if_then_else(x, y)
         });
         assert!(result.is_ok());
         assert_eq!(
@@ -11217,9 +11280,13 @@ mod tests {
         let y = FloatExprPy(ContinuousExpression::Constant(1.0));
         let condition = ConditionPy(Condition::Constant(true));
         let result = Python::with_gil(|py| {
-            let x = x.into_py(py);
-            let y = y.into_py(py);
-            condition.if_then_else(x.into_bound(py), y.into_bound(py))
+            let x = x.into_bound_py_any(py);
+            assert!(x.is_ok());
+            let x = x.unwrap();
+            let y = y.into_bound_py_any(py);
+            assert!(y.is_ok());
+            let y = y.unwrap();
+            condition.if_then_else(x, y)
         });
         assert!(result.is_err());
     }

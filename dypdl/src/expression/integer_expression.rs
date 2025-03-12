@@ -11,6 +11,7 @@ use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::vector_expression::VectorExpression;
 use crate::state::{IntegerResourceVariable, IntegerVariable, SetVariable, StateInterface};
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::{Continuous, Integer};
@@ -26,6 +27,8 @@ pub enum IntegerExpression {
     Variable(usize),
     /// Resource variable index.
     ResourceVariable(usize),
+    /// State function index.
+    StateFunction(usize),
     /// The cost of the transitioned state.
     Cost,
     /// Unary arithmetic operation.
@@ -100,10 +103,16 @@ impl IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expression = IntegerExpression::from(-1);
     /// let expression = expression.abs();
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1,
+    /// );
     /// ```
     #[inline]
     pub fn abs(self) -> IntegerExpression {
@@ -123,10 +132,16 @@ impl ops::Neg for IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expression = IntegerExpression::from(1);
     /// let expression = -expression;
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), -1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     -1,
+    /// );
     /// ```
     #[inline]
     fn neg(self) -> Self::Output {
@@ -146,11 +161,17 @@ impl ops::Add for IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = IntegerExpression::from(2);
     /// let b = IntegerExpression::from(3);
     /// let expression = a + b;
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     5,
+    /// );
     /// ```
     #[inline]
     fn add(self, rhs: Self) -> Self::Output {
@@ -170,11 +191,17 @@ impl ops::Sub for IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = IntegerExpression::from(2);
     /// let b = IntegerExpression::from(3);
     /// let expression = a - b;
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), -1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     -1,
+    /// );
     /// ```
     #[inline]
     fn sub(self, rhs: Self) -> Self::Output {
@@ -194,11 +221,17 @@ impl ops::Mul for IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = IntegerExpression::from(2);
     /// let b = IntegerExpression::from(3);
     /// let expression = a * b;
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 6);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     6,
+    /// );
     /// ```
     #[inline]
     fn mul(self, rhs: Self) -> Self::Output {
@@ -218,11 +251,17 @@ impl ops::Div for IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = IntegerExpression::from(2);
     /// let b = IntegerExpression::from(3);
     /// let expression = a / b;
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0,
+    /// );
     /// ```
     #[inline]
     fn div(self, rhs: Self) -> Self::Output {
@@ -242,11 +281,17 @@ impl ops::Rem for IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = IntegerExpression::from(2);
     /// let b = IntegerExpression::from(3);
     /// let expression = a % b;
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     fn rem(self, rhs: Self) -> Self::Output {
@@ -266,11 +311,17 @@ impl MaxMin for IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = IntegerExpression::from(2);
     /// let b = IntegerExpression::from(3);
     /// let expression = a.max(b);
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     3,
+    /// );
     /// ```
     #[inline]
     fn max(self, rhs: Self) -> Self::Output {
@@ -286,11 +337,17 @@ impl MaxMin for IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let a = IntegerExpression::from(2);
     /// let b = IntegerExpression::from(3);
     /// let expression = a.min(b);
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     fn min(self, rhs: Self) -> Self::Output {
@@ -310,11 +367,17 @@ impl SetExpression {
     /// let object_type = model.add_object_type("object", 4).unwrap();
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = SetExpression::from(set);
     /// let expression = expression.len();
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     pub fn len(self) -> IntegerExpression {
@@ -335,10 +398,16 @@ impl SetVariable {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = variable.len();
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     pub fn len(self) -> IntegerExpression {
@@ -359,9 +428,15 @@ impl Table1DHandle<Integer> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = Table1DHandle::<Integer>::element(&table, variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     pub fn element<T>(&self, x: T) -> IntegerExpression
@@ -387,9 +462,15 @@ impl Table1DHandle<Integer> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.sum(variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     5,
+    /// );
     /// ```
     #[inline]
     pub fn sum<T>(&self, x: T) -> IntegerExpression
@@ -416,9 +497,15 @@ impl Table1DHandle<Integer> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.product(variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 6);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     6,
+    /// );
     /// ```
     #[inline]
     pub fn product<T>(&self, x: T) -> IntegerExpression
@@ -445,9 +532,15 @@ impl Table1DHandle<Integer> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.max(variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     3,
+    /// );
     /// ```
     #[inline]
     pub fn max<T>(&self, x: T) -> IntegerExpression
@@ -474,9 +567,15 @@ impl Table1DHandle<Integer> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let variable = model.add_set_variable("variable", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.min(variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     pub fn min<T>(&self, x: T) -> IntegerExpression
@@ -504,9 +603,15 @@ impl Table2DHandle<Integer> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = Table2DHandle::<Integer>::element(&table, variable, 1);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     3,
+    /// );
     /// ```
     #[inline]
     pub fn element<T, U>(&self, x: T, y: U) -> IntegerExpression
@@ -535,9 +640,15 @@ impl Table2DHandle<Integer> {
     /// let x = model.add_set_variable("x", object_type, set).unwrap();
     /// let y = model.add_element_variable("y", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.sum_x(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 6);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     6,
+    /// );
     /// ```
     #[inline]
     pub fn sum_x<T, U>(&self, x: T, y: U) -> IntegerExpression
@@ -567,9 +678,15 @@ impl Table2DHandle<Integer> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.sum_y(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,    
+    ///     ),
+    ///     5,
+    /// );
     /// ```
     #[inline]
     pub fn sum_y<T, U>(&self, x: T, y: U) -> IntegerExpression
@@ -598,9 +715,15 @@ impl Table2DHandle<Integer> {
     /// let x = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.sum(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 14);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     14,
+    /// );
     /// ```
     #[inline]
     pub fn sum<T, U>(&self, x: T, y: U) -> IntegerExpression
@@ -630,9 +753,15 @@ impl Table2DHandle<Integer> {
     /// let x = model.add_set_variable("x", object_type, set).unwrap();
     /// let y = model.add_element_variable("y", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.product_x(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 8);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     8,
+    /// );
     /// ```
     #[inline]
     pub fn product_x<T, U>(&self, x: T, y: U) -> IntegerExpression
@@ -662,9 +791,15 @@ impl Table2DHandle<Integer> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.product_y(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 6);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     6,
+    /// );
     /// ```
     #[inline]
     pub fn product_y<T, U>(&self, x: T, y: U) -> IntegerExpression
@@ -693,9 +828,15 @@ impl Table2DHandle<Integer> {
     /// let x = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.product(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 120);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     120,
+    /// );
     /// ```
     #[inline]
     pub fn product<T, U>(&self, x: T, y: U) -> IntegerExpression
@@ -725,9 +866,15 @@ impl Table2DHandle<Integer> {
     /// let x = model.add_set_variable("x", object_type, set).unwrap();
     /// let y = model.add_element_variable("y", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.max_x(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 4);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     4,
+    /// );
     #[inline]
     pub fn max_x<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -756,9 +903,15 @@ impl Table2DHandle<Integer> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.max_y(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     3,
+    /// );
     #[inline]
     pub fn max_y<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -786,9 +939,15 @@ impl Table2DHandle<Integer> {
     /// let x = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.max(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     5,
+    /// );
     /// ```
     #[inline]
     pub fn max<T, U>(&self, x: T, y: U) -> IntegerExpression
@@ -818,9 +977,15 @@ impl Table2DHandle<Integer> {
     /// let x = model.add_set_variable("x", object_type, set).unwrap();
     /// let y = model.add_element_variable("y", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.min_x(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     #[inline]
     pub fn min_x<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -849,9 +1014,15 @@ impl Table2DHandle<Integer> {
     /// let set = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, set).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.min_y(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,    
+    ///     ),
+    ///     2,
+    /// );
     #[inline]
     pub fn min_y<T, U>(&self, x: T, y: U) -> IntegerExpression
     where
@@ -879,9 +1050,15 @@ impl Table2DHandle<Integer> {
     /// let x = model.create_set(object_type, &[0, 1]).unwrap();
     /// let y = model.add_set_variable("y", object_type, x.clone()).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.min(x, y);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     pub fn min<T, U>(&self, x: T, y: U) -> IntegerExpression
@@ -915,9 +1092,15 @@ impl Table3DHandle<Integer> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = Table3DHandle::<Integer>::element(&table, variable, variable + 1, 1);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 5);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     5,
+    /// );
     /// ```
     pub fn element<T, U, V>(&self, x: T, y: U, z: V) -> IntegerExpression
     where
@@ -950,12 +1133,23 @@ impl Table3DHandle<Integer> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.sum(set_variable, element_variable, 1);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 10);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     10,
+    /// );
     ///
     /// let expression = table.sum(set, set_variable, set_variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 44);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     44,
+    /// );
     /// ```
     #[inline]
     pub fn sum<T, U, V>(&self, x: T, y: U, z: V) -> IntegerExpression
@@ -990,12 +1184,23 @@ impl Table3DHandle<Integer> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.product(set_variable, element_variable, 1);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 21);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     21,
+    /// );
     ///
     /// let expression = table.product(set, set_variable, set_variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 362880);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     362880,
+    /// );
     /// ```
     #[inline]
     pub fn product<T, U, V>(&self, x: T, y: U, z: V) -> IntegerExpression
@@ -1030,12 +1235,23 @@ impl Table3DHandle<Integer> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.max(set_variable, element_variable, 1);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 7);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     7,
+    /// );
     ///
     /// let expression = table.max(set, set_variable, set_variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 9);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     9,
+    /// );
     /// ```
     #[inline]
     pub fn max<T, U, V>(&self, x: T, y: U, z: V) -> IntegerExpression
@@ -1070,12 +1286,24 @@ impl Table3DHandle<Integer> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = table.min(set_variable, element_variable, 1);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 3);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     3,
+    /// );
     ///
     /// let expression = table.min(set, set_variable, set_variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     pub fn min<T, U, V>(&self, x: T, y: U, z: V) -> IntegerExpression
@@ -1109,6 +1337,7 @@ impl TableHandle<Integer> {
     /// let object_type = model.add_object_type("object", 2).unwrap();
     /// let variable = model.add_element_variable("variable", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ElementExpression::from(variable),
@@ -1117,7 +1346,12 @@ impl TableHandle<Integer> {
     ///     ElementExpression::from(0),
     /// ];
     /// let expression = TableHandle::<Integer>::element(&table, indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1,
+    /// );
     /// ```
     #[inline]
     pub fn element<T>(&self, indices: Vec<T>) -> IntegerExpression
@@ -1145,6 +1379,7 @@ impl TableHandle<Integer> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(set),
@@ -1153,7 +1388,12 @@ impl TableHandle<Integer> {
     ///     ArgumentExpression::from(0),
     /// ];
     /// let expression = table.sum(indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1,
+    /// );
     /// ```
     #[inline]
     pub fn sum<T>(&self, indices: Vec<T>) -> IntegerExpression
@@ -1185,6 +1425,7 @@ impl TableHandle<Integer> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(set),
@@ -1193,7 +1434,12 @@ impl TableHandle<Integer> {
     ///     ArgumentExpression::from(0),
     /// ];
     /// let expression = table.product(indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0,
+    /// );
     /// ```
     #[inline]
     pub fn product<T>(&self, indices: Vec<T>) -> IntegerExpression
@@ -1225,6 +1471,7 @@ impl TableHandle<Integer> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(set),
@@ -1233,7 +1480,12 @@ impl TableHandle<Integer> {
     ///     ArgumentExpression::from(0),
     /// ];
     /// let expression = table.max(indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1,
+    /// );
     /// ```
     #[inline]
     pub fn max<T>(&self, indices: Vec<T>) -> IntegerExpression
@@ -1265,6 +1517,7 @@ impl TableHandle<Integer> {
     /// let set_variable = model.add_set_variable("set", object_type, set.clone()).unwrap();
     /// let element_variable = model.add_element_variable("element", object_type, 0).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let indices = vec![
     ///     ArgumentExpression::from(set),
@@ -1273,7 +1526,12 @@ impl TableHandle<Integer> {
     ///     ArgumentExpression::from(0),
     /// ];
     /// let expression = table.min(indices);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 0);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     0,
+    /// );
     /// ```
     #[inline]
     pub fn min<T>(&self, indices: Vec<T>) -> IntegerExpression
@@ -1420,11 +1678,16 @@ impl IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = ContinuousExpression::from(1.5);
     /// let expression = IntegerExpression::floor(expression);
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(    
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    /// 1);
     /// ```
     pub fn floor<T>(x: T) -> IntegerExpression
     where
@@ -1442,11 +1705,17 @@ impl IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = ContinuousExpression::from(1.5);
     /// let expression = IntegerExpression::ceil(expression);
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     pub fn ceil<T>(x: T) -> IntegerExpression
     where
@@ -1464,11 +1733,17 @@ impl IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = ContinuousExpression::from(1.5);
     /// let expression = IntegerExpression::round(expression);
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     pub fn round<T>(x: T) -> IntegerExpression
     where
@@ -1486,11 +1761,17 @@ impl IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = ContinuousExpression::from(1.5);
     /// let expression = IntegerExpression::trunc(expression);
     ///
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     1,
+    /// );
     /// ```
     pub fn trunc<T>(x: T) -> IntegerExpression
     where
@@ -1515,13 +1796,25 @@ impl IntegerExpression {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 1).unwrap();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = IntegerExpression::from(variable);
-    /// assert_eq!(expression.eval(&state, &model.table_registry), 1);
+    /// assert_eq!(
+    ///     expression.eval(
+    ///         &state, &mut function_cache, &model.state_functions, &model.table_registry,    
+    ///     ),
+    ///     1,
+    /// );
     /// ```
     #[inline]
-    pub fn eval<U: StateInterface>(&self, state: &U, registry: &TableRegistry) -> Integer {
-        self.eval_inner(None, state, registry)
+    pub fn eval<U: StateInterface>(
+        &self,
+        state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Integer {
+        self.eval_inner(None, state, function_cache, state_functions, registry)
     }
 
     /// Returns the evaluation result of a cost expression.
@@ -1537,72 +1830,118 @@ impl IntegerExpression {
     ///
     /// let model = Model::default();
     /// let state = model.target.clone();
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     ///
     /// let expression = IntegerExpression::Cost + 1;
-    /// assert_eq!(expression.eval_cost(1, &state, &model.table_registry), 2);
+    /// assert_eq!(
+    ///     expression.eval_cost(
+    ///         1, &state, &mut function_cache, &model.state_functions, &model.table_registry,
+    ///     ),
+    ///     2,
+    /// );
     /// ```
     #[inline]
     pub fn eval_cost<U: StateInterface>(
         &self,
         cost: Integer,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Integer {
-        self.eval_inner(Some(cost), state, registry)
+        self.eval_inner(Some(cost), state, function_cache, state_functions, registry)
     }
 
     fn eval_inner<U: StateInterface>(
         &self,
         cost: Option<Integer>,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Integer {
         match self {
             Self::Constant(x) => *x,
             Self::Variable(i) => state.get_integer_variable(*i),
             Self::ResourceVariable(i) => state.get_integer_resource_variable(*i),
+            Self::StateFunction(i) => {
+                function_cache.get_integer_value(*i, state, state_functions, registry)
+            }
             Self::Cost => cost.unwrap(),
-            Self::UnaryOperation(op, x) => op.eval(x.eval_inner(cost, state, registry)),
+            Self::UnaryOperation(op, x) => {
+                op.eval(x.eval_inner(cost, state, function_cache, state_functions, registry))
+            }
             Self::BinaryOperation(op, a, b) => {
-                let a = a.eval_inner(cost, state, registry);
-                let b = b.eval_inner(cost, state, registry);
+                let a = a.eval_inner(cost, state, function_cache, state_functions, registry);
+                let b = b.eval_inner(cost, state, function_cache, state_functions, registry);
                 op.eval(a, b)
             }
             Self::Cardinality(SetExpression::Reference(expression)) => {
-                let f = |i| state.get_set_variable(i);
-                let set = expression.eval(state, registry, &f, &registry.set_tables);
+                let set = expression.eval(state, function_cache, state_functions, registry);
                 set.count_ones(..) as Integer
             }
-            Self::Cardinality(set) => set.eval(state, registry).count_ones(..) as Integer,
-            Self::Table(t) => t.eval(state, registry, &registry.integer_tables),
+            Self::Cardinality(SetExpression::StateFunction(i)) => {
+                let set = function_cache.get_set_value(*i, state, state_functions, registry);
+                set.count_ones(..) as Integer
+            }
+            Self::Cardinality(set) => set
+                .eval(state, function_cache, state_functions, registry)
+                .count_ones(..) as Integer,
+            Self::Table(t) => t.eval(
+                state,
+                function_cache,
+                state_functions,
+                registry,
+                &registry.integer_tables,
+            ),
             Self::If(condition, x, y) => {
-                if condition.eval(state, registry) {
-                    x.eval_inner(cost, state, registry)
+                if condition.eval(state, function_cache, state_functions, registry) {
+                    x.eval_inner(cost, state, function_cache, state_functions, registry)
                 } else {
-                    y.eval_inner(cost, state, registry)
+                    y.eval_inner(cost, state, function_cache, state_functions, registry)
                 }
             }
-            Self::FromContinuous(op, x) => op.eval(cost.map_or_else(
-                || x.eval(state, registry),
-                |cost| x.eval_cost(Continuous::from(cost), state, registry),
-            )) as Integer,
+            Self::FromContinuous(op, x) => op.eval(if let Some(cost) = cost {
+                x.eval_cost(
+                    Continuous::from(cost),
+                    state,
+                    function_cache,
+                    state_functions,
+                    registry,
+                )
+            } else {
+                x.eval(state, function_cache, state_functions, registry)
+            }) as Integer,
             Self::Length(VectorExpression::Reference(expression)) => {
-                let f = |i| state.get_vector_variable(i);
-                let vector = expression.eval(state, registry, &f, &registry.vector_tables);
+                let vector = expression.eval(state, function_cache, state_functions, registry);
                 vector.len() as Integer
             }
-            Self::Length(vector) => vector.eval(state, registry).len() as Integer,
+            Self::Length(vector) => vector
+                .eval(state, function_cache, state_functions, registry)
+                .len() as Integer,
             Self::Last(vector) => match vector.as_ref() {
                 IntegerVectorExpression::Constant(vector) => *vector.last().unwrap(),
-                vector => *vector.eval_inner(cost, state, registry).last().unwrap(),
+                vector => *vector
+                    .eval_inner(cost, state, function_cache, state_functions, registry)
+                    .last()
+                    .unwrap(),
             },
             Self::At(vector, i) => match vector.as_ref() {
-                IntegerVectorExpression::Constant(vector) => vector[i.eval(state, registry)],
-                vector => vector.eval_inner(cost, state, registry)[i.eval(state, registry)],
+                IntegerVectorExpression::Constant(vector) => {
+                    vector[i.eval(state, function_cache, state_functions, registry)]
+                }
+                vector => vector.eval_inner(cost, state, function_cache, state_functions, registry)
+                    [i.eval(state, function_cache, state_functions, registry)],
             },
             Self::Reduce(op, vector) => match vector.as_ref() {
                 IntegerVectorExpression::Constant(vector) => op.eval(vector),
-                vector => op.eval(&vector.eval_inner(cost, state, registry)),
+                vector => op.eval(&vector.eval_inner(
+                    cost,
+                    state,
+                    function_cache,
+                    state_functions,
+                    registry,
+                )),
             },
         }
     }
@@ -3464,9 +3803,14 @@ mod tests {
     #[test]
     fn constant_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerExpression::Constant(0);
-        assert_eq!(expression.eval(&state, &registry), 0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            0
+        );
     }
 
     #[test]
@@ -3478,9 +3822,14 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerExpression::Variable(0);
-        assert_eq!(expression.eval(&state, &registry), 0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            0
+        );
     }
 
     #[test]
@@ -3492,54 +3841,124 @@ mod tests {
             },
             ..Default::default()
         };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerExpression::ResourceVariable(0);
-        assert_eq!(expression.eval(&state, &registry), 0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            0
+        );
+    }
+
+    #[test]
+    fn state_function_eval() {
+        let mut state_metadata = StateMetadata::default();
+        let v = state_metadata.add_integer_variable("v");
+        assert!(v.is_ok());
+        let v = v.unwrap();
+
+        let mut state_functions = StateFunctions::default();
+        let f = state_functions.add_integer_function("f", v + 1);
+        assert!(f.is_ok());
+        let f = f.unwrap();
+        let g = state_functions.add_integer_function("g", v + 2);
+        assert!(g.is_ok());
+        let g = g.unwrap();
+
+        let state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+
+        assert_eq!(
+            f.eval(&state, &mut function_cache, &state_functions, &registry),
+            1
+        );
+
+        assert_eq!(
+            g.eval(&state, &mut function_cache, &state_functions, &registry),
+            2
+        );
+
+        assert_eq!(
+            f.eval(&state, &mut function_cache, &state_functions, &registry),
+            1
+        );
+        assert_eq!(
+            g.eval(&state, &mut function_cache, &state_functions, &registry),
+            2
+        );
     }
 
     #[test]
     fn eval_cost() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerExpression::Cost;
-        assert_eq!(expression.eval_cost(10, &state, &registry), 10);
+        assert_eq!(
+            expression.eval_cost(10, &state, &mut function_cache, &state_functions, &registry),
+            10
+        );
     }
 
     #[test]
     #[should_panic]
     fn eval_cost_panic() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerExpression::Cost;
-        expression.eval(&state, &registry);
+        expression.eval(&state, &mut function_cache, &state_functions, &registry);
     }
 
     #[test]
     fn unary_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerExpression::UnaryOperation(
             UnaryOperator::Abs,
             Box::new(IntegerExpression::Constant(-1)),
         );
-        assert_eq!(expression.eval(&state, &registry), 1);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1
+        );
     }
 
     #[test]
     fn binary_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerExpression::BinaryOperation(
             BinaryOperator::Add,
             Box::new(IntegerExpression::Constant(1)),
             Box::new(IntegerExpression::Constant(2)),
         );
-        assert_eq!(expression.eval(&state, &registry), 3);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            3
+        );
     }
 
     #[test]
     fn cardinality_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let mut set = Set::with_capacity(5);
         set.insert(1);
@@ -3547,30 +3966,45 @@ mod tests {
         let expression = IntegerExpression::Cardinality(SetExpression::Reference(
             ReferenceExpression::Constant(set),
         ));
-        assert_eq!(expression.eval(&state, &registry), 2);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            2
+        );
     }
 
     #[test]
     fn length_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerExpression::Length(VectorExpression::Reference(
             ReferenceExpression::Constant(vec![1, 4]),
         ));
-        assert_eq!(expression.eval(&state, &registry), 2);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            2
+        );
     }
 
     #[test]
     fn table_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = IntegerExpression::Table(Box::new(NumericTableExpression::Constant(0)));
-        assert_eq!(expression.eval(&state, &registry), 0);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            0
+        );
     }
 
     #[test]
     fn if_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
 
         let expression = IntegerExpression::If(
@@ -3578,60 +4012,86 @@ mod tests {
             Box::new(IntegerExpression::Constant(1)),
             Box::new(IntegerExpression::Constant(2)),
         );
-        assert_eq!(expression.eval(&state, &registry), 1);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1
+        );
 
         let expression = IntegerExpression::If(
             Box::new(Condition::Constant(false)),
             Box::new(IntegerExpression::Constant(1)),
             Box::new(IntegerExpression::Constant(2)),
         );
-        assert_eq!(expression.eval(&state, &registry), 2);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            2
+        );
     }
 
     #[test]
     fn from_continuous_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
 
         let expression = IntegerExpression::FromContinuous(
             CastOperator::Floor,
             Box::new(ContinuousExpression::Constant(1.5)),
         );
-        assert_eq!(expression.eval(&state, &registry), 1);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1
+        );
     }
 
     #[test]
     fn last_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
 
         let expression =
             IntegerExpression::Last(Box::new(IntegerVectorExpression::Constant(vec![1, 2, 3])));
-        assert_eq!(expression.eval(&state, &registry), 3);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            3
+        );
     }
 
     #[test]
     fn at_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
 
         let expression = IntegerExpression::At(
             Box::new(IntegerVectorExpression::Constant(vec![1, 2, 3])),
             ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &registry), 1);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            1
+        );
     }
 
     #[test]
     fn reduce_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
 
         let expression = IntegerExpression::Reduce(
             ReduceOperator::Sum,
             Box::new(IntegerVectorExpression::Constant(vec![1, 2, 3])),
         );
-        assert_eq!(expression.eval(&state, &registry), 6);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            6
+        );
     }
 
     #[test]

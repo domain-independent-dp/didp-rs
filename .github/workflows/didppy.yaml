@@ -156,7 +156,7 @@ jobs:
           path: dist
 
   linux-cross:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [rust-test]
     strategy:
       matrix:
@@ -177,7 +177,7 @@ jobs:
         name: Install built wheel
         with:
           arch: ${{ matrix.target }}
-          distro: ubuntu20.04
+          distro: ubuntu22.04
           githubToken: ${{ github.token }}
           install: |
             apt-get update

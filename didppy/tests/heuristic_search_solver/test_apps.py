@@ -40,6 +40,7 @@ def test_search():
     solution = solver.search()
 
     assert solution.cost == 1
+    assert solution.state(model)[var] == 0
     assert model.validate_forward(solution.transitions, solution.cost, quiet=True)
 
 

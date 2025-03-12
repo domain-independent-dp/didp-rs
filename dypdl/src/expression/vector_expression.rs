@@ -3,6 +3,7 @@ use super::element_expression::ElementExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use crate::state::StateInterface;
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::Vector;
 
@@ -33,54 +34,59 @@ impl VectorExpression {
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<T: StateInterface>(&self, state: &T, registry: &TableRegistry) -> Vector {
+    pub fn eval<T: StateInterface>(
+        &self,
+        state: &T,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Vector {
         match self {
-            Self::Reference(expression) => {
-                let f = |i| state.get_vector_variable(i);
-                expression
-                    .eval(state, registry, &f, &registry.vector_tables)
-                    .clone()
-            }
+            Self::Reference(expression) => expression
+                .eval(state, function_cache, state_functions, registry)
+                .clone(),
             Self::Indices(vector) => {
-                let mut vector = vector.eval(state, registry);
+                let mut vector = vector.eval(state, function_cache, state_functions, registry);
                 vector.iter_mut().enumerate().for_each(|(i, v)| *v = i);
                 vector
             }
             Self::Reverse(vector) => {
-                let mut vector = vector.eval(state, registry);
+                let mut vector = vector.eval(state, function_cache, state_functions, registry);
                 vector.reverse();
                 vector
             }
             Self::Set(element, vector, i) => {
-                let mut vector = vector.eval(state, registry);
-                vector[i.eval(state, registry)] = element.eval(state, registry);
+                let mut vector = vector.eval(state, function_cache, state_functions, registry);
+                vector[i.eval(state, function_cache, state_functions, registry)] =
+                    element.eval(state, function_cache, state_functions, registry);
                 vector
             }
             Self::Push(element, vector) => {
-                let element = element.eval(state, registry);
-                let mut vector = vector.eval(state, registry);
+                let element = element.eval(state, function_cache, state_functions, registry);
+                let mut vector = vector.eval(state, function_cache, state_functions, registry);
                 vector.push(element);
                 vector
             }
             Self::Pop(vector) => {
-                let mut vector = vector.eval(state, registry);
+                let mut vector = vector.eval(state, function_cache, state_functions, registry);
                 vector.pop();
                 vector
             }
             Self::FromSet(set) => match set.as_ref() {
-                SetExpression::Reference(set) => {
-                    let f = |i| state.get_set_variable(i);
-                    set.eval(state, registry, &f, &registry.set_tables)
-                        .ones()
-                        .collect()
-                }
-                set => set.eval(state, registry).ones().collect(),
+                SetExpression::Reference(set) => set
+                    .eval(state, function_cache, state_functions, registry)
+                    .ones()
+                    .collect(),
+                set => set
+                    .eval(state, function_cache, state_functions, registry)
+                    .ones()
+                    .collect(),
             },
             Self::If(condition, x, y) => {
-                if condition.eval(state, registry) {
-                    x.eval(state, registry)
+                if condition.eval(state, function_cache, state_functions, registry) {
+                    x.eval(state, function_cache, state_functions, registry)
                 } else {
-                    y.eval(state, registry)
+                    y.eval(state, function_cache, state_functions, registry)
                 }
             }
         }
@@ -265,34 +271,66 @@ mod tests {
     #[test]
     fn vector_reference_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = VectorExpression::Reference(ReferenceExpression::Constant(vec![1, 2]));
-        assert_eq!(expression.eval(&state, &registry), vec![1, 2]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![1, 2]
+        );
     }
 
     #[test]
     fn vector_indices_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = VectorExpression::Indices(Box::new(VectorExpression::Reference(
             ReferenceExpression::Constant(vec![1, 2]),
         )));
-        assert_eq!(expression.eval(&state, &registry), vec![0, 1]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![0, 1]
+        );
     }
 
     #[test]
     fn vector_reverse_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = VectorExpression::Reverse(Box::new(VectorExpression::Reference(
             ReferenceExpression::Constant(vec![1, 2]),
         )));
-        assert_eq!(expression.eval(&state, &registry), vec![2, 1]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![2, 1]
+        );
     }
 
     #[test]
     fn vector_set_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = VectorExpression::Set(
             ElementExpression::Constant(3),
@@ -301,12 +339,22 @@ mod tests {
             ))),
             ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![3, 2]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![3, 2]
+        );
     }
 
     #[test]
     fn vector_push_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = VectorExpression::Push(
             ElementExpression::Constant(0),
@@ -314,22 +362,42 @@ mod tests {
                 vec![1, 2],
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![1, 2, 0]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![1, 2, 0]
+        );
     }
 
     #[test]
     fn vector_pop_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = VectorExpression::Pop(Box::new(VectorExpression::Reference(
             ReferenceExpression::Constant(vec![1, 2]),
         )));
-        assert_eq!(expression.eval(&state, &registry), vec![1]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![1]
+        );
     }
 
     #[test]
     fn vector_from_set_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let mut set = Set::with_capacity(3);
         set.insert(0);
@@ -337,16 +405,34 @@ mod tests {
         let expression = VectorExpression::FromSet(Box::new(SetExpression::Reference(
             ReferenceExpression::Constant(set),
         )));
-        assert_eq!(expression.eval(&state, &registry), vec![0, 1]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![0, 1]
+        );
         let expression = VectorExpression::FromSet(Box::new(SetExpression::Reference(
             ReferenceExpression::Variable(0),
         )));
-        assert_eq!(expression.eval(&state, &registry), vec![0, 2]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![0, 2]
+        );
     }
 
     #[test]
     fn vector_if_eval() {
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
         let expression = VectorExpression::If(
             Box::new(Condition::Constant(true)),
@@ -357,7 +443,15 @@ mod tests {
                 vec![1, 0],
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![0, 1]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![0, 1]
+        );
         let expression = VectorExpression::If(
             Box::new(Condition::Constant(false)),
             Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
@@ -367,7 +461,15 @@ mod tests {
                 vec![1, 0],
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![1, 0]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![1, 0]
+        );
     }
 
     #[test]

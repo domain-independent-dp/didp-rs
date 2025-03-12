@@ -75,11 +75,13 @@ Assume that the data is preprocessed, and we are given :math:`N_c` for each :mat
 
     neighbor_table = model.add_set_table(neighbors, object_type=customer)
 
+    opened_and_remaining = model.add_set_state_fun(opened & remaining)
+
     for c in range(n):
         close = dp.Transition(
             name="close {}".format(c),
             cost=dp.max(
-                ((opened & remaining) | (neighbor_table[c] - opened)).len(),
+                (opened_and_remaining | (neighbor_table[c] - opened)).len(),
                 dp.IntExpr.state_cost(),
             ),
             effects=[
@@ -93,6 +95,12 @@ Assume that the data is preprocessed, and we are given :math:`N_c` for each :mat
     model.add_base_case([remaining.is_empty()])
 
     model.add_dual_bound(0)
+
+We use a state function :code:`opened_and_remaining` to represent :math:`O \cap R` by calling :meth:`~didppy.Model.add_set_state_fun`.
+A state function is a function of a state defined by an expression.
+It is useful to represent information implied by state variables.
+A solver can cache the value of a state function to avoid redundant computation if it is used in multiple places.
+Computing :math:`O \cap R` requires linear time in the number of customers, which is not cheap, so it is better to use a state function in this case.
 
 We can take the cardinality of :class:`~didppy.SetVar` and :class:`~didppy.SetExpr` as :class:`~didppy.IntExpr` using :meth:`~didppy.SetExpr.len`.
 Now, :code:`cost` is the maximum of an :class:`~didppy.IntExpr` and :meth:`~didppy.IntExpr.state_cost`.

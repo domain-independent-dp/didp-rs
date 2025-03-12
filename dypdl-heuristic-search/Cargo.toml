@@ -1,13 +1,14 @@
 [package]
 name = "dypdl-heuristic-search"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 rust-version = "1.65"
 description = "Heuristic search solvers for Dynamic Programming Description Language (DyPDL)."
 license = "MIT OR Apache-2.0"
 authors = [
-    "Ryo Kuroiwa <ryo.kuroiwa@mail.utoronto.ca>",
+    "Ryo Kuroiwa <kuroiwa@nii.ac.jp>",
     "Yuxiao (Jasper) Chen <yuxiao.chen@mail.utoronto.ca>",
+    "Anubhav Singh <anubhav.singh@utoronto.ca>",
 ]
 homepage = "https://didp.ai"
 repository = "https://github.com/domain-independent-dp/didp-rs"
@@ -15,14 +16,13 @@ repository = "https://github.com/domain-independent-dp/didp-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ordered-float = "4.2"
-dypdl = { path = "../dypdl", version = "0.8.0" }
-rustc-hash = "1.1"
-dashmap = "5.5"
+ordered-float = "5.0"
+dypdl = { path = "../dypdl", version = "0.9.0" }
+rustc-hash = "2.1"
+dashmap = "6.1"
 rayon = "1.10"
 crossbeam-channel = "0.5"
 bus = "2.4"
-rand = "0.8"
-rand_pcg = "0.3"
-rand_distr = "0.4"
+rand = "0.9"
+rand_pcg = "0.9"
 smallvec = "1.13"

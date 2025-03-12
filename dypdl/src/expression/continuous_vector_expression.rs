@@ -7,6 +7,7 @@ use super::numeric_operator::{
 };
 use super::table_vector_expression::TableVectorExpression;
 use crate::state::StateInterface;
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry::TableRegistry;
 use crate::variable_type::Continuous;
 use std::boxed::Box;
@@ -88,8 +89,14 @@ impl ContinuousVectorExpression {
     /// # Panics
     ///
     /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<U: StateInterface>(&self, state: &U, registry: &TableRegistry) -> Vec<Continuous> {
-        self.eval_inner(None, state, registry)
+    pub fn eval<U: StateInterface>(
+        &self,
+        state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
+        registry: &TableRegistry,
+    ) -> Vec<Continuous> {
+        self.eval_inner(None, state, function_cache, state_functions, registry)
     }
 
     /// Returns the evaluation result of a cost expression.
@@ -101,108 +108,151 @@ impl ContinuousVectorExpression {
         &self,
         cost: Continuous,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Vec<Continuous> {
-        self.eval_inner(Some(cost), state, registry)
+        self.eval_inner(
+            Some(cost),
+            state,
+            function_cache,
+            state_functions,
+            registry,
+        )
     }
 
     pub fn eval_inner<U: StateInterface>(
         &self,
         cost: Option<Continuous>,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Vec<Continuous> {
         match self {
             Self::Constant(vector) => vector.clone(),
             Self::Reverse(vector) => {
-                let mut vector = vector.eval_inner(cost, state, registry);
+                let mut vector =
+                    vector.eval_inner(cost, state, function_cache, state_functions, registry);
                 vector.reverse();
                 vector
             }
             Self::Push(value, vector) => {
-                let mut vector = vector.eval_inner(cost, state, registry);
-                vector.push(value.eval(state, registry));
+                let mut vector =
+                    vector.eval_inner(cost, state, function_cache, state_functions, registry);
+                vector.push(value.eval(state, function_cache, state_functions, registry));
                 vector
             }
             Self::Pop(vector) => {
-                let mut vector = vector.eval_inner(cost, state, registry);
+                let mut vector =
+                    vector.eval_inner(cost, state, function_cache, state_functions, registry);
                 vector.pop();
                 vector
             }
             Self::Set(value, vector, i) => {
-                let mut vector = vector.eval_inner(cost, state, registry);
-                vector[i.eval(state, registry)] = value.eval(state, registry);
+                let mut vector =
+                    vector.eval_inner(cost, state, function_cache, state_functions, registry);
+                vector[i.eval(state, function_cache, state_functions, registry)] =
+                    value.eval(state, function_cache, state_functions, registry);
                 vector
             }
-            Self::UnaryOperation(op, x) => op.eval_vector(x.eval_inner(cost, state, registry)),
-            Self::ContinuousUnaryOperation(op, x) => {
-                op.eval_vector(x.eval_inner(cost, state, registry))
-            }
-            Self::Round(op, x) => op.eval_vector(x.eval_inner(cost, state, registry)),
+            Self::UnaryOperation(op, x) => op.eval_vector(x.eval_inner(
+                cost,
+                state,
+                function_cache,
+                state_functions,
+                registry,
+            )),
+            Self::ContinuousUnaryOperation(op, x) => op.eval_vector(x.eval_inner(
+                cost,
+                state,
+                function_cache,
+                state_functions,
+                registry,
+            )),
+            Self::Round(op, x) => op.eval_vector(x.eval_inner(
+                cost,
+                state,
+                function_cache,
+                state_functions,
+                registry,
+            )),
             Self::BinaryOperationX(op, x, y) => op.eval_operation_x(
-                cost.map_or_else(
-                    || x.eval(state, registry),
-                    |cost| x.eval_cost(cost, state, registry),
-                ),
-                y.eval_inner(cost, state, registry),
+                if let Some(cost) = cost {
+                    x.eval_cost(cost, state, function_cache, state_functions, registry)
+                } else {
+                    x.eval(state, function_cache, state_functions, registry)
+                },
+                y.eval_inner(cost, state, function_cache, state_functions, registry),
             ),
             Self::BinaryOperationY(op, x, y) => op.eval_operation_y(
-                x.eval_inner(cost, state, registry),
-                cost.map_or_else(
-                    || y.eval(state, registry),
-                    |cost| y.eval_cost(cost, state, registry),
-                ),
+                x.eval_inner(cost, state, function_cache, state_functions, registry),
+                if let Some(cost) = cost {
+                    y.eval_cost(cost, state, function_cache, state_functions, registry)
+                } else {
+                    y.eval(state, function_cache, state_functions, registry)
+                },
             ),
             Self::VectorOperation(op, x, y) => match (x.as_ref(), y.as_ref()) {
-                (Self::Constant(x), y) => {
-                    op.eval_vector_operation_in_y(x, y.eval_inner(cost, state, registry))
-                }
-                (x, Self::Constant(y)) => {
-                    op.eval_vector_operation_in_x(x.eval_inner(cost, state, registry), y)
-                }
+                (Self::Constant(x), y) => op.eval_vector_operation_in_y(
+                    x,
+                    y.eval_inner(cost, state, function_cache, state_functions, registry),
+                ),
+                (x, Self::Constant(y)) => op.eval_vector_operation_in_x(
+                    x.eval_inner(cost, state, function_cache, state_functions, registry),
+                    y,
+                ),
                 (x, y) => op.eval_vector_operation_in_y(
-                    &x.eval_inner(cost, state, registry),
-                    y.eval_inner(cost, state, registry),
+                    &x.eval_inner(cost, state, function_cache, state_functions, registry),
+                    y.eval_inner(cost, state, function_cache, state_functions, registry),
                 ),
             },
             Self::ContinuousBinaryOperationX(op, x, y) => op.eval_operation_x(
-                cost.map_or_else(
-                    || x.eval(state, registry),
-                    |cost| x.eval_cost(cost, state, registry),
-                ),
-                y.eval_inner(cost, state, registry),
+                if let Some(cost) = cost {
+                    x.eval_cost(cost, state, function_cache, state_functions, registry)
+                } else {
+                    x.eval(state, function_cache, state_functions, registry)
+                },
+                y.eval_inner(cost, state, function_cache, state_functions, registry),
             ),
             Self::ContinuousBinaryOperationY(op, x, y) => op.eval_operation_y(
-                x.eval_inner(cost, state, registry),
-                cost.map_or_else(
-                    || y.eval(state, registry),
-                    |cost| y.eval_cost(cost, state, registry),
-                ),
+                x.eval_inner(cost, state, function_cache, state_functions, registry),
+                if let Some(cost) = cost {
+                    y.eval_cost(cost, state, function_cache, state_functions, registry)
+                } else {
+                    y.eval(state, function_cache, state_functions, registry)
+                },
             ),
             Self::ContinuousVectorOperation(op, x, y) => match (x.as_ref(), y.as_ref()) {
-                (Self::Constant(x), y) => {
-                    op.eval_vector_operation_in_y(x, y.eval_inner(cost, state, registry))
-                }
-                (x, Self::Constant(y)) => {
-                    op.eval_vector_operation_in_x(x.eval_inner(cost, state, registry), y)
-                }
+                (Self::Constant(x), y) => op.eval_vector_operation_in_y(
+                    x,
+                    y.eval_inner(cost, state, function_cache, state_functions, registry),
+                ),
+                (x, Self::Constant(y)) => op.eval_vector_operation_in_x(
+                    x.eval_inner(cost, state, function_cache, state_functions, registry),
+                    y,
+                ),
                 (x, y) => op.eval_vector_operation_in_y(
-                    &x.eval_inner(cost, state, registry),
-                    y.eval_inner(cost, state, registry),
+                    &x.eval_inner(cost, state, function_cache, state_functions, registry),
+                    y.eval_inner(cost, state, function_cache, state_functions, registry),
                 ),
             },
-            Self::Table(expression) => {
-                expression.eval(state, registry, &registry.continuous_tables)
-            }
+            Self::Table(expression) => expression.eval(
+                state,
+                function_cache,
+                state_functions,
+                registry,
+                &registry.continuous_tables,
+            ),
             Self::If(condition, x, y) => {
-                if condition.eval(state, registry) {
-                    x.eval_inner(cost, state, registry)
+                if condition.eval(state, function_cache, state_functions, registry) {
+                    x.eval_inner(cost, state, function_cache, state_functions, registry)
                 } else {
-                    y.eval_inner(cost, state, registry)
+                    y.eval_inner(cost, state, function_cache, state_functions, registry)
                 }
             }
             Self::FromInteger(x) => x
-                .eval(state, registry)
+                .eval(state, function_cache, state_functions, registry)
                 .into_iter()
                 .map(Continuous::from)
                 .collect(),
@@ -352,111 +402,161 @@ mod tests {
     #[test]
     fn constant_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::Constant(vec![0.0, 1.0]);
-        assert_eq!(expression.eval(&state, &registry), vec![0.0, 1.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![0.0, 1.0]
+        );
     }
 
     #[test]
     fn reverse_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::Reverse(Box::new(
             ContinuousVectorExpression::Constant(vec![0.0, 1.0]),
         ));
-        assert_eq!(expression.eval(&state, &registry), vec![1.0, 0.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![1.0, 0.0]
+        );
     }
 
     #[test]
     fn push_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::Push(
             ContinuousExpression::Constant(2.0),
             Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![0.0, 1.0, 2.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![0.0, 1.0, 2.0]
+        );
     }
 
     #[test]
     fn pop_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression =
             ContinuousVectorExpression::Pop(Box::new(ContinuousVectorExpression::Constant(vec![
                 0.0, 1.0,
             ])));
-        assert_eq!(expression.eval(&state, &registry), vec![0.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![0.0]
+        );
     }
 
     #[test]
     fn set_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::Set(
             ContinuousExpression::Constant(2.0),
             Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
             ElementExpression::Constant(1),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![0.0, 2.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![0.0, 2.0]
+        );
     }
 
     #[test]
     fn unary_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::UnaryOperation(
             UnaryOperator::Abs,
             Box::new(ContinuousVectorExpression::Constant(vec![1.0, -1.0])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![1.0, 1.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![1.0, 1.0]
+        );
     }
 
     #[test]
     fn continuous_unary_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::ContinuousUnaryOperation(
             ContinuousUnaryOperator::Sqrt,
             Box::new(ContinuousVectorExpression::Constant(vec![4.0, 9.0])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2.0, 3.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![2.0, 3.0]
+        );
     }
 
     #[test]
     fn binary_operation_x_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::BinaryOperationX(
             BinaryOperator::Add,
             ContinuousExpression::Constant(2.0),
             Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2.0, 3.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![2.0, 3.0]
+        );
     }
 
     #[test]
     fn binary_operation_y_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::BinaryOperationY(
             BinaryOperator::Add,
             Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
             ContinuousExpression::Constant(2.0),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2.0, 3.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![2.0, 3.0]
+        );
     }
 
     #[test]
     fn vector_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::VectorOperation(
             BinaryOperator::Add,
             Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
             Box::new(ContinuousVectorExpression::Constant(vec![2.0, 3.0])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2.0, 4.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![2.0, 4.0]
+        );
         let expression = ContinuousVectorExpression::VectorOperation(
             BinaryOperator::Add,
             Box::new(ContinuousVectorExpression::Constant(vec![0.0])),
@@ -464,7 +564,10 @@ mod tests {
                 ContinuousVectorExpression::Constant(vec![2.0, 3.0]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![2.0]
+        );
         let expression = ContinuousVectorExpression::VectorOperation(
             BinaryOperator::Add,
             Box::new(ContinuousVectorExpression::Pop(Box::new(
@@ -474,43 +577,61 @@ mod tests {
                 ContinuousVectorExpression::Constant(vec![2.0, 3.0]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![2.0]
+        );
     }
 
     #[test]
     fn continuous_binary_operation_x_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::ContinuousBinaryOperationX(
             ContinuousBinaryOperator::Pow,
             ContinuousExpression::Constant(2.0),
             Box::new(ContinuousVectorExpression::Constant(vec![2.0, 3.0])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![4.0, 8.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![4.0, 8.0]
+        );
     }
 
     #[test]
     fn continuous_binary_operation_y_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::ContinuousBinaryOperationY(
             ContinuousBinaryOperator::Pow,
             Box::new(ContinuousVectorExpression::Constant(vec![2.0, 3.0])),
             ContinuousExpression::Constant(2.0),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![4.0, 9.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![4.0, 9.0]
+        );
     }
 
     #[test]
     fn continuous_vector_operation_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::ContinuousVectorOperation(
             ContinuousBinaryOperator::Pow,
             Box::new(ContinuousVectorExpression::Constant(vec![2.0, 3.0])),
             Box::new(ContinuousVectorExpression::Constant(vec![2.0, 3.0])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![4.0, 27.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![4.0, 27.0]
+        );
         let expression = ContinuousVectorExpression::ContinuousVectorOperation(
             ContinuousBinaryOperator::Pow,
             Box::new(ContinuousVectorExpression::Constant(vec![2.0])),
@@ -518,7 +639,10 @@ mod tests {
                 ContinuousVectorExpression::Constant(vec![2.0, 3.0]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![4.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![4.0]
+        );
         let expression = ContinuousVectorExpression::ContinuousVectorOperation(
             ContinuousBinaryOperator::Pow,
             Box::new(ContinuousVectorExpression::Pop(Box::new(
@@ -528,46 +652,67 @@ mod tests {
                 ContinuousVectorExpression::Constant(vec![2.0, 3.0]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![4.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![4.0]
+        );
     }
 
     #[test]
     fn table_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression =
             ContinuousVectorExpression::Table(Box::new(TableVectorExpression::Constant(vec![
                 0.0, 1.0,
             ])));
-        assert_eq!(expression.eval(&state, &registry), vec![0.0, 1.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![0.0, 1.0]
+        );
     }
 
     #[test]
     fn if_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::If(
             Box::new(Condition::Constant(true)),
             Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
             Box::new(ContinuousVectorExpression::Constant(vec![2.0, 3.0])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![0.0, 1.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![0.0, 1.0]
+        );
         let expression = ContinuousVectorExpression::If(
             Box::new(Condition::Constant(false)),
             Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0])),
             Box::new(ContinuousVectorExpression::Constant(vec![2.0, 3.0])),
         );
-        assert_eq!(expression.eval(&state, &registry), vec![2.0, 3.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![2.0, 3.0]
+        );
     }
 
     #[test]
     fn from_integer_eval() {
         let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
         let expression = ContinuousVectorExpression::FromInteger(Box::new(
             IntegerVectorExpression::Constant(vec![0, 1]),
         ));
-        assert_eq!(expression.eval(&state, &registry), vec![0.0, 1.0]);
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            vec![0.0, 1.0]
+        );
     }
 
     #[test]

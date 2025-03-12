@@ -5,7 +5,7 @@ use crate::search_algorithm::data_structure::{
 };
 use crate::search_algorithm::CostNode;
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ReduceFunction, Transition, TransitionInterface};
+use dypdl::{Model, ReduceFunction, StateFunctionCache, Transition, TransitionInterface};
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -118,6 +118,8 @@ where
 {
     /// Generates a sendable successor node message given a transition and a DyPDL model.
     ///
+    /// `function_cache` is not cleared and updated by this node.
+    ///
     /// Returns `None` if the successor state is pruned by a state constraint.
     ///
     /// # Panics
@@ -144,9 +146,15 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
-    /// let expected_state: StateInRegistry = transition.apply(&model.target, &model.table_registry);
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let expected_state: StateInRegistry = transition.apply(
+    ///     &model.target, &mut function_cache, &model.state_functions, &model.table_registry
+    /// );
     ///
-    /// let node = node.generate_sendable_successor_node(Arc::new(transition.clone()), &model);
+    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let node = node.generate_sendable_successor_node(
+    ///     Arc::new(transition.clone()), &mut function_cache, &model,
+    /// );
     /// assert!(node.is_some());
     /// let node = CostNode::from(node.unwrap());
     /// assert_eq!(node.state(), &expected_state);
@@ -157,11 +165,17 @@ where
     pub fn generate_sendable_successor_node(
         &self,
         transition: Arc<V>,
+        function_cache: &mut StateFunctionCache,
         model: &Model,
     ) -> Option<CostNodeMessage<T, V>> {
         let cost = self.cost(model);
-        let (state, cost) =
-            model.generate_successor_state(self.state(), cost, transition.as_ref(), None)?;
+        let (state, cost) = model.generate_successor_state(
+            self.state(),
+            function_cache,
+            cost,
+            transition.as_ref(),
+            None,
+        )?;
         let transitions = Arc::new(ArcChain::new(self.transition_chain(), transition));
 
         Some(CostNodeMessage::new(state, cost, model, Some(transitions)))
@@ -242,9 +256,9 @@ mod tests {
         assert!(variable.is_ok());
         let state = StateWithHashableSignatureVariables::from(model.target.clone());
         let expected_state = state.clone();
-        let node = CostNodeMessage::<_>::new(state, Integer::max_value(), &model, None);
+        let node = CostNodeMessage::<_>::new(state, Integer::MAX, &model, None);
         assert_eq!(node.state, expected_state);
-        assert_eq!(node.priority, Integer::min_value());
+        assert_eq!(node.priority, Integer::MIN);
         assert_eq!(node.transitions, None);
     }
 
@@ -256,9 +270,9 @@ mod tests {
         assert!(variable.is_ok());
         let state = StateWithHashableSignatureVariables::from(model.target.clone());
         let expected_state = state.clone();
-        let node = CostNodeMessage::<_>::new(state, Integer::min_value(), &model, None);
+        let node = CostNodeMessage::<_>::new(state, Integer::MIN, &model, None);
         assert_eq!(node.state, expected_state);
-        assert_eq!(node.priority, Integer::max_value());
+        assert_eq!(node.priority, Integer::MAX);
         assert_eq!(node.transitions, None);
     }
 
@@ -284,9 +298,9 @@ mod tests {
         assert!(variable.is_ok());
         let state = StateWithHashableSignatureVariables::from(model.target.clone());
         let expected_state = state.clone();
-        let node = CostNodeMessage::<_>::new(state, Integer::max_value(), &model, None);
+        let node = CostNodeMessage::<_>::new(state, Integer::MAX, &model, None);
         assert_eq!(node.state, expected_state);
-        assert_eq!(node.priority, Integer::max_value());
+        assert_eq!(node.priority, Integer::MAX);
         assert_eq!(node.transitions, None);
     }
 
@@ -298,9 +312,9 @@ mod tests {
         assert!(variable.is_ok());
         let state = StateWithHashableSignatureVariables::from(model.target.clone());
         let expected_state = state.clone();
-        let node = CostNodeMessage::<_>::new(state, Integer::min_value(), &model, None);
+        let node = CostNodeMessage::<_>::new(state, Integer::MIN, &model, None);
         assert_eq!(node.state, expected_state);
-        assert_eq!(node.priority, Integer::min_value());
+        assert_eq!(node.priority, Integer::MIN);
         assert_eq!(node.transitions, None);
     }
 
@@ -351,10 +365,21 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let expected_state = transition.apply(&state, &model.table_registry);
-        let node = CostNode::generate_root_node(state, 0, &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
 
-        let successor = node.generate_sendable_successor_node(Arc::new(transition.clone()), &model);
+        let node = CostNode::generate_root_node(state, 0, &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let successor = node.generate_sendable_successor_node(
+            Arc::new(transition.clone()),
+            &mut function_cache,
+            &model,
+        );
         assert!(successor.is_some());
         let successor = successor.unwrap();
 
@@ -385,10 +410,21 @@ mod tests {
         transition.set_cost(IntegerExpression::Cost + 1);
 
         let state = model.target.clone();
-        let expected_state = transition.apply(&state, &model.table_registry);
-        let node = CostNode::generate_root_node(state, 0, &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let expected_state = transition.apply(
+            &state,
+            &mut function_cache,
+            &model.state_functions,
+            &model.table_registry,
+        );
 
-        let successor = node.generate_sendable_successor_node(Arc::new(transition.clone()), &model);
+        let node = CostNode::generate_root_node(state, 0, &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let successor = node.generate_sendable_successor_node(
+            Arc::new(transition.clone()),
+            &mut function_cache,
+            &model,
+        );
         assert!(successor.is_some());
         let successor = successor.unwrap();
 
@@ -423,7 +459,12 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let result = node.generate_successor_node(Arc::new(transition), &model);
+        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let result = node.generate_sendable_successor_node(
+            Arc::new(transition),
+            &mut function_cache,
+            &model,
+        );
         assert_eq!(result, None);
     }
 }

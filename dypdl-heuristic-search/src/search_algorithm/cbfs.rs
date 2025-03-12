@@ -1,4 +1,6 @@
-use super::data_structure::{exceed_bound, BfsNode, StateRegistry};
+use super::data_structure::{
+    exceed_bound, BfsNode, ParentAndChildStateFunctionCache, StateRegistry,
+};
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::{print_dual_bound, update_bound_if_better, update_solution, TimeKeeper};
@@ -53,12 +55,14 @@ use std::rc::Rc;
 /// let model = Rc::new(model);
 ///
 /// let state = model.target.clone();
+/// let mut function_cache = StateFunctionCache::new(&model.state_functions);
 /// let cost = 0;
-/// let h_evaluator = |_: &_| Some(0);
+/// let h_evaluator = |_: &_, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
 /// let node = FNode::generate_root_node(
 ///     state,
+///     &mut function_cache,
 ///     cost,
 ///     &model,
 ///     &h_evaluator,
@@ -72,9 +76,10 @@ use std::rc::Rc;
 ///     solution_suffix: &[],
 /// };
 /// let transition_evaluator =
-///     move |node: &FNode<_>, transition, registry: &mut _, primal_bound| {
+///     move |node: &FNode<_>, transition, cache: &mut _, registry: &mut _, primal_bound| {
 ///         node.insert_successor_node(
 ///             transition,
+///             cache,
 ///             registry,
 ///             &h_evaluator,
 ///             &f_evaluator,
@@ -96,7 +101,13 @@ pub struct Cbfs<'a, T, N, E, B, V = Transition>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,
-    E: FnMut(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    E: FnMut(
+        &N,
+        Rc<V>,
+        &mut ParentAndChildStateFunctionCache,
+        &mut StateRegistry<T, N>,
+        Option<T>,
+    ) -> Option<(Rc<N>, bool)>,
     B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
@@ -110,6 +121,8 @@ where
     quiet: bool,
     open: Vec<collections::BinaryHeap<Rc<N>>>,
     registry: StateRegistry<T, N>,
+    function_cache: ParentAndChildStateFunctionCache,
+    applicable_transitions: Vec<Rc<V>>,
     time_keeper: TimeKeeper,
     solution: Solution<T>,
 }
@@ -118,7 +131,13 @@ impl<'a, T, N, E, B, V> Cbfs<'a, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,
-    E: FnMut(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    E: FnMut(
+        &N,
+        Rc<V>,
+        &mut ParentAndChildStateFunctionCache,
+        &mut StateRegistry<T, N>,
+        Option<T>,
+    ) -> Option<(Rc<N>, bool)>,
     B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
@@ -161,6 +180,8 @@ where
             solution.is_infeasible = true;
         }
 
+        let function_cache =
+            ParentAndChildStateFunctionCache::new(&input.generator.model.state_functions);
         time_keeper.stop();
 
         Cbfs {
@@ -173,17 +194,25 @@ where
             quiet,
             open,
             registry,
+            function_cache,
+            applicable_transitions: Vec::new(),
             time_keeper,
             solution,
         }
     }
 }
 
-impl<'a, T, N, E, B, V> Search<T> for Cbfs<'a, T, N, E, B, V>
+impl<T, N, E, B, V> Search<T> for Cbfs<'_, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
     N: BfsNode<T, V>,
-    E: FnMut(&N, Rc<V>, &mut StateRegistry<T, N>, Option<T>) -> Option<(Rc<N>, bool)>,
+    E: FnMut(
+        &N,
+        Rc<V>,
+        &mut ParentAndChildStateFunctionCache,
+        &mut StateRegistry<T, N>,
+        Option<T>,
+    ) -> Option<(Rc<N>, bool)>,
     B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,
@@ -220,11 +249,14 @@ where
                     no_node = false;
                 }
 
+                self.function_cache.parent.clear();
+
                 if let Some((cost, suffix)) = get_solution_cost_and_suffix(
                     model,
                     &*node,
                     suffix,
                     &mut self.base_cost_evaluator,
+                    &mut self.function_cache,
                 ) {
                     if !exceed_bound(model, cost, self.primal_bound) {
                         self.primal_bound = Some(cost);
@@ -253,11 +285,17 @@ where
                 }
 
                 self.solution.expanded += 1;
+                self.generator.generate_applicable_transitions(
+                    node.state(),
+                    &mut self.function_cache.parent,
+                    &mut self.applicable_transitions,
+                );
 
-                for transition in self.generator.applicable_transitions(node.state()) {
+                for transition in self.applicable_transitions.drain(..) {
                     if let Some((successor, new_generated)) = (self.transition_evaluator)(
                         &node,
                         transition,
+                        &mut self.function_cache,
                         &mut self.registry,
                         self.primal_bound,
                     ) {

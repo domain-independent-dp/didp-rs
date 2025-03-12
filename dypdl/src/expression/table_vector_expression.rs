@@ -5,6 +5,7 @@ use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::util;
 use super::vector_expression::VectorExpression;
+use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::state::StateInterface;
 use crate::table::Table2D;
 use crate::table_data::TableData;
@@ -78,23 +79,33 @@ impl<T: Numeric> TableVectorExpression<T> {
     pub fn eval<U: StateInterface>(
         &self,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
         tables: &TableData<T>,
     ) -> Vec<T> {
-        let vector_f = |i| state.get_vector_variable(i);
-        let vector_tables = &registry.vector_tables;
-        let set_f = |i| state.get_set_variable(i);
-        let set_tables = &registry.set_tables;
         match self {
             Self::Constant(vector) => vector.clone(),
             Self::Table(i, args) => {
-                let args = Self::eval_args(args.iter(), state, registry);
+                let args = Self::eval_args(
+                    args.iter(),
+                    state,
+                    function_cache,
+                    state_functions,
+                    registry,
+                );
                 args.into_iter()
                     .map(|args| tables.tables[*i].eval(&args))
                     .collect()
             }
             Self::TableReduce(op, i, args) => {
-                let args = Self::eval_sum_args(args.iter(), state, registry);
+                let args = Self::eval_sum_args(
+                    args.iter(),
+                    state,
+                    function_cache,
+                    state_functions,
+                    registry,
+                );
                 args.into_iter()
                     .map(|args| {
                         op.eval_iter(args.into_iter().map(|args| tables.tables[*i].eval(&args)))
@@ -103,77 +114,91 @@ impl<T: Numeric> TableVectorExpression<T> {
                     .collect()
             }
             Self::Table1D(i, VectorExpression::Reference(x)) => x
-                .eval(state, registry, &vector_f, vector_tables)
+                .eval(state, function_cache, state_functions, registry)
                 .iter()
                 .map(|x| tables.tables_1d[*i].eval(*x))
                 .collect(),
             Self::Table1D(i, x) => x
-                .eval(state, registry)
+                .eval(state, function_cache, state_functions, registry)
                 .into_iter()
                 .map(|x| tables.tables_1d[*i].eval(x))
                 .collect(),
             Self::Table2D(i, VectorExpression::Reference(x), VectorExpression::Reference(y)) => {
                 let x = x
-                    .eval(state, registry, &vector_f, vector_tables)
+                    .eval(state, function_cache, state_functions, registry)
                     .iter()
                     .copied();
                 let y = y
-                    .eval(state, registry, &vector_f, vector_tables)
+                    .eval(state, function_cache, state_functions, registry)
                     .iter()
                     .copied();
                 Self::table_2d(&tables.tables_2d[*i], x, y)
             }
             Self::Table2D(i, VectorExpression::Reference(x), y) => {
                 let x = x
-                    .eval(state, registry, &vector_f, vector_tables)
+                    .eval(state, function_cache, state_functions, registry)
                     .iter()
                     .copied();
-                let y = y.eval(state, registry).into_iter();
+                let y = y
+                    .eval(state, function_cache, state_functions, registry)
+                    .into_iter();
                 Self::table_2d(&tables.tables_2d[*i], x, y)
             }
             Self::Table2D(i, x, VectorExpression::Reference(y)) => {
-                let x = x.eval(state, registry).into_iter();
+                let x = x
+                    .eval(state, function_cache, state_functions, registry)
+                    .into_iter();
                 let y = y
-                    .eval(state, registry, &vector_f, vector_tables)
+                    .eval(state, function_cache, state_functions, registry)
                     .iter()
                     .copied();
                 Self::table_2d(&tables.tables_2d[*i], x, y)
             }
             Self::Table2D(i, x, y) => {
-                let x = x.eval(state, registry).into_iter();
-                let y = y.eval(state, registry).into_iter();
+                let x = x
+                    .eval(state, function_cache, state_functions, registry)
+                    .into_iter();
+                let y = y
+                    .eval(state, function_cache, state_functions, registry)
+                    .into_iter();
                 Self::table_2d(&tables.tables_2d[*i], x, y)
             }
             Self::Table2DX(i, VectorExpression::Reference(x), y) => {
-                let y = y.eval(state, registry);
-                x.eval(state, registry, &vector_f, vector_tables)
+                let y = y.eval(state, function_cache, state_functions, registry);
+                x.eval(state, function_cache, state_functions, registry)
                     .iter()
                     .map(|x| tables.tables_2d[*i].eval(*x, y))
                     .collect()
             }
             Self::Table2DX(i, x, y) => {
-                let y = y.eval(state, registry);
-                x.eval(state, registry)
+                let y = y.eval(state, function_cache, state_functions, registry);
+                x.eval(state, function_cache, state_functions, registry)
                     .into_iter()
                     .map(|x| tables.tables_2d[*i].eval(x, y))
                     .collect()
             }
             Self::Table2DY(i, x, VectorExpression::Reference(y)) => {
-                let x = x.eval(state, registry);
-                y.eval(state, registry, &vector_f, vector_tables)
+                let x = x.eval(state, function_cache, state_functions, registry);
+                y.eval(state, function_cache, state_functions, registry)
                     .iter()
                     .map(|y| tables.tables_2d[*i].eval(x, *y))
                     .collect()
             }
             Self::Table2DY(i, x, y) => {
-                let x = x.eval(state, registry);
-                y.eval(state, registry)
+                let x = x.eval(state, function_cache, state_functions, registry);
+                y.eval(state, function_cache, state_functions, registry)
                     .into_iter()
                     .map(|y| tables.tables_2d[*i].eval(x, y))
                     .collect()
             }
             Self::Table3D(i, x, y, z) => {
-                let args = Self::eval_args([x, y, z].into_iter(), state, registry);
+                let args = Self::eval_args(
+                    [x, y, z].into_iter(),
+                    state,
+                    function_cache,
+                    state_functions,
+                    registry,
+                );
                 args.into_iter()
                     .map(|args| tables.tables_3d[*i].eval(args[0], args[1], args[2]))
                     .collect()
@@ -185,28 +210,32 @@ impl<T: Numeric> TableVectorExpression<T> {
                 SetExpression::Reference(y),
             ) => {
                 let x = x
-                    .eval(state, registry, &vector_f, vector_tables)
+                    .eval(state, function_cache, state_functions, registry)
                     .iter()
                     .copied();
-                let y = y.eval(state, registry, &set_f, set_tables);
+                let y = y.eval(state, function_cache, state_functions, registry);
                 Self::x_reduce_table_2d(op, &tables.tables_2d[*i], x, y)
             }
             Self::Table2DXReduce(op, i, VectorExpression::Reference(x), y) => {
                 let x = x
-                    .eval(state, registry, &vector_f, vector_tables)
+                    .eval(state, function_cache, state_functions, registry)
                     .iter()
                     .copied();
-                let y = y.eval(state, registry);
+                let y = y.eval(state, function_cache, state_functions, registry);
                 Self::x_reduce_table_2d(op, &tables.tables_2d[*i], x, &y)
             }
             Self::Table2DXReduce(op, i, x, SetExpression::Reference(y)) => {
-                let x = x.eval(state, registry).into_iter();
-                let y = y.eval(state, registry, &set_f, set_tables);
+                let x = x
+                    .eval(state, function_cache, state_functions, registry)
+                    .into_iter();
+                let y = y.eval(state, function_cache, state_functions, registry);
                 Self::x_reduce_table_2d(op, &tables.tables_2d[*i], x, y)
             }
             Self::Table2DXReduce(op, i, x, y) => {
-                let x = x.eval(state, registry).into_iter();
-                let y = y.eval(state, registry);
+                let x = x
+                    .eval(state, function_cache, state_functions, registry)
+                    .into_iter();
+                let y = y.eval(state, function_cache, state_functions, registry);
                 Self::x_reduce_table_2d(op, &tables.tables_2d[*i], x, &y)
             }
             Self::Table2DYReduce(
@@ -215,33 +244,43 @@ impl<T: Numeric> TableVectorExpression<T> {
                 SetExpression::Reference(x),
                 VectorExpression::Reference(y),
             ) => {
-                let x = x.eval(state, registry, &set_f, set_tables);
                 let y = y
-                    .eval(state, registry, &vector_f, vector_tables)
+                    .eval(state, function_cache, state_functions, registry)
                     .iter()
                     .copied();
+                let x = x.eval(state, function_cache, state_functions, registry);
                 Self::y_reduce_table_2d(op, &tables.tables_2d[*i], x, y)
             }
             Self::Table2DYReduce(op, i, SetExpression::Reference(x), y) => {
-                let x = x.eval(state, registry, &set_f, set_tables);
-                let y = y.eval(state, registry).into_iter();
+                let y = y
+                    .eval(state, function_cache, state_functions, registry)
+                    .into_iter();
+                let x = x.eval(state, function_cache, state_functions, registry);
                 Self::y_reduce_table_2d(op, &tables.tables_2d[*i], x, y)
             }
             Self::Table2DYReduce(op, i, x, VectorExpression::Reference(y)) => {
-                let x = x.eval(state, registry);
+                let x = x.eval(state, function_cache, state_functions, registry);
                 let y = y
-                    .eval(state, registry, &vector_f, vector_tables)
+                    .eval(state, function_cache, state_functions, registry)
                     .iter()
                     .copied();
                 Self::y_reduce_table_2d(op, &tables.tables_2d[*i], &x, y)
             }
             Self::Table2DYReduce(op, i, x, y) => {
-                let x = x.eval(state, registry);
-                let y = y.eval(state, registry).into_iter();
+                let x = x.eval(state, function_cache, state_functions, registry);
+                let y = y
+                    .eval(state, function_cache, state_functions, registry)
+                    .into_iter();
                 Self::y_reduce_table_2d(op, &tables.tables_2d[*i], &x, y)
             }
             Self::Table3DReduce(op, i, x, y, z) => {
-                let args = Self::eval_sum_args([x, y, z].into_iter(), state, registry);
+                let args = Self::eval_sum_args(
+                    [x, y, z].into_iter(),
+                    state,
+                    function_cache,
+                    state_functions,
+                    registry,
+                );
                 args.into_iter()
                     .map(|args| {
                         op.eval_iter(
@@ -401,6 +440,8 @@ impl<T: Numeric> TableVectorExpression<T> {
     fn eval_args<'a, I, U: StateInterface>(
         args: I,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Vec<Vec<Element>>
     where
@@ -411,13 +452,14 @@ impl<T: Numeric> TableVectorExpression<T> {
         for arg in args {
             match arg {
                 VectorOrElementExpression::Element(element) => {
-                    let element = element.eval(state, registry);
+                    let element =
+                        element.eval(state, function_cache, state_functions, registry);
                     result.iter_mut().for_each(|r| r.push(element));
                 }
                 VectorOrElementExpression::Vector(vector) => match vector {
                     VectorExpression::Reference(vector) => {
-                        let f = |i| state.get_vector_variable(i);
-                        let vector = vector.eval(state, registry, &f, &registry.vector_tables);
+                        let vector =
+                            vector.eval(state, function_cache, state_functions, registry);
                         if vector_mode {
                             result.iter_mut().zip(vector).for_each(|(r, v)| r.push(*v));
                         } else {
@@ -433,7 +475,8 @@ impl<T: Numeric> TableVectorExpression<T> {
                         }
                     }
                     vector => {
-                        let vector = vector.eval(state, registry);
+                        let vector =
+                            vector.eval(state, function_cache, state_functions, registry);
                         if vector_mode {
                             result.iter_mut().zip(vector).for_each(|(r, v)| r.push(v));
                         } else {
@@ -494,6 +537,8 @@ impl<T: Numeric> TableVectorExpression<T> {
     fn eval_sum_args<'a, I, U: StateInterface>(
         args: I,
         state: &U,
+        function_cache: &mut StateFunctionCache,
+        state_functions: &StateFunctions,
         registry: &TableRegistry,
     ) -> Vec<Vec<Vec<Element>>>
     where
@@ -504,7 +549,8 @@ impl<T: Numeric> TableVectorExpression<T> {
         for arg in args {
             match arg {
                 ArgumentExpression::Element(element) => {
-                    let element = element.eval(state, registry);
+                    let element =
+                        element.eval(state, function_cache, state_functions, registry);
                     result
                         .iter_mut()
                         .for_each(|rr| rr.iter_mut().for_each(|r| r.push(element)));
@@ -512,15 +558,16 @@ impl<T: Numeric> TableVectorExpression<T> {
                 ArgumentExpression::Set(set) => {
                     result = match set {
                         SetExpression::Reference(set) => {
-                            let f = |i| state.get_set_variable(i);
-                            let set = set.eval(state, registry, &f, &registry.set_tables);
+                            let set =
+                                set.eval(state, function_cache, state_functions, registry);
                             result
                                 .into_iter()
                                 .map(|rr| util::expand_vector_with_set(rr, set))
                                 .collect()
                         }
                         _ => {
-                            let set = &set.eval(state, registry);
+                            let set =
+                                &set.eval(state, function_cache, state_functions, registry);
                             result
                                 .into_iter()
                                 .map(|rr| util::expand_vector_with_set(rr, set))
@@ -531,34 +578,38 @@ impl<T: Numeric> TableVectorExpression<T> {
                 ArgumentExpression::Vector(vector) => {
                     if vector_mode {
                         match vector {
-                            VectorExpression::Reference(vector) => {
-                                let f = |i| state.get_vector_variable(i);
-                                result
-                                    .iter_mut()
-                                    .zip(vector.eval(state, registry, &f, &registry.vector_tables))
-                                    .for_each(|(rr, v)| rr.iter_mut().for_each(|r| r.push(*v)))
-                            }
+                            VectorExpression::Reference(vector) => result
+                                .iter_mut()
+                                .zip(vector.eval(
+                                    state,
+                                    function_cache,
+                                    state_functions,
+                                    registry,
+                                ))
+                                .for_each(|(rr, v)| rr.iter_mut().for_each(|r| r.push(*v))),
                             _ => result
                                 .iter_mut()
-                                .zip(vector.eval(state, registry))
+                                .zip(vector.eval(
+                                    state,
+                                    function_cache,
+                                    state_functions,
+                                    registry,
+                                ))
                                 .for_each(|(rr, v)| rr.iter_mut().for_each(|r| r.push(v))),
                         }
                     } else {
                         result = match vector {
-                            VectorExpression::Reference(vector) => {
-                                let f = |i| state.get_vector_variable(i);
-                                vector
-                                    .eval(state, registry, &f, &registry.vector_tables)
-                                    .iter()
-                                    .map(|v| {
-                                        let mut rr = result[0].clone();
-                                        rr.iter_mut().for_each(|r| r.push(*v));
-                                        rr
-                                    })
-                                    .collect()
-                            }
+                            VectorExpression::Reference(vector) => vector
+                                .eval(state, function_cache, state_functions, registry)
+                                .iter()
+                                .map(|v| {
+                                    let mut rr = result[0].clone();
+                                    rr.iter_mut().for_each(|r| r.push(*v));
+                                    rr
+                                })
+                                .collect(),
                             _ => vector
-                                .eval(state, registry)
+                                .eval(state, function_cache, state_functions, registry)
                                 .into_iter()
                                 .map(|v| {
                                     let mut rr = result[0].clone();
@@ -819,6 +870,8 @@ mod test {
     fn vector_table_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let tables = &registry.integer_tables;
         let expression = TableVectorExpression::Table(
             0,
@@ -831,13 +884,24 @@ mod test {
                 VectorOrElementExpression::Element(ElementExpression::Constant(0)),
             ],
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![100, 300]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![100, 300]
+        );
     }
 
     #[test]
     fn vector_table_sum_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let tables = &registry.integer_tables;
         let mut set = Set::with_capacity(3);
         set.insert(0);
@@ -856,7 +920,16 @@ mod test {
                 ))),
             ],
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![300, 700]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![300, 700]
+        );
         let mut set = Set::with_capacity(3);
         set.insert(2);
         let expression = TableVectorExpression::TableReduce(
@@ -873,39 +946,79 @@ mod test {
                 ))),
             ],
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![700, 300]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![700, 300]
+        );
     }
 
     #[test]
     fn vector_table_1d_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let tables = &registry.integer_tables;
         let expression = TableVectorExpression::Table1D(
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![10, 20]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![10, 20]
+        );
         let expression = TableVectorExpression::Table1D(
             0,
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
                 ReferenceExpression::Constant(vec![0, 1]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![20, 10]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![20, 10]
+        );
     }
 
     #[test]
     fn vector_table_2d_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let tables = &registry.integer_tables;
         let expression = TableVectorExpression::Table2D(
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![10, 50]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![10, 50]
+        );
         let expression = TableVectorExpression::Table2D(
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
@@ -913,7 +1026,16 @@ mod test {
                 ReferenceExpression::Constant(vec![0, 1]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![20, 40]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![20, 40]
+        );
         let expression = TableVectorExpression::Table2D(
             0,
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
@@ -921,7 +1043,16 @@ mod test {
             ))),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![40, 20]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![40, 20]
+        );
         let expression = TableVectorExpression::Table2D(
             0,
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
@@ -931,20 +1062,40 @@ mod test {
                 ReferenceExpression::Constant(vec![0, 1]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![50, 10]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![50, 10]
+        );
     }
 
     #[test]
     fn vector_table_2d_x_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let tables = &registry.integer_tables;
         let expression = TableVectorExpression::Table2DX(
             0,
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![10, 40]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![10, 40]
+        );
         let expression = TableVectorExpression::Table2DX(
             0,
             VectorExpression::Reverse(Box::new(VectorExpression::Reference(
@@ -952,20 +1103,40 @@ mod test {
             ))),
             ElementExpression::Constant(0),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![40, 10]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![40, 10]
+        );
     }
 
     #[test]
     fn vector_table_2d_y_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let tables = &registry.integer_tables;
         let expression = TableVectorExpression::Table2DY(
             0,
             ElementExpression::Constant(0),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![10, 20]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![10, 20]
+        );
         let expression = TableVectorExpression::Table2DY(
             0,
             ElementExpression::Constant(0),
@@ -973,13 +1144,24 @@ mod test {
                 ReferenceExpression::Constant(vec![0, 1]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![20, 10]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![20, 10]
+        );
     }
 
     #[test]
     fn vector_table_2d_x_sum_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let tables = &registry.integer_tables;
         let mut set = Set::with_capacity(3);
         set.insert(0);
@@ -990,7 +1172,16 @@ mod test {
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
             SetExpression::Reference(ReferenceExpression::Constant(set.clone())),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![30, 90]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![30, 90]
+        );
         let expression = TableVectorExpression::Table2DXReduce(
             ReduceOperator::Sum,
             0,
@@ -999,7 +1190,16 @@ mod test {
                 ReferenceExpression::Constant(set.clone()),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![30, 60]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![30, 60]
+        );
         let expression = TableVectorExpression::Table2DXReduce(
             ReduceOperator::Sum,
             0,
@@ -1008,7 +1208,16 @@ mod test {
             ))),
             SetExpression::Reference(ReferenceExpression::Constant(set.clone())),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![90, 30]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![90, 30]
+        );
         let expression = TableVectorExpression::Table2DXReduce(
             ReduceOperator::Sum,
             0,
@@ -1019,13 +1228,24 @@ mod test {
                 ReferenceExpression::Constant(set),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![60, 30]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![60, 30]
+        );
     }
 
     #[test]
     fn vector_table_2d_y_sum_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let tables = &registry.integer_tables;
         let mut set = Set::with_capacity(3);
         set.insert(0);
@@ -1036,7 +1256,16 @@ mod test {
             SetExpression::Reference(ReferenceExpression::Constant(set.clone())),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![50, 70]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![50, 70]
+        );
         let expression = TableVectorExpression::Table2DYReduce(
             ReduceOperator::Sum,
             0,
@@ -1045,7 +1274,16 @@ mod test {
             ))),
             VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1])),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![70, 80]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![70, 80]
+        );
         let expression = TableVectorExpression::Table2DYReduce(
             ReduceOperator::Sum,
             0,
@@ -1054,7 +1292,16 @@ mod test {
                 ReferenceExpression::Constant(vec![0, 1]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![70, 50]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![70, 50]
+        );
         let expression = TableVectorExpression::Table2DYReduce(
             ReduceOperator::Sum,
             0,
@@ -1065,7 +1312,16 @@ mod test {
                 ReferenceExpression::Constant(vec![0, 1]),
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![80, 70]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![80, 70]
+        );
     }
 
     #[test]
@@ -1110,6 +1366,8 @@ mod test {
     fn vector_table_3d_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let tables = &registry.integer_tables;
         let expression = TableVectorExpression::Table3D(
             0,
@@ -1119,13 +1377,24 @@ mod test {
                 ReferenceExpression::Constant(vec![0, 2]),
             )),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![10, 30]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![10, 30]
+        );
     }
 
     #[test]
     fn vector_table_3d_sum_eval() {
         let registry = generate_registry();
         let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
         let tables = &registry.integer_tables;
         let mut set = Set::with_capacity(3);
         set.insert(0);
@@ -1139,7 +1408,16 @@ mod test {
                 vec![0, 2],
             ))),
         );
-        assert_eq!(expression.eval(&state, &registry, tables), vec![50, 90]);
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                tables
+            ),
+            vec![50, 90]
+        );
     }
 
     #[test]
