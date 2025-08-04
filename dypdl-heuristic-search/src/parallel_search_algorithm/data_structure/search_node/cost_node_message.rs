@@ -1,7 +1,7 @@
 use super::super::arc_chain::ArcChain;
 use super::search_node_message::SearchNodeMessage;
 use crate::search_algorithm::data_structure::{
-    CreateTransitionChain, StateInformation, StateWithHashableSignatureVariables,
+    CreateTransitionChain, StateInformation, StateWithHashableSignatureVariables, TransitionWithId,
 };
 use crate::search_algorithm::CostNode;
 use dypdl::variable_type::Numeric;
@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 /// Node ordered by the cost to be sent to another thread via message passing.
 #[derive(Debug, Clone, PartialEq)]
-pub struct CostNodeMessage<T, V = Transition>
+pub struct CostNodeMessage<T, V = TransitionWithId>
 where
     V: TransitionInterface + Clone,
     Transition: From<V>,

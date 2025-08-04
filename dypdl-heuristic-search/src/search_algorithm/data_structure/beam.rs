@@ -55,6 +55,7 @@ where
 /// };
 /// use dypdl_heuristic_search::search_algorithm::data_structure::{
 ///     Beam, GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
+///     TransitionWithId,
 /// };
 /// use std::rc::Rc;
 ///
@@ -65,18 +66,29 @@ where
 /// let mut increment = Transition::new("increment");
 /// increment.set_cost(IntegerExpression::Cost + 2);
 /// increment.add_effect(signature, signature + 1).unwrap();
-/// let increment = Rc::new(increment);
+/// let increment = Rc::new(TransitionWithId {
+///     transition: increment,
+///     forced: false,
+///     id: 0,
+/// });
 ///
 /// let mut decrement = Transition::new("decrement");
 /// decrement.set_cost(IntegerExpression::Cost + 3);
 /// decrement.add_effect(signature, signature - 1).unwrap();
-/// let decrement = Rc::new(decrement);
-///
+/// let decrement = Rc::new(TransitionWithId {
+///     transition: decrement,
+///     forced: false,
+///     id: 1,
+/// });
 /// let mut produce = Transition::new("produce");
 /// produce.set_cost(IntegerExpression::Cost + 1);
 /// produce.add_effect(signature, signature + 1).unwrap();
 /// produce.add_effect(resource, resource + 1).unwrap();
-/// let produce = Rc::new(produce);
+/// let produce = Rc::new(TransitionWithId {
+///     transition: produce,
+///     forced: false,
+///     id: 2,
+/// });
 ///
 /// let model = Rc::new(model);
 /// let mut registry = StateRegistry::new(model.clone());

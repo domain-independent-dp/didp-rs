@@ -1,5 +1,6 @@
 use super::data_structure::{
     exceed_bound, BfsNode, ParentAndChildStateFunctionCache, StateRegistry, SuccessorGenerator,
+    TransitionWithId,
 };
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, Search, SearchInput, Solution};
@@ -103,20 +104,20 @@ use std::rc::Rc;
 pub struct BestFirstSearch<'a, T, N, E, B, V = Transition>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNode<T, V>,
+    N: BfsNode<T, TransitionWithId<V>>,
     E: FnMut(
         &N,
-        Rc<V>,
+        Rc<TransitionWithId<V>>,
         &mut ParentAndChildStateFunctionCache,
         &mut StateRegistry<T, N>,
         Option<T>,
     ) -> Option<(Rc<N>, bool)>,
     B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
-    Transition: From<V>,
+    Transition: From<TransitionWithId<V>>,
 {
     generator: SuccessorGenerator<V>,
-    suffix: &'a [V],
+    suffix: &'a [TransitionWithId<V>],
     transition_evaluator: E,
     base_cost_evaluator: B,
     primal_bound: Option<T>,
@@ -125,7 +126,7 @@ where
     open: BinaryHeap<Rc<N>>,
     registry: StateRegistry<T, N>,
     function_cache: ParentAndChildStateFunctionCache,
-    applicable_transitions: Vec<Rc<V>>,
+    applicable_transitions: Vec<Rc<TransitionWithId<V>>>,
     time_keeper: TimeKeeper,
     solution: Solution<T>,
     phantom: PhantomData<N>,
@@ -134,17 +135,17 @@ where
 impl<T, N, E, B, V> BestFirstSearch<'_, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNode<T, V>,
+    N: BfsNode<T, TransitionWithId<V>>,
     E: FnMut(
         &N,
-        Rc<V>,
+        Rc<TransitionWithId<V>>,
         &mut ParentAndChildStateFunctionCache,
         &mut StateRegistry<T, N>,
         Option<T>,
     ) -> Option<(Rc<N>, bool)>,
     B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
-    Transition: From<V>,
+    Transition: From<TransitionWithId<V>>,
 {
     /// Creates a new best-first search solver.
     pub fn new(
@@ -203,21 +204,21 @@ where
 impl<T, N, E, B, V> Search<T> for BestFirstSearch<'_, T, N, E, B, V>
 where
     T: variable_type::Numeric + Ord + fmt::Display,
-    N: BfsNode<T, V>,
+    N: BfsNode<T, TransitionWithId<V>>,
     E: FnMut(
         &N,
-        Rc<V>,
+        Rc<TransitionWithId<V>>,
         &mut ParentAndChildStateFunctionCache,
         &mut StateRegistry<T, N>,
         Option<T>,
     ) -> Option<(Rc<N>, bool)>,
     B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
-    Transition: From<V>,
+    Transition: From<TransitionWithId<V>>,
 {
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
         self.time_keeper.start();
-        let model = &self.generator.model;
+        let model = self.generator.model.clone();
 
         while let Some(node) = self.open.pop() {
             if node.is_closed() {
@@ -225,8 +226,8 @@ where
             }
             node.close();
 
-            if let Some(dual_bound) = node.bound(model) {
-                if exceed_bound(model, dual_bound, self.primal_bound) {
+            if let Some(dual_bound) = node.bound(&model) {
+                if exceed_bound(&model, dual_bound, self.primal_bound) {
                     if N::ordered_by_bound() {
                         self.open.clear();
                     }
@@ -235,20 +236,20 @@ where
 
                 if N::ordered_by_bound() || self.open.is_empty() {
                     self.solution.time = self.time_keeper.elapsed_time();
-                    update_bound_if_better(&mut self.solution, dual_bound, model, self.quiet);
+                    update_bound_if_better(&mut self.solution, dual_bound, &model, self.quiet);
                 }
             }
 
             self.function_cache.parent.clear();
 
             if let Some((cost, suffix)) = get_solution_cost_and_suffix(
-                model,
+                &model,
                 &*node,
                 self.suffix,
                 &mut self.base_cost_evaluator,
                 &mut self.function_cache,
             ) {
-                if !exceed_bound(model, cost, self.primal_bound) {
+                if !exceed_bound(&model, cost, self.primal_bound) {
                     self.primal_bound = Some(cost);
                     let time = self.time_keeper.elapsed_time();
                     update_solution(&mut self.solution, &*node, cost, suffix, time, self.quiet);

@@ -11,6 +11,7 @@ fn didppy(_: Python, m: Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<model::ObjectTypePy>()?;
     m.add_class::<model::ModelPy>()?;
     m.add_class::<model::TransitionPy>()?;
+    m.add_class::<model::TransitionIdPy>()?;
     m.add_class::<model::StatePy>()?;
     m.add_class::<model::ElementTable1DPy>()?;
     m.add_class::<model::ElementTable2DPy>()?;

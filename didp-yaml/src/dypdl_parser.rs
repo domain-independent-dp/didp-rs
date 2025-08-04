@@ -7,6 +7,7 @@ mod parse_expression_from_yaml;
 mod state_function_parser;
 mod state_parser;
 mod table_registry_parser;
+mod transition_dominance_parser;
 mod transition_parser;
 
 pub use base_case_parser::load_base_case_from_yaml;
@@ -23,7 +24,7 @@ use dypdl::expression::{
 };
 use dypdl::variable_type::Element;
 use dypdl::{CostType, GroundedCondition, Model, ModelErr, ReduceFunction, StateFunctions};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::error::Error;
 use yaml_rust::Yaml;
 
@@ -318,6 +319,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
     let mut forward_forced_transitions = Vec::new();
     let mut backward_transitions = Vec::new();
     let mut backward_forced_transitions = Vec::new();
+    let mut transition_full_names = FxHashSet::default();
     if let Some(array) = domain.get(&yaml_rust::Yaml::from_str("transitions")) {
         for transition in util::get_array(array)? {
             let (transition, forced, backward) = load_transitions_from_yaml(
@@ -327,6 +329,17 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
                 &table_registry,
                 &cost_type,
             )?;
+
+            for t in &transition {
+                if !transition_full_names.insert(t.get_full_name()) {
+                    return Err(ModelErr::new(format!(
+                        "duplicate transition name `{}`",
+                        t.get_full_name()
+                    ))
+                    .into());
+                }
+            }
+
             if forced {
                 if backward {
                     backward_forced_transitions.extend(transition)
@@ -365,6 +378,33 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
     if forward_transitions.is_empty() && backward_transitions.is_empty() {
         return Err(ModelErr::new(String::from("no transitions")).into());
     }
+
+    let mut transition_dominance = Vec::new();
+    if let Some(array) = domain.get(&yaml_rust::Yaml::from_str("transition_dominance")) {
+        transition_dominance.extend(
+            transition_dominance_parser::load_transition_dominance_from_yaml(
+                array,
+                &state_metadata,
+                &state_functions,
+                &table_registry,
+                &forward_transitions,
+                &backward_transitions,
+            )?,
+        );
+    }
+    if let Some(array) = problem.get(&yaml_rust::Yaml::from_str("transition_dominance")) {
+        transition_dominance.extend(
+            transition_dominance_parser::load_transition_dominance_from_yaml(
+                array,
+                &state_metadata,
+                &state_functions,
+                &table_registry,
+                &forward_transitions,
+                &backward_transitions,
+            )?,
+        );
+    }
+
     let mut dual_bounds = vec![];
     if let Some(array) = domain.get(&yaml_rust::Yaml::from_str("dual_bounds")) {
         let parameters = FxHashMap::default();
@@ -444,6 +484,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
         backward_transitions,
         backward_forced_transitions,
         dual_bounds,
+        transition_dominance,
     })
 }
 
@@ -1476,6 +1517,92 @@ target:
             v1,
             10,
         )]);
+        assert!(result.is_ok());
+
+        assert_eq!(model, expected);
+    }
+
+    #[test]
+    fn model_load_from_yaml_with_transition_dominance_ok() {
+        let domain = r"
+state_variables:
+        - name: v1
+          type: integer
+transitions:
+        - name: increase
+          cost: (+ cost 1)
+          effect:
+              v1: (+ v1 1)
+        - name: square
+          cost: (+ cost 1)
+          effect:
+              v1: (* v1 v1)
+base_cases:
+        - [(>= v1 10)]
+transition_dominance:
+        - dominating:
+            name: square
+          dominated:
+            name: increase
+          conditions:
+            - (> v1 1)
+";
+
+        let problem = r"
+target:
+        v1: 0
+";
+
+        let domain = yaml_rust::YamlLoader::load_from_str(domain);
+        assert!(domain.is_ok());
+        let domain = domain.unwrap();
+        assert_eq!(domain.len(), 1);
+        let domain = &domain[0];
+
+        let problem = yaml_rust::YamlLoader::load_from_str(problem);
+        assert!(problem.is_ok());
+        let problem = problem.unwrap();
+        assert_eq!(problem.len(), 1);
+        let problem = &problem[0];
+
+        let model = load_model_from_yaml(domain, problem);
+        assert!(model.is_ok());
+        let model = model.unwrap();
+
+        let mut expected = Model::default();
+
+        let result = expected.add_integer_variable("v1", 0);
+        assert!(result.is_ok());
+        let v1 = result.unwrap();
+
+        let mut transition = Transition::new("increase");
+        transition.set_cost(IntegerExpression::Cost + 1);
+        let result = transition.add_effect(v1, v1 + 1);
+        assert!(result.is_ok());
+        let result = expected.add_forward_transition(transition);
+        assert!(result.is_ok());
+        let id1 = result.unwrap();
+
+        let mut transition = Transition::new("square");
+        transition.set_cost(IntegerExpression::Cost + 1);
+        let result = transition.add_effect(v1, v1 * v1);
+        assert!(result.is_ok());
+        let result = expected.add_forward_transition(transition);
+        assert!(result.is_ok());
+        let id2 = result.unwrap();
+
+        let result = expected.add_base_case(vec![Condition::comparison_i(
+            ComparisonOperator::Ge,
+            v1,
+            10,
+        )]);
+        assert!(result.is_ok());
+
+        let result = expected.add_transition_dominance_with_conditions(
+            &id2,
+            &id1,
+            vec![Condition::comparison_i(ComparisonOperator::Gt, v1, 1)],
+        );
         assert!(result.is_ok());
 
         assert_eq!(model, expected);

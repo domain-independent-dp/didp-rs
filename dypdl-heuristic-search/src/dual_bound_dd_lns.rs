@@ -1,8 +1,8 @@
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
-    beam_search, data_structure::ParentAndChildStateFunctionCache, rollout, Cabs,
-    CabsParameters, CostNode, DdLns, DdLnsParameters, FNode, NeighborhoodSearchInput, Search,
-    SearchInput, Solution, StateInRegistry, SuccessorGenerator, TransitionMutex, TransitionWithId,
+    beam_search, data_structure::ParentAndChildStateFunctionCache, rollout, Cabs, CabsParameters,
+    CostNode, DdLns, DdLnsParameters, FNode, NeighborhoodSearchInput, Search, SearchInput,
+    Solution, StateInRegistry, SuccessorGenerator, TransitionMutex, TransitionWithId,
 };
 use dypdl::{variable_type, StateFunctionCache, Transition};
 use std::fmt;
@@ -73,7 +73,7 @@ where
     T: variable_type::Numeric + fmt::Display + Ord + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
+    let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
     let base_cost_evaluator = move |cost, base_cost| f_evaluator_type.eval(cost, base_cost);
     let root_cost = match f_evaluator_type {
         FEvaluatorType::Plus => T::zero(),

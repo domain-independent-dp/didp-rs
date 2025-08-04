@@ -174,6 +174,7 @@ Further optimization
 We can further optimize this DP model by considering dominance relations between scenes:
 given two scenes :math:`s_1` and :math:`s_2`, when some conditions are satisfied, we can prove that scheduling :math:`s_1` first is always better.
 This can be ensured by preconditions: we can add a precondition to the transition for :math:`s_2` that states there is no such :math:`s_1` in :math:`Q`.
+Alternately, we can use :doc:`transition dominance <transition-dominance>` to define a dominance relation between transitions.
 
 We do not go into details here.
 If you are interested in this topic, please refer :cite:t:`GarciaDeLaBanda2011` and :cite:t:`DIDPAnytime`.

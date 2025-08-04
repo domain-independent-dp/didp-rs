@@ -94,6 +94,10 @@ pub fn parse_expression<'a>(
                 parse_round(name, rest, metadata, functions, registry, parameters)
             {
                 Ok(result)
+            } else if let Some((expression, rest)) =
+                parse_parameterized_state_function(name, rest, functions, parameters)?
+            {
+                Ok((expression, rest))
             } else {
                 let (x, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
                 let (expression, rest) =
@@ -115,6 +119,20 @@ pub fn parse_expression<'a>(
             Ok((expression, rest))
         }
     }
+}
+
+fn parse_parameterized_state_function<'a>(
+    name: &str,
+    tokens: &'a [String],
+    functions: &StateFunctions,
+    parameters: &FxHashMap<String, usize>,
+) -> Result<Option<(ContinuousExpression, &'a [String])>, ParseErr> {
+    let (name, rest) = util::parse_parameterized_state_function_name(name, tokens, parameters)?;
+
+    functions
+        .get_continuous_function(&name)
+        .map(|expression| Ok(Some((expression, rest))))
+        .unwrap_or_else(|_| Ok(None))
 }
 
 fn parse_reduce(
@@ -648,6 +666,64 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, expected);
         assert_eq!(rest, &tokens[1..]);
+    }
+
+    #[test]
+    fn parse_parameterized_continuous_state_function_ok() {
+        let metadata = StateMetadata::default();
+        let registry = TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let mut functions = StateFunctions::default();
+        let result =
+            functions.add_continuous_function("sf_0_1_2", ContinuousExpression::Constant(0.0));
+        assert!(result.is_ok());
+        let expected = result.unwrap();
+
+        let tokens: Vec<_> = ["(", "sf", "a", "1", "b", ")", "1", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, expected);
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_parameterized_continuous_state_function_non_exist_err() {
+        let metadata = StateMetadata::default();
+        let registry = TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let functions = StateFunctions::default();
+
+        let tokens: Vec<_> = ["(", "sf", "a", "1", "b", ")", "1", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_parameterized_continuous_state_function_no_closing_err() {
+        let metadata = StateMetadata::default();
+        let registry = TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let mut functions = StateFunctions::default();
+        let result =
+            functions.add_continuous_function("sf_0_1_2", ContinuousExpression::Constant(0.0));
+        assert!(result.is_ok());
+
+        let tokens: Vec<_> = ["(", "sf", "a", "1", "b"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_err());
     }
 
     #[test]

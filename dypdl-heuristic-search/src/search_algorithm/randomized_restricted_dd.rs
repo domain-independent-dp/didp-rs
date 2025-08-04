@@ -80,14 +80,14 @@ pub struct RandomizedRestrictedDDParameters<'a, T, V: TransitionInterface> {
 ///     &f_evaluator,
 ///     primal_bound,
 /// );
-/// let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
-/// let input = SearchInput::<_, TransitionWithId> {
+/// let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
+/// let input = SearchInput::<_> {
 ///     node,
 ///     generator,
 ///     solution_suffix: &[],
 /// };
 /// let transition_evaluator =
-///     move |node: &FNode<_, TransitionWithId>, transition, cache: &mut _, registry: &mut _, primal_bound| {
+///     move |node: &FNode<_>, transition, cache: &mut _, registry: &mut _, primal_bound| {
 ///         node.insert_successor_node(
 ///             transition,
 ///             cache,
@@ -109,7 +109,7 @@ pub struct RandomizedRestrictedDDParameters<'a, T, V: TransitionInterface> {
 /// assert!(!solution.is_infeasible);
 /// ```
 pub fn randomized_restricted_dd<'a, T, N, E, B, V>(
-    input: &'a SearchInput<'a, N, TransitionWithId<V>>,
+    input: &'a SearchInput<'a, N, V>,
     mut transition_evaluator: E,
     mut base_cost_evaluator: B,
     parameters: RandomizedRestrictedDDParameters<'a, T, V>,
@@ -139,7 +139,7 @@ where
     let keep_all_layers = parameters.beam_search_parameters.keep_all_layers;
 
     let model = &input.generator.model;
-    let generator = &input.generator;
+    let mut generator = input.generator.clone();
     let suffix = input.solution_suffix;
     let mut current_beam = Vec::<Rc<N>>::with_capacity(beam_size);
     let mut next_beam = Vec::with_capacity(beam_size);

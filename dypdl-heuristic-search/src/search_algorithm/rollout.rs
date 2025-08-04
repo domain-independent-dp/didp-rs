@@ -199,7 +199,9 @@ where
 ///     data_structure::ParentAndChildStateFunctionCache,
 ///     FNode, StateInRegistry, get_solution_cost_and_suffix,
 /// };
-/// use dypdl_heuristic_search::search_algorithm::data_structure::GetTransitions;
+/// use dypdl_heuristic_search::search_algorithm::data_structure::{
+///     GetTransitions, TransitionWithId,
+/// };
 /// use dypdl_heuristic_search::search_algorithm::util::update_solution;
 /// use std::rc::Rc;
 ///
@@ -210,6 +212,11 @@ where
 /// let mut transition = Transition::new("transition");
 /// transition.add_effect(var, var + 1).unwrap();
 /// transition.set_cost(IntegerExpression::Cost + 1);
+/// let transition = TransitionWithId {
+///     transition,
+///     forced: false,
+///     id: 0,
+/// };
 ///
 /// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
 /// let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
@@ -401,7 +408,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::super::data_structure::FNode;
+    use super::super::data_structure::{FNode, TransitionWithId};
     use super::*;
     use dypdl::expression::*;
     use dypdl::prelude::*;
@@ -791,6 +798,11 @@ mod tests {
         let mut transition = Transition::new("transition");
         transition.add_effect(var, var + 1).unwrap();
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
@@ -846,6 +858,11 @@ mod tests {
         let mut transition = Transition::new("transition");
         transition.add_effect(var, var + 1).unwrap();
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &StateInRegistry| g + h;

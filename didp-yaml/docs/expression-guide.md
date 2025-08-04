@@ -117,6 +117,14 @@ It returns element the value of element variable `<variable name>`.
 
 It returns the value of element state function `<state function name>`.
 
+If a state function is defined with a parameter, you can specify a particular instantiation with the following syntax.
+
+```
+(<state function name> <element constant 1>, ..., <element constant n>)
+```
+
+Unlike a table, only immediate values and parameters are allowed as arguments.
+
 ### Arithmetic Operations
 
 ```
@@ -304,7 +312,13 @@ For example, suppose that a table named `table1` is 3-dimensional.
 
 It returns the value of integer state function `<state function name>`.
 
-It returns the value of integer variable `<variable name>`.
+If a state function is defined with a parameter, you can specify a particular instantiation with the following syntax.
+
+```
+(<state function name> <element constant 1>, ..., <element constant n>)
+```
+
+Unlike a table, only immediate values and parameters are allowed as arguments.
 
 ### Arithmetic Operations
 
@@ -407,6 +421,12 @@ An integer variable can also be used in a continuous expression.
 It returns the value of continuous state function `<state function name>`.
 An integer state function can also be used in a continuous expression.
 
+If a state function is defined with a parameter, you can specify a particular instantiation with the following syntax.
+
+```
+(<state function name> <element constant 1>, ..., <element constant n>)
+```
+
 ### Arithmetic Operations
 
 ```
@@ -485,6 +505,12 @@ The number of element expressions must be the same as `args` of the table.
 ```
 
 It returns the value of bool state function `<state function name>`.
+
+If a state function is defined with a parameter, you can specify a particular instantiation with the following syntax.
+
+```
+(<state function name> <element constant 1>, ..., <element constant n>)
+```
 
 ### Arithmetic Comparison
 

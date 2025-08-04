@@ -84,11 +84,11 @@ pub struct LnbsParameters<T> {
 /// let h_evaluator = |_: &_, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
-/// let successor_generator = SuccessorGenerator::<TransitionWithId>::from_model(
+/// let successor_generator = SuccessorGenerator::<Transition>::from_model(
 ///     model.clone(), false,
 /// );
 /// let t_model = model.clone();
-/// let transition_evaluator = move |node: &FNode<_, _>, transition, cache: &mut _, primal_bound| {
+/// let transition_evaluator = move |node: &FNode<_>, transition, cache: &mut _, primal_bound| {
 ///     node.generate_successor_node(
 ///         transition,
 ///         cache,
@@ -99,7 +99,7 @@ pub struct LnbsParameters<T> {
 ///     )
 /// };
 /// let base_cost_evaluator = |cost, base_cost| cost + base_cost;
-/// let beam_search = move |input: &SearchInput<_, _>, parameters| {
+/// let beam_search = move |input: &SearchInput<_>, parameters| {
 ///     beam_search(input, &transition_evaluator, base_cost_evaluator, parameters)
 /// };
 /// let node_generator = |state, cost| {
@@ -165,16 +165,13 @@ pub struct Lnbs<
     B,
     G,
     V = Transition,
-    D = Rc<V>,
+    D = Rc<TransitionWithId<V>>,
     R = Rc<Model>,
     K = Rc<HashableSignatureVariables>,
 > where
     T: variable_type::Numeric + Display,
     <T as str::FromStr>::Err: Debug,
-    B: FnMut(
-        &SearchInput<N, TransitionWithId<V>, D, R>,
-        BeamSearchParameters<T>,
-    ) -> Solution<T, TransitionWithId<V>>,
+    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, TransitionWithId<V>>,
     G: FnMut(StateInRegistry<K>, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
     D: Deref<Target = TransitionWithId<V>> + Clone,
@@ -186,7 +183,7 @@ pub struct Lnbs<
         + Deref<Target = HashableSignatureVariables>
         + From<HashableSignatureVariables>,
 {
-    input: NeighborhoodSearchInput<T, N, G, StateInRegistry<K>, TransitionWithId<V>, D, R>,
+    input: NeighborhoodSearchInput<T, N, G, StateInRegistry<K>, V, D, R>,
     beam_search: B,
     max_beam_size: Option<usize>,
     has_negative_cost: bool,
@@ -215,13 +212,10 @@ impl<T, N, B, G, V, D, R, K> Lnbs<T, N, B, G, V, D, R, K>
 where
     T: variable_type::Numeric + Ord + Display,
     <T as str::FromStr>::Err: Debug,
-    B: FnMut(
-        &SearchInput<N, TransitionWithId<V>, D, R>,
-        BeamSearchParameters<T>,
-    ) -> Solution<T, TransitionWithId<V>>,
+    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, TransitionWithId<V>>,
     G: FnMut(StateInRegistry<K>, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
-    Transition: From<V>,
+    Transition: From<TransitionWithId<V>>,
     D: Deref<Target = TransitionWithId<V>> + From<TransitionWithId<V>> + Clone,
     R: Deref<Target = Model> + Clone,
     K: Hash
@@ -233,7 +227,7 @@ where
 {
     /// Create a new LNBS solver.
     pub fn new(
-        input: NeighborhoodSearchInput<T, N, G, StateInRegistry<K>, TransitionWithId<V>, D, R>,
+        input: NeighborhoodSearchInput<T, N, G, StateInRegistry<K>, V, D, R>,
         beam_search: B,
         transition_mutex: TransitionMutex,
         parameters: LnbsParameters<T>,
@@ -386,7 +380,7 @@ where
                     suffix,
                 )
             };
-            let input = SearchInput::<N, TransitionWithId<V>, D, R> {
+            let input = SearchInput::<N, V, D, R> {
                 node,
                 generator,
                 solution_suffix: suffix,
@@ -675,10 +669,7 @@ impl<T, N, B, G, V, D, R, K> Search<T> for Lnbs<T, N, B, G, V, D, R, K>
 where
     T: variable_type::Numeric + Ord + Display,
     <T as str::FromStr>::Err: Debug,
-    B: FnMut(
-        &SearchInput<N, TransitionWithId<V>, D, R>,
-        BeamSearchParameters<T>,
-    ) -> Solution<T, TransitionWithId<V>>,
+    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, TransitionWithId<V>>,
     G: FnMut(StateInRegistry<K>, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
     Transition: From<V>,

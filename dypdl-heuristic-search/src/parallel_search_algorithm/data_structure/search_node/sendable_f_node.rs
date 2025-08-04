@@ -2,11 +2,11 @@ use super::super::arc_chain::ArcChain;
 use super::super::concurrent_state_registry::ConcurrentStateRegistry;
 use crate::search_algorithm::data_structure::{
     exceed_bound, CreateTransitionChain, GetTransitions, HashableSignatureVariables,
-    ParentAndChildStateFunctionCache, StateInformation,
+    ParentAndChildStateFunctionCache, StateInformation, TransitionWithId,
 };
 use crate::search_algorithm::{BfsNode, StateInRegistry};
 use dypdl::variable_type::Numeric;
-use dypdl::{StateFunctionCache, Model, ReduceFunction, Transition, TransitionInterface};
+use dypdl::{Model, ReduceFunction, StateFunctionCache, Transition, TransitionInterface};
 use std::cmp::Ordering;
 use std::fmt::Display;
 use std::sync::atomic;
@@ -22,7 +22,7 @@ use std::sync::Arc;
 /// In minimization, a node having a lower f-value is `Greater` in `Ord`.
 /// In maximization , a node having a higher f-value is `Greater` in `Ord`.
 #[derive(Debug)]
-pub struct SendableFNode<T, V = Transition>
+pub struct SendableFNode<T, V = TransitionWithId>
 where
     T: Numeric,
     V: TransitionInterface + Clone,
@@ -162,7 +162,7 @@ where
     /// use dypdl_heuristic_search::SendableFNode;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
+    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
     /// };
     /// use std::sync::Arc;
     ///
@@ -181,6 +181,11 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let transition = TransitionWithId {
+    ///     transition,
+    ///     forced: false,
+    ///     id: 0,
+    /// };
     /// let mut function_cache_for_expected = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry<_> = transition.apply(
     ///     &model.target, &mut function_cache_for_expected, &model.state_functions, &model.table_registry,
@@ -276,7 +281,7 @@ where
     /// use dypdl_heuristic_search::parallel_search_algorithm::ConcurrentStateRegistry;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
+    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
     /// };
     /// use std::sync::Arc;
     ///
@@ -296,6 +301,11 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let transition = TransitionWithId {
+    ///     transition,
+    ///     forced: false,
+    ///     id: 0,
+    /// };
     /// let mut function_cache_for_expected = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry<_> = transition.apply(
     ///     &model.target, &mut function_cache_for_expected, &model.state_functions, &model.table_registry,
@@ -746,8 +756,7 @@ mod tests {
             &model.table_registry,
         );
 
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -807,8 +816,7 @@ mod tests {
             &model.table_registry,
         );
 
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -855,8 +863,7 @@ mod tests {
         assert!(result.is_ok());
 
         let state = model.target.clone();
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -901,8 +908,7 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = model.target.clone();
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -947,8 +953,7 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = model.target.clone();
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -992,8 +997,7 @@ mod tests {
         let v2 = v2.unwrap();
 
         let state = model.target.clone();
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -1048,6 +1052,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let expected_state: StateInRegistry<_> = transition.apply(
@@ -1057,8 +1066,7 @@ mod tests {
             &model.table_registry,
         );
 
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -1116,6 +1124,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let expected_state: StateInRegistry<_> = transition.apply(
@@ -1125,8 +1138,7 @@ mod tests {
             &model.table_registry,
         );
 
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -1177,8 +1189,7 @@ mod tests {
         assert!(result.is_ok());
 
         let state = StateInRegistry::from(model.target.clone());
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let registry = ConcurrentStateRegistry::<_, SendableFNode<_>>::new(Arc::new(model.clone()));
 
         let h_evaluator = |_: &_, _: &mut _| Some(0);
@@ -1201,6 +1212,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let result = node.insert_successor_node(
             Arc::new(transition),
@@ -1230,6 +1246,11 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
@@ -1240,8 +1261,7 @@ mod tests {
             &model.table_registry,
         );
 
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -1298,6 +1318,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
@@ -1308,8 +1333,7 @@ mod tests {
             &model.table_registry,
         );
 
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -1365,10 +1389,14 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -1416,10 +1444,14 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -1469,10 +1501,14 @@ mod tests {
         assert!(result.is_ok());
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node = SendableFNode::generate_root_node(
@@ -1522,12 +1558,16 @@ mod tests {
         assert!(result.is_ok());
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let node = SendableFNode::generate_root_node(
             state,
             &mut function_cache.parent,
@@ -1572,8 +1612,7 @@ mod tests {
 
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let node = SendableFNode::generate_root_node(
             state,
             &mut function_cache.parent,
@@ -1592,6 +1631,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let h_evaluator = |_: &_, _: &mut _| None;
         let result = node.insert_successor_node(
@@ -1619,8 +1663,7 @@ mod tests {
         let model = Arc::new(model);
 
         let state = model.target.clone();
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator_0 = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node1 = SendableFNode::<_>::generate_root_node(
@@ -1640,6 +1683,11 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
         let node2 = node1.generate_successor_node(
             Arc::new(transition),
             &mut function_cache,
@@ -1653,6 +1701,11 @@ mod tests {
 
         let mut transition = Transition::default();
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
         let registry = ConcurrentStateRegistry::<_, SendableFNode<_>>::new(model.clone());
         let node3 = node1.insert_successor_node(
             Arc::new(transition),
@@ -1708,8 +1761,7 @@ mod tests {
         let model = Arc::new(model);
 
         let state = model.target.clone();
-        let mut function_cache =
-            ParentAndChildStateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let h_evaluator_0 = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &_| g + h;
         let node1 = SendableFNode::<_>::generate_root_node(
@@ -1729,6 +1781,11 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
         let node2 = node1.generate_successor_node(
             Arc::new(transition),
             &mut function_cache,
@@ -1742,6 +1799,11 @@ mod tests {
 
         let mut transition = Transition::default();
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
         let registry = ConcurrentStateRegistry::<_, SendableFNode<_>>::new(model.clone());
         let node3 = node1.insert_successor_node(
             Arc::new(transition),

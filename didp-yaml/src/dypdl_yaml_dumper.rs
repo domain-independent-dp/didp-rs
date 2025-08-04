@@ -12,6 +12,7 @@ mod state_function_to_yaml;
 mod state_to_yaml;
 mod table_to_yaml;
 mod to_yaml;
+mod transition_dominance_to_yaml;
 mod transition_to_yaml;
 mod variable_to_yaml;
 
@@ -19,6 +20,7 @@ use base_case_to_yaml::base_case_to_yaml;
 use expression_to_string::ToYamlString;
 use table_to_yaml::{set_table_data_to_yaml, table_data_to_yaml};
 use to_yaml::ToYaml;
+use transition_dominance_to_yaml::transition_dominance_to_yaml;
 use transition_to_yaml::transition_to_yaml;
 use variable_to_yaml::*;
 
@@ -192,6 +194,32 @@ pub fn model_to_yaml(model: &Model) -> Result<(Yaml, Yaml), Box<dyn Error>> {
         problem_hash.insert(Yaml::from_str("transitions"), Yaml::Array(transitions));
     }
 
+    if !model.transition_dominance.is_empty() {
+        let mut array = Array::new();
+
+        for d in &model.transition_dominance {
+            if d.backward {
+                array.push(transition_dominance_to_yaml(
+                    &model.state_metadata,
+                    &model.state_functions,
+                    &model.table_registry,
+                    &model.backward_transitions,
+                    d,
+                )?);
+            } else {
+                array.push(transition_dominance_to_yaml(
+                    &model.state_metadata,
+                    &model.state_functions,
+                    &model.table_registry,
+                    &model.forward_transitions,
+                    d,
+                )?);
+            }
+        }
+
+        problem_hash.insert(Yaml::from_str("transition_dominance"), Yaml::Array(array));
+    }
+
     // The base cases field
     let mut base_cases = Array::new();
     for bc in &model.base_cases {
@@ -317,7 +345,6 @@ pub fn dump_model(model: &Model) -> Result<(String, String), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use crate::dypdl_parser;
 
@@ -473,6 +500,86 @@ mod tests {
             assert_eq!(state_functions, &expected);
         } else {
             panic!("The domain yaml is not a hash");
+        }
+    }
+
+    #[test]
+    fn model_with_transition_dominance_to_yaml_ok() {
+        let mut model = Model::default();
+        let result = model.add_integer_variable("v", 0);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+
+        let transition1 = Transition::new("transition1");
+        let result = model.add_forward_transition(transition1);
+        assert!(result.is_ok());
+        let id1 = result.unwrap();
+        let transition2 = Transition::new("transition2");
+        let result = model.add_forward_transition(transition2);
+        assert!(result.is_ok());
+        let id2 = result.unwrap();
+
+        let result = model.add_transition_dominance_with_conditions(
+            &id1,
+            &id2,
+            vec![
+                Condition::comparison_i(ComparisonOperator::Ge, v, 0),
+                Condition::comparison_i(ComparisonOperator::Le, v, 10),
+            ],
+        );
+        assert!(result.is_ok());
+
+        let transition3 = Transition::new("transition3");
+        let result = model.add_backward_transition(transition3);
+        assert!(result.is_ok());
+        let id3 = result.unwrap();
+        let transition4 = Transition::new("transition4");
+        let result = model.add_backward_transition(transition4);
+        assert!(result.is_ok());
+        let id4 = result.unwrap();
+
+        let result = model.add_transition_dominance(&id3, &id4);
+        assert!(result.is_ok());
+
+        let yam_result = model_to_yaml(&model);
+        assert!(yam_result.is_ok());
+        let (_, problem_yaml) = yam_result.unwrap();
+
+        let expected = Yaml::Array(vec![
+            Yaml::Hash({
+                let mut hash = Hash::new();
+                let mut dominating_hash = Hash::new();
+                dominating_hash.insert(Yaml::from_str("name"), Yaml::from_str("transition1"));
+                hash.insert(Yaml::from_str("dominating"), Yaml::Hash(dominating_hash));
+                let mut dominated_hash = Hash::new();
+                dominated_hash.insert(Yaml::from_str("name"), Yaml::from_str("transition2"));
+                hash.insert(Yaml::from_str("dominated"), Yaml::Hash(dominated_hash));
+                hash.insert(
+                    Yaml::from_str("conditions"),
+                    Yaml::Array(vec![
+                        Yaml::String("(>= v 0)".to_owned()),
+                        Yaml::String("(<= v 10)".to_owned()),
+                    ]),
+                );
+                hash
+            }),
+            Yaml::Hash({
+                let mut hash = Hash::new();
+                let mut dominating_hash = Hash::new();
+                dominating_hash.insert(Yaml::from_str("name"), Yaml::from_str("transition3"));
+                hash.insert(Yaml::from_str("dominating"), Yaml::Hash(dominating_hash));
+                let mut dominated_hash = Hash::new();
+                dominated_hash.insert(Yaml::from_str("name"), Yaml::from_str("transition4"));
+                hash.insert(Yaml::from_str("dominated"), Yaml::Hash(dominated_hash));
+                hash
+            }),
+        ]);
+
+        if let Yaml::Hash(hash) = problem_yaml {
+            let result = hash.get(&Yaml::from_str("transition_dominance"));
+            assert_eq!(result, Some(&expected));
+        } else {
+            panic!("The problem yaml is not a hash");
         }
     }
 

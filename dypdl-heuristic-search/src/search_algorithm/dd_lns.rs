@@ -71,9 +71,9 @@ pub struct DdLnsParameters<T> {
 /// let h_evaluator = |_: &_, _: &mut _| Some(0);
 /// let f_evaluator = |g, h, _: &_| g + h;
 /// let primal_bound = None;
-/// let successor_generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
+/// let successor_generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
 /// let transition_evaluator =
-///     move |node: &FNode<_, _>, transition, cache: &mut _, registry: &mut _, primal_bound| {
+///     move |node: &FNode<_>, transition, cache: &mut _, registry: &mut _, primal_bound| {
 ///         node.insert_successor_node(
 ///             transition,
 ///             cache,
@@ -160,7 +160,7 @@ where
     G: FnMut(StateInRegistry, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
 {
-    input: NeighborhoodSearchInput<T, N, G, StateInRegistry, TransitionWithId<V>>,
+    input: NeighborhoodSearchInput<T, N, G, StateInRegistry, V>,
     transition_evaluator: E,
     base_cost_evaluator: B,
     beam_size: usize,
@@ -187,11 +187,11 @@ where
     B: FnMut(T, T) -> T,
     G: FnMut(StateInRegistry, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
-    Transition: From<V>,
+    Transition: From<TransitionWithId<V>>,
 {
     /// Create a new DD-LNS solver.
     pub fn new(
-        input: NeighborhoodSearchInput<T, N, G, StateInRegistry, TransitionWithId<V>>,
+        input: NeighborhoodSearchInput<T, N, G, StateInRegistry, V>,
         transition_evaluator: E,
         base_cost_evaluator: B,
         transition_mutex: TransitionMutex,
@@ -384,7 +384,7 @@ where
     B: FnMut(T, T) -> T,
     G: FnMut(StateInRegistry, T) -> Option<N>,
     V: TransitionInterface + Clone + Default,
-    Transition: From<V>,
+    Transition: From<TransitionWithId<V>>,
 {
     fn search_next(&mut self) -> Result<(Solution<T>, bool), Box<dyn Error>> {
         let (solution, is_terminated) = self.search_inner();
@@ -396,7 +396,7 @@ where
             transitions: solution
                 .transitions
                 .into_iter()
-                .map(|t| dypdl::Transition::from(t.transition))
+                .map(dypdl::Transition::from)
                 .collect(),
             expanded: solution.expanded,
             generated: solution.generated,

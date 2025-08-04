@@ -9,6 +9,7 @@ Model
 
    didppy.Model
    didppy.Transition
+   didppy.TransitionId
    didppy.ObjectType
    didppy.SetConst
 

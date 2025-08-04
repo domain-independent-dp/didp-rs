@@ -2,8 +2,8 @@ use super::data_structure::{ConcurrentStateRegistry, SendableSuccessorIterator};
 use crate::search_algorithm::data_structure::{exceed_bound, HashableSignatureVariables};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
-    data_structure::ParentAndChildStateFunctionCache, get_solution_cost_and_suffix,
-    BeamSearchParameters, BfsNode, SearchInput, Solution,
+    data_structure::{ParentAndChildStateFunctionCache, TransitionWithId},
+    get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
 };
 use dypdl::{variable_type, Model, ReduceFunction, TransitionInterface};
 use rayon::prelude::*;
@@ -43,7 +43,7 @@ use std::sync::Arc;
 ///     shared_beam_search, SendableFNode,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::{
-///     BeamSearchParameters, SearchInput, SuccessorGenerator,
+///     BeamSearchParameters, SearchInput, SuccessorGenerator, TransitionWithId,
 /// };
 /// use std::sync::Arc;
 ///
@@ -73,7 +73,7 @@ use std::sync::Arc;
 ///     &f_evaluator,
 ///     primal_bound,
 /// );
-/// let generator = SuccessorGenerator::<Transition, Arc<Transition>, Arc<_>>::from_model(
+/// let generator = SuccessorGenerator::<Transition, Arc<TransitionWithId>, Arc<_>>::from_model(
 ///     model.clone(), false,
 /// );
 /// let input = SearchInput {
@@ -100,27 +100,32 @@ use std::sync::Arc;
 /// ).unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions.len(), 1);
-/// assert_eq!(Transition::from(solution.transitions[0].clone()), increment);
+/// assert_eq!(Transition::from(solution.transitions[0].transition.clone()), increment);
 /// assert!(!solution.is_infeasible);
 /// ```
 pub fn shared_beam_search<'a, T, N, E, B, V>(
-    input: &'a SearchInput<'a, N, V, Arc<V>, Arc<Model>>,
+    input: &'a SearchInput<'a, N, V, Arc<TransitionWithId<V>>, Arc<Model>>,
     transition_evaluator: E,
     base_cost_evaluator: B,
     parameters: BeamSearchParameters<T>,
     threads: usize,
-) -> Result<Solution<T, V>, Box<dyn Error>>
+) -> Result<Solution<T, TransitionWithId<V>>, Box<dyn Error>>
 where
     T: variable_type::Numeric + Ord + Display + Send + Sync,
-    N: BfsNode<T, V, Arc<HashableSignatureVariables>> + Clone + Send + Sync,
+    N: BfsNode<T, TransitionWithId<V>, Arc<HashableSignatureVariables>> + Clone + Send + Sync,
     Arc<N>: Send + Sync,
-    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<N>
+    E: Fn(
+            &N,
+            Arc<TransitionWithId<V>>,
+            &mut ParentAndChildStateFunctionCache,
+            Option<T>,
+        ) -> Option<N>
         + Send
         + Sync,
     B: Fn(T, T) -> T + Send + Sync,
     V: TransitionInterface + Clone + Default + Send + Sync,
-    Arc<V>: Send + Sync,
-    &'a [V]: Clone + Send + Sync,
+    Arc<TransitionWithId<V>>: Send + Sync,
+    &'a [TransitionWithId<V>]: Clone + Send + Sync,
 {
     let time_keeper = parameters
         .parameters

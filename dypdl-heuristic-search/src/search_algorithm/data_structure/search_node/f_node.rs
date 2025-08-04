@@ -1,4 +1,5 @@
 use super::super::state_registry::{StateInRegistry, StateInformation, StateRegistry};
+use super::super::transition::TransitionWithId;
 use super::super::transition_chain::{CreateTransitionChain, GetTransitions, RcChain};
 use super::super::util::exceed_bound;
 use super::super::ParentAndChildStateFunctionCache;
@@ -18,7 +19,7 @@ use std::rc::Rc;
 /// In minimization, the negative of the f-value should be a lower bound on the cost of a solution extending the path to this node (dual bound).
 /// In maximization, the f-value should be an upper bound on the solution of a solution extending the path to this node (dual bound).
 #[derive(Debug, Clone)]
-pub struct FNode<T, V = Transition, R = Rc<V>, C = RcChain<V>, P = Rc<C>> {
+pub struct FNode<T, V = TransitionWithId, R = Rc<V>, C = RcChain<V>, P = Rc<C>> {
     node: CostNode<T, V, R, C, P>,
     /// h-value.
     pub h: T,
@@ -309,7 +310,7 @@ where
     /// use dypdl::prelude::*;
     /// use dypdl_heuristic_search::search_algorithm::{FNode, StateInRegistry};
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
+    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
     /// };
     /// use std::rc::Rc;
     ///
@@ -328,6 +329,11 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let transition = TransitionWithId {
+    ///     transition,
+    ///     id: 0,
+    ///     forced: false,
+    /// };
     /// let mut function_cache_for_expected = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry = transition.apply(
     ///     &model.target, &mut function_cache_for_expected, &model.state_functions, &model.table_registry,
@@ -416,7 +422,7 @@ where
     /// use dypdl::prelude::*;
     /// use dypdl_heuristic_search::search_algorithm::{FNode, StateInRegistry, StateRegistry};
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
+    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
     /// };
     /// use std::rc::Rc;
     ///
@@ -436,6 +442,11 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let transition = TransitionWithId {
+    ///     transition,
+    ///     id: 0,
+    ///     forced: false,
+    /// };
     /// let mut function_cache_for_expected = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry = transition.apply(
     ///     &model.target, &mut function_cache_for_expected, &model.state_functions, &model.table_registry,
@@ -595,8 +606,16 @@ mod tests {
     fn test_get_transition() {
         let model = Model::default();
         let state = StateInRegistry::from(model.target.clone());
-        let transition1 = Transition::new("t1");
-        let transition2 = Transition::new("t2");
+        let transition1 = TransitionWithId {
+            transition: Transition::new("t1"),
+            forced: false,
+            id: 0,
+        };
+        let transition2 = TransitionWithId {
+            transition: Transition::new("t2"),
+            forced: false,
+            id: 1,
+        };
         let cost = 10;
         let transition_chain = Some(Rc::new(RcChain::new(None, Rc::new(transition1.clone()))));
         let transition_chain = Some(Rc::new(RcChain::new(
@@ -1011,6 +1030,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = model.target.clone();
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
@@ -1078,6 +1102,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = model.target.clone();
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
@@ -1163,6 +1192,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let result = node.generate_successor_node(
             Rc::new(transition),
@@ -1208,6 +1242,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let result = node.generate_successor_node(
             Rc::new(transition),
@@ -1253,6 +1292,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let result = node.generate_successor_node(
             Rc::new(transition),
@@ -1297,6 +1341,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let h_evaluator = |_: &StateInRegistry, _: &mut _| None;
         let result = node.generate_successor_node(
@@ -1357,11 +1406,21 @@ mod tests {
         let result = transition1.add_effect(v, fun1.clone() + 1);
         assert!(result.is_ok());
         transition1.set_cost(IntegerExpression::Cost + 1);
+        let transition1 = TransitionWithId {
+            transition: transition1,
+            forced: false,
+            id: 0,
+        };
 
         let mut transition2 = Transition::default();
         let result = transition2.add_effect(v, fun1 + 2);
         assert!(result.is_ok());
         transition2.set_cost(IntegerExpression::Cost + 1);
+        let transition2 = TransitionWithId {
+            transition: transition2,
+            forced: false,
+            id: 1,
+        };
 
         let successor = node.generate_successor_node(
             Rc::new(transition1),
@@ -1411,6 +1470,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let expected_state: StateInRegistry = transition.apply(
@@ -1484,6 +1548,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let expected_state: StateInRegistry = transition.apply(
@@ -1573,6 +1642,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let result = node.insert_successor_node(
             Rc::new(transition),
@@ -1602,6 +1676,11 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
@@ -1676,6 +1755,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
@@ -1749,6 +1833,11 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
@@ -1799,6 +1888,11 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
@@ -1851,6 +1945,11 @@ mod tests {
         assert!(result.is_ok());
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
@@ -1901,8 +2000,12 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
-        assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
@@ -1971,6 +2074,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let h_evaluator = |_: &StateInRegistry, _: &mut _| None;
         let result = node.insert_successor_node(
@@ -2034,11 +2142,21 @@ mod tests {
         let result = transition1.add_effect(v, fun1.clone() + 1);
         assert!(result.is_ok());
         transition1.set_cost(IntegerExpression::Cost + 1);
+        let transition1 = TransitionWithId {
+            transition: transition1,
+            forced: false,
+            id: 0,
+        };
 
         let mut transition2 = Transition::default();
         let result = transition2.add_effect(v, fun1 + 2);
         assert!(result.is_ok());
         transition2.set_cost(IntegerExpression::Cost + 1);
+        let transition2 = TransitionWithId {
+            transition: transition2,
+            forced: false,
+            id: 0,
+        };
 
         let result = node.insert_successor_node(
             Rc::new(transition1),

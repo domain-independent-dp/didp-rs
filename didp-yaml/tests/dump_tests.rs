@@ -103,6 +103,8 @@ fn test_emit_bpp_problem() {
         new_model.backward_forced_transitions
     ));
     assert_eq!(model.dual_bounds, new_model.dual_bounds);
+    assert_eq!(model.state_functions, new_model.state_functions);
+    assert_eq!(model.transition_dominance, new_model.transition_dominance);
 }
 
 #[test]
@@ -166,6 +168,8 @@ fn test_emit_cvrp_problem() {
         new_model.backward_forced_transitions
     ));
     assert_eq!(model.dual_bounds, new_model.dual_bounds);
+    assert_eq!(model.state_functions, new_model.state_functions);
+    assert_eq!(model.transition_dominance, new_model.transition_dominance);
 }
 
 #[test]
@@ -228,6 +232,8 @@ fn test_emit_graph_clear_problem() {
         new_model.backward_forced_transitions
     ));
     assert_eq!(model.dual_bounds, new_model.dual_bounds);
+    assert_eq!(model.state_functions, new_model.state_functions);
+    assert_eq!(model.transition_dominance, new_model.transition_dominance);
 }
 
 #[test]
@@ -284,6 +290,8 @@ fn test_emit_knapsack_problem() {
         new_model.backward_forced_transitions
     );
     assert_eq!(model.dual_bounds, new_model.dual_bounds);
+    assert_eq!(model.state_functions, new_model.state_functions);
+    assert_eq!(model.transition_dominance, new_model.transition_dominance);
 }
 
 #[test]
@@ -346,4 +354,6 @@ fn test_emit_mpdtsp_problem() {
         new_model.backward_forced_transitions
     ));
     assert_eq!(model.dual_bounds, new_model.dual_bounds);
+    assert_eq!(model.state_functions, new_model.state_functions);
+    assert_eq!(model.transition_dominance, new_model.transition_dominance);
 }

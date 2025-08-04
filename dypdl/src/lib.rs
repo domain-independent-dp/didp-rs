@@ -177,8 +177,8 @@ pub mod prelude {
         IntegerResourceVariable, IntegerStateFunction, IntegerVariable, Model, ObjectType,
         ReduceFunction, ResourceVariables, Set, SetStateFunction, SetVariable, SignatureVariables,
         State, StateFunctionCache, StateFunctions, StateInterface, StateMetadata, Table1DHandle,
-        Table2DHandle, Table3DHandle, TableHandle, TableInterface, Transition, TransitionInterface,
-        Vector, VectorVariable,
+        Table2DHandle, Table3DHandle, TableHandle, TableInterface, Transition, TransitionId,
+        TransitionInterface, Vector, VectorVariable,
     };
 }
 
@@ -224,6 +224,30 @@ impl Default for ReduceFunction {
     }
 }
 
+/// ID of a transition.
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct TransitionId {
+    /// Id.
+    pub id: usize,
+    /// Whether the transition is forced.
+    pub forced: bool,
+    /// Whether the transition is backward.
+    pub backward: bool,
+}
+
+/// Transition dominance.
+#[derive(Debug, PartialEq, Clone)]
+pub struct TransitionDominance {
+    /// Transition id dominating.
+    pub dominating: usize,
+    /// Transition id dominated.
+    pub dominated: usize,
+    /// Conditions for dominance.
+    pub conditions: Vec<GroundedCondition>,
+    /// Whether the transitions are backward.
+    pub backward: bool,
+}
+
 /// DyPDL model.
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct Model {
@@ -255,6 +279,8 @@ pub struct Model {
     pub backward_forced_transitions: Vec<Transition>,
     /// Dual bounds.
     pub dual_bounds: Vec<CostExpression>,
+    /// Transition dominance.
+    pub transition_dominance: Vec<TransitionDominance>,
 }
 
 impl Model {
@@ -1582,6 +1608,26 @@ impl Model {
         self.state_functions.add_boolean_function(name, simplified)
     }
 
+    fn check_and_simplify_condition(
+        &self,
+        condition: &expression::Condition,
+    ) -> Result<GroundedCondition, ModelErr> {
+        self.check_expression(condition, false)?;
+        let simplified = condition.simplify(&self.table_registry);
+
+        match condition.simplify(&self.table_registry) {
+            expression::Condition::Constant(true) => {
+                eprintln!("constraint {:?} is always satisfied", condition)
+            }
+            expression::Condition::Constant(false) => {
+                eprintln!("constraint {:?} cannot be satisfied", condition)
+            }
+            _ => {}
+        }
+
+        Ok(simplified.into())
+    }
+
     /// Adds a state constraint.
     ///
     /// # Errors
@@ -1604,19 +1650,8 @@ impl Model {
         &mut self,
         condition: expression::Condition,
     ) -> Result<(), ModelErr> {
-        self.check_expression(&condition, false)?;
-        let simplified = condition.simplify(&self.table_registry);
-        match simplified {
-            expression::Condition::Constant(true) => {
-                eprintln!("constraint {:?} is always satisfied", condition)
-            }
-            expression::Condition::Constant(false) => {
-                eprintln!("constraint {:?} cannot be satisfied", condition)
-            }
-            _ => {}
-        }
-        self.state_constraints
-            .push(GroundedCondition::from(simplified));
+        let simplified = self.check_and_simplify_condition(&condition)?;
+        self.state_constraints.push(simplified);
         Ok(())
     }
 
@@ -1627,20 +1662,8 @@ impl Model {
         let mut simplified_conditions = Vec::with_capacity(conditions.len());
 
         for condition in conditions {
-            self.check_expression(&condition, false)?;
-            let simplified = condition.simplify(&self.table_registry);
-
-            match simplified {
-                expression::Condition::Constant(true) => {
-                    eprintln!("base case condition {:?} is always satisfied", condition)
-                }
-                expression::Condition::Constant(false) => {
-                    eprintln!("base case condition {:?} cannot be satisfied", condition)
-                }
-                _ => {}
-            }
-
-            simplified_conditions.push(GroundedCondition::from(simplified));
+            let simplified = self.check_and_simplify_condition(&condition)?;
+            simplified_conditions.push(simplified);
         }
 
         Ok(simplified_conditions)
@@ -1786,6 +1809,44 @@ impl Model {
         self.reduce_function = reduce_function
     }
 
+    /// Get a transition using its id.
+    ///
+    /// # Errors
+    ///
+    /// If no such transition.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    ///
+    /// let mut model = Model::default();
+    /// let transition = Transition::new("transition");
+    /// let id = model.add_forward_transition(transition.clone()).unwrap();
+    ///
+    /// let result = model.get_transition(&id);
+    /// assert!(result.is_ok());
+    /// assert_eq!(result.unwrap(), &transition);
+    /// ```
+    #[inline]
+    pub fn get_transition(&self, id: &TransitionId) -> Result<&Transition, ModelErr> {
+        let transitions = if id.backward {
+            if id.forced {
+                &self.backward_forced_transitions
+            } else {
+                &self.backward_transitions
+            }
+        } else if id.forced {
+            &self.forward_forced_transitions
+        } else {
+            &self.forward_transitions
+        };
+
+        transitions
+            .get(id.id)
+            .ok_or_else(|| ModelErr::new(format!("No such transition with {:?}", id)))
+    }
+
     /// Adds a forward transition.
     ///
     /// # Errors
@@ -1799,14 +1860,26 @@ impl Model {
     ///
     /// let mut model = Model::default();
     /// let transition = Transition::new("transition");
+    /// let result = model.add_forward_transition(transition);
     ///
-    /// assert!(model.add_forward_transition(transition).is_ok());
+    /// assert!(result.is_ok());
+    /// let id = result.unwrap();
+    /// assert!(!id.forced);
+    /// assert!(!id.backward);
     /// ```
     #[inline]
-    pub fn add_forward_transition(&mut self, transition: Transition) -> Result<(), ModelErr> {
+    pub fn add_forward_transition(
+        &mut self,
+        transition: Transition,
+    ) -> Result<TransitionId, ModelErr> {
         let transition = self.check_and_simplify_transition(&transition)?;
         self.forward_transitions.push(transition);
-        Ok(())
+
+        Ok(TransitionId {
+            id: self.forward_transitions.len() - 1,
+            forced: false,
+            backward: false,
+        })
     }
 
     /// Adds a forward forced transition.
@@ -1822,17 +1895,26 @@ impl Model {
     ///
     /// let mut model = Model::default();
     /// let transition = Transition::new("transition");
+    /// let result = model.add_forward_forced_transition(transition);
     ///
-    /// assert!(model.add_forward_forced_transition(transition).is_ok());
+    /// assert!(result.is_ok());
+    /// let id = result.unwrap();
+    /// assert!(id.forced);
+    /// assert!(!id.backward);
     /// ```
     #[inline]
     pub fn add_forward_forced_transition(
         &mut self,
         transition: Transition,
-    ) -> Result<(), ModelErr> {
+    ) -> Result<TransitionId, ModelErr> {
         let transition = self.check_and_simplify_transition(&transition)?;
         self.forward_forced_transitions.push(transition);
-        Ok(())
+
+        Ok(TransitionId {
+            id: self.forward_forced_transitions.len() - 1,
+            forced: true,
+            backward: false,
+        })
     }
 
     /// Adds a backward transition.
@@ -1848,14 +1930,26 @@ impl Model {
     ///
     /// let mut model = Model::default();
     /// let transition = Transition::new("transition");
+    /// let result = model.add_backward_transition(transition);
     ///
-    /// assert!(model.add_backward_transition(transition).is_ok());
+    /// assert!(result.is_ok());
+    /// let id = result.unwrap();
+    /// assert!(!id.forced);
+    /// assert!(id.backward);
     /// ```
     #[inline]
-    pub fn add_backward_transition(&mut self, transition: Transition) -> Result<(), ModelErr> {
+    pub fn add_backward_transition(
+        &mut self,
+        transition: Transition,
+    ) -> Result<TransitionId, ModelErr> {
         let transition = self.check_and_simplify_transition(&transition)?;
         self.backward_transitions.push(transition);
-        Ok(())
+
+        Ok(TransitionId {
+            id: self.backward_transitions.len() - 1,
+            forced: false,
+            backward: true,
+        })
     }
 
     /// Adds a backward forced transition.
@@ -1871,17 +1965,238 @@ impl Model {
     ///
     /// let mut model = Model::default();
     /// let transition = Transition::new("transition");
+    /// let result = model.add_backward_forced_transition(transition);
     ///
-    /// assert!(model.add_backward_forced_transition(transition).is_ok());
+    /// assert!(result.is_ok());
+    /// let id = result.unwrap();
+    /// assert!(id.forced);
+    /// assert!(id.backward);
     /// ```
     #[inline]
     pub fn add_backward_forced_transition(
         &mut self,
         transition: Transition,
-    ) -> Result<(), ModelErr> {
+    ) -> Result<TransitionId, ModelErr> {
         let transition = self.check_and_simplify_transition(&transition)?;
         self.backward_forced_transitions.push(transition);
+
+        Ok(TransitionId {
+            id: self.backward_forced_transitions.len() - 1,
+            forced: true,
+            backward: true,
+        })
+    }
+
+    fn add_transition_dominance_inner(
+        &mut self,
+        dominating: &TransitionId,
+        dominated: &TransitionId,
+        conditions: Vec<GroundedCondition>,
+    ) -> Result<(), ModelErr> {
+        if dominating.forced {
+            return Err(ModelErr::new(String::from(
+                "dominating transition should not be forced",
+            )));
+        }
+
+        if dominated.forced {
+            return Err(ModelErr::new(String::from(
+                "dominated transition should not be forced",
+            )));
+        }
+
+        if dominating.backward != dominated.backward {
+            return Err(ModelErr::new(String::from(
+                "dominating and dominated transitions should be both forward or backward",
+            )));
+        }
+
+        if dominating.id == dominated.id {
+            return Err(ModelErr::new(String::from(
+                "dominating and dominated transitions should be different",
+            )));
+        }
+
+        self.get_transition(dominating)?;
+        self.get_transition(dominated)?;
+        let transition_dominance = TransitionDominance {
+            dominating: dominating.id,
+            dominated: dominated.id,
+            conditions,
+            backward: dominating.backward,
+        };
+        self.transition_dominance.push(transition_dominance);
+
         Ok(())
+    }
+
+    /// Adds a transition dominance.
+    ///
+    /// # Errors
+    ///
+    /// If the dominating or dominated transition is forced or does not exist,
+    /// or the condition is invalid, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::ComparisonOperator;
+    ///
+    /// let mut model = Model::default();
+    /// let transition1 = Transition::new("transition1");
+    /// let id1 = model.add_forward_transition(transition1).unwrap();
+    /// let transition2 = Transition::new("transition2");
+    /// let id2 = model.add_forward_transition(transition2).unwrap();
+    ///
+    /// let result = model.add_transition_dominance(&id1, &id2);
+    /// assert!(result.is_ok());
+    /// ```
+    #[inline]
+    pub fn add_transition_dominance(
+        &mut self,
+        dominating: &TransitionId,
+        dominated: &TransitionId,
+    ) -> Result<(), ModelErr> {
+        self.add_transition_dominance_inner(dominating, dominated, vec![])
+    }
+
+    /// Adds a transition dominance with a condition.
+    ///
+    /// # Errors
+    ///
+    /// If the dominating or dominated transition is forced or does not exist,
+    /// or the condition is invalid, e.g., it uses variables not existing in this model or the state of the transitioned state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::ComparisonOperator;
+    ///
+    /// let mut model = Model::default();
+    /// let v = model.add_integer_variable("v", 0).unwrap();
+    /// let transition1 = Transition::new("transition1");
+    /// let id1 = model.add_forward_transition(transition1).unwrap();
+    /// let transition2 = Transition::new("transition2");
+    /// let id2 = model.add_forward_transition(transition2).unwrap();
+    /// let conditions = vec![Condition::comparison_i(ComparisonOperator::Eq, v, 0)];
+    ///
+    /// let result = model.add_transition_dominance_with_conditions(&id1, &id2, conditions);
+    /// assert!(result.is_ok());
+    /// ```
+    #[inline]
+    pub fn add_transition_dominance_with_conditions(
+        &mut self,
+        dominating: &TransitionId,
+        dominated: &TransitionId,
+        conditions: Vec<expression::Condition>,
+    ) -> Result<(), ModelErr> {
+        let conditions = conditions
+            .into_iter()
+            .map(|c| self.check_and_simplify_condition(&c))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.add_transition_dominance_inner(dominating, dominated, conditions)
+    }
+
+    /// Returns if the given transition is dominated (a better or as good transition is applicable) in the given state.
+    ///
+    /// # Errors
+    ///
+    /// If the transition does not exist.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use dypdl::prelude::*;
+    /// use dypdl::expression::ComparisonOperator;
+    ///
+    /// let mut model = Model::default();
+    /// let v = model.add_integer_variable("v", 0).unwrap();
+    /// let transition1 = Transition::new("transition1");
+    /// let id1 = model.add_forward_transition(transition1).unwrap();
+    /// let transition2 = Transition::new("transition2");
+    /// let id2 = model.add_forward_transition(transition2).unwrap();
+    /// let conditions = vec![Condition::comparison_i(ComparisonOperator::Eq, v, 0)];
+    ///
+    /// model.add_transition_dominance_with_conditions(&id1, &id2, conditions).unwrap();
+    /// let state = &model.target;
+    ///
+    /// assert!(!model.is_transition_dominated(state, &id1).unwrap());
+    /// assert!(model.is_transition_dominated(state, &id2).unwrap());
+    /// ```
+    pub fn is_transition_dominated<U: StateInterface>(
+        &self,
+        state: &U,
+        transition_id: &TransitionId,
+    ) -> Result<bool, ModelErr> {
+        let transition = self.get_transition(transition_id)?;
+
+        let mut function_cache = StateFunctionCache::default();
+
+        if !transition.is_applicable(
+            state,
+            &mut function_cache,
+            &self.state_functions,
+            &self.table_registry,
+        ) {
+            return Ok(true);
+        }
+
+        let forced_transitions = if transition_id.backward {
+            &self.backward_forced_transitions
+        } else {
+            &self.forward_forced_transitions
+        };
+
+        let forced_transitions = if transition_id.forced {
+            &forced_transitions[..transition_id.id]
+        } else {
+            &forced_transitions[..]
+        };
+
+        for forced in forced_transitions {
+            if forced.is_applicable(
+                state,
+                &mut function_cache,
+                &self.state_functions,
+                &self.table_registry,
+            ) {
+                return Ok(true);
+            }
+        }
+
+        if !transition_id.forced {
+            for d in self.transition_dominance.iter() {
+                let dominating = if transition_id.backward {
+                    &self.backward_transitions[d.dominating]
+                } else {
+                    &self.forward_transitions[d.dominating]
+                };
+
+                if transition_id.backward == d.backward
+                    && transition_id.id == d.dominated
+                    && dominating.is_applicable(
+                        state,
+                        &mut function_cache,
+                        &self.state_functions,
+                        &self.table_registry,
+                    )
+                    && d.conditions.iter().all(|c| {
+                        c.is_satisfied(
+                            state,
+                            &mut function_cache,
+                            &self.state_functions,
+                            &self.table_registry,
+                        )
+                    })
+                {
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
     }
 
     /// Returns the capacity of a set constant in a 1D table.
@@ -7419,6 +7734,35 @@ mod tests {
     }
 
     #[test]
+    fn get_forward_transition_ok() {
+        let mut model = Model::default();
+        let transition = Transition::new("transition");
+
+        let result = model.add_forward_transition(transition.clone());
+        assert!(result.is_ok());
+
+        let id = result.unwrap();
+        let result = model.get_transition(&id);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), &transition);
+    }
+
+    #[test]
+    fn get_forward_transition_err() {
+        let mut model = Model::default();
+        let transition = Transition::new("transition");
+
+        let result = model.add_forward_transition(transition.clone());
+        assert!(result.is_ok());
+
+        let id = result.unwrap();
+
+        let model = Model::default();
+        let result = model.get_transition(&id);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn add_forward_transition_ok() {
         let mut model = Model {
             cost_type: CostType::Integer,
@@ -7466,6 +7810,9 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![Transition {
@@ -7605,6 +7952,9 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![
@@ -7739,6 +8089,9 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![Transition {
@@ -7878,6 +8231,9 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![
@@ -7994,6 +8350,9 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![Transition {
@@ -8033,6 +8392,9 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![Transition {
@@ -8073,6 +8435,9 @@ mod tests {
         };
         let result = model.add_forward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_transitions,
             vec![Transition {
@@ -8742,6 +9107,35 @@ mod tests {
     }
 
     #[test]
+    fn get_forward_forced_transition_ok() {
+        let mut model = Model::default();
+        let transition = Transition::new("transition");
+
+        let result = model.add_forward_forced_transition(transition.clone());
+        assert!(result.is_ok());
+
+        let id = result.unwrap();
+        let result = model.get_transition(&id);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), &transition);
+    }
+
+    #[test]
+    fn get_forward_forced_transition_err() {
+        let mut model = Model::default();
+        let transition = Transition::new("transition");
+
+        let result = model.add_forward_forced_transition(transition.clone());
+        assert!(result.is_ok());
+
+        let id = result.unwrap();
+
+        let model = Model::default();
+        let result = model.get_transition(&id);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn add_forward_forced_transition_ok() {
         let mut model = Model {
             cost_type: CostType::Integer,
@@ -8789,6 +9183,9 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![Transition {
@@ -8928,6 +9325,9 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![
@@ -9062,6 +9462,9 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![Transition {
@@ -9201,6 +9604,9 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![
@@ -9317,6 +9723,9 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![Transition {
@@ -9356,6 +9765,9 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![Transition {
@@ -9396,6 +9808,9 @@ mod tests {
         };
         let result = model.add_forward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(!id.backward);
         assert_eq!(
             model.forward_forced_transitions,
             vec![Transition {
@@ -10065,6 +10480,35 @@ mod tests {
     }
 
     #[test]
+    fn get_backward_transition_ok() {
+        let mut model = Model::default();
+        let transition = Transition::new("transition");
+
+        let result = model.add_backward_transition(transition.clone());
+        assert!(result.is_ok());
+
+        let id = result.unwrap();
+        let result = model.get_transition(&id);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), &transition);
+    }
+
+    #[test]
+    fn get_backward_transition_err() {
+        let mut model = Model::default();
+        let transition = Transition::new("transition");
+
+        let result = model.add_backward_transition(transition.clone());
+        assert!(result.is_ok());
+
+        let id = result.unwrap();
+
+        let model = Model::default();
+        let result = model.get_transition(&id);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn add_backward_transition_ok() {
         let mut model = Model {
             cost_type: CostType::Integer,
@@ -10112,6 +10556,9 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![Transition {
@@ -10251,6 +10698,9 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![
@@ -10385,6 +10835,9 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![Transition {
@@ -10524,6 +10977,9 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![
@@ -10640,6 +11096,9 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![Transition {
@@ -10679,6 +11138,9 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![Transition {
@@ -10719,6 +11181,9 @@ mod tests {
         };
         let result = model.add_backward_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(!id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_transitions,
             vec![Transition {
@@ -11388,6 +11853,35 @@ mod tests {
     }
 
     #[test]
+    fn get_backward_forced_transition_ok() {
+        let mut model = Model::default();
+        let transition = Transition::new("transition");
+
+        let result = model.add_backward_forced_transition(transition.clone());
+        assert!(result.is_ok());
+
+        let id = result.unwrap();
+        let result = model.get_transition(&id);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), &transition);
+    }
+
+    #[test]
+    fn get_backward_forced_transition_err() {
+        let mut model = Model::default();
+        let transition = Transition::new("transition");
+
+        let result = model.add_backward_forced_transition(transition.clone());
+        assert!(result.is_ok());
+
+        let id = result.unwrap();
+
+        let model = Model::default();
+        let result = model.get_transition(&id);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn add_backward_forced_transition_ok() {
         let mut model = Model {
             cost_type: CostType::Integer,
@@ -11435,6 +11929,9 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![Transition {
@@ -11574,6 +12071,9 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![
@@ -11708,6 +12208,9 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![Transition {
@@ -11847,6 +12350,9 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![
@@ -11963,6 +12469,9 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![Transition {
@@ -12002,6 +12511,9 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![Transition {
@@ -12042,6 +12554,9 @@ mod tests {
         };
         let result = model.add_backward_forced_transition(transition);
         assert!(result.is_ok());
+        let id = result.unwrap();
+        assert!(id.forced);
+        assert!(id.backward);
         assert_eq!(
             model.backward_forced_transitions,
             vec![Transition {
@@ -12707,6 +13222,496 @@ mod tests {
             ..Default::default()
         };
         let result = model.add_backward_forced_transition(transition);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_transition_dominance_ok() {
+        let mut model = Model::default();
+
+        let result = model.add_forward_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_forward_transition(Transition::new("dominated"));
+        assert!(result.is_ok());
+        let dominated = result.unwrap();
+
+        let result = model.add_transition_dominance(&dominating, &dominated);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn add_transition_dominance_dominating_forced_err() {
+        let mut model = Model::default();
+
+        let result = model.add_forward_forced_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_forward_transition(Transition::new("dominated"));
+        assert!(result.is_ok());
+        let dominated = result.unwrap();
+
+        let result = model.add_transition_dominance(&dominating, &dominated);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_transition_dominance_dominated_forced_err() {
+        let mut model = Model::default();
+
+        let result = model.add_forward_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_forward_forced_transition(Transition::new("dominated"));
+        assert!(result.is_ok());
+        let dominated = result.unwrap();
+
+        let result = model.add_transition_dominance(&dominating, &dominated);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_transition_dominance_forward_backward_err() {
+        let mut model = Model::default();
+
+        let result = model.add_forward_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_backward_transition(Transition::new("dominated"));
+        assert!(result.is_ok());
+        let dominated = result.unwrap();
+
+        let result = model.add_transition_dominance(&dominating, &dominated);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_transition_dominance_same_id_err() {
+        let mut model = Model::default();
+
+        let result = model.add_forward_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_transition_dominance(&dominating, &dominating);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_transition_dominance_not_exist_err() {
+        let mut model = Model::default();
+
+        let result = model.add_forward_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_forward_transition(Transition::new("dominated"));
+        assert!(result.is_ok());
+        let dominated = result.unwrap();
+
+        let mut model = Model::default();
+
+        let result = model.add_transition_dominance(&dominating, &dominated);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_transition_dominance_with_conditions_ok() {
+        let mut model = Model::default();
+
+        let result = model.add_integer_variable("v", 0);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+
+        let result = model.add_forward_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_forward_transition(Transition::new("dominated"));
+        assert!(result.is_ok());
+        let dominated = result.unwrap();
+
+        let conditions = vec![
+            Condition::comparison_i(ComparisonOperator::Ge, v, 0),
+            Condition::comparison_i(ComparisonOperator::Le, v, 3),
+        ];
+
+        let result =
+            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn add_transition_dominance_with_conditions_dominating_forced_err() {
+        let mut model = Model::default();
+
+        let result = model.add_integer_variable("v", 0);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+
+        let result = model.add_forward_forced_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_forward_transition(Transition::new("dominated"));
+        assert!(result.is_ok());
+        let dominated = result.unwrap();
+
+        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
+
+        let result =
+            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_transition_dominance_with_conditions_dominated_forced_err() {
+        let mut model = Model::default();
+
+        let result = model.add_integer_variable("v", 0);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+
+        let result = model.add_forward_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_forward_forced_transition(Transition::new("dominated"));
+        assert!(result.is_ok());
+        let dominated = result.unwrap();
+
+        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
+
+        let result =
+            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_transition_dominance_with_conditions_forward_backward_err() {
+        let mut model = Model::default();
+
+        let result = model.add_integer_variable("v", 0);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+
+        let result = model.add_forward_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_backward_transition(Transition::new("dominated"));
+        assert!(result.is_ok());
+        let dominated = result.unwrap();
+
+        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
+
+        let result =
+            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_transition_dominance_with_conditions_same_id_err() {
+        let mut model = Model::default();
+
+        let result = model.add_integer_variable("v", 0);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+
+        let result = model.add_forward_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
+
+        let result =
+            model.add_transition_dominance_with_conditions(&dominating, &dominating, conditions);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_transition_dominance_with_conditions_not_exist_err() {
+        let mut model = Model::default();
+
+        let result = model.add_forward_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_forward_transition(Transition::new("dominated"));
+        assert!(result.is_ok());
+        let dominated = result.unwrap();
+
+        let mut model = Model::default();
+
+        let result = model.add_integer_variable("v", 0);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+
+        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
+
+        let result =
+            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn add_transition_dominance_with_conditions_condition_err() {
+        let mut model = Model::default();
+
+        let result = model.add_integer_variable("v", 0);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+
+        let mut model = Model::default();
+
+        let result = model.add_forward_transition(Transition::new("dominating"));
+        assert!(result.is_ok());
+        let dominating = result.unwrap();
+
+        let result = model.add_forward_transition(Transition::new("dominated"));
+        assert!(result.is_ok());
+        let dominated = result.unwrap();
+
+        let conditions = vec![Condition::comparison_i(ComparisonOperator::Ge, v, 0)];
+
+        let result =
+            model.add_transition_dominance_with_conditions(&dominating, &dominated, conditions);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn is_transition_dominated_forward_ok() {
+        let mut model = Model::default();
+        let result = model.add_integer_variable("v", 0);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+        let transition1 = Transition::new("transition1");
+        let result = model.add_forward_transition(transition1);
+        assert!(result.is_ok());
+        let id1 = result.unwrap();
+        let transition2 = Transition::new("transition2");
+        let result = model.add_forward_transition(transition2);
+        assert!(result.is_ok());
+        let id2 = result.unwrap();
+        let mut transition3 = Transition::new("transition3");
+        // precondition not satisfied
+        transition3.add_precondition(Condition::comparison_i(ComparisonOperator::Eq, v, 1));
+        let result = model.add_forward_transition(transition3);
+        assert!(result.is_ok());
+        let id3 = result.unwrap();
+
+        let conditions = vec![Condition::comparison_i(ComparisonOperator::Eq, v, 0)];
+        let result = model.add_transition_dominance_with_conditions(&id1, &id2, conditions);
+        assert!(result.is_ok());
+        // conditions not satisfied
+        let conditions = vec![Condition::comparison_i(ComparisonOperator::Eq, v, 1)];
+        let result = model.add_transition_dominance_with_conditions(&id2, &id1, conditions);
+        assert!(result.is_ok());
+        let result = model.add_transition_dominance(&id3, &id1);
+        assert!(result.is_ok());
+        let result = model.add_transition_dominance(&id3, &id2);
+        assert!(result.is_ok());
+
+        let state = &model.target;
+
+        // not dominated
+        let result = model.is_transition_dominated(state, &id1);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+
+        // dominated
+        let result = model.is_transition_dominated(state, &id2);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+
+        // not applicable
+        let result = model.is_transition_dominated(state, &id3);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn is_transition_dominated_forward_forced_ok() {
+        let mut model = Model::default();
+        let transition1 = Transition::new("transition1");
+        let result = model.add_forward_forced_transition(transition1);
+        assert!(result.is_ok());
+        let id1 = result.unwrap();
+        let transition2 = Transition::new("transition2");
+        let result = model.add_forward_transition(transition2);
+        assert!(result.is_ok());
+        let id2 = result.unwrap();
+
+        let state = &model.target;
+
+        let result = model.is_transition_dominated(state, &id1);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+
+        let result = model.is_transition_dominated(state, &id2);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn is_transition_dominated_forward_forced_forced_ok() {
+        let mut model = Model::default();
+        let transition1 = Transition::new("transition1");
+        let result = model.add_forward_forced_transition(transition1);
+        assert!(result.is_ok());
+        let id1 = result.unwrap();
+        let transition2 = Transition::new("transition2");
+        let result = model.add_forward_forced_transition(transition2);
+        assert!(result.is_ok());
+        let id2 = result.unwrap();
+
+        let state = &model.target;
+
+        let result = model.is_transition_dominated(state, &id1);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+
+        let result = model.is_transition_dominated(state, &id2);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn is_transition_dominated_forward_err() {
+        let mut model = Model::default();
+        let transition1 = Transition::new("transition1");
+        let result = model.add_backward_transition(transition1);
+        assert!(result.is_ok());
+
+        let id = TransitionId {
+            id: 0,
+            forced: false,
+            backward: false,
+        };
+
+        let state = &model.target;
+
+        let result = model.is_transition_dominated(state, &id);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn is_transition_dominated_backward_ok() {
+        let mut model = Model::default();
+        let result = model.add_integer_variable("v", 0);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+        let transition1 = Transition::new("transition1");
+        let result = model.add_backward_transition(transition1);
+        assert!(result.is_ok());
+        let id1 = result.unwrap();
+        let transition2 = Transition::new("transition2");
+        let result = model.add_backward_transition(transition2);
+        assert!(result.is_ok());
+        let id2 = result.unwrap();
+        let mut transition3 = Transition::new("transition3");
+        // precondition not satisfied
+        transition3.add_precondition(Condition::comparison_i(ComparisonOperator::Eq, v, 1));
+        let result = model.add_backward_transition(transition3);
+        assert!(result.is_ok());
+        let id3 = result.unwrap();
+
+        let conditions = vec![Condition::comparison_i(ComparisonOperator::Eq, v, 0)];
+        let result = model.add_transition_dominance_with_conditions(&id1, &id2, conditions);
+        assert!(result.is_ok());
+        // conditions not satisfied
+        let conditions = vec![Condition::comparison_i(ComparisonOperator::Eq, v, 1)];
+        let result = model.add_transition_dominance_with_conditions(&id2, &id1, conditions);
+        assert!(result.is_ok());
+        let result = model.add_transition_dominance(&id3, &id1);
+        assert!(result.is_ok());
+        let result = model.add_transition_dominance(&id3, &id2);
+        assert!(result.is_ok());
+
+        let state = &model.target;
+
+        // not dominated
+        let result = model.is_transition_dominated(state, &id1);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+
+        // dominated
+        let result = model.is_transition_dominated(state, &id2);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+
+        // not applicable
+        let result = model.is_transition_dominated(state, &id3);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn is_transition_dominated_backward_forced_ok() {
+        let mut model = Model::default();
+        let transition1 = Transition::new("transition1");
+        let result = model.add_backward_forced_transition(transition1);
+        assert!(result.is_ok());
+        let id1 = result.unwrap();
+        let transition2 = Transition::new("transition2");
+        let result = model.add_backward_transition(transition2);
+        assert!(result.is_ok());
+        let id2 = result.unwrap();
+
+        let state = &model.target;
+
+        let result = model.is_transition_dominated(state, &id1);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+
+        let result = model.is_transition_dominated(state, &id2);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn is_transition_dominated_backward_forced_forced_ok() {
+        let mut model = Model::default();
+        let transition1 = Transition::new("transition1");
+        let result = model.add_backward_forced_transition(transition1);
+        assert!(result.is_ok());
+        let id1 = result.unwrap();
+        let transition2 = Transition::new("transition2");
+        let result = model.add_backward_forced_transition(transition2);
+        assert!(result.is_ok());
+        let id2 = result.unwrap();
+
+        let state = &model.target;
+
+        let result = model.is_transition_dominated(state, &id1);
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
+
+        let result = model.is_transition_dominated(state, &id2);
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
+
+    #[test]
+    fn is_transition_dominated_backward_err() {
+        let mut model = Model::default();
+        let transition1 = Transition::new("transition1");
+        let result = model.add_forward_transition(transition1);
+        assert!(result.is_ok());
+
+        let id = TransitionId {
+            id: 0,
+            forced: false,
+            backward: true,
+        };
+
+        let state = &model.target;
+
+        let result = model.is_transition_dominated(state, &id);
         assert!(result.is_err());
     }
 

@@ -1,9 +1,5 @@
-use super::super::successor_generator::SuccessorGenerator;
-use std::ops::Deref;
-
 use dypdl::{
-    variable_type::Numeric, StateFunctionCache, StateFunctions, Transition,
-    TransitionInterface,
+    variable_type::Numeric, StateFunctionCache, StateFunctions, Transition, TransitionInterface,
 };
 
 #[derive(Debug, PartialEq, Clone, Default)]
@@ -68,56 +64,11 @@ where
     }
 }
 
-impl<U, R> SuccessorGenerator<TransitionWithId, U, R>
-where
-    U: Deref<Target = TransitionWithId> + Clone + From<TransitionWithId>,
-    R: Deref<Target = dypdl::Model>,
-{
-    pub fn from_model(model: R, backward: bool) -> Self {
-        let forced_transitions = if backward {
-            &model.backward_forced_transitions
-        } else {
-            &model.forward_forced_transitions
-        };
-        let forced_transitions = forced_transitions
-            .iter()
-            .enumerate()
-            .map(|(id, t)| {
-                U::from(TransitionWithId {
-                    transition: t.clone(),
-                    forced: true,
-                    id,
-                })
-            })
-            .collect();
-
-        let transitions = if backward {
-            &model.backward_transitions
-        } else {
-            &model.forward_transitions
-        };
-        let transitions = transitions
-            .iter()
-            .enumerate()
-            .map(|(id, t)| {
-                U::from(TransitionWithId {
-                    transition: t.clone(),
-                    forced: false,
-                    id,
-                })
-            })
-            .collect();
-
-        SuccessorGenerator::new(forced_transitions, transitions, backward, model)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use dypdl::expression::*;
     use dypdl::prelude::*;
-    use std::rc::Rc;
 
     #[test]
     fn transition_with_custom_cost_to_transition() {
@@ -227,133 +178,5 @@ mod tests {
             &model.table_registry,
         );
         assert_eq!(cost, 1);
-    }
-
-    #[test]
-    fn from_model_forward() {
-        let mut model = Model::default();
-        let mut transition1 = Transition::new("transition1");
-        transition1.set_cost(IntegerExpression::Cost + 1);
-        let result = model.add_forward_transition(transition1.clone());
-        assert!(result.is_ok());
-        let mut transition2 = Transition::new("transition2");
-        transition2.set_cost(IntegerExpression::Cost + 2);
-        let result = model.add_forward_transition(transition2.clone());
-        assert!(result.is_ok());
-        let mut transition3 = Transition::new("transition3");
-        transition3.set_cost(IntegerExpression::Cost + 3);
-        let result = model.add_forward_forced_transition(transition3.clone());
-        assert!(result.is_ok());
-        let mut transition4 = Transition::new("transition4");
-        transition4.set_cost(IntegerExpression::Cost + 4);
-        let result = model.add_forward_forced_transition(transition4.clone());
-        assert!(result.is_ok());
-        let mut transition5 = Transition::new("transition5");
-        transition5.set_cost(IntegerExpression::Cost + 5);
-        let result = model.add_backward_transition(transition5.clone());
-        assert!(result.is_ok());
-        let mut transition6 = Transition::new("transition6");
-        transition6.set_cost(IntegerExpression::Cost + 6);
-        let result = model.add_backward_forced_transition(transition6.clone());
-        assert!(result.is_ok());
-        let model = Rc::new(model);
-
-        let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
-
-        assert_eq!(generator.model, model);
-        assert_eq!(
-            generator.transitions,
-            vec![
-                Rc::new(TransitionWithId {
-                    transition: transition1,
-                    id: 0,
-                    forced: false,
-                }),
-                Rc::new(TransitionWithId {
-                    transition: transition2,
-                    id: 1,
-                    forced: false,
-                }),
-            ]
-        );
-        assert_eq!(
-            generator.forced_transitions,
-            vec![
-                Rc::new(TransitionWithId {
-                    transition: transition3,
-                    id: 0,
-                    forced: true,
-                }),
-                Rc::new(TransitionWithId {
-                    transition: transition4,
-                    id: 1,
-                    forced: true,
-                }),
-            ]
-        );
-    }
-
-    #[test]
-    fn from_model_backward() {
-        let mut model = Model::default();
-        let mut transition1 = Transition::new("transition1");
-        transition1.set_cost(IntegerExpression::Cost + 1);
-        let result = model.add_backward_transition(transition1.clone());
-        assert!(result.is_ok());
-        let mut transition2 = Transition::new("transition2");
-        transition2.set_cost(IntegerExpression::Cost + 2);
-        let result = model.add_backward_transition(transition2.clone());
-        assert!(result.is_ok());
-        let mut transition3 = Transition::new("transition3");
-        transition3.set_cost(IntegerExpression::Cost + 3);
-        let result = model.add_backward_forced_transition(transition3.clone());
-        assert!(result.is_ok());
-        let mut transition4 = Transition::new("transition4");
-        transition4.set_cost(IntegerExpression::Cost + 4);
-        let result = model.add_backward_forced_transition(transition4.clone());
-        assert!(result.is_ok());
-        let mut transition5 = Transition::new("transition5");
-        transition5.set_cost(IntegerExpression::Cost + 5);
-        let result = model.add_forward_transition(transition5.clone());
-        assert!(result.is_ok());
-        let mut transition6 = Transition::new("transition6");
-        transition6.set_cost(IntegerExpression::Cost + 6);
-        let result = model.add_forward_forced_transition(transition6.clone());
-        assert!(result.is_ok());
-        let model = Rc::new(model);
-
-        let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), true);
-
-        assert_eq!(generator.model, model);
-        assert_eq!(
-            generator.transitions,
-            vec![
-                Rc::new(TransitionWithId {
-                    transition: transition1,
-                    id: 0,
-                    forced: false,
-                }),
-                Rc::new(TransitionWithId {
-                    transition: transition2,
-                    id: 1,
-                    forced: false,
-                }),
-            ]
-        );
-        assert_eq!(
-            generator.forced_transitions,
-            vec![
-                Rc::new(TransitionWithId {
-                    transition: transition3,
-                    id: 0,
-                    forced: true,
-                }),
-                Rc::new(TransitionWithId {
-                    transition: transition4,
-                    id: 1,
-                    forced: true,
-                }),
-            ]
-        );
     }
 }

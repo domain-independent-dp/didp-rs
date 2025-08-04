@@ -1,14 +1,14 @@
 use super::super::state_registry::StateInformation;
 use super::super::transition_chain::GetTransitions;
-use crate::search_algorithm::data_structure::HashableSignatureVariables;
+use crate::search_algorithm::data_structure::{HashableSignatureVariables, TransitionWithId};
 use dypdl::variable_type::Numeric;
-use dypdl::{Transition, TransitionInterface};
+use dypdl::TransitionInterface;
 use std::fmt::{Debug, Display};
 use std::hash::Hash;
 use std::rc::Rc;
 
 /// Trait for best-first search node.
-pub trait BfsNode<T, V = Transition, K = Rc<HashableSignatureVariables>>:
+pub trait BfsNode<T, V = TransitionWithId, K = Rc<HashableSignatureVariables>>:
     Ord + StateInformation<T, K> + GetTransitions<V>
 where
     T: Numeric + Display,

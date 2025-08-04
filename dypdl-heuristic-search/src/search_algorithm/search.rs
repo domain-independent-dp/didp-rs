@@ -1,14 +1,14 @@
-use super::data_structure::SuccessorGenerator;
+use super::data_structure::{SuccessorGenerator, TransitionWithId};
 use dypdl::{variable_type::Numeric, Model, Transition, TransitionInterface};
 use std::error::Error;
 use std::{ops::Deref, rc::Rc};
 
 /// Input of a heuristic search solver.
 #[derive(Debug, PartialEq, Clone)]
-pub struct SearchInput<'a, N, V = Transition, D = Rc<V>, R = Rc<dypdl::Model>>
+pub struct SearchInput<'a, N, V = Transition, D = Rc<TransitionWithId<V>>, R = Rc<dypdl::Model>>
 where
     V: TransitionInterface,
-    D: Deref<Target = V> + Clone,
+    D: Deref<Target = TransitionWithId<V>> + Clone,
     R: Deref<Target = Model>,
 {
     /// Root node.
@@ -16,7 +16,7 @@ where
     /// Successor generator.
     pub generator: SuccessorGenerator<V, D, R>,
     /// Suffix of the solution.
-    pub solution_suffix: &'a [V],
+    pub solution_suffix: &'a [TransitionWithId<V>],
 }
 
 /// Common parameters for heuristic search solvers.

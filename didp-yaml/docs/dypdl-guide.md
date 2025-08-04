@@ -22,6 +22,7 @@ To solve a problem using the DyPDL solver, you need to create three files, `doma
   - [cost_type](#cost_type)
   - [transitions](#transitions)
   - [dual_bounds](#dual_bounds)
+  - [transition_dominance](#transition_dominance)
 - [Problem YAML](#problem-yaml)
   - [object_numbers](#object_numbers)
   - [table_values](#table_values)
@@ -214,6 +215,7 @@ Each map has the following keys:
 - `name`
 - `type`
 - `expression`
+- `parameters`
 
 `name` is required, and the value is a string describing the name of the state function.
 `type` is required, and the value is either of `set`, `element`, `integer`, `continuous`, or `bool`.
@@ -222,6 +224,16 @@ It represents the type of the state function.
 `expression` is required, and the value is a string describing an expression defining the state function.
 For the syntax of an expression, see [the expression guide](./expression-guide.md).
 The type of the expression must match `type`.
+
+`parameters` is optional, and the value is a list of maps with the following mandatory keys.
+
+- `name`
+- `object`
+
+`name` is required, and the value is the name of a parameter.
+`object` is required, and the value is the name of an object type.
+With `parameters`, for each object or an element in the set variable, one state function is defined.
+The value of the key `name` can be used in the expression defining the state function.
 
 ### constraints
 
@@ -382,6 +394,71 @@ dual_bounds:
 ```
 
 It can be also defined in a problem file.
+
+### transition_dominance
+
+`transition_dominance` is optional, and the value is a list of maps.
+Each map has the following keys.
+
+- `dominating`
+- `dominated`
+- `conditions`
+
+`conditions` is optional and specifies conditions to fire the transition dominance.
+The value for this key is a list of conditions, defined in the same way as [constraints](#constraints)
+If no condition is defined, transition dominance is always active when the two transitions are applicable.
+
+`dominating` and `dominated` are required.
+`dominating` specifies a transition that potentially dominates the transition specified by `dominated`.
+The value for `dominating` or `dominated` is a map with the following keys.
+
+- `name`
+- `parameters`
+
+`name` is required, specifying the name of the transition.
+If a transition is defined with `parameters` (see [transitions](#transitions)), there can be multiple transitions with the same `name`.
+In such a case, by using `name: "{parameter_name}:{value}"`, one particular instantiation can be specified, where `{parameter_name}` is the name of a parameter defined with the transition, and `{value}` is a concrete value.
+Instead, multiple dominating transitions can be specified with the optional key `parameters`, whose value is a list of maps with the following mandatory keys.
+
+- `name`
+- `object`
+
+`name` specifies the name of a parameter, which can be potentially used in `conditions`.
+This name can be different from the name of the parameter in the transition definition.
+However, the i-th parameter defined here corresponds to the i-th parameter defined in the transition.
+Thus, the length of the list must be the same as the number of parameters for the transition, and the object type specified by the key `object` must be the same as that in the transition definition.
+
+#### Example
+
+```yaml
+transitions:
+  - name: sweep
+    parameters:
+      - name: c
+        object: node
+    cost: (max cost
+      (+ (node_edge_weight c)
+      (sum edge_weight clean (remove c contaminated))))
+    effect:
+      clean: (add c clean)
+    preconditions:
+      - (not (is_in c clean))
+transition_dominance:
+  - dominating:
+      name: sweep
+      parameters:
+        - name: i
+          object: node
+    dominated:
+      name: sweep
+      parameters:
+        - name: j
+          object: node
+    conditions:
+      - (<= (+ (node_weight i) (contaminated_edge_weight i))
+        (+ (node_weight j) (contaminated_edge_weight j)))
+      - (<= (contaminated_edge_weight i) (clean_edge_weight i))
+```
 
 ## Problem YAML
 

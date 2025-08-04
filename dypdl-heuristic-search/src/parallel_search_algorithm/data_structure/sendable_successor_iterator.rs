@@ -1,5 +1,7 @@
 use crate::search_algorithm::{
-    data_structure::HashableSignatureVariables, data_structure::ParentAndChildStateFunctionCache,
+    data_structure::{
+        HashableSignatureVariables, ParentAndChildStateFunctionCache, TransitionWithId,
+    },
     BfsNode, SuccessorGenerator,
 };
 use crate::ConcurrentStateRegistry;
@@ -12,17 +14,22 @@ use std::sync::Arc;
 pub struct SendableSuccessorIterator<'a, T, N, E, V>
 where
     T: Numeric + Display,
-    N: BfsNode<T, V, Arc<HashableSignatureVariables>>,
-    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<N>,
+    N: BfsNode<T, TransitionWithId<V>, Arc<HashableSignatureVariables>>,
+    E: Fn(
+        &N,
+        Arc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
+        Option<T>,
+    ) -> Option<N>,
     V: TransitionInterface + Clone,
 {
     node: Arc<N>,
-    generator: &'a SuccessorGenerator<V, Arc<V>, Arc<Model>>,
+    generator: &'a SuccessorGenerator<V, Arc<TransitionWithId<V>>, Arc<Model>>,
     evaluator: E,
     registry: &'a ConcurrentStateRegistry<T, N>,
     function_cache: ParentAndChildStateFunctionCache,
     primal_bound: Option<T>,
-    iter: std::slice::Iter<'a, Arc<V>>,
+    iter: std::slice::Iter<'a, Arc<TransitionWithId<V>>>,
     forced: bool,
     end: bool,
 }
@@ -30,14 +37,19 @@ where
 impl<'a, T, N, E, V> SendableSuccessorIterator<'a, T, N, E, V>
 where
     T: Numeric + Display,
-    N: BfsNode<T, V, Arc<HashableSignatureVariables>>,
-    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<N>,
+    N: BfsNode<T, TransitionWithId<V>, Arc<HashableSignatureVariables>>,
+    E: Fn(
+        &N,
+        Arc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
+        Option<T>,
+    ) -> Option<N>,
     V: TransitionInterface + Clone,
 {
     /// Creates a new iterator.
     pub fn new(
         node: Arc<N>,
-        generator: &'a SuccessorGenerator<V, Arc<V>, Arc<Model>>,
+        generator: &'a SuccessorGenerator<V, Arc<TransitionWithId<V>>, Arc<Model>>,
         evaluator: E,
         registry: &'a ConcurrentStateRegistry<T, N>,
         primal_bound: Option<T>,
@@ -62,8 +74,13 @@ where
 impl<T, N, E, V> Iterator for SendableSuccessorIterator<'_, T, N, E, V>
 where
     T: Numeric + Display,
-    N: BfsNode<T, V, Arc<HashableSignatureVariables>>,
-    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<N>,
+    N: BfsNode<T, TransitionWithId<V>, Arc<HashableSignatureVariables>>,
+    E: Fn(
+        &N,
+        Arc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
+        Option<T>,
+    ) -> Option<N>,
     V: TransitionInterface + Clone,
 {
     type Item = Arc<N>;
@@ -189,7 +206,7 @@ mod tests {
         assert!(result.is_ok());
 
         let model = Arc::new(model);
-        let generator = SuccessorGenerator::<Transition, Arc<Transition>, Arc<_>>::from_model(
+        let generator = SuccessorGenerator::<Transition, Arc<TransitionWithId>, Arc<_>>::from_model(
             model.clone(),
             false,
         );
@@ -197,7 +214,7 @@ mod tests {
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g: Integer, h: Integer, _: &_| g + h;
-        let node = SendableFNode::<_>::generate_root_node(
+        let node = SendableFNode::<_, TransitionWithId>::generate_root_node(
             model.target.clone(),
             &mut function_cache,
             0,
@@ -209,8 +226,8 @@ mod tests {
         assert!(node.is_some());
         let node = Arc::new(node.unwrap());
         let registry = ConcurrentStateRegistry::new(model.clone());
-        let evaluator = |node: &SendableFNode<_>,
-                         transition: Arc<Transition>,
+        let evaluator = |node: &SendableFNode<_, TransitionWithId>,
+                         transition: Arc<TransitionWithId>,
                          cache: &mut _,
                          primal_bound: Option<Integer>| {
             SendableFNode::generate_successor_node(
@@ -294,7 +311,7 @@ mod tests {
         assert!(result.is_ok());
 
         let model = Arc::new(model);
-        let generator = SuccessorGenerator::<Transition, Arc<Transition>, Arc<_>>::from_model(
+        let generator = SuccessorGenerator::<Transition, Arc<TransitionWithId>, Arc<_>>::from_model(
             model.clone(),
             false,
         );
@@ -302,7 +319,7 @@ mod tests {
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g: Integer, h: Integer, _: &_| g + h;
-        let node = SendableFNode::<_>::generate_root_node(
+        let node = SendableFNode::<_, TransitionWithId>::generate_root_node(
             model.target.clone(),
             &mut function_cache,
             0,
@@ -314,8 +331,8 @@ mod tests {
         assert!(node.is_some());
         let node = Arc::new(node.unwrap());
         let registry = ConcurrentStateRegistry::new(model.clone());
-        let evaluator = |node: &SendableFNode<_>,
-                         transition: Arc<Transition>,
+        let evaluator = |node: &SendableFNode<_, TransitionWithId>,
+                         transition: Arc<TransitionWithId>,
                          cache: &mut _,
                          primal_bound: Option<Integer>| {
             SendableFNode::generate_successor_node(
@@ -363,7 +380,7 @@ mod tests {
         assert!(result.is_ok());
 
         let model = Arc::new(model);
-        let generator = SuccessorGenerator::<Transition, Arc<Transition>, Arc<_>>::from_model(
+        let generator = SuccessorGenerator::<Transition, Arc<TransitionWithId>, Arc<_>>::from_model(
             model.clone(),
             false,
         );
@@ -371,7 +388,7 @@ mod tests {
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let h_evaluator = |_: &_, _: &mut _| Some(0);
         let f_evaluator = |g: Integer, h: Integer, _: &_| g + h;
-        let node = SendableFNode::<_>::generate_root_node(
+        let node = SendableFNode::<_, TransitionWithId>::generate_root_node(
             model.target.clone(),
             &mut function_cache,
             0,
@@ -384,8 +401,8 @@ mod tests {
         let node = Arc::new(node.unwrap());
 
         let registry = ConcurrentStateRegistry::new(model.clone());
-        let evaluator = |node: &SendableFNode<_>,
-                         transition: Arc<Transition>,
+        let evaluator = |node: &SendableFNode<_, TransitionWithId>,
+                         transition: Arc<TransitionWithId>,
                          cache: &mut _,
                          primal_bound: Option<Integer>| {
             SendableFNode::generate_successor_node(
