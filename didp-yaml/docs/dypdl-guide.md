@@ -34,7 +34,7 @@ For a config file, see [the solver guide](./solver-guide.md).
 ## YAML Basics
 
 In YAML, you can use boolean, integer, real, and string values, a list of these values, and a map consisting of key-value pairs.
-For example, a menu of a sushi restraunt can be represented by a list of maps as follows:
+For example, a menu of a sushi restaurant can be represented by a list of maps as follows:
 
 ```yaml
 - name: maguro
@@ -60,7 +60,7 @@ If you are familiar with JSON, the above data is equivalent to the following JSO
 [
     { "name": "maguro", "price": 3, "description": "tuna", "cooked": false },
     { "name": "sake", "price": 3, "description": "salmon", "cooked": false },
-    { "name": "tempura", "price": 5, "description": "fried shirmp", "cooked": true }
+    { "name": "tempura", "price": 5, "description": "fried shrimp", "cooked": true }
 ]
 ```
 
@@ -125,7 +125,7 @@ If `type` is `set` or `element`, defining `object` is required, whose value is t
 
 `set` is a set variable, whose value is a set of objects having the specified type.
 `element` is an element variable, whose value is an object having the specified type.
-`integer` and `continous` are integer and continuous variables.
+`integer` and `continuos` are integer and continuous variables.
 
 If `type` is `element`, `integer`, or `continuous`, the key `preference` can be used.
 The value for `preference`  is either of `less` or `more`.
@@ -248,7 +248,7 @@ If the value is a map, it should have the following keys.
 - `forall`
 
 `condition` is required, and the value is a string describing a condition.
-`forall` is required, and the valeue is a map having the following keys.
+`forall` is required, and the value is a map having the following keys.
 
 - `name`
 - `object`
@@ -272,7 +272,7 @@ It can be also defined in a problem file.
 
 ### base_cases
 
-`base_cases` is optinal, and the value is a list of lists of conditions.
+`base_cases` is optional, and the value is a list of lists of conditions.
 Alternately,  it can be a list of a map having a key `conditions` whose value is a list of conditions and `cost` whose value is an expression representing the value of the base case.
 If `cost` is not given, the value of the base case is 0.
 You need to do either defining `base_cases` in a domain file or a problem file.
@@ -301,8 +301,8 @@ base_cases:
 ### reduce
 
 `reduce` is required, and the value is either of `min` or `max`.
-The name `reduce` comes from the fact that we preform a reduce operation to aggregate the results of cost expressions of applocable transitions.
-`min`/`max` means that the problem is minimization/maximizatoin.
+The name `reduce` comes from the fact that we preform a reduce operation to aggregate the results of cost expressions of applicable transitions.
+`min`/`max` means that the problem is minimization/maximization.
 
 #### Example
 
@@ -337,18 +337,18 @@ Each map has the following keys.
 
 `name` is required, and the value is a string describing the name of a transition.
 
-`parameters` is optinal, and the value is a map having the following keys.
+`parameters` is optional, and the value is a map having the following keys.
 
 - `name`
 - `object`
 
 Here, `name` is required, and the value is a string describing the name of a parameter.
-`object` is requried, and the value is the name of an object type or a set variable.
+`object` is required, and the value is the name of an object type or a set variable.
 Similarly to `forall` in a condition, with `parameters`, for each object or an element in the set variable, one transition is defined.
 The object or the element can be accessed in expressions and conditions used in `preconditions`, `effect`, and `cost`.
 
 `preconditions` is optional, and the value is a list of conditions described in the same way as [`constraints`](#constraints).
-A transtion is applied only if all preconditions are satisfied by a state.
+A transition is applied only if all preconditions are satisfied by a state.
 
 `effect` is required, and the value is a map where a key is the name of a state variable, and a the value is an expression describing to which value the variable is updated.
 If the name of a state variable is not used as a key of the map, that variable is not updated.
@@ -356,7 +356,7 @@ For the syntax of an expression, see [the expression guide](./expression-guide.m
 
 `cost` is required, and the value is a string describing the cost expression.
 It is either an integer or a continuous expression depending on the [cost type](#costtype).
-In the cost expressoin, in addition to state variables and tables, you can use `cost`, which represnets the cost of the transformed state by the transition.
+In the cost expression, in addition to state variables and tables, you can use `cost`, which represents the cost of the transformed state by the transition.
 
 #### Example
 

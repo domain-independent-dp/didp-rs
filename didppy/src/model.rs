@@ -1578,7 +1578,7 @@ impl ModelPy {
     ///     Expression defining the function.
     /// name: str or None, default: None
     ///     Name of the function.
-    ///     If :code`None`, :code:`__set_state_fun_{id}` is used where :code:`{id}` is the id of the function.
+    ///     If :code:`None`, :code:`__set_state_fun_{id}` is used where :code:`{id}` is the id of the function.
     ///
     /// Returns
     /// -------
@@ -1660,7 +1660,7 @@ impl ModelPy {
     ///     Expression defining the function.
     /// name: str or None, default: None
     ///     Name of the function.
-    ///     If :code`None`, :code:`__element_state_fun_{id}` is used where :code:`{id}` is the id of the function.
+    ///     If :code:`None`, :code:`__element_state_fun_{id}` is used where :code:`{id}` is the id of the function.
     ///
     /// Returns
     /// -------
@@ -1745,7 +1745,7 @@ impl ModelPy {
     ///     Expression defining the function.
     /// name: str or None, default: None
     ///     Name of the function.
-    ///     If :code`None`, :code:`__int_state_fun_{id}` is used where :code:`{id}` is the id of the function.
+    ///     If :code:`None`, :code:`__int_state_fun_{id}` is used where :code:`{id}` is the id of the function.
     ///
     /// Returns
     /// -------
@@ -1825,7 +1825,7 @@ impl ModelPy {
     ///     Expression defining the function.
     /// name: str or None, default: None
     ///     Name of the function.
-    ///     If :code`None`, :code:`__float_state_fun_{id}` is used where :code:`{id}` is the id of the function.
+    ///     If :code:`None`, :code:`__float_state_fun_{id}` is used where :code:`{id}` is the id of the function.
     ///
     /// Returns
     /// -------
@@ -1909,7 +1909,7 @@ impl ModelPy {
     ///     Expression defining the function.
     /// name: str or None, default: None
     ///     Name of the function.
-    ///     If :code`None`, :code:`__bool_state_fun_{id}` is used where :code:`{id}` is the id of the function.
+    ///     If :code:`None`, :code:`__bool_state_fun_{id}` is used where :code:`{id}` is the id of the function.
     ///
     /// Returns
     /// -------
