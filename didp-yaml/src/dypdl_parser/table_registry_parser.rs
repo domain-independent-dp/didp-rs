@@ -41,18 +41,15 @@ pub fn load_table_registry_from_yaml(
         let map = util::get_map(value)?;
         let name = util::get_string_by_key(map, "name")?;
         if let Some(name) = reserved_names.get(&name) {
-            return Err(util::YamlContentErr::new(format!(
-                "table name `{}` is already used",
-                name
-            ))
-            .into());
+            return Err(
+                util::YamlContentErr::new(format!("table name `{name}` is already used",)).into(),
+            );
         }
         reserved_names.insert(name.clone());
         let dimension_sizes = match map.get(&ARGS_KEY) {
             Some(Yaml::Array(arg_array)) => util::get_table_arg_array(arg_array, metadata),
             Some(value) => Err(util::YamlContentErr::new(format!(
-                "expected Array, but is `{:?}`",
-                value
+                "expected Array, but is `{value:?}`",
             ))
             .into()),
             None => Ok(Vec::new()),
@@ -88,8 +85,7 @@ pub fn load_table_registry_from_yaml(
                 let object = match map.get(&Yaml::from_str("object")) {
                     Some(value) => Ok(value),
                     None => Err(util::YamlContentErr::new(format!(
-                        "object not found for set table {}",
-                        name
+                        "object not found for set table {name}",
                     ))),
                 }?;
                 let n = util::get_size_from_yaml(object, metadata)?;
@@ -98,8 +94,7 @@ pub fn load_table_registry_from_yaml(
                     for v in array {
                         if v >= n {
                             return Err(util::YamlContentErr::new(format!(
-                                "element `{}` is too large for the set table `{}`",
-                                v, name
+                                "element `{v}` is too large for the set table `{name}`",
                             ))
                             .into());
                         }
@@ -117,8 +112,7 @@ pub fn load_table_registry_from_yaml(
                     Some(object) => *object,
                     None => {
                         return Err(util::YamlContentErr::new(format!(
-                            "no such object `{}`",
-                            object_name
+                            "no such object `{object_name}`",
                         ))
                         .into())
                     }
@@ -129,8 +123,7 @@ pub fn load_table_registry_from_yaml(
                         for v in &array {
                             if *v >= n {
                                 return Err(util::YamlContentErr::new(format!(
-                                    "element `{}` is too large for object `{}`",
-                                    *v, object_name
+                                    "element `{v}` is too large for object `{object_name}`",
                                 ))
                                 .into());
                             }
@@ -170,8 +163,7 @@ pub fn load_table_registry_from_yaml(
             }
             _ => {
                 return Err(util::YamlContentErr::new(format!(
-                    "no such table type `{}`",
-                    return_type
+                    "no such table type `{return_type}`",
                 ))
                 .into())
             }
@@ -354,8 +346,7 @@ pub fn load_table_registry_from_yaml(
         let name = util::get_string_by_key(map, "name")?;
         if let Some(name) = reserved_names.get(&name) {
             return Err(util::YamlContentErr::new(format!(
-                "dictionary name `{}` is already used",
-                name
+                "dictionary name `{name}` is already used",
             ))
             .into());
         }
@@ -381,8 +372,7 @@ pub fn load_table_registry_from_yaml(
                 let object = match map.get(&Yaml::from_str("object")) {
                     Some(value) => Ok(value),
                     None => Err(util::YamlContentErr::new(format!(
-                        "object not found for set dictionary {}",
-                        name
+                        "object not found for set dictionary {name}",
                     ))),
                 }?;
                 let n = util::get_size_from_yaml(object, metadata)?;
@@ -391,8 +381,7 @@ pub fn load_table_registry_from_yaml(
                     for v in array {
                         if v >= n {
                             return Err(util::YamlContentErr::new(format!(
-                                "element `{}` is too large for the set dictionary `{}`",
-                                v, name
+                                "element `{v}` is too large for the set dictionary `{name}`",
                             ))
                             .into());
                         }
@@ -407,8 +396,7 @@ pub fn load_table_registry_from_yaml(
                     Some(object) => *object,
                     None => {
                         return Err(util::YamlContentErr::new(format!(
-                            "no such object `{}`",
-                            object_name
+                            "no such object `{object_name}`",
                         ))
                         .into())
                     }
@@ -447,8 +435,7 @@ pub fn load_table_registry_from_yaml(
             }
             _ => {
                 return Err(util::YamlContentErr::new(format!(
-                    "no such dictionary type `{}`",
-                    return_type
+                    "no such dictionary type `{return_type}`",
                 ))
                 .into())
             }
@@ -509,8 +496,7 @@ where
         let value = util::get_numeric(value)?;
         if args >= size {
             return Err(util::YamlContentErr::new(format!(
-                "`{}` is greater than the number of the objects for table",
-                args,
+                "`{args}` is greater than the number of the objects for table",
             )));
         }
         body[args] = value;
@@ -538,8 +524,7 @@ where
         let value = util::get_numeric(value)?;
         if x >= size_x || y >= size_y {
             return Err(util::YamlContentErr::new(format!(
-                "`({}, {})` is greater than the numbers of objects for table",
-                x, y,
+                "`({x}, {y})` is greater than the numbers of objects for table",
             )));
         }
         body[x][y] = value;
@@ -573,8 +558,7 @@ where
         let value = util::get_numeric(value)?;
         if x >= size_x || y >= size_y || z >= size_z {
             return Err(util::YamlContentErr::new(format!(
-                "`({}, {}, {})` is greater than the numbers of objects for table",
-                x, y, z,
+                "`({x}, {y}, {z})` is greater than the numbers of objects for table",
             )));
         }
         body[x][y][z] = value;
@@ -604,8 +588,7 @@ where
         let value = util::get_numeric(value)?;
         if args.iter().zip(size.iter()).any(|(a, b)| a >= b) {
             return Err(util::YamlContentErr::new(format!(
-                "`{:?}` is greater than the numbers of objects for table",
-                args,
+                "`{args:?}` is greater than the numbers of objects for table",
             )));
         }
         body.insert(args, value);
@@ -643,8 +626,7 @@ fn load_bool_table_1d_from_yaml(
         let value = util::get_bool(value)?;
         if args >= size {
             return Err(util::YamlContentErr::new(format!(
-                "`{}` is greater than the number of the objects for table",
-                args,
+                "`{args}` is greater than the number of the objects for table",
             )));
         }
         body[args] = value;
@@ -669,8 +651,7 @@ fn load_bool_table_2d_from_yaml(
         let value = util::get_bool(value)?;
         if x >= size_x || y >= size_y {
             return Err(util::YamlContentErr::new(format!(
-                "`({}, {})` is greater than the numbers of objects for table",
-                x, y,
+                "`({x}, {y})` is greater than the numbers of objects for table",
             )));
         }
         body[x][y] = value;
@@ -701,8 +682,7 @@ fn load_bool_table_3d_from_yaml(
         let value = util::get_bool(value)?;
         if x >= size_x || y >= size_y || z >= size_z {
             return Err(util::YamlContentErr::new(format!(
-                "`({}, {}, {})` is greater than the numbers of objects for table",
-                x, y, z,
+                "`({x}, {y}, {z})` is greater than the numbers of objects for table",
             )));
         }
         body[x][y][z] = value;
@@ -729,8 +709,7 @@ fn load_bool_table_from_yaml(
         let value = util::get_bool(value)?;
         if args.iter().zip(size.iter()).any(|(a, b)| a >= b) {
             return Err(util::YamlContentErr::new(format!(
-                "`{:?}` is greater than the numbers of objects for table",
-                args,
+                "`{args:?}` is greater than the numbers of objects for table",
             )));
         }
         body.insert(args, value);
@@ -759,8 +738,7 @@ fn load_set_from_yaml(value: &Yaml, capacity: usize) -> Result<Set, util::YamlCo
     for v in array {
         if v >= capacity {
             return Err(util::YamlContentErr::new(format!(
-                "element `{}` in a set table is too large for the object",
-                v,
+                "element `{v}` in a set table is too large for the object",
             )));
         }
         set.insert(v);
@@ -780,8 +758,7 @@ fn load_set_table_1d_from_yaml(
         let value = load_set_from_yaml(value, default.len())?;
         if args >= size {
             return Err(util::YamlContentErr::new(format!(
-                "`{}` is greater than the number of the objects for table",
-                args,
+                "`{args}` is greater than the number of the objects for table",
             )));
         }
         body[args] = value;
@@ -806,8 +783,7 @@ fn load_set_table_2d_from_yaml(
         let value = load_set_from_yaml(value, default.len())?;
         if x >= size_x || y >= size_y {
             return Err(util::YamlContentErr::new(format!(
-                "`({}, {})` is greater than the numbers of objects for table",
-                x, y,
+                "`({x}, {y})` is greater than the numbers of objects for table",
             )));
         }
         body[x][y] = value;
@@ -838,8 +814,7 @@ fn load_set_table_3d_from_yaml(
         let value = load_set_from_yaml(value, default.len())?;
         if x >= size_x || y >= size_y || z >= size_z {
             return Err(util::YamlContentErr::new(format!(
-                "`({}, {}, {})` is greater than the numbers of objects for table",
-                x, y, z,
+                "`({x}, {y}, {z})` is greater than the numbers of objects for table",
             )));
         }
         body[x][y][z] = value;
@@ -866,8 +841,7 @@ fn load_set_table_from_yaml(
         let value = load_set_from_yaml(value, default.len())?;
         if args.iter().zip(size.iter()).any(|(a, b)| a >= b) {
             return Err(util::YamlContentErr::new(format!(
-                "`{:?}` is greater than the numbers of objects for table",
-                args,
+                "`{args:?}` is greater than the numbers of objects for table",
             )));
         }
         body.insert(args, value);
@@ -916,8 +890,7 @@ fn load_vector_table_1d_from_yaml(
         let value = load_vector_from_yaml(value, capacity)?;
         if args >= size {
             return Err(util::YamlContentErr::new(format!(
-                "`{}` is greater than the number of the objects for table",
-                args,
+                "`{args}` is greater than the number of the objects for table",
             )));
         }
         body[args] = value;
@@ -943,8 +916,7 @@ fn load_vector_table_2d_from_yaml(
         let value = load_vector_from_yaml(value, capacity)?;
         if x >= size_x || y >= size_y {
             return Err(util::YamlContentErr::new(format!(
-                "`({}, {})` is greater than the numbers of objects for table",
-                x, y,
+                "`({x}, {y})` is greater than the numbers of objects for table",
             )));
         }
         body[x][y] = value;
@@ -976,8 +948,7 @@ fn load_vector_table_3d_from_yaml(
         let value = load_vector_from_yaml(value, capacity)?;
         if x >= size_x || y >= size_y || z >= size_z {
             return Err(util::YamlContentErr::new(format!(
-                "`({}, {}, {})` is greater than the numbers of objects for table",
-                x, y, z,
+                "`({x}, {y}, {z})` is greater than the numbers of objects for table",
             )));
         }
         body[x][y][z] = value;
@@ -1006,8 +977,7 @@ fn load_vector_table_from_yaml(
         let value = load_vector_from_yaml(value, capacity)?;
         if args.iter().zip(size.iter()).any(|(a, b)| a >= b) {
             return Err(util::YamlContentErr::new(format!(
-                "`{:?}` is greater than the numbers of objects for table",
-                args,
+                "`{args:?}` is greater than the numbers of objects for table",
             )));
         }
         body.insert(args, value);

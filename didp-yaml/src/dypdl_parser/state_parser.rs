@@ -25,8 +25,7 @@ pub fn load_state_from_yaml(
         for v in values {
             if v >= capacity {
                 return Err(util::YamlContentErr::new(format!(
-                    "value `{}` is out of range of a set variable `{}`",
-                    v, name
+                    "value `{v}` is out of range of a set variable `{name}`"
                 ))
                 .into());
             }
@@ -43,8 +42,7 @@ pub fn load_state_from_yaml(
         for v in &vector {
             if *v >= capacity {
                 return Err(util::YamlContentErr::new(format!(
-                    "value `{}` is out of range of a vector variable `{}`",
-                    v, name
+                    "value `{v}` is out of range of a vector variable `{name}`"
                 ))
                 .into());
             }
@@ -116,8 +114,7 @@ pub fn ground_static_parameters_from_yaml(
 
         if let Some(name) = reserved_names.get(&name) {
             return Err(util::YamlContentErr::new(format!(
-                "parameter name `{}` is already used",
-                name
+                "parameter name `{name}` is already used"
             ))
             .into());
         }
@@ -168,8 +165,7 @@ pub fn ground_parameters_from_yaml(
         let name = util::get_string_by_key(map, "name")?;
         if let Some(name) = reserved_names.get(&name) {
             return Err(util::YamlContentErr::new(format!(
-                "parameter name `{}` is already used",
-                name
+                "parameter name `{name}` is already used"
             ))
             .into());
         }
@@ -185,8 +181,7 @@ pub fn ground_parameters_from_yaml(
             (metadata.get_number_of_objects(object)?, None, Some(v.id()))
         } else {
             return Err(util::YamlContentErr::new(format!(
-                "no such object, set variable, or vector variable `{}`",
-                object
+                "no such object, set variable, or vector variable `{object}`"
             ))
             .into());
         };
@@ -252,8 +247,7 @@ pub fn load_metadata_from_yaml(
         let name = util::get_string_by_key(map, "name")?;
         if let Some(name) = reserved_names.get(&name) {
             return Err(util::YamlContentErr::new(format!(
-                "variable name `{}` is already used",
-                name
+                "variable name `{name}` is already used"
             ))
             .into());
         }
@@ -300,8 +294,7 @@ pub fn load_metadata_from_yaml(
             },
             value => {
                 return Err(util::YamlContentErr::new(format!(
-                    "`{:?}` is not a variable type",
-                    value
+                    "`{value:?}` is not a variable type"
                 ))
                 .into())
             }
@@ -320,8 +313,7 @@ fn get_less_is_better(
         Some(yaml_rust::Yaml::String(value)) if &value[..] == "greater" => Ok(Some(false)),
         Some(yaml_rust::Yaml::String(value)) if &value[..] == "less" => Ok(Some(true)),
         Some(value) => Err(util::YamlContentErr::new(format!(
-            "expected `String(\"greater\")` or `String(\"less\")`, found `{:?}`",
-            value
+            "expected `String(\"greater\")` or `String(\"less\")`, found `{value:?}`"
         ))),
         None => Ok(None),
     }

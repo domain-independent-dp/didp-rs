@@ -1034,16 +1034,14 @@ impl StateMetadata {
             let v = panic::catch_unwind(|| state.get_element_variable(i));
             if v.is_err() {
                 return Err(ModelErr::new(format!(
-                    "{} th element variable does not exists",
-                    i
+                    "{i} th element variable does not exists",
                 )));
             }
             let v = v.unwrap();
             let m = self.object_numbers[self.element_variable_to_object[i]];
             if v >= m {
                 return Err(ModelErr::new(format!(
-                    "value {} for an element variable >= #objects ({})",
-                    i, m
+                    "value {i} for an element variable >= #objects ({m})",
                 )));
             }
         }
@@ -1052,16 +1050,14 @@ impl StateMetadata {
             let v = panic::catch_unwind(|| state.get_element_resource_variable(i));
             if v.is_err() {
                 return Err(ModelErr::new(format!(
-                    "{} th element resource variable does not exist",
-                    i
+                    "{i} th element resource variable does not exist",
                 )));
             }
             let v = v.unwrap();
             let m = self.object_numbers[self.element_resource_variable_to_object[i]];
             if v >= m {
                 return Err(ModelErr::new(format!(
-                    "value {} for an element resource variable >= #objects ({})",
-                    i, m
+                    "value {i} for an element resource variable >= #objects ({m})",
                 )));
             }
         }
@@ -1070,18 +1066,15 @@ impl StateMetadata {
             let v = panic::catch_unwind(|| state.get_set_variable(i));
             if v.is_err() {
                 return Err(ModelErr::new(format!(
-                    "{} th set variable does not exists",
-                    i
+                    "{i} th set variable does not exists",
                 )));
             }
             let v = v.unwrap();
             let m = self.object_numbers[self.set_variable_to_object[i]];
             if v.len() > m {
                 return Err(ModelErr::new(format!(
-                    "set size {} for {} th set variable > #objects ({})",
+                    "set size {} for {i} th set variable > #objects ({m})",
                     v.len(),
-                    i,
-                    m
                 )));
             }
         }
@@ -1090,16 +1083,14 @@ impl StateMetadata {
             let v = panic::catch_unwind(|| state.get_vector_variable(i));
             if v.is_err() {
                 return Err(ModelErr::new(format!(
-                    "{} th vector variable does not exists",
-                    i
+                    "{i} th vector variable does not exists",
                 )));
             }
             let v = v.unwrap();
             let m = self.object_numbers[self.vector_variable_to_object[i]];
             if v.iter().any(|v| *v >= m) {
                 return Err(ModelErr::new(format!(
-                    "vector for {} th vector variable contains a value >= #objects ({})",
-                    i, m
+                    "vector for {i} th vector variable contains a value >= #objects ({m})",
                 )));
             }
         }
@@ -1108,8 +1099,7 @@ impl StateMetadata {
             let v = panic::catch_unwind(|| state.get_integer_variable(i));
             if v.is_err() {
                 return Err(ModelErr::new(format!(
-                    "{} th integer variable does not exist",
-                    i
+                    "{i} th integer variable does not exist",
                 )));
             }
         }
@@ -1118,8 +1108,7 @@ impl StateMetadata {
             let v = panic::catch_unwind(|| state.get_integer_resource_variable(i));
             if v.is_err() {
                 return Err(ModelErr::new(format!(
-                    "{} th integer resource variable does not exist",
-                    i
+                    "{i} th integer resource variable does not exist",
                 )));
             }
         }
@@ -1128,8 +1117,7 @@ impl StateMetadata {
             let v = panic::catch_unwind(|| state.get_continuous_variable(i));
             if v.is_err() {
                 return Err(ModelErr::new(format!(
-                    "{} th continuous variable does not exist",
-                    i
+                    "{i} th continuous variable does not exist",
                 )));
             }
         }
@@ -1138,8 +1126,7 @@ impl StateMetadata {
             let v = panic::catch_unwind(|| state.get_continuous_resource_variable(i));
             if v.is_err() {
                 return Err(ModelErr::new(format!(
-                    "{} th continuous resource variable does not exist",
-                    i
+                    "{i} th continuous resource variable does not exist",
                 )));
             }
         }
@@ -1155,7 +1142,7 @@ impl StateMetadata {
         if let Some(id) = self.name_to_object_type.get(name) {
             Ok(ObjectType(*id))
         } else {
-            Err(ModelErr::new(format!("no such object `{}`", name)))
+            Err(ModelErr::new(format!("no such object `{name}`")))
         }
     }
 

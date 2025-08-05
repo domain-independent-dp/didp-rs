@@ -51,7 +51,7 @@ pub fn parse_expression<'a, 'b>(
             } else if let Ok(condition) = functions.get_boolean_function(key) {
                 Ok((condition, rest))
             } else {
-                Err(ParseErr::new(format!("unexpected token: `{}`", token)))
+                Err(ParseErr::new(format!("unexpected token: `{token}`")))
             }
         }
     }
@@ -139,8 +139,7 @@ fn parse_comparison<'a, 'b>(
             )),
             "is_subset" => Ok((Condition::Set(Box::new(SetCondition::IsSubset(x, y))), rest)),
             _ => Err(ParseErr::new(format!(
-                "no such comparison operator `{}` for two set expressions",
-                operator
+                "no such comparison operator `{operator}` for two set expressions",
             ))),
         }
     } else {
@@ -151,7 +150,7 @@ fn parse_comparison<'a, 'b>(
             ">" => ComparisonOperator::Gt,
             "<=" => ComparisonOperator::Le,
             "<" => ComparisonOperator::Lt,
-            _ => return Err(ParseErr::new(format!("no such operator `{}`", operator))),
+            _ => return Err(ParseErr::new(format!("no such operator `{operator}`"))),
         };
         if let Ok((x, y, rest)) = parse_ii(tokens, metadata, functions, registry, parameters) {
             Ok((
@@ -172,8 +171,7 @@ fn parse_comparison<'a, 'b>(
             ))
         } else {
             Err(ParseErr::new(format!(
-                "could not parse `{:?}` as a comparison",
-                tokens
+                "could not parse `{tokens:?}` as a comparison",
             )))
         }
     }

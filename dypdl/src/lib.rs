@@ -64,7 +64,7 @@
 //!
 //! for j in 1..n_customers {
 //!     // Visiting each customer.
-//!     let mut visit = Transition::new(format!("visit {}", j));
+//!     let mut visit = Transition::new(format!("visit {j}"));
 //!     visit.set_cost(distance.element(location, j) + IntegerExpression::Cost);
 //!     // Remove j from the set of unvisited customers.
 //!     visit.add_effect(unvisited, unvisited.remove(j)).unwrap();
@@ -659,7 +659,7 @@ impl Model {
             );
         }
         if cost != validation_cost && show_message {
-            println!("The cost {} does not match the actual cost {}. This is possibly due to the cost is continuous.", cost, validation_cost)
+            println!("The cost {cost} does not match the actual cost {validation_cost}. This is possibly due to the cost being continuous.");
         }
         true
     }
@@ -1359,7 +1359,7 @@ impl Model {
             constant,
         )) = &simplified
         {
-            eprintln!("The state function always returns a constant {}", constant);
+            eprintln!("The state function always returns a constant {constant}");
         }
 
         self.state_functions.add_set_function(name, simplified)
@@ -1419,7 +1419,7 @@ impl Model {
         let simplified = expression.simplify(&self.table_registry);
 
         if let expression::ElementExpression::Constant(constant) = &simplified {
-            eprintln!("The state function always returns a constant {}", constant);
+            eprintln!("The state function always returns a constant {constant}");
         }
 
         self.state_functions.add_element_function(name, simplified)
@@ -1477,7 +1477,7 @@ impl Model {
         let simplified = expression.simplify(&self.table_registry);
 
         if let expression::IntegerExpression::Constant(constant) = &simplified {
-            eprintln!("The state function always returns a constant {}", constant);
+            eprintln!("The state function always returns a constant {constant}");
         }
 
         self.state_functions.add_integer_function(name, simplified)
@@ -1535,7 +1535,7 @@ impl Model {
         let simplified = expression.simplify(&self.table_registry);
 
         if let expression::ContinuousExpression::Constant(constant) = &simplified {
-            eprintln!("The state function always returns a constant {}", constant);
+            eprintln!("The state function always returns a constant {constant}");
         }
 
         self.state_functions
@@ -1602,7 +1602,7 @@ impl Model {
         let simplified = expression.simplify(&self.table_registry);
 
         if let expression::Condition::Constant(constant) = &simplified {
-            eprintln!("The state function always returns a constant {}", constant);
+            eprintln!("The state function always returns a constant {constant}");
         }
 
         self.state_functions.add_boolean_function(name, simplified)
@@ -1617,10 +1617,10 @@ impl Model {
 
         match condition.simplify(&self.table_registry) {
             expression::Condition::Constant(true) => {
-                eprintln!("constraint {:?} is always satisfied", condition)
+                eprintln!("constraint {condition:?} is always satisfied")
             }
             expression::Condition::Constant(false) => {
-                eprintln!("constraint {:?} cannot be satisfied", condition)
+                eprintln!("constraint {condition:?} cannot be satisfied")
             }
             _ => {}
         }
@@ -1844,7 +1844,7 @@ impl Model {
 
         transitions
             .get(id.id)
-            .ok_or_else(|| ModelErr::new(format!("No such transition with {:?}", id)))
+            .ok_or_else(|| ModelErr::new(format!("No such transition with {id:?}")))
     }
 
     /// Adds a forward transition.
@@ -2419,13 +2419,13 @@ impl Model {
             let elements_in_vector_variable = condition.elements_in_vector_variable.clone();
             match simplified {
                 expression::Condition::Constant(true) => {
-                    eprintln!("precondition {:?} is always satisfied", condition);
+                    eprintln!("precondition {condition:?} is always satisfied");
                 }
                 expression::Condition::Constant(false)
                     if elements_in_set_variable.is_empty()
                         && elements_in_vector_variable.is_empty() =>
                 {
-                    eprintln!("precondition {:?} is never satisfied", condition);
+                    eprintln!("precondition {condition:?} is never satisfied");
                 }
                 _ => {}
             }
@@ -3573,8 +3573,7 @@ impl CheckExpression<expression::IntegerExpression> for Model {
                     }
                 } else {
                     Err(ModelErr::new(format!(
-                        "using cost is not allowed in integer expression `{:?}`",
-                        expression,
+                        "using cost is not allowed in integer expression `{expression:?}`",
                     )))
                 }
             }
@@ -3662,8 +3661,7 @@ impl CheckExpression<expression::ContinuousExpression> for Model {
                     Ok(())
                 } else {
                     Err(ModelErr::new(format!(
-                        "Using cost is not allowed in continuous expression `{:?}`",
-                        expression,
+                        "Using cost is not allowed in continuous expression `{expression:?}`",
                     )))
                 }
             }

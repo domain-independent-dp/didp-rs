@@ -82,10 +82,10 @@ fn load_state_function(
     for parameters in parameters_array {
         let name = parameters
             .values()
-            .fold(name.clone(), |acc, value| format!("{}_{}", acc, value));
+            .fold(name.clone(), |acc, value| format!("{acc}_{value}"));
 
         if reserved_names.contains(&name) || name_set.contains(&name) {
-            return Err(format!("state function name `{}` is already used", name).into());
+            return Err(format!("state function name `{name}` is already used").into());
         }
 
         let parameters = FxHashMap::from_iter(parameters.into_iter());
@@ -162,7 +162,7 @@ fn load_state_function(
                 }
             }
             value => {
-                return Err(format!("{:?} is not a function type", value).into());
+                return Err(format!("{value:?} is not a function type").into());
             }
         }
 

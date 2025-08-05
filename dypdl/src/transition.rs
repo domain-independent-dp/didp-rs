@@ -375,7 +375,7 @@ impl Transition {
             .iter()
             .zip(self.parameter_values.iter())
         {
-            full_name += format!(" {}:{}", name, value).as_str();
+            full_name += format!(" {name}:{value}").as_str();
         }
         full_name
     }

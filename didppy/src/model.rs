@@ -425,8 +425,7 @@ impl ModelPy {
             Ok(domain) => domain,
             Err(error) => {
                 return Err(PyErr::new::<PyRuntimeError, _>(format!(
-                    "Couldn't load a domain as YAML: {:?}",
-                    error
+                    "Couldn't load a domain as YAML: {error:?}",
                 )))
             }
         };
@@ -438,8 +437,7 @@ impl ModelPy {
             Ok(problem) => problem,
             Err(error) => {
                 return Err(PyErr::new::<PyRuntimeError, _>(format!(
-                    "Couldn't load a problem as YAML: {:?}",
-                    error
+                    "Couldn't load a problem as YAML: {error:?}",
                 )))
             }
         };
@@ -450,8 +448,7 @@ impl ModelPy {
         match model_result {
             Ok(model) => Ok(ModelPy::from(model)),
             Err(error) => Err(PyErr::new::<PyRuntimeError, _>(format!(
-                "Couldn't load a model: {:?}",
-                error
+                "Couldn't load a model: {error:?}",
             ))),
         }
     }
@@ -582,7 +579,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_metadata.number_of_object_types();
-                format!("_object_{}", n)
+                format!("_object_{n}")
             },
             String::from,
         );
@@ -746,7 +743,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_metadata.number_of_element_variables();
-                format!("__element_var_{}", n)
+                format!("__element_var_{n}")
             },
             String::from,
         );
@@ -841,7 +838,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_metadata.number_of_element_resource_variables();
-                format!("__element_resource_var_{}", n)
+                format!("__element_resource_var_{n}")
             },
             String::from,
         );
@@ -932,7 +929,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_metadata.number_of_set_variables();
-                format!("__set_var_{}", n)
+                format!("__set_var_{n}")
             },
             String::from,
         );
@@ -1005,7 +1002,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_metadata.number_of_integer_variables();
-                format!("__int_var_{}", n)
+                format!("__int_var_{n}")
             },
             String::from,
         );
@@ -1089,7 +1086,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_metadata.number_of_integer_resource_variables();
-                format!("__int_resource_var_{}", n)
+                format!("__int_resource_var_{n}")
             },
             String::from,
         );
@@ -1166,7 +1163,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_metadata.number_of_continuous_variables();
-                format!("__float_var_{}", n)
+                format!("__float_var_{n}")
             },
             String::from,
         );
@@ -1253,7 +1250,7 @@ impl ModelPy {
                     .0
                     .state_metadata
                     .number_of_continuous_resource_variables();
-                format!("__float_resource_var_{}", n)
+                format!("__float_resource_var_{n}")
             },
             String::from,
         );
@@ -1604,7 +1601,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_functions.set_functions.len();
-                format!("__set_state_fun_{}", n)
+                format!("__set_state_fun_{n}")
             },
             String::from,
         );
@@ -1690,7 +1687,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_functions.element_functions.len();
-                format!("__element_state_fun_{}", n)
+                format!("__element_state_fun_{n}")
             },
             String::from,
         );
@@ -1770,7 +1767,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_functions.integer_functions.len();
-                format!("__int_state_fun_{}", n)
+                format!("__int_state_fun_{n}")
             },
             String::from,
         );
@@ -1854,7 +1851,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_functions.continuous_functions.len();
-                format!("__float_state_fun_{}", n)
+                format!("__float_state_fun_{n}")
             },
             String::from,
         );
@@ -1938,7 +1935,7 @@ impl ModelPy {
         let name = name.map_or_else(
             || {
                 let n = self.0.state_functions.boolean_functions.len();
-                format!("__bool_state_fun_{}", n)
+                format!("__bool_state_fun_{n}")
             },
             String::from,
         );
@@ -2592,7 +2589,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.element_tables.tables_1d.len();
-                        format!("__element_table_1d_{}", n)
+                        format!("__element_table_1d_{n}")
                     }
                 };
                 match self.0.add_table_1d(name, table) {
@@ -2605,7 +2602,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.element_tables.tables_2d.len();
-                        format!("__element_table_2d_{}", n)
+                        format!("__element_table_2d_{n}")
                     }
                 };
                 match self.0.add_table_2d(name, table) {
@@ -2618,7 +2615,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.element_tables.tables_3d.len();
-                        format!("__element_table_3d_{}", n)
+                        format!("__element_table_3d_{n}")
                     }
                 };
                 match self.0.add_table_3d(name, table) {
@@ -2631,7 +2628,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.element_tables.tables.len();
-                        format!("__element_table_{}", n)
+                        format!("__element_table_{n}")
                     }
                 };
                 if let Some(default) = default {
@@ -2721,7 +2718,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.set_tables.tables_1d.len();
-                        format!("__set_table_1d_{}", n)
+                        format!("__set_table_1d_{n}")
                     }
                 };
                 let mut set_table = Vec::with_capacity(table.len());
@@ -2744,7 +2741,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.set_tables.tables_2d.len();
-                        format!("__set_table_2d_{}", n)
+                        format!("__set_table_2d_{n}")
                     }
                 };
                 let mut set_table = Vec::with_capacity(table.len());
@@ -2771,7 +2768,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.set_tables.tables_3d.len();
-                        format!("__set_table_3d_{}", n)
+                        format!("__set_table_3d_{n}")
                     }
                 };
                 let mut set_table = Vec::with_capacity(table.len());
@@ -2802,7 +2799,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.set_tables.tables.len();
-                        format!("__set_table_{}", n)
+                        format!("__set_table_{n}")
                     }
                 };
                 let mut map = FxHashMap::default();
@@ -2883,7 +2880,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.bool_tables.tables_1d.len();
-                        format!("__bool_table_1d_{}", n)
+                        format!("__bool_table_1d_{n}")
                     }
                 };
                 match self.0.add_table_1d(name, table) {
@@ -2896,7 +2893,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.bool_tables.tables_2d.len();
-                        format!("__bool_table_2d_{}", n)
+                        format!("__bool_table_2d_{n}")
                     }
                 };
                 match self.0.add_table_2d(name, table) {
@@ -2909,7 +2906,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.bool_tables.tables_3d.len();
-                        format!("__bool_table_3d_{}", n)
+                        format!("__bool_table_3d_{n}")
                     }
                 };
                 match self.0.add_table_3d(name, table) {
@@ -2922,7 +2919,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.bool_tables.tables.len();
-                        format!("__bool_table_{}", n)
+                        format!("__bool_table_{n}")
                     }
                 };
                 if let Some(default) = default {
@@ -3006,7 +3003,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.integer_tables.tables_1d.len();
-                        format!("__int_table_1d_{}", n)
+                        format!("__int_table_1d_{n}")
                     }
                 };
                 match self.0.add_table_1d(name, table) {
@@ -3019,7 +3016,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.integer_tables.tables_2d.len();
-                        format!("__int_table_2d_{}", n)
+                        format!("__int_table_2d_{n}")
                     }
                 };
                 match self.0.add_table_2d(name, table) {
@@ -3032,7 +3029,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.integer_tables.tables_3d.len();
-                        format!("__int_table_3d_{}", n)
+                        format!("__int_table_3d_{n}")
                     }
                 };
                 match self.0.add_table_3d(name, table) {
@@ -3045,7 +3042,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.integer_tables.tables.len();
-                        format!("__int_table_{}", n)
+                        format!("__int_table_{n}")
                     }
                 };
                 if let Some(default) = default {
@@ -3129,7 +3126,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.continuous_tables.tables_1d.len();
-                        format!("__float_table_1d_{}", n)
+                        format!("__float_table_1d_{n}")
                     }
                 };
                 match self.0.add_table_1d(name, table) {
@@ -3142,7 +3139,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.continuous_tables.tables_2d.len();
-                        format!("__float_table_2d_{}", n)
+                        format!("__float_table_2d_{n}")
                     }
                 };
                 match self.0.add_table_2d(name, table) {
@@ -3155,7 +3152,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.continuous_tables.tables_3d.len();
-                        format!("__float_table_3d_{}", n)
+                        format!("__float_table_3d_{n}")
                     }
                 };
                 match self.0.add_table_3d(name, table) {
@@ -3168,7 +3165,7 @@ impl ModelPy {
                     Some(name) => String::from(name),
                     None => {
                         let n = self.0.table_registry.continuous_tables.tables.len();
-                        format!("__float_table_{}", n)
+                        format!("__float_table_{n}")
                     }
                 };
                 if let Some(default) = default {
@@ -6884,7 +6881,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         ElementTableUnion::Table(t) => t,
-    //         _ => panic!("expected ElementTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected ElementTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<Element>::from(t).id();
     //     assert_eq!(
@@ -6910,7 +6907,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         ElementTableUnion::Table(t) => t,
-    //         _ => panic!("expected ElementTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected ElementTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<Element>::from(t).id();
     //     assert_eq!(
@@ -6936,7 +6933,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         ElementTableUnion::Table(t) => t,
-    //         _ => panic!("expected ElementTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected ElementTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<Element>::from(t).id();
     //     assert_eq!(
@@ -7012,7 +7009,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         ElementTableUnion::Table(t) => t,
-    //         _ => panic!("expected ElementTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected ElementTableUnion::Table but `{t:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = 2usize.into_bound_py_any(py);
@@ -7032,7 +7029,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         ElementTableUnion::Table(t) => t,
-    //         _ => panic!("expected ElementTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected ElementTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
@@ -7054,7 +7051,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         ElementTableUnion::Table(t) => t,
-    //         _ => panic!("expected ElementTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected ElementTableUnion::Table but `{t:?}`"),
     //     };
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
@@ -7213,7 +7210,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table1DHandle::<Set>::from(t1).id();
@@ -7243,7 +7240,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table1D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table1DHandle::<Set>::from(t2).id();
@@ -7278,7 +7275,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table1DHandle::<Set>::from(t1).id();
@@ -7312,7 +7309,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table1D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table1DHandle::<Set>::from(t2).id();
@@ -7382,7 +7379,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -7399,7 +7396,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table1D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -7418,7 +7415,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -7430,7 +7427,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table1D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -7458,7 +7455,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -7475,7 +7472,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table1D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -7494,7 +7491,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -7506,7 +7503,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table1D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -7580,7 +7577,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -7597,7 +7594,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table1D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -7621,7 +7618,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -7638,7 +7635,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table1D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -7666,7 +7663,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -7683,7 +7680,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table1D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -7708,7 +7705,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -7726,7 +7723,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table1D(t) => t,
-            _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table1D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -7985,7 +7982,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table1D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
     //     let table = vec![
     //         SetConstPy::from(Set::with_capacity(10)),
@@ -8033,7 +8030,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table1D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
@@ -8062,7 +8059,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table1D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let table = vec![vec![
@@ -8101,7 +8098,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table1D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
     //     let table = vec![
     //         SetConstPy::from(Set::with_capacity(10)),
@@ -8143,7 +8140,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table1D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![vec![], vec![0, 1, 2]].into_bound_py_any(py);
@@ -8183,7 +8180,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table1D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![0, 1, 2, 10].into_bound_py_any(py);
@@ -8212,7 +8209,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table1D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![HashSet::new(), {
@@ -8259,7 +8256,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table1D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table1D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table1D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![HashSet::new(), {
@@ -8299,7 +8296,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table2DHandle::<Set>::from(t1).id();
@@ -8329,7 +8326,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table2D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table2DHandle::<Set>::from(t2).id();
@@ -8364,7 +8361,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table2DHandle::<Set>::from(t1).id();
@@ -8398,7 +8395,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table2D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table2DHandle::<Set>::from(t2).id();
@@ -8468,7 +8465,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -8485,7 +8482,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table2D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -8504,7 +8501,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -8516,7 +8513,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table2D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -8544,7 +8541,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -8561,7 +8558,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table2D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -8580,7 +8577,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -8592,7 +8589,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table2D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -8666,7 +8663,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -8683,7 +8680,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table2D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -8707,7 +8704,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -8724,7 +8721,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table2D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -8752,7 +8749,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -8769,7 +8766,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table2D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -8794,7 +8791,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -8812,7 +8809,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table2D(t) => t,
-            _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table2D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -9071,7 +9068,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table2D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
     //     let table = vec![vec![
     //         SetConstPy::from(Set::with_capacity(10)),
@@ -9119,7 +9116,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table2D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
@@ -9148,7 +9145,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table2D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let table = vec![vec![vec![
@@ -9187,7 +9184,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table2D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
     //     let table = vec![vec![
     //         SetConstPy::from(Set::with_capacity(10)),
@@ -9229,7 +9226,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table2D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![vec![vec![], vec![0, 1, 2]]].into_bound_py_any(py);
@@ -9269,7 +9266,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table2D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![vec![vec![0, 1, 2, 10]]].into_bound_py_any(py);
@@ -9298,7 +9295,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table2D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![vec![HashSet::new(), {
@@ -9345,7 +9342,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table2D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table2D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table2D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![vec![HashSet::new(), {
@@ -9385,7 +9382,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table3DHandle::<Set>::from(t1).id();
@@ -9415,7 +9412,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table3D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table3DHandle::<Set>::from(t2).id();
@@ -9450,7 +9447,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = Table3DHandle::<Set>::from(t1).id();
@@ -9484,7 +9481,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table3D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = Table3DHandle::<Set>::from(t2).id();
@@ -9555,7 +9552,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -9573,7 +9570,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table3D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -9592,7 +9589,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -9604,7 +9601,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table3D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -9633,7 +9630,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -9651,7 +9648,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table3D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -9670,7 +9667,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -9682,7 +9679,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table3D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -9757,7 +9754,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -9775,7 +9772,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table3D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -9800,7 +9797,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -9818,7 +9815,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table3D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -9847,7 +9844,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -9865,7 +9862,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table3D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -9890,7 +9887,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -9908,7 +9905,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table3D(t) => t,
-            _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table3D but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -10167,7 +10164,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table3D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
     //     let table = vec![vec![vec![
     //         SetConstPy::from(Set::with_capacity(10)),
@@ -10215,7 +10212,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table3D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
@@ -10244,7 +10241,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table3D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let table = vec![vec![
@@ -10283,7 +10280,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table3D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
     //     let table = vec![vec![vec![
     //         SetConstPy::from(Set::with_capacity(10)),
@@ -10325,7 +10322,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table3D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![vec![vec![vec![], vec![0, 1, 2]]]].into_bound_py_any(py);
@@ -10365,7 +10362,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table3D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![vec![vec![vec![0, 1, 2, 10]]]].into_bound_py_any(py);
@@ -10394,7 +10391,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table3D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![vec![vec![HashSet::new(), {
@@ -10441,7 +10438,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table3D(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table3D but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table3D but `{t1:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let table = vec![vec![vec![HashSet::new(), {
@@ -10492,7 +10489,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = TableHandle::<Set>::from(t1).id();
@@ -10538,7 +10535,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = TableHandle::<Set>::from(t2).id();
@@ -10589,7 +10586,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
         let t_id = TableHandle::<Set>::from(t1).id();
@@ -10635,7 +10632,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
         let t_id = TableHandle::<Set>::from(t2).id();
@@ -10725,7 +10722,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -10755,7 +10752,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -10786,7 +10783,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -10810,7 +10807,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -10851,7 +10848,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -10881,7 +10878,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -10912,7 +10909,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -10936,7 +10933,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -11051,7 +11048,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -11081,7 +11078,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -11118,7 +11115,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -11148,7 +11145,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -11189,7 +11186,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -11219,7 +11216,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -11256,7 +11253,7 @@ mod tests {
         let t1 = t1.unwrap();
         let t1 = match t1 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+            _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
         };
         assert_eq!(t1.get_capacity_of_set(), 10);
 
@@ -11286,7 +11283,7 @@ mod tests {
         let t2 = t2.unwrap();
         let t2 = match t2 {
             SetTableUnion::Table(t) => t,
-            _ => panic!("expected SetTableUnion::Table but `{:?}`", t2),
+            _ => panic!("expected SetTableUnion::Table but `{t2:?}`"),
         };
         assert_eq!(t2.get_capacity_of_set(), 10);
 
@@ -11438,7 +11435,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table1D(0);
     //     let result = Python::with_gil(|py| {
@@ -11476,7 +11473,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table2D((0, 0));
     //     let result = Python::with_gil(|py| {
@@ -11517,7 +11514,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
     //     let result = Python::with_gil(|py| {
@@ -11558,7 +11555,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //     let result = Python::with_gil(|py| {
@@ -11659,7 +11656,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table1D(0);
     //     let result = Python::with_gil(|py| {
@@ -11694,7 +11691,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table2D((0, 0));
     //     let result = Python::with_gil(|py| {
@@ -11732,7 +11729,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
     //     let result = Python::with_gil(|py| {
@@ -11770,7 +11767,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //     let result = Python::with_gil(|py| {
@@ -11836,7 +11833,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table1D(0);
     //     let result = Python::with_gil(|py| {
@@ -11876,7 +11873,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table2D((0, 0));
     //     let result = Python::with_gil(|py| {
@@ -11919,7 +11916,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table3D((0, 0, 0));
     //     let result = Python::with_gil(|py| {
@@ -11962,7 +11959,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t_id = match t.clone() {
     //         SetTableUnion::Table(t) => TableHandle::<Set>::from(t).id(),
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let index = TableIndexUnion::Table(vec![0, 0, 0, 0]);
     //     let result = Python::with_gil(|py| {
@@ -12036,7 +12033,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = SetConstPy::from(Set::with_capacity(10)).into_bound_py_any(py);
@@ -12063,7 +12060,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
@@ -12092,7 +12089,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
@@ -12124,7 +12121,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = vec![1].into_bound_py_any(py);
@@ -12153,7 +12150,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
@@ -12184,7 +12181,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = {
@@ -12218,7 +12215,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("Expected SetTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("Expected SetTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
@@ -12253,7 +12250,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let table: FxHashMap<(Element, Element, Element, Element), SetConstPy> = {
     //         let mut map = FxHashMap::default();
@@ -12316,7 +12313,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let table = vec![SetConstPy::from({
     //         let mut set = Set::with_capacity(10);
@@ -12358,7 +12355,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
@@ -12393,7 +12390,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let table: FxHashMap<(Element, Element, Element, Element), SetConstPy> = {
     //         let mut map = FxHashMap::default();
@@ -12442,7 +12439,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let table: FxHashMap<(Element, Element, Element, Element), SetConstPy> = {
     //         let mut map = FxHashMap::default();
@@ -12494,7 +12491,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let table: FxHashMap<(Element, Element, Element, Element), HashSet<Element>> = {
     //         let mut map = FxHashMap::default();
@@ -12556,7 +12553,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let table: FxHashMap<(Element, Element, Element, Element), HashSet<Element>> = {
     //         let mut map = FxHashMap::default();
@@ -12605,7 +12602,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let table: FxHashMap<(Element, Element, Element, Element), HashSet<Element>> = {
     //         let mut map = FxHashMap::default();
@@ -12658,7 +12655,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let table: FxHashMap<(Element, Element, Element, Element), Vec<Element>> = {
     //         let mut map = FxHashMap::default();
@@ -12714,7 +12711,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let table: FxHashMap<(Element, Element, Element, Element), Vec<Element>> = {
     //         let mut map = FxHashMap::default();
@@ -12756,7 +12753,7 @@ mod tests {
     //     let t1 = t1.unwrap();
     //     let t1 = match t1 {
     //         SetTableUnion::Table(t) => t,
-    //         _ => panic!("expected SetTableUnion::Table but `{:?}`", t1),
+    //         _ => panic!("expected SetTableUnion::Table but `{t1:?}`"),
     //     };
     //     let table: FxHashMap<(Element, Element, Element, Element), Vec<Element>> = {
     //         let mut map = FxHashMap::default();
@@ -13441,7 +13438,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         BoolTableUnion::Table(t) => t,
-    //         _ => panic!("expected BoolTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected BoolTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<bool>::from(t).id();
     //     assert!(*model.0.table_registry.bool_tables.tables[t_id].get(&[0]),);
@@ -13464,7 +13461,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         BoolTableUnion::Table(t) => t,
-    //         _ => panic!("expected BoolTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected BoolTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<bool>::from(t).id();
     //     assert!(*model.0.table_registry.bool_tables.tables[t_id].get(&[0, 0]),);
@@ -13487,7 +13484,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         BoolTableUnion::Table(t) => t,
-    //         _ => panic!("expected BoolTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected BoolTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<bool>::from(t).id();
     //     assert!(*model.0.table_registry.bool_tables.tables[t_id].get(&[0, 0, 0]),);
@@ -13560,7 +13557,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         BoolTableUnion::Table(t) => t,
-    //         _ => panic!("expected BoolTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected BoolTableUnion::Table but `{t:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = true.into_bound_py_any(py);
@@ -13580,7 +13577,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         BoolTableUnion::Table(t) => t,
-    //         _ => panic!("expected BoolTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected BoolTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
@@ -13602,7 +13599,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         BoolTableUnion::Table(t) => t,
-    //         _ => panic!("expected BoolTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected BoolTableUnion::Table but `{t:?}`"),
     //     };
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
@@ -14406,7 +14403,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         IntTableUnion::Table(t) => t,
-    //         _ => panic!("expected IntTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected IntTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<Integer>::from(t).id();
     //     assert_eq!(
@@ -14432,7 +14429,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         IntTableUnion::Table(t) => t,
-    //         _ => panic!("expected IntTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected IntTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<Integer>::from(t).id();
     //     assert_eq!(
@@ -14458,7 +14455,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         IntTableUnion::Table(t) => t,
-    //         _ => panic!("expected IntTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected IntTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<Integer>::from(t).id();
     //     assert_eq!(
@@ -14534,7 +14531,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         IntTableUnion::Table(t) => t,
-    //         _ => panic!("expected IntTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected IntTableUnion::Table but `{t:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = 2i32.into_bound_py_any(py);
@@ -14554,7 +14551,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         IntTableUnion::Table(t) => t,
-    //         _ => panic!("expected IntTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected IntTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
@@ -14576,7 +14573,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         IntTableUnion::Table(t) => t,
-    //         _ => panic!("expected IntTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected IntTableUnion::Table but `{t:?}`"),
     //     };
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();
@@ -15380,7 +15377,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         FloatTableUnion::Table(t) => t,
-    //         _ => panic!("expected FloatTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected FloatTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<Continuous>::from(t).id();
     //     assert_eq!(
@@ -15406,7 +15403,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         FloatTableUnion::Table(t) => t,
-    //         _ => panic!("expected FloatTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected FloatTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<Continuous>::from(t).id();
     //     assert_eq!(
@@ -15432,7 +15429,7 @@ mod tests {
     //     assert!(result.is_ok());
     //     let t = match t {
     //         FloatTableUnion::Table(t) => t,
-    //         _ => panic!("expected FloatTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected FloatTableUnion::Table but `{t:?}`"),
     //     };
     //     let t_id = TableHandle::<Continuous>::from(t).id();
     //     assert_eq!(
@@ -15508,7 +15505,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         FloatTableUnion::Table(t) => t,
-    //         _ => panic!("expected FloatTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected FloatTableUnion::Table but `{t:?}`"),
     //     };
     //     let result = Python::with_gil(|py| {
     //         let value = 2f64.into_bound_py_any(py);
@@ -15528,7 +15525,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         FloatTableUnion::Table(t) => t,
-    //         _ => panic!("expected FloatTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected FloatTableUnion::Table but `{t:?}`"),
     //     };
     //     let snapshot = model.clone();
     //     let result = Python::with_gil(|py| {
@@ -15550,7 +15547,7 @@ mod tests {
     //     let t = t.unwrap();
     //     let t = match t {
     //         FloatTableUnion::Table(t) => t,
-    //         _ => panic!("expected FloatTableUnion::Table but `{:?}`", t),
+    //         _ => panic!("expected FloatTableUnion::Table but `{t:?}`"),
     //     };
     //     let mut model = ModelPy::default();
     //     let snapshot = model.clone();

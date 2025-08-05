@@ -779,9 +779,9 @@ table_values:
         let problem = &problem[0];
 
         let model = dypdl_parser::load_model_from_yaml(domain, problem)
-            .unwrap_or_else(|err| panic!("Cannot load example model due to Error: {:?}", err));
+            .unwrap_or_else(|err| panic!("Cannot load example model due to Error: {err:?}"));
         let (new_domain, new_problem) = dump_model(&model).unwrap_or_else(|e| {
-            panic!("Couldn't dump the model: {:?}", e);
+            panic!("Couldn't dump the model: {e:?}");
         });
 
         let new_domain = yaml_rust::YamlLoader::load_from_str(&new_domain)
@@ -795,7 +795,7 @@ table_values:
         let new_problem = &new_problem[0];
 
         let new_model = dypdl_parser::load_model_from_yaml(new_domain, new_problem)
-            .unwrap_or_else(|e| panic!("Cannot load the new model {:?}", e));
+            .unwrap_or_else(|e| panic!("Cannot load the new model {e:?}"));
 
         assert_eq!(model.state_metadata, new_model.state_metadata);
         assert_eq!(model.target, new_model.target);
@@ -906,9 +906,9 @@ dictionary_values:
         let problem = &problem[0];
 
         let model = dypdl_parser::load_model_from_yaml(domain, problem)
-            .unwrap_or_else(|err| panic!("Cannot load example model due to Error: {:?}", err));
+            .unwrap_or_else(|err| panic!("Cannot load example model due to Error: {err:?}"));
         let (new_domain, new_problem) = dump_model(&model).unwrap_or_else(|e| {
-            panic!("Couldn't dump the model: {:?}", e);
+            panic!("Couldn't dump the model: {e:?}");
         });
 
         let new_domain = yaml_rust::YamlLoader::load_from_str(&new_domain)
@@ -922,7 +922,7 @@ dictionary_values:
         let new_problem = &new_problem[0];
 
         let new_model = dypdl_parser::load_model_from_yaml(new_domain, new_problem)
-            .unwrap_or_else(|e| panic!("Cannot load the new model {:?}", e));
+            .unwrap_or_else(|e| panic!("Cannot load the new model {e:?}"));
 
         assert_eq!(model.state_metadata, new_model.state_metadata);
         assert_eq!(model.target, new_model.target);
@@ -1014,9 +1014,9 @@ table_values:
         let problem = &problem[0];
 
         let model = dypdl_parser::load_model_from_yaml(domain, problem)
-            .unwrap_or_else(|err| panic!("Cannot load example model due to Error: {:?}", err));
+            .unwrap_or_else(|err| panic!("Cannot load example model due to Error: {err:?}"));
         let (new_domain, new_problem) = dump_model(&model).unwrap_or_else(|e| {
-            panic!("Couldn't dump the model: {:?}", e);
+            panic!("Couldn't dump the model: {e:?}");
         });
 
         let new_domain = yaml_rust::YamlLoader::load_from_str(&new_domain)
@@ -1030,7 +1030,7 @@ table_values:
         let new_problem = &new_problem[0];
 
         let new_model = dypdl_parser::load_model_from_yaml(new_domain, new_problem)
-            .unwrap_or_else(|e| panic!("Cannot load the new model {:?}", e));
+            .unwrap_or_else(|e| panic!("Cannot load the new model {e:?}"));
 
         assert_eq!(model.state_metadata, new_model.state_metadata);
         assert_eq!(model.target, new_model.target);

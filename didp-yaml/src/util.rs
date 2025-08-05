@@ -15,7 +15,7 @@ pub struct YamlContentErr(String);
 impl YamlContentErr {
     /// Returns a new error.
     pub fn new(message: String) -> YamlContentErr {
-        YamlContentErr(format!("Error in yaml contents: {}", message))
+        YamlContentErr(format!("Error in yaml contents: {message}"))
     }
 }
 
@@ -37,10 +37,9 @@ pub fn get_map(
 ) -> Result<&linked_hash_map::LinkedHashMap<Yaml, Yaml>, YamlContentErr> {
     match value {
         Yaml::Hash(map) => Ok(map),
-        _ => Err(YamlContentErr::new(format!(
-            "expected Hash, but {:?}",
-            value
-        ))),
+        _ => Err(YamlContentErr::new(
+            format!("expected Hash, but {value:?}",),
+        )),
     }
 }
 
@@ -55,10 +54,7 @@ pub fn get_yaml_by_key<'a>(
 ) -> Result<&'a Yaml, YamlContentErr> {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => Ok(value),
-        None => Err(YamlContentErr::new(format!(
-            "no such key `{}` in yaml",
-            key
-        ))),
+        None => Err(YamlContentErr::new(format!("no such key `{key}` in yaml",))),
     }
 }
 
@@ -71,8 +67,7 @@ pub fn get_array(value: &Yaml) -> Result<&Vec<Yaml>, YamlContentErr> {
     match value {
         Yaml::Array(array) => Ok(array),
         _ => Err(YamlContentErr::new(format!(
-            "expected Array, but is `{:?}`",
-            value
+            "expected Array, but is `{value:?}`",
         ))),
     }
 }
@@ -86,8 +81,7 @@ pub fn get_bool(value: &Yaml) -> Result<bool, YamlContentErr> {
     match value {
         Yaml::Boolean(value) => Ok(*value),
         _ => Err(YamlContentErr::new(format!(
-            "expected Boolean, but is `{:?}`",
-            value
+            "expected Boolean, but is `{value:?}`",
         ))),
     }
 }
@@ -103,7 +97,7 @@ pub fn get_bool_by_key(
 ) -> Result<bool, YamlContentErr> {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_bool(value),
-        None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
+        None => Err(YamlContentErr::new(format!("key `{key}` not found"))),
     }
 }
 
@@ -117,14 +111,12 @@ pub fn get_usize(value: &Yaml) -> Result<usize, YamlContentErr> {
         match variable_type::Element::try_from(*value) {
             Ok(value) => Ok(value),
             Err(e) => Err(YamlContentErr::new(format!(
-                "cannot convert {} to usize: {:?}",
-                value, e
+                "cannot convert {value} to usize: {e:?}",
             ))),
         }
     } else {
         Err(YamlContentErr::new(format!(
-            "expected Integer, but is `{:?}`",
-            value
+            "expected Integer, but is `{value:?}`",
         )))
     }
 }
@@ -143,8 +135,7 @@ pub fn get_usize_array(value: &Yaml) -> Result<Vec<usize>, YamlContentErr> {
         Ok(result)
     } else {
         Err(YamlContentErr::new(format!(
-            "expected Array, but is `{:?}`",
-            value
+            "expected Array, but is `{value:?}`",
         )))
     }
 }
@@ -160,7 +151,7 @@ pub fn get_usize_by_key(
 ) -> Result<usize, YamlContentErr> {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_usize(value),
-        None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
+        None => Err(YamlContentErr::new(format!("key `{key}` not found"))),
     }
 }
 
@@ -175,7 +166,7 @@ pub fn get_usize_array_by_key(
 ) -> Result<Vec<usize>, YamlContentErr> {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_usize_array(value),
-        None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
+        None => Err(YamlContentErr::new(format!("key `{key}` not found"))),
     }
 }
 
@@ -199,11 +190,10 @@ where
             ))),
         },
         Yaml::Real(value) => value.parse().map_err(|e| {
-            YamlContentErr::new(format!("could not parse {} as a number: {:?}", value, e))
+            YamlContentErr::new(format!("could not parse {value} as a number: {e:?}"))
         }),
         _ => Err(YamlContentErr::new(format!(
-            "expected Integer or Real, but is {:?}",
-            value
+            "expected Integer or Real, but is {value:?}",
         ))),
     }
 }
@@ -222,7 +212,7 @@ where
 {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_numeric(value),
-        None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
+        None => Err(YamlContentErr::new(format!("key `{key}` not found"))),
     }
 }
 
@@ -235,8 +225,7 @@ pub fn get_string(value: &Yaml) -> Result<String, YamlContentErr> {
     match value {
         Yaml::String(string) => Ok(string.clone()),
         _ => Err(YamlContentErr::new(format!(
-            "expected String, but {:?}",
-            value
+            "expected String, but {value:?}",
         ))),
     }
 }
@@ -250,8 +239,7 @@ pub fn get_string_array(value: &Yaml) -> Result<Vec<String>, YamlContentErr> {
     match value {
         Yaml::Array(value) => parse_string_array(value),
         _ => Err(YamlContentErr::new(format!(
-            "expected Array, but is `{:?}`",
-            value
+            "expected Array, but is `{value:?}`",
         ))),
     }
 }
@@ -272,7 +260,7 @@ pub fn get_size_from_yaml(
             if let Some(index) = metadata.name_to_object_type.get(object) {
                 Ok(metadata.object_numbers[*index])
             } else {
-                Err(YamlContentErr::new(format!("no such object `{}`", object)).into())
+                Err(YamlContentErr::new(format!("no such object `{object}`",)).into())
             }
         }
         Yaml::Integer(size) => Ok(usize::try_from(*size)?),
@@ -308,7 +296,7 @@ pub fn get_string_by_key(
 ) -> Result<String, YamlContentErr> {
     match map.get(&Yaml::String(String::from(key))) {
         Some(value) => get_string(value),
-        None => Err(YamlContentErr::new(format!("key `{}` not found", key))),
+        None => Err(YamlContentErr::new(format!("key `{key}` not found"))),
     }
 }
 

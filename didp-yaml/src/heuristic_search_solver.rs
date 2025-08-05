@@ -58,7 +58,7 @@ where
         "dual_bound_dd_lns" => dual_bound_dd_lns::load_from_yaml(model, config),
         "dual_bound_weighted_astar" => dual_bound_weighted_astar::load_from_yaml(model, config),
         "expression_beam_search" => expression_beam_search::load_from_yaml(model, config),
-        _ => Err(util::YamlContentErr::new(format!("No such solver: {}", solver_name)).into()),
+        _ => Err(util::YamlContentErr::new(format!("No such solver: {solver_name}")).into()),
     }
 }
 

@@ -36,7 +36,7 @@ fn transition_equality_ignoring_parameter(t1: Vec<Transition>, t2: Vec<Transitio
             ..t2_element.clone()
         };
         if filtered_t1 != filtered_t2 {
-            println!("t1: {:?}\nt2: {:?}", filtered_t1, filtered_t2);
+            println!("t1: {filtered_t1:?}\nt2: {filtered_t2:?}");
             return false;
         }
     }
@@ -46,38 +46,38 @@ fn transition_equality_ignoring_parameter(t1: Vec<Transition>, t2: Vec<Transitio
 #[test]
 fn test_emit_bpp_problem() {
     let domain = fs::read_to_string("tests/example_problems/bin-packing/bin-packing-domain.yaml")
-        .unwrap_or_else(|e| panic!("Cannot read example domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot read example domain {e:?}"));
     let domain = yaml_rust::YamlLoader::load_from_str(&domain)
-        .unwrap_or_else(|e| panic!("Cannot load example domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example domain {e:?}"));
     assert_eq!(domain.len(), 1);
     let domain = &domain[0];
 
     let problem = fs::read_to_string("tests/example_problems/bin-packing/bin-packing-problem.yaml")
-        .unwrap_or_else(|e| panic!("Cannot read example problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot read example problem {e:?}"));
     let problem = yaml_rust::YamlLoader::load_from_str(&problem)
-        .unwrap_or_else(|e| panic!("Cannot load example problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example problem {e:?}"));
     assert_eq!(problem.len(), 1);
     let problem = &problem[0];
 
     let model = dypdl_parser::load_model_from_yaml(domain, problem)
-        .unwrap_or_else(|e| panic!("Cannot load example model due to {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example model due to {e:?}"));
 
     let (new_domain, new_problem) = dump_model(&model).unwrap_or_else(|e| {
-        panic!("Couldn't dump the model: {:?}", e);
+        panic!("Couldn't dump the model: {e:?}");
     });
 
     let new_domain = yaml_rust::YamlLoader::load_from_str(&new_domain)
-        .unwrap_or_else(|e| panic!("Cannot load the new domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new domain {e:?}"));
     assert_eq!(new_domain.len(), 1);
     let new_domain = &new_domain[0];
 
     let new_problem = yaml_rust::YamlLoader::load_from_str(&new_problem)
-        .unwrap_or_else(|e| panic!("Cannot load the new problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new problem {e:?}"));
     assert_eq!(new_problem.len(), 1);
     let new_problem = &new_problem[0];
 
     let new_model = dypdl_parser::load_model_from_yaml(new_domain, new_problem)
-        .unwrap_or_else(|e| panic!("Cannot load the new model {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new model {e:?}"));
     assert_eq!(model.state_metadata, new_model.state_metadata);
     assert_eq!(model.target, new_model.target);
     assert_eq!(model.table_registry, new_model.table_registry);
@@ -110,38 +110,38 @@ fn test_emit_bpp_problem() {
 #[test]
 fn test_emit_cvrp_problem() {
     let domain = fs::read_to_string("tests/example_problems/cvrp/cvrp-domain.yaml")
-        .unwrap_or_else(|e| panic!("Cannot read example domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot read example domain {e:?}"));
     let domain = yaml_rust::YamlLoader::load_from_str(&domain)
-        .unwrap_or_else(|e| panic!("Cannot load example domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example domain {e:?}"));
     assert_eq!(domain.len(), 1);
     let domain = &domain[0];
 
     let problem = fs::read_to_string("tests/example_problems/cvrp/cvrp-problem.yaml")
-        .unwrap_or_else(|e| panic!("Cannot read example problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot read example problem {e:?}"));
     let problem = yaml_rust::YamlLoader::load_from_str(&problem)
-        .unwrap_or_else(|e| panic!("Cannot load example problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example problem {e:?}"));
     assert_eq!(problem.len(), 1);
     let problem = &problem[0];
 
     let model = dypdl_parser::load_model_from_yaml(domain, problem)
-        .unwrap_or_else(|e| panic!("Cannot load example model due to {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example model due to {e:?}"));
 
     let (new_domain, new_problem) = dump_model(&model).unwrap_or_else(|e| {
-        panic!("Couldn't dump the model: {:?}", e);
+        panic!("Couldn't dump the model: {e:?}");
     });
 
     let new_domain = yaml_rust::YamlLoader::load_from_str(&new_domain)
-        .unwrap_or_else(|e| panic!("Cannot load the new domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new domain {e:?}"));
     assert_eq!(new_domain.len(), 1);
     let new_domain = &new_domain[0];
 
     let new_problem = yaml_rust::YamlLoader::load_from_str(&new_problem)
-        .unwrap_or_else(|e| panic!("Cannot load the new problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new problem {e:?}"));
     assert_eq!(new_problem.len(), 1);
     let new_problem = &new_problem[0];
 
     let new_model = dypdl_parser::load_model_from_yaml(new_domain, new_problem)
-        .unwrap_or_else(|e| panic!("Cannot load the new model {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new model {e:?}"));
 
     assert_eq!(model.state_metadata, new_model.state_metadata);
     assert_eq!(model.target, new_model.target);
@@ -175,38 +175,38 @@ fn test_emit_cvrp_problem() {
 #[test]
 fn test_emit_graph_clear_problem() {
     let domain = fs::read_to_string("tests/example_problems/graph-clear/graph-clear-domain.yaml")
-        .unwrap_or_else(|e| panic!("Cannot read example domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot read example domain {e:?}"));
     let domain = yaml_rust::YamlLoader::load_from_str(&domain)
-        .unwrap_or_else(|e| panic!("Cannot load example domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example domain {e:?}"));
     assert_eq!(domain.len(), 1);
     let domain = &domain[0];
 
     let problem = fs::read_to_string("tests/example_problems/graph-clear/graph-clear-problem.yaml")
-        .unwrap_or_else(|e| panic!("Cannot read example problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot read example problem {e:?}"));
     let problem = yaml_rust::YamlLoader::load_from_str(&problem)
-        .unwrap_or_else(|e| panic!("Cannot load example problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example problem {e:?}"));
     assert_eq!(problem.len(), 1);
     let problem = &problem[0];
 
     let model = dypdl_parser::load_model_from_yaml(domain, problem)
-        .unwrap_or_else(|e| panic!("Cannot load example model due to {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example model due to {e:?}"));
 
     let (new_domain, new_problem) = dump_model(&model).unwrap_or_else(|e| {
-        panic!("Couldn't dump the model: {:?}", e);
+        panic!("Couldn't dump the model: {e:?}");
     });
 
     let new_domain = yaml_rust::YamlLoader::load_from_str(&new_domain)
-        .unwrap_or_else(|e| panic!("Cannot load the new domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new domain {e:?}"));
     assert_eq!(new_domain.len(), 1);
     let new_domain = &new_domain[0];
 
     let new_problem = yaml_rust::YamlLoader::load_from_str(&new_problem)
-        .unwrap_or_else(|e| panic!("Cannot load the new problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new problem {e:?}"));
     assert_eq!(new_problem.len(), 1);
     let new_problem = &new_problem[0];
 
     let new_model = dypdl_parser::load_model_from_yaml(new_domain, new_problem)
-        .unwrap_or_else(|e| panic!("Cannot load the new model {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new model {e:?}"));
     assert_eq!(model.state_metadata, new_model.state_metadata);
     assert_eq!(model.table_registry, new_model.table_registry);
     assert_eq!(model.target, new_model.target);
@@ -239,38 +239,38 @@ fn test_emit_graph_clear_problem() {
 #[test]
 fn test_emit_knapsack_problem() {
     let domain = fs::read_to_string("tests/example_problems/knapsack/knapsack-domain.yaml")
-        .unwrap_or_else(|e| panic!("Cannot read example domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot read example domain {e:?}"));
     let domain = yaml_rust::YamlLoader::load_from_str(&domain)
-        .unwrap_or_else(|e| panic!("Cannot load example domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example domain {e:?}"));
     assert_eq!(domain.len(), 1);
     let domain = &domain[0];
 
     let problem = fs::read_to_string("tests/example_problems/knapsack/knapsack-problem.yaml")
-        .unwrap_or_else(|e| panic!("Cannot read example problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot read example problem {e:?}"));
     let problem = yaml_rust::YamlLoader::load_from_str(&problem)
-        .unwrap_or_else(|e| panic!("Cannot load example problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example problem {e:?}"));
     assert_eq!(problem.len(), 1);
     let problem = &problem[0];
 
     let model = dypdl_parser::load_model_from_yaml(domain, problem)
-        .unwrap_or_else(|e| panic!("Cannot load example model due to {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example model due to {e:?}"));
 
     let (new_domain, new_problem) = dump_model(&model).unwrap_or_else(|e| {
-        panic!("Couldn't dump the model: {:?}", e);
+        panic!("Couldn't dump the model: {e:?}");
     });
 
     let new_domain = yaml_rust::YamlLoader::load_from_str(&new_domain)
-        .unwrap_or_else(|e| panic!("Cannot load the new domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new domain {e:?}"));
     assert_eq!(new_domain.len(), 1);
     let new_domain = &new_domain[0];
 
     let new_problem = yaml_rust::YamlLoader::load_from_str(&new_problem)
-        .unwrap_or_else(|e| panic!("Cannot load the new problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new problem {e:?}"));
     assert_eq!(new_problem.len(), 1);
     let new_problem = &new_problem[0];
 
     let new_model = dypdl_parser::load_model_from_yaml(new_domain, new_problem)
-        .unwrap_or_else(|e| panic!("Cannot load the new model {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new model {e:?}"));
     assert_eq!(model.state_metadata, new_model.state_metadata);
     assert_eq!(model.table_registry, new_model.table_registry);
     assert_eq!(model.target, new_model.target);
@@ -297,38 +297,38 @@ fn test_emit_knapsack_problem() {
 #[test]
 fn test_emit_mpdtsp_problem() {
     let domain = fs::read_to_string("tests/example_problems/m-pdtsp/m-pdtsp-domain.yaml")
-        .unwrap_or_else(|e| panic!("Cannot read example domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot read example domain {e:?}"));
     let domain = yaml_rust::YamlLoader::load_from_str(&domain)
-        .unwrap_or_else(|e| panic!("Cannot load example domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example domain {e:?}"));
     assert_eq!(domain.len(), 1);
     let domain = &domain[0];
 
     let problem = fs::read_to_string("tests/example_problems/m-pdtsp/m-pdtsp-problem.yaml")
-        .unwrap_or_else(|e| panic!("Cannot read example problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot read example problem {e:?}"));
     let problem = yaml_rust::YamlLoader::load_from_str(&problem)
-        .unwrap_or_else(|e| panic!("Cannot load example problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example problem {e:?}"));
     assert_eq!(problem.len(), 1);
     let problem = &problem[0];
 
     let model = dypdl_parser::load_model_from_yaml(domain, problem)
-        .unwrap_or_else(|e| panic!("Cannot load example model due to {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load example model due to {e:?}"));
 
     let (new_domain, new_problem) = dump_model(&model).unwrap_or_else(|e| {
-        panic!("Couldn't dump the model: {:?}", e);
+        panic!("Couldn't dump the model: {e:?}");
     });
 
     let new_domain = yaml_rust::YamlLoader::load_from_str(&new_domain)
-        .unwrap_or_else(|e| panic!("Cannot load the new domain {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new domain {e:?}"));
     assert_eq!(new_domain.len(), 1);
     let new_domain = &new_domain[0];
 
     let new_problem = yaml_rust::YamlLoader::load_from_str(&new_problem)
-        .unwrap_or_else(|e| panic!("Cannot load the new problem {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new problem {e:?}"));
     assert_eq!(new_problem.len(), 1);
     let new_problem = &new_problem[0];
 
     let new_model = dypdl_parser::load_model_from_yaml(new_domain, new_problem)
-        .unwrap_or_else(|e| panic!("Cannot load the new model {:?}", e));
+        .unwrap_or_else(|e| panic!("Cannot load the new model {e:?}"));
     assert_eq!(model.state_metadata, new_model.state_metadata);
     assert_eq!(model.table_registry, new_model.table_registry);
     assert_eq!(model.target, new_model.target);
