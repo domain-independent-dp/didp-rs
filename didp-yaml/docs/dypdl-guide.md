@@ -125,7 +125,7 @@ If `type` is `set` or `element`, defining `object` is required, whose value is t
 
 `set` is a set variable, whose value is a set of objects having the specified type.
 `element` is an element variable, whose value is an object having the specified type.
-`integer` and `continuos` are integer and continuous variables.
+`integer` and `continuous` are integer and continuous variables.
 
 If `type` is `element`, `integer`, or `continuous`, the key `preference` can be used.
 The value for `preference`  is either of `less` or `more`.
