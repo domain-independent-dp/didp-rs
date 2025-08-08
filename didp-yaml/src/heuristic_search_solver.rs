@@ -88,8 +88,10 @@ where
 
         if let Some(cost) = solution.cost {
             let line = format!(
-                "{}, {}, {}, {}\n",
-                solution.time, cost, solution.expanded, solution.generated
+                "{time}, {cost}, {expanded}, {generated}\n",
+                time = solution.time,
+                expanded = solution.expanded,
+                generated = solution.generated
             );
             file.write_all(line.as_bytes())?;
             let solution_to_dump = SolutionToDump::from(solution.clone());

@@ -833,9 +833,9 @@ fn load_set_table_from_yaml(
         let args = util::get_usize_array(args)?;
         if args.len() != size.len() {
             return Err(util::YamlContentErr::new(format!(
-                "expected `{}` arguments for table, but passed `{}`",
-                size.len(),
-                args.len()
+                "expected `{expected}` arguments for table, but passed `{passed}`",
+                expected = size.len(),
+                passed = args.len()
             )));
         }
         let value = load_set_from_yaml(value, default.len())?;
@@ -869,8 +869,7 @@ fn load_vector_from_yaml(value: &Yaml, capacity: usize) -> Result<Vector, util::
     for v in &value {
         if *v >= capacity {
             return Err(util::YamlContentErr::new(format!(
-                "element `{}` in a vector table is too large for the object",
-                *v,
+                "element `{v}` in a vector table is too large for the object",
             )));
         }
     }
@@ -969,9 +968,9 @@ fn load_vector_table_from_yaml(
         let args = util::get_usize_array(args)?;
         if args.len() != size.len() {
             return Err(util::YamlContentErr::new(format!(
-                "expected `{}` arguments for table, but passed `{}`",
-                size.len(),
-                args.len()
+                "expected `{expected}` arguments for table, but passed `{passed}`",
+                expected = size.len(),
+                passed = args.len()
             )));
         }
         let value = load_vector_from_yaml(value, capacity)?;

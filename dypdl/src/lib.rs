@@ -995,10 +995,9 @@ impl Model {
         let n = self.get_number_of_objects(ob)?;
         if target.len() != n {
             Err(ModelErr::new(format!(
-                "target set size {} for set variable {} != #objects ({})",
-                target.len(),
-                String::from(name),
-                n
+                "target set size {len} for set variable {name} != #objects ({n})",
+                len = target.len(),
+                name = String::from(name),
             )))
         } else {
             let v = self.state_metadata.add_set_variable(name, ob)?;
@@ -1059,10 +1058,8 @@ impl Model {
         let n = self.get_number_of_objects(ob)?;
         if target.iter().any(|v| *v >= n) {
             Err(ModelErr::new(format!(
-                "target vector {:?} for vector variable {} contains a value >= #objects ({})",
-                target,
-                String::from(name),
-                n
+                "target vector {target:?} for vector variable {name} contains a value >= #objects ({n})",
+                name=String::from(name),
             )))
         } else {
             let v = self.state_metadata.add_vector_variable(name, ob)?;
@@ -2343,16 +2340,14 @@ impl Model {
         for (i, e) in &transition.elements_in_set_variable {
             if *i >= n {
                 return Err(ModelErr::new(format!(
-                    "set variable id {} >= #set variables ({})",
-                    *i, n
+                    "set variable id {i} >= #set variables ({n})",
                 )));
             } else {
                 let object = self.state_metadata.set_variable_to_object[*i];
                 let m = self.state_metadata.object_numbers[object];
                 if *e >= m {
                     return Err(ModelErr::new(format!(
-                        "element {} >= #objects ({}) for object id {}",
-                        *e, n, object
+                        "element {e} >= #objects ({n}) for object id {object}",
                     )));
                 }
             }
@@ -2361,16 +2356,14 @@ impl Model {
         for (i, e, _) in &transition.elements_in_vector_variable {
             if *i >= n {
                 return Err(ModelErr::new(format!(
-                    "vector variable id {} >= #set variables ({})",
-                    *i, n
+                    "vector variable id {i} >= #set variables ({n})",
                 )));
             } else {
                 let object = self.state_metadata.vector_variable_to_object[*i];
                 let m = self.state_metadata.object_numbers[object];
                 if *e >= m {
                     return Err(ModelErr::new(format!(
-                        "element {} >= #objects ({}) for object id {}",
-                        *e, n, object
+                        "element {e} >= #objects ({n}) for object id {object}",
                     )));
                 }
             }
@@ -2381,16 +2374,14 @@ impl Model {
             for (i, e) in &condition.elements_in_set_variable {
                 if *i >= n {
                     return Err(ModelErr::new(format!(
-                        "set variable id {} >= #set variables ({})",
-                        *i, n
+                        "set variable id {i} >= #set variables ({n})",
                     )));
                 } else {
                     let object = self.state_metadata.set_variable_to_object[*i];
                     let m = self.state_metadata.object_numbers[object];
                     if *e >= m {
                         return Err(ModelErr::new(format!(
-                            "element {} >= #objects ({}) for object id {}",
-                            *e, n, object
+                            "element {e} >= #objects ({n}) for object id {object}",
                         )));
                     }
                 }
@@ -2399,16 +2390,14 @@ impl Model {
             for (i, e, _) in &condition.elements_in_vector_variable {
                 if *i >= n {
                     return Err(ModelErr::new(format!(
-                        "vector variable id {} >= #set variables ({})",
-                        *i, n
+                        "vector variable id {i} >= #set variables ({n})",
                     )));
                 } else {
                     let object = self.state_metadata.vector_variable_to_object[*i];
                     let m = self.state_metadata.object_numbers[object];
                     if *e >= m {
                         return Err(ModelErr::new(format!(
-                            "element {} >= #objects ({}) for object id {}",
-                            *e, n, object
+                            "element {e} >= #objects ({n}) for object id {object}",
                         )));
                     }
                 }
@@ -2441,13 +2430,11 @@ impl Model {
         for (i, expression) in &transition.effect.set_effects {
             if *i >= n {
                 return Err(ModelErr::new(format!(
-                    "set variable id {} >= #set variables ({})",
-                    *i, n
+                    "set variable id {i} >= #set variables ({n})",
                 )));
             } else if variable_ids.contains(i) {
                 return Err(ModelErr::new(format!(
-                    "the transition already has an effect on set variable id {}",
-                    *i
+                    "the transition already has an effect on set variable id {i}",
                 )));
             }
             self.check_expression(expression, false)?;
@@ -2460,13 +2447,11 @@ impl Model {
         for (i, expression) in &transition.effect.vector_effects {
             if *i >= n {
                 return Err(ModelErr::new(format!(
-                    "vector variable id {} >= #vector variables ({})",
-                    *i, n
+                    "vector variable id {i} >= #vector variables ({n})",
                 )));
             } else if variable_ids.contains(i) {
                 return Err(ModelErr::new(format!(
-                    "the transition already has an effect on set variable id {}",
-                    *i
+                    "the transition already has an effect on set variable id {i}",
                 )));
             }
             self.check_expression(expression, false)?;
@@ -2479,13 +2464,11 @@ impl Model {
         for (i, expression) in &transition.effect.element_effects {
             if *i >= n {
                 return Err(ModelErr::new(format!(
-                    "element variable id {} >= #element variables ({})",
-                    *i, n
+                    "element variable id {i} >= #element variables ({n})",
                 )));
             } else if variable_ids.contains(i) {
                 return Err(ModelErr::new(format!(
-                    "the transition already has an effect on set variable id {}",
-                    *i
+                    "the transition already has an effect on set variable id {i}",
                 )));
             }
             self.check_expression(expression, false)?;
@@ -2498,13 +2481,11 @@ impl Model {
         for (i, expression) in &transition.effect.integer_effects {
             if *i >= n {
                 return Err(ModelErr::new(format!(
-                    "integer variable id {} >= #integer variables ({})",
-                    *i, n
+                    "integer variable id {i} >= #integer variables ({n})",
                 )));
             } else if variable_ids.contains(i) {
                 return Err(ModelErr::new(format!(
-                    "the transition already has an effect on set variable id {}",
-                    *i
+                    "the transition already has an effect on set variable id {i}",
                 )));
             }
             self.check_expression(expression, false)?;
@@ -2517,13 +2498,11 @@ impl Model {
         for (i, expression) in &transition.effect.continuous_effects {
             if *i >= n {
                 return Err(ModelErr::new(format!(
-                    "continuous variable id {} >= #continuous variables ({})",
-                    *i, n
+                    "continuous variable id {i} >= #continuous variables ({n})",
                 )));
             } else if variable_ids.contains(i) {
                 return Err(ModelErr::new(format!(
-                    "the transition already has an effect on set variable id {}",
-                    *i
+                    "the transition already has an effect on set variable id {i}",
                 )));
             }
             self.check_expression(expression, false)?;
@@ -2537,13 +2516,11 @@ impl Model {
         for (i, expression) in &transition.effect.element_resource_effects {
             if *i >= n {
                 return Err(ModelErr::new(format!(
-                    "element_resource variable id {} >= #element_resource variables ({})",
-                    *i, n
+                    "element_resource variable id {i} >= #element_resource variables ({n})",
                 )));
             } else if variable_ids.contains(i) {
                 return Err(ModelErr::new(format!(
-                    "the transition already has an effect on set variable id {}",
-                    *i
+                    "the transition already has an effect on set variable id {i}",
                 )));
             }
             self.check_expression(expression, false)?;
@@ -2557,13 +2534,11 @@ impl Model {
         for (i, expression) in &transition.effect.integer_resource_effects {
             if *i >= n {
                 return Err(ModelErr::new(format!(
-                    "integer_resource variable id {} >= #integer_resource variables ({})",
-                    *i, n
+                    "integer_resource variable id {i} >= #integer_resource variables ({n})",
                 )));
             } else if variable_ids.contains(i) {
                 return Err(ModelErr::new(format!(
-                    "the transition already has an effect on set variable id {}",
-                    *i
+                    "the transition already has an effect on set variable id {i}",
                 )));
             }
             self.check_expression(expression, false)?;
@@ -2579,13 +2554,11 @@ impl Model {
         for (i, expression) in &transition.effect.continuous_resource_effects {
             if *i >= n {
                 return Err(ModelErr::new(format!(
-                    "continuous_resource variable id {} >= #continuous_resource variables ({})",
-                    *i, n
+                    "continuous_resource variable id {i} >= #continuous_resource variables ({n})",
                 )));
             } else if variable_ids.contains(i) {
                 return Err(ModelErr::new(format!(
-                    "the transition already has an effect on set variable id {}",
-                    *i
+                    "the transition already has an effect on set variable id {i}",
                 )));
             }
             self.check_expression(expression, false)?;
@@ -2687,10 +2660,9 @@ impl AccessTarget<SetVariable, Set> for Model {
         let n = self.get_number_of_objects(ob)?;
         if target.len() != n {
             Err(ModelErr::new(format!(
-                "target set size {} for set variable id {} != #objects ({})",
-                target.len(),
-                variable.id(),
-                n
+                "target set size {len} for set variable id {id} != #objects ({n})",
+                len = target.len(),
+                id = variable.id(),
             )))
         } else {
             self.target.signature_variables.set_variables[variable.id()] = target;
@@ -2710,10 +2682,8 @@ impl AccessTarget<VectorVariable, Vector> for Model {
         let n = self.get_number_of_objects(ob)?;
         if target.iter().any(|v| *v >= n) {
             Err(ModelErr::new(format!(
-                "target vector {:?} for vector variable id {} contains a value >= #objects ({})",
-                target,
-                variable.id(),
-                n
+                "target vector {target:?} for vector variable id {id} contains a value >= #objects ({n})",
+                id=variable.id(),
             )))
         } else {
             self.target.signature_variables.vector_variables[variable.id()] = target;
@@ -3290,8 +3260,7 @@ impl CheckExpression<expression::ElementExpression> for Model {
                 let n = self.state_metadata.number_of_element_variables();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "element variable id {} >= #variables ({})",
-                        *id, n
+                        "element variable id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3301,8 +3270,7 @@ impl CheckExpression<expression::ElementExpression> for Model {
                 let n = self.state_metadata.number_of_element_resource_variables();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "element resource variable id {} >= #variables ({})",
-                        *id, n
+                        "element resource variable id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3312,8 +3280,7 @@ impl CheckExpression<expression::ElementExpression> for Model {
                 let n = self.state_functions.element_functions.len();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "element state function id {} >= #variables ({})",
-                        *id, n
+                        "element state function id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3356,8 +3323,7 @@ impl CheckExpression<expression::SetReduceExpression> for Model {
                     self.table_registry.set_tables.tables_1d[*i].capacity_of_set();
                 if expected_capacity != *capacity {
                     return Err(ModelErr::new(format!(
-                        "Given capacity `{}` mismatches the capacity `{}` of an entry in a 1D table",
-                        *capacity, expected_capacity
+                        "Given capacity `{capacity}` mismatches the capacity `{expected_capacity}` of an entry in a 1D table",
                     )));
                 }
                 self.check_expression(x.as_ref(), allow_cost)
@@ -3368,8 +3334,7 @@ impl CheckExpression<expression::SetReduceExpression> for Model {
                     self.table_registry.set_tables.tables_2d[*i].capacity_of_set();
                 if expected_capacity != *capacity {
                     return Err(ModelErr::new(format!(
-                        "Given capacity `{}` mismatches the capacity `{}` of an entry in a 2D table",
-                        *capacity, expected_capacity
+                        "Given capacity `{capacity}` mismatches the capacity `{expected_capacity}` of an entry in a 2D table",
                     )));
                 }
                 self.check_expression(x.as_ref(), allow_cost)?;
@@ -3381,8 +3346,7 @@ impl CheckExpression<expression::SetReduceExpression> for Model {
                     self.table_registry.set_tables.tables_3d[*i].capacity_of_set();
                 if expected_capacity != *capacity {
                     return Err(ModelErr::new(format!(
-                        "Given capacity `{}` mismatches the capacity `{}` of an entry in a 3D table",
-                        *capacity, expected_capacity
+                        "Given capacity `{capacity}` mismatches the capacity `{expected_capacity}` of an entry in a 3D table",
                     )));
                 }
                 self.check_expression(x.as_ref(), allow_cost)?;
@@ -3394,8 +3358,7 @@ impl CheckExpression<expression::SetReduceExpression> for Model {
                 let expected_capacity = self.table_registry.set_tables.tables[*i].capacity_of_set();
                 if expected_capacity != *capacity {
                     return Err(ModelErr::new(format!(
-                        "Given capacity `{}` mismatches the capacity `{}` of an entry in a table",
-                        *capacity, expected_capacity
+                        "Given capacity `{capacity}` mismatches the capacity `{expected_capacity}` of an entry in a table",
                     )));
                 }
                 for arg in args {
@@ -3421,8 +3384,7 @@ impl CheckExpression<expression::SetExpression> for Model {
                 let n = self.state_metadata.number_of_set_variables();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "set variable id {} >= #variables ({})",
-                        *id, n
+                        "set variable id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3435,8 +3397,7 @@ impl CheckExpression<expression::SetExpression> for Model {
                 let n = self.state_functions.set_functions.len();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "set state function id {} >= #variables ({})",
-                        *id, n
+                        "set state function id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3484,8 +3445,7 @@ impl CheckExpression<expression::VectorExpression> for Model {
                 let n = self.state_metadata.number_of_vector_variables();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "vector variable id {} >= #varaibles ({})",
-                        *id, n
+                        "vector variable id {id} >= #varaibles ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3532,8 +3492,7 @@ impl CheckExpression<expression::IntegerExpression> for Model {
                 let n = self.state_metadata.number_of_integer_variables();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "integer variable id {} >= #variables ({})",
-                        *id, n
+                        "integer variable id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3543,8 +3502,7 @@ impl CheckExpression<expression::IntegerExpression> for Model {
                 let n = self.state_metadata.number_of_integer_resource_variables();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "integer resource variable id {} >= #variables ({})",
-                        *id, n
+                        "integer resource variable id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3554,8 +3512,7 @@ impl CheckExpression<expression::IntegerExpression> for Model {
                 let n = self.state_functions.integer_functions.len();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "integer state function id {} >= #variables ({})",
-                        *id, n
+                        "integer state function id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3567,8 +3524,8 @@ impl CheckExpression<expression::IntegerExpression> for Model {
                         Ok(())
                     } else {
                         Err(ModelErr::new(format!(
-                            "using cost is not allowed in an integer expression as the cost type is {:?}. Please explicitly cast it to an integer expression.",
-                            self.cost_type,
+                            "using cost is not allowed in an integer expression as the cost type is {cost_type:?}. Please explicitly cast it to an integer expression.",
+                            cost_type=self.cost_type,
                         )))
                     }
                 } else {
@@ -3625,8 +3582,7 @@ impl CheckExpression<expression::ContinuousExpression> for Model {
                 let n = self.state_metadata.number_of_continuous_variables();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "continuous variable id {} >= #variables ({})",
-                        *id, n
+                        "continuous variable id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3638,8 +3594,7 @@ impl CheckExpression<expression::ContinuousExpression> for Model {
                     .number_of_continuous_resource_variables();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "continuous resource variable id {} >= #variables ({})",
-                        *id, n
+                        "continuous resource variable id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3649,8 +3604,7 @@ impl CheckExpression<expression::ContinuousExpression> for Model {
                 let n = self.state_functions.continuous_functions.len();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "continuous state function id {} >= #variables ({})",
-                        *id, n
+                        "continuous state function id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())
@@ -3815,8 +3769,7 @@ impl CheckExpression<expression::Condition> for Model {
                 let n = self.state_functions.boolean_functions.len();
                 if *id >= n {
                     Err(ModelErr::new(format!(
-                        "boolean state function id {} >= #variables ({})",
-                        *id, n
+                        "boolean state function id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())

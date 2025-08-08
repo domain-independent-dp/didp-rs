@@ -49,7 +49,10 @@ where
 
             Ok(id)
         }
-        Entry::Occupied(e) => Err(ModelErr::new(format!("name `{}` is already used", e.key()))),
+        Entry::Occupied(e) => Err(ModelErr::new(format!(
+            "name `{key}` is already used",
+            key = e.key()
+        ))),
     }
 }
 

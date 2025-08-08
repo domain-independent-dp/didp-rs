@@ -44,8 +44,8 @@ pub fn load_custom_cost_expressions(
             }
         } else {
             return Err(util::YamlContentErr::new(format!(
-                "expression for `{}` is undefined",
-                t.name
+                "expression for `{name}` is undefined",
+                name = t.name
             ))
             .into());
         };
@@ -85,8 +85,8 @@ pub fn load_custom_cost_expressions(
             }
         } else {
             return Err(util::YamlContentErr::new(format!(
-                "expression for `{}` is undefined",
-                t.name
+                "expression for `{name}` is undefined",
+                name = t.name
             ))
             .into());
         };

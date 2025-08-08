@@ -1165,8 +1165,8 @@ impl StateMetadata {
                 Ok(ObjectType(id))
             }
             Entry::Occupied(e) => Err(ModelErr::new(format!(
-                "object `{}` already exists",
-                e.key()
+                "object `{key}` already exists",
+                key = e.key()
             ))),
         }
     }
@@ -1204,8 +1204,7 @@ impl StateMetadata {
         for v in array {
             if *v >= n {
                 return Err(ModelErr::new(format!(
-                    "index {} for object >= #objects ({})",
-                    *v, n
+                    "index {v} for object >= #objects ({n})",
                 )));
             }
             set.insert(*v);
@@ -1497,9 +1496,9 @@ impl StateMetadata {
     fn check_object(&self, ob: ObjectType) -> Result<(), ModelErr> {
         if ob.id() >= self.number_of_object_types() {
             Err(ModelErr::new(format!(
-                "object id {} >= #object types ({})",
-                ob.id(),
-                self.object_numbers.len()
+                "object id {id} >= #object types ({len})",
+                id = ob.id(),
+                len = self.object_numbers.len()
             )))
         } else {
             Ok(())
@@ -1524,8 +1523,7 @@ macro_rules! impl_check_variable {
                 let n = self.$x.len();
                 if id >= n {
                     Err(ModelErr::new(format!(
-                        "variable id {} >= #variables ({})",
-                        id, n
+                        "variable id {id} >= #variables ({n})",
                     )))
                 } else {
                     Ok(())

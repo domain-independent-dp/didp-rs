@@ -3406,7 +3406,7 @@ impl ModelPy {
     //             for i in hash_set {
     //                 if i >= capacity {
     //                     return Err(PyRuntimeError::new_err(format!(
-    //                         "value `{}` >= capacity :code:`{} of a set`",
+    //                         "value `{}` >= capacity :code:`{capacity} of a set`",
     //                         i, capacity
     //                     )));
     //                 }
