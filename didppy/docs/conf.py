@@ -18,8 +18,8 @@
 # -- Project information -----------------------------------------------------
 
 project = "DIDPPy"
-copyright = "2024, Ryo Kuroiwa, Yuxiao (Jasper) Chen, and J. Christopher Beck"
-author = "Ryo Kuroiwa <ryo.kuroiwa@mail.utoronto.ca> and Yuxiao (Jasper) Chen <yuxiao.chen@mail.utoronto.ca>"
+copyright = "2025, Ryo Kuroiwa, Yuxiao (Jasper) Chen, and J. Christopher Beck"
+author = "Ryo Kuroiwa <kuroiwa@nii.ac.jp> and Yuxiao (Jasper) Chen <yuxiao.chen@mail.utoronto.ca>"
 
 
 # -- General configuration ---------------------------------------------------
