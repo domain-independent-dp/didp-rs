@@ -3,7 +3,7 @@ use super::cost_node_message::CostNodeMessage;
 use super::search_node_message::SearchNodeMessage;
 use crate::search_algorithm::data_structure::{
     CreateTransitionChain, ParentAndChildStateFunctionCache, StateInformation,
-    StateWithHashableSignatureVariables,
+    StateWithHashableSignatureVariables, TransitionWithId,
 };
 use crate::search_algorithm::{FNode, FNodeEvaluators};
 use dypdl::variable_type::Numeric;
@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 /// Node ordered by the f-value to be sent to another thread via message passing.
 #[derive(Debug, Clone, PartialEq)]
-pub struct FNodeMessage<T, V = Transition>
+pub struct FNodeMessage<T, V = TransitionWithId>
 where
     V: TransitionInterface + Clone,
     Transition: From<V>,

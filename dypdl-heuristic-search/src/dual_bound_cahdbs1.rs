@@ -1,4 +1,4 @@
-use crate::search_algorithm::data_structure::ParentAndChildStateFunctionCache;
+use crate::search_algorithm::data_structure::{ParentAndChildStateFunctionCache, TransitionWithId};
 
 use super::f_evaluator_type::FEvaluatorType;
 use super::parallel_search_algorithm::{hd_beam_search1, CostNodeMessage, FNodeMessage};
@@ -66,8 +66,10 @@ where
     T: variable_type::Numeric + fmt::Display + Ord + Send + Sync + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let generator =
-        SuccessorGenerator::<Transition, Arc<Transition>, _>::from_model(model.clone(), false);
+    let generator = SuccessorGenerator::<Transition, Arc<TransitionWithId>, _>::from_model(
+        model.clone(),
+        false,
+    );
     let base_cost_evaluator = move |cost, base_cost| f_evaluator_type.eval(cost, base_cost);
     let cost = match f_evaluator_type {
         FEvaluatorType::Plus => T::zero(),

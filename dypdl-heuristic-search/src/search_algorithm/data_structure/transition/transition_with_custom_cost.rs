@@ -1,4 +1,5 @@
 use super::super::successor_generator::SuccessorGenerator;
+use super::TransitionWithId;
 use core::ops::Deref;
 use dypdl::variable_type::Numeric;
 use dypdl::{CostExpression, StateFunctionCache, StateFunctions, Transition, TransitionInterface};
@@ -60,7 +61,9 @@ impl From<TransitionWithCustomCost> for Transition {
 
 impl<U, R> SuccessorGenerator<TransitionWithCustomCost, U, R>
 where
-    U: Deref<Target = TransitionWithCustomCost> + Clone + From<TransitionWithCustomCost>,
+    U: Deref<Target = TransitionWithId<TransitionWithCustomCost>>
+        + Clone
+        + From<TransitionWithId<TransitionWithCustomCost>>,
     R: Deref<Target = dypdl::Model>,
 {
     /// Returns a successor generator returning applicable transitions with customized cost expressions.
@@ -78,10 +81,15 @@ where
         let forced_transitions = forced_transitions
             .iter()
             .zip(forced_custom_costs)
-            .map(|(t, c)| {
-                U::from(TransitionWithCustomCost {
-                    transition: t.clone(),
-                    custom_cost: c.simplify(&model.table_registry),
+            .enumerate()
+            .map(|(id, (t, c))| {
+                U::from(TransitionWithId {
+                    transition: TransitionWithCustomCost {
+                        transition: t.clone(),
+                        custom_cost: c.simplify(&model.table_registry),
+                    },
+                    forced: true,
+                    id,
                 })
             })
             .collect();
@@ -94,10 +102,15 @@ where
         let transitions = transitions
             .iter()
             .zip(custom_costs)
-            .map(|(t, c)| {
-                U::from(TransitionWithCustomCost {
-                    transition: t.clone(),
-                    custom_cost: c.simplify(&model.table_registry),
+            .enumerate()
+            .map(|(id, (t, c))| {
+                U::from(TransitionWithId {
+                    transition: TransitionWithCustomCost {
+                        transition: t.clone(),
+                        custom_cost: c.simplify(&model.table_registry),
+                    },
+                    forced: false,
+                    id,
                 })
             })
             .collect();
@@ -266,26 +279,42 @@ mod tests {
         assert_eq!(
             generator.transitions,
             vec![
-                Rc::new(TransitionWithCustomCost {
-                    transition: transition1,
-                    custom_cost: CostExpression::Integer(IntegerExpression::Cost + 7),
+                Rc::new(TransitionWithId {
+                    transition: TransitionWithCustomCost {
+                        transition: transition1,
+                        custom_cost: CostExpression::Integer(IntegerExpression::Cost + 7),
+                    },
+                    forced: false,
+                    id: 0
                 }),
-                Rc::new(TransitionWithCustomCost {
-                    transition: transition2,
-                    custom_cost: CostExpression::Integer(IntegerExpression::Cost + 8),
+                Rc::new(TransitionWithId {
+                    transition: TransitionWithCustomCost {
+                        transition: transition2,
+                        custom_cost: CostExpression::Integer(IntegerExpression::Cost + 8),
+                    },
+                    forced: false,
+                    id: 1
                 }),
             ]
         );
         assert_eq!(
             generator.forced_transitions,
             vec![
-                Rc::new(TransitionWithCustomCost {
-                    transition: transition3,
-                    custom_cost: CostExpression::Integer(IntegerExpression::Cost + 9),
+                Rc::new(TransitionWithId {
+                    transition: TransitionWithCustomCost {
+                        transition: transition3,
+                        custom_cost: CostExpression::Integer(IntegerExpression::Cost + 9),
+                    },
+                    forced: true,
+                    id: 0,
                 }),
-                Rc::new(TransitionWithCustomCost {
-                    transition: transition4,
-                    custom_cost: CostExpression::Integer(IntegerExpression::Cost + 10),
+                Rc::new(TransitionWithId {
+                    transition: TransitionWithCustomCost {
+                        transition: transition4,
+                        custom_cost: CostExpression::Integer(IntegerExpression::Cost + 10),
+                    },
+                    forced: true,
+                    id: 1,
                 }),
             ]
         );
@@ -339,26 +368,42 @@ mod tests {
         assert_eq!(
             generator.transitions,
             vec![
-                Rc::new(TransitionWithCustomCost {
-                    transition: transition1,
-                    custom_cost: CostExpression::Integer(IntegerExpression::Cost + 7),
+                Rc::new(TransitionWithId {
+                    transition: TransitionWithCustomCost {
+                        transition: transition1,
+                        custom_cost: CostExpression::Integer(IntegerExpression::Cost + 7),
+                    },
+                    forced: false,
+                    id: 0,
                 }),
-                Rc::new(TransitionWithCustomCost {
-                    transition: transition2,
-                    custom_cost: CostExpression::Integer(IntegerExpression::Cost + 8),
+                Rc::new(TransitionWithId {
+                    transition: TransitionWithCustomCost {
+                        transition: transition2,
+                        custom_cost: CostExpression::Integer(IntegerExpression::Cost + 8),
+                    },
+                    forced: false,
+                    id: 1,
                 }),
             ]
         );
         assert_eq!(
             generator.forced_transitions,
             vec![
-                Rc::new(TransitionWithCustomCost {
-                    transition: transition3,
-                    custom_cost: CostExpression::Integer(IntegerExpression::Cost + 9),
+                Rc::new(TransitionWithId {
+                    transition: TransitionWithCustomCost {
+                        transition: transition3,
+                        custom_cost: CostExpression::Integer(IntegerExpression::Cost + 9),
+                    },
+                    forced: true,
+                    id: 0,
                 }),
-                Rc::new(TransitionWithCustomCost {
-                    transition: transition4,
-                    custom_cost: CostExpression::Integer(IntegerExpression::Cost + 10),
+                Rc::new(TransitionWithId {
+                    transition: TransitionWithCustomCost {
+                        transition: transition4,
+                        custom_cost: CostExpression::Integer(IntegerExpression::Cost + 10),
+                    },
+                    forced: true,
+                    id: 1,
                 }),
             ]
         );

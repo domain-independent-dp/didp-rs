@@ -22,6 +22,7 @@ To solve a problem using the DyPDL solver, you need to create three files, `doma
   - [cost_type](#cost_type)
   - [transitions](#transitions)
   - [dual_bounds](#dual_bounds)
+  - [transition_dominance](#transition_dominance)
 - [Problem YAML](#problem-yaml)
   - [object_numbers](#object_numbers)
   - [table_values](#table_values)
@@ -33,7 +34,7 @@ For a config file, see [the solver guide](./solver-guide.md).
 ## YAML Basics
 
 In YAML, you can use boolean, integer, real, and string values, a list of these values, and a map consisting of key-value pairs.
-For example, a menu of a sushi restraunt can be represented by a list of maps as follows:
+For example, a menu of a sushi restaurant can be represented by a list of maps as follows:
 
 ```yaml
 - name: maguro
@@ -59,7 +60,7 @@ If you are familiar with JSON, the above data is equivalent to the following JSO
 [
     { "name": "maguro", "price": 3, "description": "tuna", "cooked": false },
     { "name": "sake", "price": 3, "description": "salmon", "cooked": false },
-    { "name": "tempura", "price": 5, "description": "fried shirmp", "cooked": true }
+    { "name": "tempura", "price": 5, "description": "fried shrimp", "cooked": true }
 ]
 ```
 
@@ -124,7 +125,7 @@ If `type` is `set` or `element`, defining `object` is required, whose value is t
 
 `set` is a set variable, whose value is a set of objects having the specified type.
 `element` is an element variable, whose value is an object having the specified type.
-`integer` and `continous` are integer and continuous variables.
+`integer` and `continuous` are integer and continuous variables.
 
 If `type` is `element`, `integer`, or `continuous`, the key `preference` can be used.
 The value for `preference`  is either of `less` or `more`.
@@ -214,6 +215,7 @@ Each map has the following keys:
 - `name`
 - `type`
 - `expression`
+- `parameters`
 
 `name` is required, and the value is a string describing the name of the state function.
 `type` is required, and the value is either of `set`, `element`, `integer`, `continuous`, or `bool`.
@@ -222,6 +224,16 @@ It represents the type of the state function.
 `expression` is required, and the value is a string describing an expression defining the state function.
 For the syntax of an expression, see [the expression guide](./expression-guide.md).
 The type of the expression must match `type`.
+
+`parameters` is optional, and the value is a list of maps with the following mandatory keys.
+
+- `name`
+- `object`
+
+`name` is required, and the value is the name of a parameter.
+`object` is required, and the value is the name of an object type.
+With `parameters`, for each object or an element in the set variable, one state function is defined.
+The value of the key `name` can be used in the expression defining the state function.
 
 ### constraints
 
@@ -236,7 +248,7 @@ If the value is a map, it should have the following keys.
 - `forall`
 
 `condition` is required, and the value is a string describing a condition.
-`forall` is required, and the valeue is a map having the following keys.
+`forall` is required, and the value is a map having the following keys.
 
 - `name`
 - `object`
@@ -260,7 +272,7 @@ It can be also defined in a problem file.
 
 ### base_cases
 
-`base_cases` is optinal, and the value is a list of lists of conditions.
+`base_cases` is optional, and the value is a list of lists of conditions.
 Alternately,  it can be a list of a map having a key `conditions` whose value is a list of conditions and `cost` whose value is an expression representing the value of the base case.
 If `cost` is not given, the value of the base case is 0.
 You need to do either defining `base_cases` in a domain file or a problem file.
@@ -289,8 +301,8 @@ base_cases:
 ### reduce
 
 `reduce` is required, and the value is either of `min` or `max`.
-The name `reduce` comes from the fact that we preform a reduce operation to aggregate the results of cost expressions of applocable transitions.
-`min`/`max` means that the problem is minimization/maximizatoin.
+The name `reduce` comes from the fact that we preform a reduce operation to aggregate the results of cost expressions of applicable transitions.
+`min`/`max` means that the problem is minimization/maximization.
 
 #### Example
 
@@ -325,18 +337,18 @@ Each map has the following keys.
 
 `name` is required, and the value is a string describing the name of a transition.
 
-`parameters` is optinal, and the value is a map having the following keys.
+`parameters` is optional, and the value is a map having the following keys.
 
 - `name`
 - `object`
 
 Here, `name` is required, and the value is a string describing the name of a parameter.
-`object` is requried, and the value is the name of an object type or a set variable.
+`object` is required, and the value is the name of an object type or a set variable.
 Similarly to `forall` in a condition, with `parameters`, for each object or an element in the set variable, one transition is defined.
 The object or the element can be accessed in expressions and conditions used in `preconditions`, `effect`, and `cost`.
 
 `preconditions` is optional, and the value is a list of conditions described in the same way as [`constraints`](#constraints).
-A transtion is applied only if all preconditions are satisfied by a state.
+A transition is applied only if all preconditions are satisfied by a state.
 
 `effect` is required, and the value is a map where a key is the name of a state variable, and a the value is an expression describing to which value the variable is updated.
 If the name of a state variable is not used as a key of the map, that variable is not updated.
@@ -344,7 +356,7 @@ For the syntax of an expression, see [the expression guide](./expression-guide.m
 
 `cost` is required, and the value is a string describing the cost expression.
 It is either an integer or a continuous expression depending on the [cost type](#costtype).
-In the cost expressoin, in addition to state variables and tables, you can use `cost`, which represnets the cost of the transformed state by the transition.
+In the cost expression, in addition to state variables and tables, you can use `cost`, which represents the cost of the transformed state by the transition.
 
 #### Example
 
@@ -382,6 +394,71 @@ dual_bounds:
 ```
 
 It can be also defined in a problem file.
+
+### transition_dominance
+
+`transition_dominance` is optional, and the value is a list of maps.
+Each map has the following keys.
+
+- `dominating`
+- `dominated`
+- `conditions`
+
+`conditions` is optional and specifies conditions to fire the transition dominance.
+The value for this key is a list of conditions, defined in the same way as [constraints](#constraints)
+If no condition is defined, transition dominance is always active when the two transitions are applicable.
+
+`dominating` and `dominated` are required.
+`dominating` specifies a transition that potentially dominates the transition specified by `dominated`.
+The value for `dominating` or `dominated` is a map with the following keys.
+
+- `name`
+- `parameters`
+
+`name` is required, specifying the name of the transition.
+If a transition is defined with `parameters` (see [transitions](#transitions)), there can be multiple transitions with the same `name`.
+In such a case, by using `name: "{parameter_name}:{value}"`, one particular instantiation can be specified, where `{parameter_name}` is the name of a parameter defined with the transition, and `{value}` is a concrete value.
+Instead, multiple dominating transitions can be specified with the optional key `parameters`, whose value is a list of maps with the following mandatory keys.
+
+- `name`
+- `object`
+
+`name` specifies the name of a parameter, which can be potentially used in `conditions`.
+This name can be different from the name of the parameter in the transition definition.
+However, the i-th parameter defined here corresponds to the i-th parameter defined in the transition.
+Thus, the length of the list must be the same as the number of parameters for the transition, and the object type specified by the key `object` must be the same as that in the transition definition.
+
+#### Example
+
+```yaml
+transitions:
+  - name: sweep
+    parameters:
+      - name: c
+        object: node
+    cost: (max cost
+      (+ (node_edge_weight c)
+      (sum edge_weight clean (remove c contaminated))))
+    effect:
+      clean: (add c clean)
+    preconditions:
+      - (not (is_in c clean))
+transition_dominance:
+  - dominating:
+      name: sweep
+      parameters:
+        - name: i
+          object: node
+    dominated:
+      name: sweep
+      parameters:
+        - name: j
+          object: node
+    conditions:
+      - (<= (+ (node_weight i) (contaminated_edge_weight i))
+        (+ (node_weight j) (contaminated_edge_weight j)))
+      - (<= (contaminated_edge_weight i) (clean_edge_weight i))
+```
 
 ## Problem YAML
 

@@ -220,7 +220,7 @@ impl<T> TableInterface<T> for TableData<T> {
     {
         let name = String::from(name);
         if v.is_empty() {
-            return Err(ModelErr::new(format!("1D table `{}` is empty", name)));
+            return Err(ModelErr::new(format!("1D table `{name}` is empty")));
         }
         match self.name_to_table_1d.entry(name) {
             Entry::Vacant(e) => {
@@ -230,8 +230,8 @@ impl<T> TableInterface<T> for TableData<T> {
                 Ok(Table1DHandle(id, PhantomData))
             }
             Entry::Occupied(e) => Err(ModelErr::new(format!(
-                "1D table `{}` already exists",
-                e.key()
+                "1D table `{key}` already exists",
+                key = e.key()
             ))),
         }
     }
@@ -246,8 +246,8 @@ impl<T> TableInterface<T> for TableData<T> {
     //     self.check_table_1d(t.id())?;
     //     if v.is_empty() {
     //         return Err(ModelErr::new(format!(
-    //             "1D table with id `{}` is updated to be empty",
-    //             t.id()
+    //             "1D table with id `{id}` is updated to be empty",
+    //             id = t.id()
     //         )));
     //     }
     //     self.tables_1d[t.id()].update(v);
@@ -260,7 +260,7 @@ impl<T> TableInterface<T> for TableData<T> {
     {
         let name = String::from(name);
         if v.is_empty() || v[0].is_empty() {
-            return Err(ModelErr::new(format!("2D table `{}` is empty", name)));
+            return Err(ModelErr::new(format!("2D table `{name}` is empty")));
         }
         match self.name_to_table_2d.entry(name) {
             Entry::Vacant(e) => {
@@ -270,8 +270,8 @@ impl<T> TableInterface<T> for TableData<T> {
                 Ok(Table2DHandle(id, PhantomData))
             }
             Entry::Occupied(e) => Err(ModelErr::new(format!(
-                "2D table `{}` already exists",
-                e.key()
+                "2D table `{key}` already exists",
+                key = e.key()
             ))),
         }
     }
@@ -292,8 +292,8 @@ impl<T> TableInterface<T> for TableData<T> {
     //     self.check_table_2d(t.id())?;
     //     if v.is_empty() || v[0].is_empty() {
     //         return Err(ModelErr::new(format!(
-    //             "2D table with id `{}` is updated to be empty",
-    //             t.id()
+    //             "2D table with id `{id}` is updated to be empty",
+    //             id = t.id()
     //         )));
     //     }
     //     self.tables_2d[t.id()].update(v);
@@ -310,7 +310,7 @@ impl<T> TableInterface<T> for TableData<T> {
     {
         let name = String::from(name);
         if v.is_empty() || v[0].is_empty() || v[0][0].is_empty() {
-            return Err(ModelErr::new(format!("3D table `{}` is empty", name)));
+            return Err(ModelErr::new(format!("3D table {name} is empy")));
         }
         match self.name_to_table_3d.entry(name) {
             Entry::Vacant(e) => {
@@ -320,8 +320,8 @@ impl<T> TableInterface<T> for TableData<T> {
                 Ok(Table3DHandle(id, PhantomData))
             }
             Entry::Occupied(e) => Err(ModelErr::new(format!(
-                "3D table `{}` already exists",
-                e.key()
+                "3D table `{key}` already exists",
+                key = e.key()
             ))),
         }
     }
@@ -347,8 +347,8 @@ impl<T> TableInterface<T> for TableData<T> {
     //     self.check_table_3d(t.id())?;
     //     if v.is_empty() || v[0].is_empty() || v[0][0].is_empty() {
     //         return Err(ModelErr::new(format!(
-    //             "3D table with id `{}` is updated to be empty",
-    //             t.id()
+    //             "3D table with id `{id}` is updated to be empty",
+    //             id = t.id()
     //         )));
     //     }
     //     self.tables_3d[t.id()].update(v);
@@ -372,7 +372,10 @@ impl<T> TableInterface<T> for TableData<T> {
                 e.insert(id);
                 Ok(TableHandle(id, PhantomData))
             }
-            Entry::Occupied(e) => Err(ModelErr::new(format!("table `{}` already exists", e.key()))),
+            Entry::Occupied(e) => Err(ModelErr::new(format!(
+                "table `{key}` already exists",
+                key = e.key()
+            ))),
         }
     }
 
@@ -430,10 +433,7 @@ impl<T> TableData<T> {
     pub fn check_table_1d(&self, id: usize) -> Result<(), ModelErr> {
         let n = self.tables_1d.len();
         if id >= n {
-            Err(ModelErr::new(format!(
-                "table 1d id {} >= #tables ({})",
-                id, n
-            )))
+            Err(ModelErr::new(format!("table 1d id {id} >= #tables ({n})",)))
         } else {
             Ok(())
         }
@@ -447,10 +447,7 @@ impl<T> TableData<T> {
     pub fn check_table_2d(&self, id: usize) -> Result<(), ModelErr> {
         let n = self.tables_2d.len();
         if id >= n {
-            Err(ModelErr::new(format!(
-                "table 2d id {} >= #tables ({})",
-                id, n
-            )))
+            Err(ModelErr::new(format!("table 2d id {id} >= #tables ({n})",)))
         } else {
             Ok(())
         }
@@ -464,10 +461,7 @@ impl<T> TableData<T> {
     pub fn check_table_3d(&self, id: usize) -> Result<(), ModelErr> {
         let n = self.tables_3d.len();
         if id >= n {
-            Err(ModelErr::new(format!(
-                "table 3d id {} >= #tables ({})",
-                id, n
-            )))
+            Err(ModelErr::new(format!("table 3d id {id} >= #tables ({n})",)))
         } else {
             Ok(())
         }
@@ -481,7 +475,7 @@ impl<T> TableData<T> {
     pub fn check_table(&self, id: usize) -> Result<(), ModelErr> {
         let n = self.tables.len();
         if id >= n {
-            Err(ModelErr::new(format!("table id {} >= #tables ({})", id, n)))
+            Err(ModelErr::new(format!("table id {id} >= #tables ({n})",)))
         } else {
             Ok(())
         }

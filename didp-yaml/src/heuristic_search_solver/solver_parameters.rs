@@ -13,13 +13,12 @@ where
     let primal_bound = match map.get(&yaml_rust::Yaml::from_str("primal_bound")) {
         Some(yaml_rust::Yaml::Integer(value)) => Some(T::from_integer(*value as Integer)),
         Some(yaml_rust::Yaml::Real(value)) => Some(value.parse().map_err(|e| {
-            util::YamlContentErr::new(format!("could not parse {} as a number: {:?}", value, e))
+            util::YamlContentErr::new(format!("could not parse {value} as a number: {e:?}"))
         })?),
         None => None,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer or Real, but found `{:?}`",
-                value
+                "expected Integer or Real, but found `{value:?}`",
             )))
         }
     };
@@ -32,8 +31,7 @@ where
         None => false,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Boolean, but found `{:?}`",
-                value
+                "expected Boolean, but found `{value:?}`",
             )))
         }
     };
@@ -42,8 +40,7 @@ where
         None => false,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Boolean, but found `{:?}`",
-                value
+                "expected Boolean, but found `{value:?}`",
             )))
         }
     };
@@ -53,8 +50,7 @@ where
             None => Some(1000000),
             value => {
                 return Err(util::YamlContentErr::new(format!(
-                    "expected Integer for `initial_registry_capacity`, but found `{:?}`",
-                    value
+                    "expected Integer for `initial_registry_capacity`, but found `{value:?}`",
                 )))
             }
         };

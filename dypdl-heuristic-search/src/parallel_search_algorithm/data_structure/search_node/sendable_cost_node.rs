@@ -2,6 +2,7 @@ use super::super::arc_chain::ArcChain;
 use super::super::concurrent_state_registry::ConcurrentStateRegistry;
 use crate::search_algorithm::data_structure::{
     CreateTransitionChain, GetTransitions, HashableSignatureVariables, StateInformation,
+    TransitionWithId,
 };
 use crate::search_algorithm::{BfsNode, StateInRegistry};
 use dypdl::variable_type::Numeric;
@@ -20,7 +21,7 @@ use std::sync::Arc;
 ///
 /// This node does not have information about a bound.
 #[derive(Debug)]
-pub struct SendableCostNode<T, V = Transition>
+pub struct SendableCostNode<T, V = TransitionWithId>
 where
     T: Numeric,
     V: TransitionInterface + Clone,
@@ -113,7 +114,7 @@ where
     /// use dypdl_heuristic_search::SendableCostNode;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation,
+    ///     GetTransitions, StateInformation, TransitionWithId,
     /// };
     /// use std::sync::Arc;
     ///
@@ -127,6 +128,11 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let transition = TransitionWithId {
+    ///     transition,
+    ///     forced: false,
+    ///     id: 0,
+    /// };
     /// let mut function_cache_for_expected = StateFunctionCache::new(&model.state_functions);;
     /// let expected_state: StateInRegistry<_> = transition.apply(
     ///     &model.target,
@@ -185,7 +191,7 @@ where
     /// use dypdl_heuristic_search::parallel_search_algorithm::ConcurrentStateRegistry;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation,
+    ///     GetTransitions, StateInformation, TransitionWithId,
     /// };
     /// use std::sync::Arc;
     ///
@@ -202,6 +208,11 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
+    /// let transition = TransitionWithId {
+    ///     transition,
+    ///     forced: false,
+    ///     id: 0,
+    /// };
     ///
     /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry<_> = transition.apply(
@@ -648,6 +659,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let expected_state: StateInRegistry<_> = transition.apply(
@@ -699,6 +715,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let expected_state: StateInRegistry<_> = transition.apply(
@@ -754,6 +775,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let result =
@@ -778,6 +804,11 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
@@ -831,6 +862,11 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
@@ -883,6 +919,11 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let node = SendableCostNode::generate_root_node(state, 0, &model);
@@ -919,6 +960,11 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let state = StateInRegistry::from(model.target.clone());
         let node = SendableCostNode::generate_root_node(state, 0, &model);
@@ -959,6 +1005,11 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let node2 =
             node1.generate_successor_node(Arc::new(transition), &mut function_cache, &model);
@@ -967,6 +1018,11 @@ mod tests {
 
         let mut transition = Transition::default();
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
         let registry = ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model));
         let result =
             node1.insert_successor_node(Arc::new(transition), &mut function_cache, &registry);
@@ -1003,6 +1059,11 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
         let node2 =
             node1.generate_successor_node(Arc::new(transition), &mut function_cache, &model);
@@ -1011,6 +1072,11 @@ mod tests {
 
         let mut transition = Transition::default();
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
         let registry = ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model));
         let result =
             node1.insert_successor_node(Arc::new(transition), &mut function_cache, &registry);

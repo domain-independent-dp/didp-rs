@@ -37,8 +37,8 @@ pub fn parse_integer(
         Ok(expression)
     } else {
         Err(ParseErr::new(format!(
-            "unexpected tokens: `{}`",
-            rest.join(" ")
+            "unexpected tokens: `{rest}`",
+            rest = rest.join(" ")
         )))
     }
 }
@@ -64,8 +64,8 @@ pub fn parse_continuous(
         Ok(expression)
     } else {
         Err(ParseErr::new(format!(
-            "unexpected tokens: `{}`",
-            rest.join(" ")
+            "unexpected tokens: `{rest}`",
+            rest = rest.join(" ")
         )))
     }
 }
@@ -91,8 +91,8 @@ pub fn parse_element(
         Ok(expression)
     } else {
         Err(ParseErr::new(format!(
-            "unexpected tokens: `{}`",
-            rest.join(" ")
+            "unexpected tokens: `{rest}`",
+            rest = rest.join(" ")
         )))
     }
 }
@@ -118,8 +118,8 @@ pub fn parse_set(
         Ok(expression)
     } else {
         Err(ParseErr::new(format!(
-            "unexpected tokens: `{}`",
-            rest.join(" ")
+            "unexpected tokens: `{rest}`",
+            rest = rest.join(" ")
         )))
     }
 }
@@ -146,8 +146,8 @@ pub fn parse_vector(
         Ok(expression)
     } else {
         Err(ParseErr::new(format!(
-            "unexpected tokens: `{}`",
-            rest.join(" ")
+            "unexpected tokens: `{rest}`",
+            rest = rest.join(" ")
         )))
     }
 }
@@ -173,8 +173,8 @@ pub fn parse_condition(
         Ok(expression)
     } else {
         Err(ParseErr::new(format!(
-            "unexpected tokens: `{}`",
-            rest.join(" ")
+            "unexpected tokens: `{rest}`",
+            rest = rest.join(" ")
         )))
     }
 }

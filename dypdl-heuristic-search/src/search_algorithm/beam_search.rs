@@ -1,5 +1,5 @@
 use super::data_structure::{
-    exceed_bound, Beam, BfsNode, ParentAndChildStateFunctionCache, StateRegistry,
+    exceed_bound, Beam, BfsNode, ParentAndChildStateFunctionCache, StateRegistry, TransitionWithId,
 };
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, SearchInput, Solution};
@@ -115,11 +115,16 @@ pub fn beam_search<'a, T, N, E, B, V>(
     mut transition_evaluator: E,
     mut base_cost_evaluator: B,
     parameters: BeamSearchParameters<T>,
-) -> Solution<T, V>
+) -> Solution<T, TransitionWithId<V>>
 where
     T: variable_type::Numeric + Ord + Display,
-    N: BfsNode<T, V> + Clone,
-    E: FnMut(&N, Rc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<N>,
+    N: BfsNode<T, TransitionWithId<V>> + Clone,
+    E: FnMut(
+        &N,
+        Rc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
+        Option<T>,
+    ) -> Option<N>,
     B: FnMut(T, T) -> T,
     V: TransitionInterface + Clone + Default,
 {
@@ -130,8 +135,8 @@ where
     let quiet = parameters.parameters.quiet;
     let mut primal_bound = parameters.parameters.primal_bound;
 
-    let model = &input.generator.model;
-    let generator = &input.generator;
+    let model = input.generator.model.clone();
+    let mut generator = input.generator.clone();
     let suffix = input.solution_suffix;
     let mut current_beam = Beam::new(parameters.beam_size);
     let mut next_beam = Beam::new(parameters.beam_size);
@@ -178,8 +183,8 @@ where
         };
 
         for node in iter {
-            if let Some(dual_bound) = node.bound(model) {
-                if exceed_bound(model, dual_bound, primal_bound) {
+            if let Some(dual_bound) = node.bound(&model) {
+                if exceed_bound(&model, dual_bound, primal_bound) {
                     continue;
                 }
             }
@@ -187,13 +192,13 @@ where
             function_cache.parent.clear();
 
             if let Some((cost, suffix)) = get_solution_cost_and_suffix(
-                model,
+                &model,
                 &*node,
                 suffix,
                 &mut base_cost_evaluator,
                 &mut function_cache,
             ) {
-                if !exceed_bound(model, cost, primal_bound) {
+                if !exceed_bound(&model, cost, primal_bound) {
                     primal_bound = Some(cost);
                     incumbent = Some((node, cost, suffix));
 
@@ -243,7 +248,7 @@ where
                 if let Some(successor) =
                     transition_evaluator(&node, transition, &mut function_cache, primal_bound)
                 {
-                    let successor_bound = successor.bound(model);
+                    let successor_bound = successor.bound(&model);
                     let status = next_beam.insert(&mut registry, successor);
 
                     if !pruned && (status.is_pruned || status.removed.is_some()) {
@@ -251,17 +256,17 @@ where
                     }
 
                     if let Some(bound) = successor_bound {
-                        if !exceed_bound(model, bound, layer_dual_bound) {
+                        if !exceed_bound(&model, bound, layer_dual_bound) {
                             layer_dual_bound = Some(bound);
                         }
 
-                        if status.is_pruned && !exceed_bound(model, bound, removed_dual_bound) {
+                        if status.is_pruned && !exceed_bound(&model, bound, removed_dual_bound) {
                             removed_dual_bound = Some(bound);
                         }
                     }
 
-                    if let Some(bound) = status.removed.and_then(|removed| removed.bound(model)) {
-                        if !exceed_bound(model, bound, removed_dual_bound) {
+                    if let Some(bound) = status.removed.and_then(|removed| removed.bound(&model)) {
+                        if !exceed_bound(&model, bound, removed_dual_bound) {
                             removed_dual_bound = Some(bound);
                         }
                     }
@@ -283,9 +288,10 @@ where
         }
 
         if let Some(value) = layer_dual_bound {
-            if exceed_bound(model, value, primal_bound) {
+            if exceed_bound(&model, value, primal_bound) {
                 best_dual_bound = primal_bound;
-            } else if best_dual_bound.map_or(true, |bound| !exceed_bound(model, bound, Some(value)))
+            } else if best_dual_bound
+                .map_or(true, |bound| !exceed_bound(&model, bound, Some(value)))
             {
                 best_dual_bound = layer_dual_bound;
             }

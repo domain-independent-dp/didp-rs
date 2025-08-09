@@ -77,7 +77,7 @@ dual_bounds:
 
 An effect on an element variable must be an element expression.
 Also, element expressions are used to access tables.
-The value of an element expression must be non-negative and less than the number of the assosiated object.
+The value of an element expression must be non-negative and less than the number of the associated object.
 
 ### Immediate Value
 
@@ -116,6 +116,14 @@ It returns element the value of element variable `<variable name>`.
 ```
 
 It returns the value of element state function `<state function name>`.
+
+If a state function is defined with a parameter, you can specify a particular instantiation with the following syntax.
+
+```
+(<state function name> <element constant 1>, ..., <element constant n>)
+```
+
+Unlike a table, only immediate values and parameters are allowed as arguments.
 
 ### Arithmetic Operations
 
@@ -261,7 +269,7 @@ Otherwise, it returns `<set expression 2>`.
 
 An integer expression is a numeric expression using integer values.
 An effect on an integer variable must be an integer expression.
-If `cost_type` is `integer`, the cost exprssion of each transition and dual bounds must be integer expressions.
+If `cost_type` is `integer`, the cost expression of each transition and dual bounds must be integer expressions.
 
 ### Immediate Value
 
@@ -304,7 +312,13 @@ For example, suppose that a table named `table1` is 3-dimensional.
 
 It returns the value of integer state function `<state function name>`.
 
-It returns the value of integer variable `<variable name>`.
+If a state function is defined with a parameter, you can specify a particular instantiation with the following syntax.
+
+```
+(<state function name> <element constant 1>, ..., <element constant n>)
+```
+
+Unlike a table, only immediate values and parameters are allowed as arguments.
 
 ### Arithmetic Operations
 
@@ -359,7 +373,7 @@ Otherwise, it returns `<integer expression 2>`.
 
 A continuous expression is a numeric expression using continuous values.
 An effect on a continuous variable must be a continuous expression.
-If `cost_type` is `continuous`, the cost exprssion of each transition and dual bounds must be continuous expressions.
+If `cost_type` is `continuous`, the cost expression of each transition and dual bounds must be continuous expressions.
 
 ### Immediate Value
 
@@ -406,6 +420,12 @@ An integer variable can also be used in a continuous expression.
 
 It returns the value of continuous state function `<state function name>`.
 An integer state function can also be used in a continuous expression.
+
+If a state function is defined with a parameter, you can specify a particular instantiation with the following syntax.
+
+```
+(<state function name> <element constant 1>, ..., <element constant n>)
+```
 
 ### Arithmetic Operations
 
@@ -485,6 +505,12 @@ The number of element expressions must be the same as `args` of the table.
 ```
 
 It returns the value of bool state function `<state function name>`.
+
+If a state function is defined with a parameter, you can specify a particular instantiation with the following syntax.
+
+```
+(<state function name> <element constant 1>, ..., <element constant n>)
+```
 
 ### Arithmetic Comparison
 

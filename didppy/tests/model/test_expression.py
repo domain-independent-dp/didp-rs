@@ -2215,6 +2215,22 @@ condition_eval_cases = [
 ]
 
 
+def test_condition_true():
+    model = dp.Model()
+    state = model.target_state
+    condition = dp.Condition(True)
+
+    assert condition.eval(state, model)
+
+
+def test_condition_false():
+    model = dp.Model()
+    state = model.target_state
+    condition = dp.Condition(False)
+
+    assert not condition.eval(state, model)
+
+
 @pytest.mark.parametrize("condition, expected", condition_eval_cases)
 def test_condition_eval(condition, expected):
     model = dp.Model()

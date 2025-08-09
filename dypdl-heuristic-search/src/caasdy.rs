@@ -1,4 +1,4 @@
-use crate::search_algorithm::data_structure::ParentAndChildStateFunctionCache;
+use crate::search_algorithm::data_structure::{ParentAndChildStateFunctionCache, TransitionWithId};
 
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
@@ -107,7 +107,7 @@ where
                 )
             };
 
-        Box::new(BestFirstSearch::<_, FNode<_>, _, _>::new(
+        Box::new(BestFirstSearch::<_, FNode<_, TransitionWithId>, _, _>::new(
             input,
             transition_evaluator,
             base_cost_evaluator,
@@ -126,11 +126,13 @@ where
              cache: &mut ParentAndChildStateFunctionCache,
              registry: &mut _,
              _| { node.insert_successor_node(transition, &mut cache.parent, registry) };
-        Box::new(BestFirstSearch::<_, CostNode<_>, _, _>::new(
-            input,
-            transition_evaluator,
-            base_cost_evaluator,
-            parameters,
-        ))
+        Box::new(
+            BestFirstSearch::<_, CostNode<_, TransitionWithId>, _, _>::new(
+                input,
+                transition_evaluator,
+                base_cost_evaluator,
+                parameters,
+            ),
+        )
     }
 }

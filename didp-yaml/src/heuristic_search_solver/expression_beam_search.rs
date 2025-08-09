@@ -26,8 +26,7 @@ where
         yaml_rust::Yaml::Hash(map) => map,
         _ => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Hash for the solver config, but found `{:?}`",
-                config
+                "expected Hash for the solver config, but found `{config:?}`",
             ))
             .into())
         }
@@ -38,15 +37,14 @@ where
             "continuous" => dypdl::CostType::Continuous,
             value => {
                 return Err(
-                    util::YamlContentErr::new(format!("unexpected cost type `{}`", value)).into(),
+                    util::YamlContentErr::new(format!("unexpected cost type `{value}`")).into(),
                 )
             }
         },
         None => model.cost_type,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String for `custom_cost_type`, but found `{:?}`",
-                value
+                "expected String for `custom_cost_type`, but found `{value:?}`",
             ))
             .into())
         }
@@ -62,8 +60,7 @@ where
                     }
                     _ => {
                         return Err(util::YamlContentErr::new(format!(
-                            "expected (String, String) for `g`, but found (`{:?}`, `{:?}`)",
-                            key, value
+                            "expected (String, String) for `g`, but found (`{key:?}`, `{value:?}`)",
                         ))
                         .into())
                     }
@@ -90,11 +87,9 @@ where
             (custom_costs, forced_custom_costs)
         }
         value => {
-            return Err(util::YamlContentErr::new(format!(
-                "expected Hash, but found `{:?}`",
-                value
-            ))
-            .into())
+            return Err(
+                util::YamlContentErr::new(format!("expected Hash, but found `{value:?}`",)).into(),
+            )
         }
     };
 
@@ -119,8 +114,7 @@ where
             "h" => FEvaluatorType::Overwrite,
             op => {
                 return Err(util::YamlContentErr::new(format!(
-                    "unexpected operator for f function `{}`",
-                    op
+                    "unexpected operator for f function `{op}`",
                 ))
                 .into())
             }
@@ -128,8 +122,7 @@ where
         None => FEvaluatorType::default(),
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String, but found `{:?}`",
-                value
+                "expected String, but found `{value:?}`",
             ))
             .into())
         }
@@ -142,8 +135,7 @@ where
             "h" => FEvaluatorType::Overwrite,
             op => {
                 return Err(util::YamlContentErr::new(format!(
-                    "unexpected operator for custom f function `{}`",
-                    op
+                    "unexpected operator for custom f function `{op}`",
                 ))
                 .into())
             }
@@ -151,8 +143,7 @@ where
         None => FEvaluatorType::default(),
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String, but found `{:?}`",
-                value
+                "expected String, but found `{value:?}`",
             ))
             .into())
         }
@@ -161,8 +152,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer, but found `{:?}`",
-                value
+                "expected Integer, but found `{value:?}`",
             ))
             .into())
         }
@@ -171,8 +161,7 @@ where
         Some(yaml_rust::Yaml::Boolean(value)) => *value,
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Boolean, but found `{:?}`",
-                value
+                "expected Boolean, but found `{value:?}`",
             ))
             .into())
         }
@@ -183,8 +172,7 @@ where
         None => false,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Boolean for `keep_all_layers`, but found `{:?}`",
-                value
+                "expected Boolean for `keep_all_layers`, but found `{value:?}`",
             ))
             .into())
         }

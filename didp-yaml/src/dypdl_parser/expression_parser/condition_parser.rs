@@ -7,6 +7,7 @@ use dypdl::expression::{
     ComparisonOperator, Condition, ContinuousExpression, ElementExpression, IntegerExpression,
     SetCondition, SetExpression,
 };
+use dypdl::StateFunctions;
 use rustc_hash::FxHashMap;
 
 pub fn parse_expression<'a, 'b>(
@@ -34,6 +35,10 @@ pub fn parse_expression<'a, 'b>(
                 &registry.bool_tables,
             )? {
                 Ok((Condition::Table(Box::new(expression)), rest))
+            } else if let Some((expression, rest)) =
+                parse_parameterized_state_function(name, rest, functions, parameters)?
+            {
+                Ok((expression, rest))
             } else {
                 parse_operation(name, rest, metadata, functions, registry, parameters)
             }
@@ -46,10 +51,24 @@ pub fn parse_expression<'a, 'b>(
             } else if let Ok(condition) = functions.get_boolean_function(key) {
                 Ok((condition, rest))
             } else {
-                Err(ParseErr::new(format!("unexpected token: `{}`", token)))
+                Err(ParseErr::new(format!("unexpected token: `{token}`")))
             }
         }
     }
+}
+
+fn parse_parameterized_state_function<'a>(
+    name: &str,
+    tokens: &'a [String],
+    functions: &StateFunctions,
+    parameters: &FxHashMap<String, usize>,
+) -> Result<Option<(Condition, &'a [String])>, ParseErr> {
+    let (name, rest) = util::parse_parameterized_state_function_name(name, tokens, parameters)?;
+
+    functions
+        .get_boolean_function(&name)
+        .map(|expression| Ok(Some((expression, rest))))
+        .unwrap_or_else(|_| Ok(None))
 }
 
 fn parse_operation<'a, 'b>(
@@ -120,8 +139,7 @@ fn parse_comparison<'a, 'b>(
             )),
             "is_subset" => Ok((Condition::Set(Box::new(SetCondition::IsSubset(x, y))), rest)),
             _ => Err(ParseErr::new(format!(
-                "no such comparison operator `{}` for two set expressions",
-                operator
+                "no such comparison operator `{operator}` for two set expressions",
             ))),
         }
     } else {
@@ -132,7 +150,7 @@ fn parse_comparison<'a, 'b>(
             ">" => ComparisonOperator::Gt,
             "<=" => ComparisonOperator::Le,
             "<" => ComparisonOperator::Lt,
-            _ => return Err(ParseErr::new(format!("no such operator `{}`", operator))),
+            _ => return Err(ParseErr::new(format!("no such operator `{operator}`"))),
         };
         if let Ok((x, y, rest)) = parse_ii(tokens, metadata, functions, registry, parameters) {
             Ok((
@@ -153,8 +171,7 @@ fn parse_comparison<'a, 'b>(
             ))
         } else {
             Err(ParseErr::new(format!(
-                "could not parse `{:?}` as a comparison",
-                tokens
+                "could not parse `{tokens:?}` as a comparison",
             )))
         }
     }
@@ -456,6 +473,62 @@ mod tests {
         assert!(result.is_ok());
         let (expression, _) = result.unwrap();
         assert_eq!(expression, expected);
+    }
+
+    #[test]
+    fn parse_parameterized_state_function_ok() {
+        let metadata = dypdl::StateMetadata::default();
+        let registry = dypdl::TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let mut functions = StateFunctions::default();
+        let result = functions.add_boolean_function("sf_0_1_2", Condition::Constant(true));
+        assert!(result.is_ok());
+        let expected = result.unwrap();
+
+        let tokens: Vec<_> = ["(", "sf", "a", "1", "b", ")", "1", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, expected);
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_parameterized_state_function_non_exist_err() {
+        let metadata = dypdl::StateMetadata::default();
+        let registry = dypdl::TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let functions = StateFunctions::default();
+
+        let tokens: Vec<_> = ["(", "sf", "a", "1", "b", ")", "1", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_parameterized_state_function_no_closing_err() {
+        let metadata = dypdl::StateMetadata::default();
+        let registry = dypdl::TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let mut functions = StateFunctions::default();
+        let result = functions.add_boolean_function("sf_0_1_2", Condition::Constant(true));
+        assert!(result.is_ok());
+
+        let tokens: Vec<_> = ["(", "sf", "a", "1", "b"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_err());
     }
 
     #[test]

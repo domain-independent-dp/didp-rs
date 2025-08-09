@@ -25,8 +25,7 @@ pub fn parse_argument<'a>(
         Ok((ArgumentExpression::Vector(vector), rest))
     } else {
         Err(ParseErr::new(format!(
-            "could not parse tokens `{:?}`",
-            tokens
+            "could not parse tokens `{tokens:?}`",
         )))
     }
 }

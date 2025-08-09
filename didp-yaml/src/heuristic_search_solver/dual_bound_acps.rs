@@ -34,8 +34,7 @@ where
         }
         _ => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Hash for the solver config, but found `{:?}`",
-                config
+                "expected Hash for the solver config, but found `{config:?}`",
             ))
             .into())
         }
@@ -48,8 +47,7 @@ where
             "h" => FEvaluatorType::Overwrite,
             op => {
                 return Err(util::YamlContentErr::new(format!(
-                    "unexpected operator for `{}` for `f`",
-                    op
+                    "unexpected operator for `{op}` for `f`",
                 ))
                 .into())
             }
@@ -57,8 +55,7 @@ where
         None => FEvaluatorType::default(),
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String for `f`, but found `{:?}`",
-                value
+                "expected String for `f`, but found `{value:?}`",
             ))
             .into())
         }
@@ -67,8 +64,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer for `init`, but found `{:?}`",
-                value
+                "expected Integer for `init`, but found `{value:?}`",
             ))
             .into())
         }
@@ -78,8 +74,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer for `step`, but found `{:?}`",
-                value
+                "expected Integer for `step`, but found `{value:?}`",
             ))
             .into())
         }
@@ -89,8 +84,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer for `width_bound`, but found `{:?}`",
-                value
+                "expected Integer for `width_bound`, but found `{value:?}`",
             ))
             .into())
         }
@@ -101,8 +95,7 @@ where
         None => false,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Boolean for `reset`, but found `{:?}`",
-                value
+                "expected Boolean for `reset`, but found `{value:?}`",
             ))
             .into())
         }

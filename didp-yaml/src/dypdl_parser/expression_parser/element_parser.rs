@@ -54,10 +54,13 @@ pub fn parse_expression<'a>(
                 parse_element_from_vector(name, rest, metadata, functions, registry, parameters)?
             {
                 Ok((expression, rest))
+            } else if let Some((expression, rest)) =
+                parse_parameterized_state_function(name, rest, functions, parameters)?
+            {
+                Ok((expression, rest))
             } else {
                 Err(ParseErr::new(format!(
-                    "no such table or operation `{}`",
-                    name
+                    "no such table, state function, or operation `{name}`",
                 )))
             }
         }
@@ -125,9 +128,9 @@ fn parse_atom(
     } else if let Ok(expression) = functions.get_element_function(token) {
         Ok(expression)
     } else {
-        let v: Element = token.parse().map_err(|e| {
-            ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
-        })?;
+        let v: Element = token
+            .parse()
+            .map_err(|e| ParseErr::new(format!("could not parse {token} as a number: {e:?}")))?;
         Ok(ElementExpression::Constant(v))
     }
 }
@@ -218,6 +221,20 @@ fn parse_table<'a, T: Clone>(
     }
 }
 
+fn parse_parameterized_state_function<'a>(
+    name: &str,
+    tokens: &'a [String],
+    functions: &StateFunctions,
+    parameters: &FxHashMap<String, usize>,
+) -> Result<Option<(ElementExpression, &'a [String])>, ParseErr> {
+    let (name, rest) = util::parse_parameterized_state_function_name(name, tokens, parameters)?;
+
+    functions
+        .get_element_function(&name)
+        .map(|expression| Ok(Some((expression, rest))))
+        .unwrap_or_else(|_| Ok(None))
+}
+
 pub fn parse_vector_expression<'a>(
     tokens: &'a [String],
     metadata: &StateMetadata,
@@ -267,8 +284,7 @@ pub fn parse_vector_expression<'a>(
                 parse_vector_from(rest, metadata, functions, registry, parameters)
             } else {
                 Err(ParseErr::new(format!(
-                    "no such table or operation `{}`",
-                    name
+                    "no such table or operation `{name}`",
                 )))
             }
         }
@@ -486,10 +502,13 @@ pub fn parse_set_expression<'a, 'b>(
                 parse_set_operation(name, rest, metadata, functions, registry, parameters)?
             {
                 Ok((expression, rest))
+            } else if let Some((expression, rest)) =
+                parse_parameterized_set_state_function(name, rest, functions, parameters)?
+            {
+                Ok((expression, rest))
             } else {
                 Err(ParseErr::new(format!(
-                    "no such table, object, or operation `{}`",
-                    name
+                    "no such table, state function, object, or operation `{name}`",
                 )))
             }
         }
@@ -588,6 +607,20 @@ fn parse_set_from<'a>(
     }
 }
 
+pub fn parse_parameterized_set_state_function<'a>(
+    name: &str,
+    tokens: &'a [String],
+    functions: &StateFunctions,
+    parameters: &FxHashMap<String, usize>,
+) -> Result<Option<(SetExpression, &'a [String])>, ParseErr> {
+    let (name, rest) = util::parse_parameterized_state_function_name(name, tokens, parameters)?;
+
+    functions
+        .get_set_function(&name)
+        .map(|expression| Ok(Some((expression, rest))))
+        .unwrap_or_else(|_| Ok(None))
+}
+
 fn parse_set_operation<'a>(
     name: &str,
     tokens: &'a [String],
@@ -669,10 +702,7 @@ fn parse_element_vector<'a>(
             *v
         } else {
             let v: Element = next_token.parse().map_err(|e| {
-                ParseErr::new(format!(
-                    "could not parse {} as a number: {:?}",
-                    next_token, e
-                ))
+                ParseErr::new(format!("could not parse {next_token} as a number: {e:?}",))
             })?;
             v
         };
@@ -692,8 +722,7 @@ fn parse_reference_atom<T: Clone>(
         Ok(ReferenceExpression::Variable(*i))
     } else {
         Err(ParseErr::new(format!(
-            "no such constant or variable `{}`",
-            token
+            "no such constant or variable `{token}`",
         )))
     }
 }
@@ -1028,6 +1057,62 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, expected);
         assert_eq!(rest, &tokens[1..]);
+    }
+
+    #[test]
+    fn parse_parameterized_element_state_function_ok() {
+        let metadata = StateMetadata::default();
+        let registry = TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let mut functions = StateFunctions::default();
+        let result = functions.add_element_function("sf_0_1_2", ElementExpression::Constant(0));
+        assert!(result.is_ok());
+        let expected = result.unwrap();
+
+        let tokens: Vec<_> = ["(", "sf", "a", "1", "b", ")", "1", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, expected);
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_parameterized_element_state_function_non_exist_err() {
+        let metadata = StateMetadata::default();
+        let registry = TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let functions = StateFunctions::default();
+
+        let tokens: Vec<_> = ["(", "sf", "a", "1", "b", ")", "1", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_parameterized_element_state_function_no_closing_err() {
+        let metadata = StateMetadata::default();
+        let registry = TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let mut functions = StateFunctions::default();
+        let result = functions.add_element_function("sf_0_1_2", ElementExpression::Constant(0));
+        assert!(result.is_ok());
+
+        let tokens: Vec<_> = ["(", "sf", "a", "1", "b"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -2043,6 +2128,76 @@ mod tests {
         let (expression, rest) = result.unwrap();
         assert_eq!(expression, expected);
         assert_eq!(rest, &tokens[1..]);
+    }
+
+    #[test]
+    fn parse_parameterized_set_state_function_ok() {
+        let registry = TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type("object", 4);
+        assert!(result.is_ok());
+        let object = result.unwrap();
+        let result = metadata.add_set_variable("v", object);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+
+        let mut functions = StateFunctions::default();
+        let result = functions.add_set_function("f_0_1_2", v.add(1));
+        assert!(result.is_ok());
+        let expected = result.unwrap();
+
+        let tokens: Vec<_> = ["(", "f", "a", "1", "b", ")", "1", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(expression, expected);
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_parameterized_set_state_function_non_exist_err() {
+        let metadata = StateMetadata::default();
+        let registry = TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let functions = StateFunctions::default();
+
+        let tokens: Vec<_> = ["(", "f", "a", "1", "b", ")", "1", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_set_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_parameterized_set_state_function_no_closing_err() {
+        let registry = TableRegistry::default();
+        let parameters = FxHashMap::from_iter(vec![("a".to_string(), 0), ("b".to_string(), 2)]);
+
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type("object", 4);
+        assert!(result.is_ok());
+        let object = result.unwrap();
+        let result = metadata.add_set_variable("v", object);
+        assert!(result.is_ok());
+        let v = result.unwrap();
+
+        let mut functions = StateFunctions::default();
+        let result = functions.add_set_function("f_0_1_2", v.add(1));
+        assert!(result.is_ok());
+
+        let tokens: Vec<_> = ["(", "f", "a", "1", "b"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_err());
     }
 
     #[test]

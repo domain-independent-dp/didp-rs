@@ -1160,6 +1160,35 @@ def test_add_transition():
     assert model.get_transitions(forced=True)[1].name == "ft2"
 
 
+def test_get_transition():
+    model = dp.Model()
+    t1 = dp.Transition(name="t1")
+    id1 = model.add_transition(t1)
+    t1 = model.get_transition(id1)
+
+    assert t1.name == "t1"
+
+
+def test_get_forced_transition():
+    model = dp.Model()
+    t1 = dp.Transition(name="t1")
+    id1 = model.add_transition(t1, forced=True)
+    t1 = model.get_transition(id1)
+
+    assert t1.name == "t1"
+
+
+def test_get_transition_error():
+    model = dp.Model()
+    t1 = dp.Transition(name="t1")
+    id1 = model.add_transition(t1, forced=True)
+
+    model = dp.Model()
+
+    with pytest.raises(RuntimeError):
+        t1 = model.get_transition(id1)
+
+
 class TestTransitionError:
     model = dp.Model()
     int_var = model.add_int_var(target=3)
@@ -1198,6 +1227,87 @@ class TestTransitionError:
 
         with pytest.raises(error):
             self.model.add_transition(transition, forced=True)
+
+
+def test_add_transition_dominance():
+    model = dp.Model()
+    int_var = model.add_int_var(target=2)
+    transition1 = dp.Transition(name="t1", preconditions=[int_var >= 1])
+    id1 = model.add_transition(transition1)
+    transition2 = dp.Transition(name="t2", preconditions=[int_var >= 2])
+    id2 = model.add_transition(transition2)
+    model.add_transition_dominance(id1, id2)
+    state = model.target_state
+
+    assert model.is_transition_dominated(state, id2)
+
+
+def test_add_transition_dominance_with_conditions():
+    model = dp.Model()
+    int_var = model.add_int_var(target=2)
+    transition1 = dp.Transition(name="t1", preconditions=[int_var >= 1])
+    id1 = model.add_transition(transition1)
+    transition2 = dp.Transition(name="t2", preconditions=[int_var >= 2])
+    id2 = model.add_transition(transition2)
+    model.add_transition_dominance(id1, id2, conditions=[int_var >= 1, int_var <= 3])
+    state = model.target_state
+
+    assert model.is_transition_dominated(state, id2)
+
+
+class TestAddTransitionDominanceError:
+    model = dp.Model()
+    int_var = model.add_int_var(target=2)
+    transition1 = dp.Transition(name="t1", preconditions=[int_var >= 1])
+    id1 = model.add_transition(transition1)
+    transition2 = dp.Transition(name="t2", preconditions=[int_var >= 2])
+    id2 = model.add_transition(transition2)
+    transition3 = dp.Transition(name="t3", preconditions=[int_var >= 3])
+    id3 = model.add_transition(transition3, forced=True)
+    state = model.target_state
+
+    cases = [
+        (id1, id1, None, RuntimeError),
+        (id1, id2, [int_var >= dp.IntExpr.state_cost()], RuntimeError),
+        (id1, id3, None, RuntimeError),
+        (id3, id2, None, RuntimeError),
+    ]
+
+    @pytest.mark.parametrize("id1, id2, conditions, error", cases)
+    def test(self, id1, id2, conditions, error):
+        with pytest.raises(error):
+            self.model.add_transition_dominance(id1, id2, conditions=conditions)
+
+
+def test_is_transition_dominated():
+    model = dp.Model()
+    int_var = model.add_int_var(target=2)
+    transition1 = dp.Transition(name="t1", preconditions=[int_var >= 1])
+    id1 = model.add_transition(transition1)
+    transition2 = dp.Transition(name="t2", preconditions=[int_var >= 2])
+    id2 = model.add_transition(transition2)
+    transition3 = dp.Transition(name="t3", preconditions=[int_var >= 3])
+    id3 = model.add_transition(transition3)
+
+    model.add_transition_dominance(id1, id2, conditions=[int_var <= 3])
+    model.add_transition_dominance(id3, id1)
+    state = model.target_state
+
+    assert not model.is_transition_dominated(state, id1)
+    assert model.is_transition_dominated(state, id2)
+    assert model.is_transition_dominated(state, id3)
+
+
+def test_is_transition_dominated_error():
+    model = dp.Model()
+    int_var = model.add_int_var(target=2)
+    transition1 = dp.Transition(name="t1", preconditions=[int_var >= 1])
+    id1 = model.add_transition(transition1)
+
+    model = dp.Model()
+
+    with pytest.raises(RuntimeError):
+        model.is_transition_dominated(model.target_state, id1)
 
 
 def test_add_dual_bound_int():

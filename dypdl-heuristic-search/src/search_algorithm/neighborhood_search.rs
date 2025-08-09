@@ -1,4 +1,4 @@
-use super::data_structure::SuccessorGenerator;
+use super::data_structure::{SuccessorGenerator, TransitionWithId};
 use super::search::Solution;
 use dypdl::{
     variable_type::Numeric, Model, State, StateInterface, Transition, TransitionInterface,
@@ -13,14 +13,14 @@ pub struct NeighborhoodSearchInput<
     G,
     S = State,
     V = Transition,
-    D = Rc<V>,
+    D = Rc<TransitionWithId<V>>,
     R = Rc<dypdl::Model>,
 > where
     T: Numeric,
     G: FnMut(S, T) -> Option<N>,
     S: StateInterface,
     V: TransitionInterface,
-    D: Deref<Target = V> + Clone,
+    D: Deref<Target = TransitionWithId<V>> + Clone,
     R: Deref<Target = Model>,
 {
     /// Cost of the root node.
@@ -30,7 +30,7 @@ pub struct NeighborhoodSearchInput<
     /// Successor generator.
     pub successor_generator: SuccessorGenerator<V, D, R>,
     /// Initial feasible solution.
-    pub solution: Solution<T, V>,
+    pub solution: Solution<T, TransitionWithId<V>>,
     /// Phantom data.
     pub phantom: marker::PhantomData<S>,
 }

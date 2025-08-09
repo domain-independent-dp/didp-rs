@@ -3,6 +3,7 @@ use dypdl::prelude::*;
 use dypdl::{ResourceVariables, SignatureVariables, State, StateMetadata};
 use lazy_static::lazy_static;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::collections::BTreeMap;
 
 /// Returns a state loaded from YAML
 ///
@@ -24,8 +25,7 @@ pub fn load_state_from_yaml(
         for v in values {
             if v >= capacity {
                 return Err(util::YamlContentErr::new(format!(
-                    "value `{}` is out of range of a set variable `{}`",
-                    v, name
+                    "value `{v}` is out of range of a set variable `{name}`"
                 ))
                 .into());
             }
@@ -42,8 +42,7 @@ pub fn load_state_from_yaml(
         for v in &vector {
             if *v >= capacity {
                 return Err(util::YamlContentErr::new(format!(
-                    "value `{}` is out of range of a vector variable `{}`",
-                    v, name
+                    "value `{v}` is out of range of a vector variable `{name}`"
                 ))
                 .into());
             }
@@ -99,6 +98,48 @@ pub fn load_state_from_yaml(
     })
 }
 
+pub fn ground_static_parameters_from_yaml(
+    metadata: &StateMetadata,
+    value: &yaml_rust::Yaml,
+) -> Result<Vec<BTreeMap<String, usize>>, Box<dyn std::error::Error>> {
+    let array = util::get_array(value)?;
+    let mut parameters_array = Vec::with_capacity(array.len());
+    parameters_array.push(BTreeMap::default());
+
+    let mut reserved_names = FxHashSet::default();
+
+    for value in array {
+        let map = util::get_map(value)?;
+        let name = util::get_string_by_key(map, "name")?;
+
+        if let Some(name) = reserved_names.get(&name) {
+            return Err(util::YamlContentErr::new(format!(
+                "parameter name `{name}` is already used"
+            ))
+            .into());
+        }
+
+        reserved_names.insert(name.clone());
+
+        let object = util::get_string_by_key(map, "object")?;
+        let object = metadata.get_object_type(&object)?;
+        let n = metadata.get_number_of_objects(object)?;
+        let mut new_parameters_set = Vec::with_capacity(parameters_array.len() * n);
+
+        for parameters in &parameters_array {
+            for i in 0..n {
+                let mut parameters = parameters.clone();
+                parameters.insert(name.clone(), i);
+                new_parameters_set.push(parameters);
+            }
+        }
+
+        parameters_array = new_parameters_set;
+    }
+
+    Ok(parameters_array)
+}
+
 type GroundedParameterTriplet = (
     Vec<FxHashMap<String, usize>>,
     Vec<Vec<(usize, usize)>>,
@@ -124,8 +165,7 @@ pub fn ground_parameters_from_yaml(
         let name = util::get_string_by_key(map, "name")?;
         if let Some(name) = reserved_names.get(&name) {
             return Err(util::YamlContentErr::new(format!(
-                "parameter name `{}` is already used",
-                name
+                "parameter name `{name}` is already used"
             ))
             .into());
         }
@@ -141,8 +181,7 @@ pub fn ground_parameters_from_yaml(
             (metadata.get_number_of_objects(object)?, None, Some(v.id()))
         } else {
             return Err(util::YamlContentErr::new(format!(
-                "no such object, set variable, or vector variable `{}`",
-                object
+                "no such object, set variable, or vector variable `{object}`"
             ))
             .into());
         };
@@ -208,8 +247,7 @@ pub fn load_metadata_from_yaml(
         let name = util::get_string_by_key(map, "name")?;
         if let Some(name) = reserved_names.get(&name) {
             return Err(util::YamlContentErr::new(format!(
-                "variable name `{}` is already used",
-                name
+                "variable name `{name}` is already used"
             ))
             .into());
         }
@@ -256,8 +294,7 @@ pub fn load_metadata_from_yaml(
             },
             value => {
                 return Err(util::YamlContentErr::new(format!(
-                    "`{:?}` is not a variable type",
-                    value
+                    "`{value:?}` is not a variable type"
                 ))
                 .into())
             }
@@ -276,8 +313,7 @@ fn get_less_is_better(
         Some(yaml_rust::Yaml::String(value)) if &value[..] == "greater" => Ok(Some(false)),
         Some(yaml_rust::Yaml::String(value)) if &value[..] == "less" => Ok(Some(true)),
         Some(value) => Err(util::YamlContentErr::new(format!(
-            "expected `String(\"greater\")` or `String(\"less\")`, found `{:?}`",
-            value
+            "expected `String(\"greater\")` or `String(\"less\")`, found `{value:?}`"
         ))),
         None => Ok(None),
     }
@@ -629,6 +665,144 @@ cr3: 3
         let yaml = &yaml[0];
         let state = load_state_from_yaml(yaml, &metadata);
         assert!(state.is_err());
+    }
+
+    #[test]
+    fn ground_static_parameters_from_yaml_ok() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object"), 3);
+        assert!(result.is_ok());
+        let result = metadata.add_object_type(String::from("small"), 2);
+        assert!(result.is_ok());
+
+        let mut map1 = BTreeMap::default();
+        map1.insert(String::from("v0"), 0);
+        map1.insert(String::from("v1"), 0);
+        let mut map2 = BTreeMap::default();
+        map2.insert(String::from("v0"), 0);
+        map2.insert(String::from("v1"), 1);
+        let mut map3 = BTreeMap::default();
+        map3.insert(String::from("v0"), 1);
+        map3.insert(String::from("v1"), 0);
+        let mut map4 = BTreeMap::default();
+        map4.insert(String::from("v0"), 1);
+        map4.insert(String::from("v1"), 1);
+        let mut map5 = BTreeMap::default();
+        map5.insert(String::from("v0"), 2);
+        map5.insert(String::from("v1"), 0);
+        let mut map6 = BTreeMap::default();
+        map6.insert(String::from("v0"), 2);
+        map6.insert(String::from("v1"), 1);
+        let expected_parameters = vec![map1, map2, map3, map4, map5, map6];
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+- name: v0
+  object: object
+- name: v1
+  object: small
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let result = ground_static_parameters_from_yaml(&metadata, yaml);
+        assert!(result.is_ok());
+        let parameters = result.unwrap();
+        assert_eq!(parameters, expected_parameters);
+    }
+
+    #[test]
+    fn ground_static_parameters_from_yaml_array_err() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object"), 3);
+        assert!(result.is_ok());
+        let result = metadata.add_object_type(String::from("small"), 2);
+        assert!(result.is_ok());
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+name: v0
+object: object
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let result = ground_static_parameters_from_yaml(&metadata, yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn ground_static_parameters_from_yaml_no_name_err() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object"), 3);
+        assert!(result.is_ok());
+        let result = metadata.add_object_type(String::from("small"), 2);
+        assert!(result.is_ok());
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+- name: v0
+  object: object
+- object: small
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let result = ground_static_parameters_from_yaml(&metadata, yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn ground_static_parameters_from_yaml_no_object_err() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object"), 3);
+        assert!(result.is_ok());
+        let result = metadata.add_object_type(String::from("small"), 2);
+        assert!(result.is_ok());
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+- name: v0
+  object: object
+- name: v1
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let result = ground_static_parameters_from_yaml(&metadata, yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn ground_static_parameters_from_yaml_duplicate_name_err() {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object"), 3);
+        assert!(result.is_ok());
+        let result = metadata.add_object_type(String::from("small"), 2);
+        assert!(result.is_ok());
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+- name: v0
+  object: object
+- name: v0
+  object: small
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let result = ground_static_parameters_from_yaml(&metadata, yaml);
+        assert!(result.is_err());
     }
 
     #[test]

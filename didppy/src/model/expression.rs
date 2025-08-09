@@ -3967,6 +3967,11 @@ pub fn min(x: Bound<'_, PyAny>, y: Bound<'_, PyAny>) -> PyResult<ExprUnion> {
 /// The conjunction of two conditions can be crated by :code:`x & y`.
 /// The disjunction of two conditions can be crated by :code:`x | y`.
 ///
+/// Parameters
+/// ----------
+/// value : bool
+///     A value from which a constant condition is created.
+///
 /// Examples
 /// --------
 /// >>> import didppy as dp
@@ -4000,6 +4005,11 @@ impl From<Condition> for ConditionPy {
 
 #[pymethods]
 impl ConditionPy {
+    #[new]
+    fn new_py(value: bool) -> Self {
+        Self(Condition::Constant(value))
+    }
+
     fn __invert__(&self) -> ConditionPy {
         ConditionPy(Condition::Not(Box::new(self.0.clone())))
     }

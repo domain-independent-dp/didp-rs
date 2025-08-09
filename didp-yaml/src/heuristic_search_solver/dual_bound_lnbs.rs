@@ -23,8 +23,7 @@ where
         yaml_rust::Yaml::Hash(map) => map,
         _ => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Hash for the solver config, but found `{:?}`",
-                config
+                "expected Hash for the solver config, but found `{config:?}`",
             ))
             .into())
         }
@@ -37,8 +36,7 @@ where
             "h" => FEvaluatorType::Overwrite,
             op => {
                 return Err(util::YamlContentErr::new(format!(
-                    "unexpected operator for `{}` for `f`",
-                    op
+                    "unexpected operator for `{op}` for `f`",
                 ))
                 .into())
             }
@@ -46,8 +44,7 @@ where
         None => FEvaluatorType::default(),
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String for `f`, but found `{:?}`",
-                value
+                "expected String for `f`, but found `{value:?}`",
             ))
             .into())
         }
@@ -56,8 +53,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer for `initial_beam_size`, but found `{:?}`",
-                value
+                "expected Integer for `initial_beam_size`, but found `{value:?}`",
             ))
             .into())
         }
@@ -68,8 +64,7 @@ where
         None => false,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Boolean for `keep_all_layers`, but found `{:?}`",
-                value
+                "expected Boolean for `keep_all_layers`, but found `{value:?}`",
             ))
             .into())
         }
@@ -78,8 +73,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer for `max_beam_size`, but found `{:?}`",
-                value
+                "expected Integer for `max_beam_size`, but found `{value:?}`",
             ))
             .into())
         }
@@ -89,8 +83,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => *value as u64,
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer for `seed`, but found `{:?}`",
-                value
+                "expected Integer for `seed`, but found `{value:?}`",
             ))
             .into())
         }
@@ -101,8 +94,7 @@ where
         None => false,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Boolean for `has_negative_cost`, but found `{:?}`",
-                value
+                "expected Boolean for `has_negative_cost`, but found `{value:?}`",
             ))
             .into())
         }
@@ -112,8 +104,7 @@ where
         None => false,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Boolean for `use_cost_weight`, but found `{:?}`",
-                value
+                "expected Boolean for `use_cost_weight`, but found `{value:?}`",
             ))
             .into())
         }
@@ -123,8 +114,7 @@ where
         None => false,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Boolean for `no_bandit`, but found `{:?}`",
-                value
+                "expected Boolean for `no_bandit`, but found `{value:?}`",
             ))
             .into())
         }
@@ -134,8 +124,7 @@ where
         None => false,
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Boolean for `no_transition_mutex`, but found `{:?}`",
-                value
+                "expected Boolean for `no_transition_mutex`, but found `{value:?}`",
             ))
             .into())
         }
@@ -144,8 +133,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer for `cabs_initial_beam_size`, but found `{:?}`",
-                value
+                "expected Integer for `cabs_initial_beam_size`, but found `{value:?}`",
             ))
             .into())
         }
@@ -155,8 +143,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => Some(*value as usize),
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer for `cabs_max_beam_size`, but found `{:?}`",
-                value
+                "expected Integer for `cabs_max_beam_size`, but found `{value:?}`",
             ))
             .into())
         }
@@ -188,8 +175,7 @@ where
         Some(yaml_rust::Yaml::Integer(value)) => *value as usize,
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Integer for `threads`, but found `{:?}`",
-                value
+                "expected Integer for `threads`, but found `{value:?}`",
             ))
             .into())
         }
@@ -202,16 +188,14 @@ where
             "sbs" => 2,
             _ => {
                 return Err(util::YamlContentErr::new(format!(
-                    "unexpected value for `parallel_type`: `{}`",
-                    value
+                    "unexpected value for `parallel_type`: `{value}`",
                 ))
                 .into())
             }
         },
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String for `parallel_type`, but found `{:?}`",
-                value
+                "expected String for `parallel_type`, but found `{value:?}`",
             ))
             .into())
         }
@@ -245,8 +229,7 @@ where
                 threads,
             )),
             _ => Err(util::YamlContentErr::new(format!(
-                "unexpected value for `parallel_type`: `{}`",
-                parallel_type
+                "unexpected value for `parallel_type`: `{parallel_type}`",
             ))
             .into()),
         }

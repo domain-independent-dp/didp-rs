@@ -20,19 +20,53 @@ tables:
     args:
       - node
       - node
+  - name: node_edge_weight
+    type: integer
+    args:
+      - node
+state_functions:
+  - name: contaminated
+    type: set
+    expression: ~clean
+  - name: clean_edge_weight
+    type: integer
+    parameters:
+      - name: c
+        object: node
+    expression: (sum edge_weight c clean)
+  - name: contaminated_edge_weight
+    type: integer
+    parameters:
+      - name: c
+        object: node
+    expression: (sum edge_weight c contaminated)
 transitions:
   - name: sweep
     parameters:
       - name: c
         object: node
     cost: (max cost
-      (+ (node_weight c)
-      (+ (sum edge_weight c all_nodes)
-      (sum edge_weight clean (remove c ~clean)))))
+      (+ (node_edge_weight c)
+      (sum edge_weight clean (remove c contaminated))))
     effect:
       clean: (add c clean)
     preconditions:
       - (not (is_in c clean))
+transition_dominance:
+  - dominating:
+      name: sweep
+      parameters:
+        - name: i
+          object: node
+    dominated:
+      name: sweep
+      parameters:
+        - name: j
+          object: node
+    conditions:
+      - (<= (+ (node_weight i) (contaminated_edge_weight i))
+        (+ (node_weight j) (contaminated_edge_weight j)))
+      - (<= (contaminated_edge_weight i) (clean_edge_weight i))
 base_cases:
   - - (= clean all_nodes)
 dual_bounds:

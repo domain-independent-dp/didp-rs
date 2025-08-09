@@ -1,5 +1,5 @@
 use super::super::state_registry::{StateInRegistry, StateInformation, StateRegistry};
-use super::super::transition::TransitionWithCustomCost;
+use super::super::transition::{TransitionWithCustomCost, TransitionWithId};
 use super::super::transition_chain::{CreateTransitionChain, GetTransitions};
 use super::super::{ParentAndChildStateFunctionCache, RcChain};
 use super::{BfsNode, CostNode, FNodeEvaluators};
@@ -16,11 +16,11 @@ use std::rc::Rc;
 pub struct CustomFNode<
     T,
     U,
-    R = Rc<TransitionWithCustomCost>,
-    C = RcChain<TransitionWithCustomCost>,
+    R = Rc<TransitionWithId<TransitionWithCustomCost>>,
+    C = RcChain<TransitionWithId<TransitionWithCustomCost>>,
     P = Rc<C>,
 > {
-    node: CostNode<T, TransitionWithCustomCost, R, C, P>,
+    node: CostNode<T, TransitionWithId<TransitionWithCustomCost>, R, C, P>,
     pub g: U,
     pub h: U,
     pub f: U,
@@ -98,28 +98,29 @@ where
     }
 }
 
-impl<T: Numeric, U: Numeric, R, C, P> GetTransitions<TransitionWithCustomCost>
+impl<T: Numeric, U: Numeric, R, C, P> GetTransitions<TransitionWithId<TransitionWithCustomCost>>
     for CustomFNode<T, U, R, C, P>
 where
-    C: GetTransitions<TransitionWithCustomCost>,
+    C: GetTransitions<TransitionWithId<TransitionWithCustomCost>>,
     P: Deref<Target = C>,
 {
     #[inline]
-    fn transitions(&self) -> Vec<TransitionWithCustomCost> {
+    fn transitions(&self) -> Vec<TransitionWithId<TransitionWithCustomCost>> {
         self.node.transitions()
     }
 
     #[inline]
-    fn last(&self) -> Option<&TransitionWithCustomCost> {
+    fn last(&self) -> Option<&TransitionWithId<TransitionWithCustomCost>> {
         self.node.last()
     }
 }
 
-impl<T, U, R, C, P> BfsNode<T, TransitionWithCustomCost> for CustomFNode<T, U, R, C, P>
+impl<T, U, R, C, P> BfsNode<T, TransitionWithId<TransitionWithCustomCost>>
+    for CustomFNode<T, U, R, C, P>
 where
     T: Numeric + Display,
     U: Numeric + Ord,
-    C: GetTransitions<TransitionWithCustomCost>,
+    C: GetTransitions<TransitionWithId<TransitionWithCustomCost>>,
     P: Deref<Target = C>,
 {
     #[inline]
@@ -132,12 +133,17 @@ impl<T, U, R, C, P> CustomFNode<T, U, R, C, P>
 where
     T: Numeric + Ord,
     U: Numeric + Ord,
-    R: Deref<Target = TransitionWithCustomCost>,
+    R: Deref<Target = TransitionWithId<TransitionWithCustomCost>>,
     C: CreateTransitionChain<R, P>,
     P: From<C> + Clone,
 {
     /// Generate a new node.
-    pub fn new(node: CostNode<T, TransitionWithCustomCost, R, C, P>, g: U, h: U, f: U) -> Self {
+    pub fn new(
+        node: CostNode<T, TransitionWithId<TransitionWithCustomCost>, R, C, P>,
+        g: U,
+        h: U,
+        f: U,
+    ) -> Self {
         CustomFNode { node, g, h, f }
     }
 
@@ -204,9 +210,10 @@ where
         H: FnOnce(&StateInRegistry, &mut StateFunctionCache) -> Option<U>,
         F: FnOnce(U, U, &StateInRegistry) -> U,
     {
-        let node = CostNode::<T, TransitionWithCustomCost, R, C, P>::generate_root_node(
-            state, cost, model,
-        );
+        let node =
+            CostNode::<T, TransitionWithId<TransitionWithCustomCost>, R, C, P>::generate_root_node(
+                state, cost, model,
+            );
         let h = (evaluators.h)(node.state(), function_cache)?;
         let f = (evaluators.f)(g, h, node.state());
         let (h, f) = if maximize { (h, f) } else { (-h, -f) };
@@ -235,7 +242,7 @@ where
     /// ```
     /// use dypdl::prelude::*;
     /// use dypdl_heuristic_search::search_algorithm::{
-    ///     CustomFNode, FNodeEvaluators, StateInRegistry, TransitionWithCustomCost,
+    ///     CustomFNode, FNodeEvaluators, StateInRegistry, TransitionWithCustomCost, TransitionWithId,
     /// };
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
     ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
@@ -262,9 +269,13 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
-    /// let transition = TransitionWithCustomCost {
-    ///     transition,
-    ///     custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+    /// let transition = TransitionWithId {
+    ///     transition: TransitionWithCustomCost {
+    ///         transition,
+    ///         custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+    ///     },
+    ///     forced: false,
+    ///     id: 0,
     /// };
     /// let mut function_cache_for_expected = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry = transition.apply(
@@ -294,7 +305,7 @@ where
         H: FnOnce(&StateInRegistry, &mut StateFunctionCache) -> Option<U>,
         F: FnOnce(U, U, &StateInRegistry) -> U,
     {
-        let g = transition.custom_cost.eval_cost(
+        let g = transition.transition.custom_cost.eval_cost(
             self.g,
             self.state(),
             &mut function_cache.parent,
@@ -341,7 +352,7 @@ where
     ///     CustomFNode, FNodeEvaluators, StateInRegistry, StateRegistry, TransitionWithCustomCost,
     /// };
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
+    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
     /// };
     /// use std::rc::Rc;
     ///
@@ -366,9 +377,13 @@ where
     /// let mut transition = Transition::new("transition");
     /// transition.set_cost(IntegerExpression::Cost + 1);
     /// transition.add_effect(variable, variable + 1).unwrap();
-    /// let transition = TransitionWithCustomCost {
-    ///     transition,
-    ///     custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+    /// let transition = TransitionWithId {
+    ///     transition: TransitionWithCustomCost {
+    ///         transition,
+    ///         custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+    ///     },
+    ///     id: 0,
+    ///     forced: false,
     /// };
     /// let mut function_cache_for_expected = StateFunctionCache::new(&model.state_functions);
     /// let expected_state: StateInRegistry = transition.apply(
@@ -429,7 +444,7 @@ where
 
                 (evaluators.h)(&state, &mut function_cache.child)?
             };
-            let g = transition.custom_cost.eval_cost(
+            let g = transition.transition.custom_cost.eval_cost(
                 self.g,
                 self.state(),
                 &mut function_cache.parent,
@@ -512,13 +527,21 @@ mod tests {
     fn test_get_transitions() {
         let model = Model::default();
         let state = StateInRegistry::from(model.target.clone());
-        let transition1 = TransitionWithCustomCost {
-            transition: Transition::new("t1"),
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 1),
+        let transition1 = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition: Transition::new("t1"),
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 1),
+            },
+            forced: false,
+            id: 0,
         };
-        let transition2 = TransitionWithCustomCost {
-            transition: Transition::new("t2"),
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 1),
+        let transition2 = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition: Transition::new("t2"),
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 1),
+            },
+            forced: false,
+            id: 1,
         };
         let cost = 10;
         let transition_chain = Some(Rc::new(RcChain::new(None, Rc::new(transition1.clone()))));
@@ -661,9 +684,13 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
-        let transition = TransitionWithCustomCost {
-            transition,
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+        let transition = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition,
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+            },
+            forced: false,
+            id: 0,
         };
 
         let state = model.target.clone();
@@ -758,9 +785,13 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
-        let transition = TransitionWithCustomCost {
-            transition,
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+        let transition = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition,
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+            },
+            forced: false,
+            id: 0,
         };
 
         let result = node.generate_successor_node(
@@ -824,18 +855,26 @@ mod tests {
         let result = transition1.add_effect(v, fun1.clone() + 1);
         assert!(result.is_ok());
         transition1.set_cost(IntegerExpression::Cost + 1);
-        let transition1 = TransitionWithCustomCost {
-            transition: transition1,
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+        let transition1 = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition: transition1,
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+            },
+            forced: false,
+            id: 0,
         };
 
         let mut transition2 = Transition::default();
         let result = transition2.add_effect(v, fun1 + 2);
         assert!(result.is_ok());
         transition2.set_cost(IntegerExpression::Cost + 1);
-        let transition2 = TransitionWithCustomCost {
-            transition: transition2,
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+        let transition2 = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition: transition2,
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+            },
+            forced: false,
+            id: 0,
         };
 
         let successor = node.generate_successor_node(
@@ -883,9 +922,13 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
-        let transition = TransitionWithCustomCost {
-            transition,
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+        let transition = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition,
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+            },
+            forced: false,
+            id: 0,
         };
 
         let mut function_cache = StateFunctionCache::new(&model.state_functions);
@@ -984,9 +1027,13 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
-        let transition = TransitionWithCustomCost {
-            transition,
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+        let transition = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition,
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+            },
+            forced: false,
+            id: 0,
         };
 
         let result = node.insert_successor_node(
@@ -1015,9 +1062,13 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
-        let transition = TransitionWithCustomCost {
-            transition,
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+        let transition = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition,
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+            },
+            forced: false,
+            id: 0,
         };
 
         let state = StateInRegistry::from(model.target.clone());
@@ -1095,9 +1146,13 @@ mod tests {
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
-        let transition = TransitionWithCustomCost {
-            transition,
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+        let transition = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition,
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+            },
+            forced: false,
+            id: 0,
         };
 
         let state = StateInRegistry::from(model.target.clone());
@@ -1174,9 +1229,13 @@ mod tests {
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
-        let transition = TransitionWithCustomCost {
-            transition,
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+        let transition = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition,
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+            },
+            forced: false,
+            id: 0,
         };
 
         let h_evaluator = |_: &StateInRegistry, _: &mut _| None;
@@ -1248,18 +1307,26 @@ mod tests {
         let result = transition1.add_effect(v, fun1.clone() + 1);
         assert!(result.is_ok());
         transition1.set_cost(IntegerExpression::Cost + 1);
-        let transition1 = TransitionWithCustomCost {
-            transition: transition1,
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+        let transition1 = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition: transition1,
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+            },
+            forced: false,
+            id: 0,
         };
 
         let mut transition2 = Transition::default();
         let result = transition2.add_effect(v, fun1 + 2);
         assert!(result.is_ok());
         transition2.set_cost(IntegerExpression::Cost + 1);
-        let transition2 = TransitionWithCustomCost {
-            transition: transition2,
-            custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+        let transition2 = TransitionWithId {
+            transition: TransitionWithCustomCost {
+                transition: transition2,
+                custom_cost: CostExpression::from(IntegerExpression::Cost + 2),
+            },
+            forced: false,
+            id: 0,
         };
 
         let result = node.insert_successor_node(

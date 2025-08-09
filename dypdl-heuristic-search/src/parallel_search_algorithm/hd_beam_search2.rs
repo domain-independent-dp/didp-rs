@@ -1,10 +1,11 @@
 use super::data_structure::SearchNodeMessage;
-use super::hd_search_statistics::HdSearchStatistics;
+use super::hd_search_statistics::{HdSearchResult, HdSearchStatistics};
 use crate::search_algorithm::data_structure::{exceed_bound, Beam};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
-    data_structure::ParentAndChildStateFunctionCache, get_solution_cost_and_suffix,
-    BeamSearchParameters, BfsNode, SearchInput, Solution, StateRegistry,
+    data_structure::{ParentAndChildStateFunctionCache, TransitionWithId},
+    get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
+    StateRegistry,
 };
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use dypdl::{variable_type, Model, TransitionInterface};
@@ -45,7 +46,7 @@ use std::{cmp, mem, thread};
 ///     FNodeMessage, hd_beam_search2,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::{
-///     BeamSearchParameters, FNode, SearchInput, SuccessorGenerator,
+///     BeamSearchParameters, FNode, SearchInput, SuccessorGenerator, TransitionWithId,
 /// };
 /// use std::sync::Arc;
 ///
@@ -75,7 +76,7 @@ use std::{cmp, mem, thread};
 ///     &f_evaluator,
 ///     primal_bound,
 /// );
-/// let generator = SuccessorGenerator::<Transition, Arc<Transition>, Arc<_>>::from_model(
+/// let generator = SuccessorGenerator::<Transition, Arc<TransitionWithId>, Arc<_>>::from_model(
 ///     model.clone(), false,
 /// );
 /// let input = SearchInput {
@@ -102,22 +103,27 @@ use std::{cmp, mem, thread};
 /// ).unwrap();
 /// assert_eq!(solution.cost, Some(1));
 /// assert_eq!(solution.transitions.len(), 1);
-/// assert_eq!(Transition::from(solution.transitions[0].clone()), increment);
+/// assert_eq!(Transition::from(solution.transitions[0].transition.clone()), increment);
 /// assert!(!solution.is_infeasible);
 /// ```
 pub fn hd_beam_search2<'a, T, N, M, E, B, V>(
-    input: &'a SearchInput<'a, M, V, Arc<V>, Arc<Model>>,
+    input: &'a SearchInput<'a, M, V, Arc<TransitionWithId<V>>, Arc<Model>>,
     transition_evaluator: E,
     base_cost_evaluator: B,
     parameters: BeamSearchParameters<T>,
     threads: usize,
-) -> Result<(Solution<T, V>, HdSearchStatistics), Box<dyn Error>>
+) -> Result<HdSearchResult<T, V>, Box<dyn Error>>
 where
     T: variable_type::Numeric + Ord + Display + Send + Sync,
-    N: BfsNode<T, V>,
+    N: BfsNode<T, TransitionWithId<V>>,
     N: From<M>,
     M: Clone + SearchNodeMessage,
-    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<M>
+    E: Fn(
+            &N,
+            Arc<TransitionWithId<V>>,
+            &mut ParentAndChildStateFunctionCache,
+            Option<T>,
+        ) -> Option<M>
         + Send
         + Sync,
     B: Fn(T, T) -> T + Send + Sync,
@@ -292,17 +298,22 @@ struct Channels<T, M, V> {
 }
 
 fn single_beam_search<'a, T, N, M, E, B, V>(
-    input: &'a SearchInput<'a, M, V, Arc<V>, Arc<Model>>,
+    input: &'a SearchInput<'a, M, V, Arc<TransitionWithId<V>>, Arc<Model>>,
     transition_evaluator: E,
     base_cost_evaluator: B,
     parameters: BeamSearchParameters<T>,
-    mut channels: Channels<T, M, V>,
+    mut channels: Channels<T, M, TransitionWithId<V>>,
 ) where
     T: variable_type::Numeric + Ord + Display + Sync,
-    N: BfsNode<T, V>,
+    N: BfsNode<T, TransitionWithId<V>>,
     N: From<M>,
     M: Clone + SearchNodeMessage,
-    E: Fn(&N, Arc<V>, &mut ParentAndChildStateFunctionCache, Option<T>) -> Option<M>,
+    E: Fn(
+        &N,
+        Arc<TransitionWithId<V>>,
+        &mut ParentAndChildStateFunctionCache,
+        Option<T>,
+    ) -> Option<M>,
     B: Fn(T, T) -> T,
     V: TransitionInterface + Clone + Default,
 {
@@ -322,7 +333,7 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
     let threads = channels.layer_txs.len();
 
     let model = &input.generator.model;
-    let generator = &input.generator;
+    let mut generator = input.generator.clone();
     let suffix = input.solution_suffix;
     let mut current_beam = Beam::new(parameters.beam_size);
     let mut next_beam = Beam::new(parameters.beam_size);

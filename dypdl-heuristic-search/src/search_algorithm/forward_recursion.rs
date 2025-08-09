@@ -1,4 +1,4 @@
-use super::data_structure::{HashableState, SuccessorGenerator};
+use super::data_structure::{HashableState, SuccessorGenerator, TransitionWithId};
 use super::search::{Parameters, Search, Solution};
 use super::util;
 use dypdl::{variable_type, StateFunctionCache, Transition, TransitionInterface};
@@ -80,7 +80,7 @@ where
             .parameters
             .time_limit
             .map_or_else(util::TimeKeeper::default, util::TimeKeeper::with_time_limit);
-        let generator = SuccessorGenerator::<Transition>::from_model(self.model.clone(), false);
+        let mut generator = SuccessorGenerator::<Transition>::from_model(self.model.clone(), false);
         let mut memo = FxHashMap::default();
 
         if let Some(capacity) = self.parameters.initial_registry_capacity {
@@ -91,7 +91,7 @@ where
         self.solution.cost = forward_recursion(
             state,
             self.model.as_ref(),
-            &generator,
+            &mut generator,
             &mut memo,
             &time_keeper,
             &mut self.solution.expanded,
@@ -106,7 +106,7 @@ where
 
                 while let Some((_, Some(transition))) = memo.get(&state) {
                     function_cache.clear();
-                    let transition = transition.as_ref().clone();
+                    let transition = transition.as_ref().transition.clone();
                     state = transition.apply(
                         &state,
                         &mut function_cache,
@@ -134,13 +134,14 @@ where
     }
 }
 
-type StateMemo<T> = FxHashMap<HashableState, (Option<T>, Option<Rc<dypdl::Transition>>)>;
+type StateMemo<T> =
+    FxHashMap<HashableState, (Option<T>, Option<Rc<TransitionWithId<dypdl::Transition>>>)>;
 
 /// Performs a naive recursion while memoizing all encountered states.
 pub fn forward_recursion<T: variable_type::Numeric + Ord>(
     state: HashableState,
     model: &dypdl::Model,
-    generator: &SuccessorGenerator,
+    generator: &mut SuccessorGenerator,
     memo: &mut StateMemo<T>,
     time_keeper: &util::TimeKeeper,
     expanded: &mut usize,

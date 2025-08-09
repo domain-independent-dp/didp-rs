@@ -1,3 +1,6 @@
+use crate::search_algorithm::data_structure::TransitionWithId;
+use crate::search_algorithm::Solution;
+
 /// Statistics of hash distributed search.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HdSearchStatistics {
@@ -10,3 +13,6 @@ pub struct HdSearchStatistics {
     /// Number of nodes sent to other threads by each thread.
     pub sent: Vec<usize>,
 }
+
+/// Result of a hash distributed search.
+pub type HdSearchResult<T, V> = (Solution<T, TransitionWithId<V>>, HdSearchStatistics);

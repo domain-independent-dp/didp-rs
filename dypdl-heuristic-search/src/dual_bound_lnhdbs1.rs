@@ -92,7 +92,7 @@ where
     T: variable_type::Numeric + fmt::Display + Ord + Send + Sync + 'static,
     <T as str::FromStr>::Err: fmt::Debug,
 {
-    let generator = SuccessorGenerator::<TransitionWithId, Arc<TransitionWithId>, _>::from_model(
+    let generator = SuccessorGenerator::<Transition, Arc<TransitionWithId>, _>::from_model(
         model.clone(),
         false,
     );

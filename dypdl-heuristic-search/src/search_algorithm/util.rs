@@ -124,7 +124,7 @@ where
 ///     FNode, StateInRegistry, get_solution_cost_and_suffix,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-///     GetTransitions, ParentAndChildStateFunctionCache,
+///     GetTransitions, ParentAndChildStateFunctionCache, TransitionWithId,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::util::update_solution;
 /// use std::rc::Rc;
@@ -136,6 +136,11 @@ where
 /// let mut transition = Transition::new("transition");
 /// transition.add_effect(var, var + 1).unwrap();
 /// transition.set_cost(IntegerExpression::Cost + 1);
+/// let transition = TransitionWithId {
+///     transition,
+///     forced: false,
+///     id: 0,
+/// };
 ///
 /// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
 /// let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
@@ -172,7 +177,7 @@ where
 /// assert_eq!(solution.cost, Some(3));
 /// assert_eq!(
 ///     solution.transitions,
-///     [transition.clone(), transition.clone(), transition],
+///     [transition.transition.clone(), transition.transition.clone(), transition.transition],
 /// );
 /// ```
 pub fn update_solution<T, N, V>(
@@ -247,7 +252,7 @@ pub fn update_bound_if_better<T, V>(
 #[cfg(test)]
 mod tests {
     use super::super::data_structure::{
-        FNode, ParentAndChildStateFunctionCache, StateInRegistry,
+        FNode, ParentAndChildStateFunctionCache, StateInRegistry, TransitionWithId,
     };
     use super::*;
     use dypdl::prelude::*;
@@ -268,6 +273,11 @@ mod tests {
         let mut transition = Transition::new("transition");
         transition.add_effect(var, var + 1).unwrap();
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &StateInRegistry| g + h;
@@ -302,7 +312,11 @@ mod tests {
         assert_eq!(solution.cost, Some(3));
         assert_eq!(
             solution.transitions,
-            [transition.clone(), transition.clone(), transition],
+            [
+                transition.transition.clone(),
+                transition.transition.clone(),
+                transition.transition
+            ],
         );
         assert_eq!(solution.best_bound, None);
         assert!(!solution.is_optimal);
@@ -328,6 +342,11 @@ mod tests {
         let mut transition = Transition::new("transition");
         transition.add_effect(var, var + 1).unwrap();
         transition.set_cost(IntegerExpression::Cost + 1);
+        let transition = TransitionWithId {
+            transition,
+            forced: false,
+            id: 0,
+        };
 
         let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
         let f_evaluator = |g, h, _: &StateInRegistry| g + h;
@@ -365,7 +384,11 @@ mod tests {
         assert_eq!(solution.cost, Some(3));
         assert_eq!(
             solution.transitions,
-            [transition.clone(), transition.clone(), transition],
+            [
+                transition.transition.clone(),
+                transition.transition.clone(),
+                transition.transition
+            ],
         );
         assert_eq!(solution.best_bound, Some(3));
         assert!(solution.is_optimal);

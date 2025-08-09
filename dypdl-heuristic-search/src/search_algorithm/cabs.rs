@@ -1,5 +1,5 @@
 use super::beam_search::BeamSearchParameters;
-use super::data_structure::{exceed_bound, HashableSignatureVariables};
+use super::data_structure::{exceed_bound, HashableSignatureVariables, TransitionWithId};
 use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::print_primal_bound;
 use super::util::{update_bound_if_better, TimeKeeper};
@@ -112,16 +112,16 @@ pub struct Cabs<
     N,
     B,
     V = Transition,
-    D = Rc<V>,
+    D = Rc<TransitionWithId<V>>,
     R = Rc<Model>,
     K = Rc<HashableSignatureVariables>,
 > where
     T: variable_type::Numeric + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
-    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
+    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, TransitionWithId<V>>,
     V: TransitionInterface + Clone + Default,
-    Transition: From<V>,
-    D: Deref<Target = V> + Clone,
+    Transition: From<TransitionWithId<V>>,
+    D: Deref<Target = TransitionWithId<V>> + Clone,
     R: Deref<Target = Model> + Clone,
     K: Hash + Eq + Clone + Debug,
 {
@@ -133,7 +133,7 @@ pub struct Cabs<
     beam_size: usize,
     max_beam_size: Option<usize>,
     time_keeper: TimeKeeper,
-    solution: Solution<T, V>,
+    solution: Solution<T, TransitionWithId<V>>,
     phantom: PhantomData<K>,
 }
 
@@ -141,10 +141,10 @@ impl<'a, T, N, B, V, D, R, K> Cabs<'a, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display,
     <T as str::FromStr>::Err: fmt::Debug,
-    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
+    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, TransitionWithId<V>>,
     V: TransitionInterface + Clone + Default,
-    Transition: From<V>,
-    D: Deref<Target = V> + Clone,
+    Transition: From<TransitionWithId<V>>,
+    D: Deref<Target = TransitionWithId<V>> + Clone,
     R: Deref<Target = Model> + Clone,
     K: Hash + Eq + Clone + Debug,
 {
@@ -176,7 +176,7 @@ where
     }
 
     //// Search for the next solution, returning the solution without converting it into `Transition`.
-    pub fn search_inner(&mut self) -> (Solution<T, V>, bool) {
+    pub fn search_inner(&mut self) -> (Solution<T, TransitionWithId<V>>, bool) {
         self.time_keeper.start();
         let model = &self.input.generator.model;
 
@@ -275,10 +275,10 @@ impl<T, N, B, V, D, R, K> Search<T> for Cabs<'_, T, N, B, V, D, R, K>
 where
     T: variable_type::Numeric + fmt::Display + Ord,
     <T as str::FromStr>::Err: fmt::Debug,
-    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, V>,
+    B: FnMut(&SearchInput<N, V, D, R>, BeamSearchParameters<T>) -> Solution<T, TransitionWithId<V>>,
     V: TransitionInterface + Clone + Default,
-    Transition: From<V>,
-    D: Deref<Target = V> + Clone,
+    Transition: From<TransitionWithId<V>>,
+    D: Deref<Target = TransitionWithId<V>> + Clone,
     R: Deref<Target = Model> + Clone,
     K: Hash + Eq + Clone + Debug,
 {

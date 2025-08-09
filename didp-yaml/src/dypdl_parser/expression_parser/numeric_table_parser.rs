@@ -123,8 +123,7 @@ fn parse_reduce<'a, T: Numeric>(
                 rest,
             ))),
             _ => Err(ParseErr::new(format!(
-                "argument `{:?}` is invalid for sum",
-                name
+                "argument `{name:?}` is invalid for sum",
             ))),
         }
     } else if let Some(i) = tables.name_to_table_2d.get(name) {
@@ -165,8 +164,7 @@ fn parse_reduce<'a, T: Numeric>(
                 rest,
             ))),
             (x, y) => Err(ParseErr::new(format!(
-                "arguments `{:?}` `{:?}` are invalid for sum",
-                x, y
+                "arguments `{x:?}` `{y:?}` are invalid for sum",
             ))),
         }
     } else if let Some(i) = tables.name_to_table_3d.get(name) {

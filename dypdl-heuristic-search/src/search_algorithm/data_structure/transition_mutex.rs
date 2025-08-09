@@ -106,7 +106,7 @@ fn get_required_elements(transition: &Transition) -> RequiredElements {
 /// ```
 /// use dypdl::prelude::*;
 /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-///     TransitionMutex, TransitionWithId
+///     TransitionMutex,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::SuccessorGenerator;
 /// use std::rc::Rc;
@@ -133,7 +133,7 @@ fn get_required_elements(transition: &Transition) -> RequiredElements {
 /// model.add_forward_transition(transition).unwrap();
 ///
 /// let model = Rc::new(model);
-/// let generator = SuccessorGenerator::<TransitionWithId>::from_model(model, false);
+/// let generator = SuccessorGenerator::<Transition>::from_model(model, false);
 /// let transitions = generator
 ///     .transitions
 ///     .iter()
@@ -196,10 +196,10 @@ impl TransitionMutex {
     /// Create a successor generator filtering forbidden transitions by the given prefix ans suffix.
     pub fn filter_successor_generator<T, U, R>(
         &self,
-        generator: &SuccessorGenerator<TransitionWithId<T>, U, R>,
+        generator: &SuccessorGenerator<T, U, R>,
         prefix: &[TransitionWithId<T>],
         suffix: &[TransitionWithId<T>],
-    ) -> SuccessorGenerator<TransitionWithId<T>, U, R>
+    ) -> SuccessorGenerator<T, U, R>
     where
         T: TransitionInterface,
         U: Deref<Target = TransitionWithId<T>> + Clone + From<TransitionWithId<T>>,
@@ -743,7 +743,7 @@ mod tests {
             forward_forced_transitions: vec![Transition::default()],
             ..Default::default()
         });
-        let expected = SuccessorGenerator::<TransitionWithId>::from_model(model, false);
+        let expected = SuccessorGenerator::<Transition>::from_model(model, false);
         let transitions = expected
             .transitions
             .iter()
@@ -762,7 +762,7 @@ mod tests {
             forward_forced_transitions: vec![Transition::default()],
             ..Default::default()
         });
-        let expected = SuccessorGenerator::<TransitionWithId>::from_model(model, false);
+        let expected = SuccessorGenerator::<Transition>::from_model(model, false);
         let transitions = expected
             .transitions
             .iter()
@@ -838,7 +838,7 @@ mod tests {
             }],
             ..Default::default()
         });
-        let expected = SuccessorGenerator::<TransitionWithId>::from_model(model, false);
+        let expected = SuccessorGenerator::<Transition>::from_model(model, false);
         let transitions = expected
             .transitions
             .iter()
@@ -899,7 +899,7 @@ mod tests {
             forward_forced_transitions: vec![t2.clone(), Transition::default()],
             ..Default::default()
         });
-        let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
+        let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
         let transitions = generator
             .transitions
             .iter()
@@ -918,20 +918,17 @@ mod tests {
             transition: t2,
         };
         let generator = mutex.filter_successor_generator(&generator, &[t1, t2], &[]);
-        let expected = SuccessorGenerator {
-            forced_transitions: vec![Rc::new(TransitionWithId {
-                id: 1,
-                forced: true,
-                ..Default::default()
-            })],
-            transitions: vec![Rc::new(TransitionWithId {
-                id: 1,
-                forced: false,
-                ..Default::default()
-            })],
-            backward: false,
-            model,
-        };
+        let forced_transitions = vec![Rc::new(TransitionWithId {
+            id: 1,
+            forced: true,
+            ..Default::default()
+        })];
+        let transitions = vec![Rc::new(TransitionWithId {
+            id: 1,
+            forced: false,
+            ..Default::default()
+        })];
+        let expected = SuccessorGenerator::new(forced_transitions, transitions, false, model);
         assert_eq!(generator, expected);
     }
 
@@ -984,7 +981,7 @@ mod tests {
             forward_forced_transitions: vec![t2.clone(), Transition::default()],
             ..Default::default()
         });
-        let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
+        let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
         let transitions = generator
             .transitions
             .iter()
@@ -1003,20 +1000,18 @@ mod tests {
             transition: t2,
         };
         let generator = mutex.filter_successor_generator(&generator, &[], &[t1, t2]);
-        let expected = SuccessorGenerator {
-            forced_transitions: vec![Rc::new(TransitionWithId {
-                id: 1,
-                forced: true,
-                ..Default::default()
-            })],
-            transitions: vec![Rc::new(TransitionWithId {
-                id: 1,
-                forced: false,
-                ..Default::default()
-            })],
-            backward: false,
-            model,
-        };
+        let forced_transitions = vec![Rc::new(TransitionWithId {
+            id: 1,
+            forced: true,
+            ..Default::default()
+        })];
+        let transitions = vec![Rc::new(TransitionWithId {
+            id: 1,
+            forced: false,
+            ..Default::default()
+        })];
+        let expected =
+            SuccessorGenerator::new(forced_transitions, transitions, false, model.clone());
         assert_eq!(generator, expected);
     }
 
@@ -1069,7 +1064,7 @@ mod tests {
             forward_forced_transitions: vec![t2.clone(), Transition::default()],
             ..Default::default()
         });
-        let generator = SuccessorGenerator::<TransitionWithId>::from_model(model.clone(), false);
+        let generator = SuccessorGenerator::<Transition>::from_model(model.clone(), false);
         let transitions = generator
             .transitions
             .iter()
@@ -1088,20 +1083,18 @@ mod tests {
             transition: t2,
         };
         let generator = mutex.filter_successor_generator(&generator, &[t1], &[t2]);
-        let expected = SuccessorGenerator {
-            forced_transitions: vec![Rc::new(TransitionWithId {
-                id: 1,
-                forced: true,
-                ..Default::default()
-            })],
-            transitions: vec![Rc::new(TransitionWithId {
-                id: 1,
-                forced: false,
-                ..Default::default()
-            })],
-            backward: false,
-            model,
-        };
+        let forced_transitions = vec![Rc::new(TransitionWithId {
+            id: 1,
+            forced: true,
+            ..Default::default()
+        })];
+        let transitions = vec![Rc::new(TransitionWithId {
+            id: 1,
+            forced: false,
+            ..Default::default()
+        })];
+        let expected =
+            SuccessorGenerator::new(forced_transitions, transitions, false, model.clone());
         assert_eq!(generator, expected);
     }
 }
