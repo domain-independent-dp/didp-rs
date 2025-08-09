@@ -103,7 +103,7 @@ Here, we store the id of each transition returned by :meth:`~didppy.Model.add_tr
 Defining Transition Dominance
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For a node :math:`i` and :math:`j`, when the following condition holds, it is known that sweeping $i$ now is at least as good as sweeping :math:`j` now :cite:p:`TransitionDominance`.
+For a node :math:`i` and :math:`j`, when the following condition holds, it is known that sweeping :math:`i` now is at least as good as sweeping :math:`j` now :cite:p:`TransitionDominance`.
 
 .. math::
 
