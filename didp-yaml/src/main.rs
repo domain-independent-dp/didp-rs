@@ -26,8 +26,7 @@ fn load_config(
         yaml_rust::Yaml::Hash(map) => map,
         _ => {
             return Err(util::YamlContentErr::new(format!(
-                "expected Hash for the config file, but found {:?}",
-                config
+                "expected Hash for the config file, but found {config:?}",
             ))
             .into());
         }
@@ -36,8 +35,7 @@ fn load_config(
         Some(yaml_rust::Yaml::String(value)) => value.clone(),
         value => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String for `solver`, but found {:?}",
-                value
+                "expected String for `solver`, but found {value:?}",
             ))
             .into())
         }
@@ -50,8 +48,7 @@ fn load_config(
         Some(yaml_rust::Yaml::String(value)) => Some(value.clone()),
         Some(value) => {
             return Err(util::YamlContentErr::new(format!(
-                "expected String for `dump_to`, but found {:?}",
-                value
+                "expected String for `dump_to`, but found {value:?}",
             ))
             .into())
         }
@@ -72,7 +69,7 @@ where
         solver.search()
     };
     let solution = solution.unwrap_or_else(|e| {
-        eprintln!("Failed to run the solver: {:}", e);
+        eprintln!("Failed to run the solver: {e:?}");
         process::exit(1);
     });
 
@@ -86,18 +83,18 @@ where
             println!("{}", transition.get_full_name());
         }
 
-        println!("cost: {}", cost);
+        println!("cost: {cost}");
         if solution.is_optimal {
-            println!("optimal cost: {}", cost);
+            println!("optimal cost: {cost}");
         } else if let Some(bound) = solution.best_bound {
-            println!("best bound: {}", bound);
+            println!("best bound: {bound}");
         }
 
         let solution = SolutionToDump::from(solution);
         solution
             .dump_to_file(solution_filename)
             .unwrap_or_else(|e| {
-                eprintln!("Failed to dump a solution: {:?}", e);
+                eprintln!("Failed to dump a solution: {e:?}");
                 process::exit(1);
             });
     } else if solution.is_infeasible {
@@ -106,13 +103,13 @@ where
         println!("Could not find a solution.");
 
         if let Some(bound) = solution.best_bound {
-            println!("best bound: {}", bound);
+            println!("best bound: {bound}");
         }
     }
 
-    println!("Expanded: {}", expanded);
-    println!("Generated: {}", generated);
-    println!("Search time: {}s", search_time);
+    println!("Expanded: {expanded}");
+    println!("Generated: {generated}");
+    println!("Search time: {search_time}s");
 }
 
 fn main() {
@@ -134,42 +131,42 @@ fn main() {
         process::exit(1);
     });
     let domain = fs::read_to_string(domain).unwrap_or_else(|e| {
-        eprintln!("Couldn't read a domain file: {:?}", e);
+        eprintln!("Couldn't read a domain file: {e:?}");
         process::exit(1);
     });
     let domain = yaml_rust::YamlLoader::load_from_str(&domain).unwrap_or_else(|e| {
-        eprintln!("Couldn't read a domain file: {:?}", e);
+        eprintln!("Couldn't read a domain file: {e:?}");
         process::exit(1);
     });
     assert_eq!(domain.len(), 1);
     let domain = &domain[0];
     let problem = fs::read_to_string(problem).unwrap_or_else(|e| {
-        eprintln!("Could'nt read a problem file: {:?}", e);
+        eprintln!("Could'nt read a problem file: {e:?}");
         process::exit(1);
     });
     let problem = yaml_rust::YamlLoader::load_from_str(&problem).unwrap_or_else(|e| {
-        eprintln!("Couldn't read a problem file: {:?}", e);
+        eprintln!("Couldn't read a problem file: {e:?}");
         process::exit(1);
     });
     assert_eq!(problem.len(), 1);
     let problem = &problem[0];
     let config = fs::read_to_string(config).unwrap_or_else(|e| {
-        eprintln!("Couldn't read a config file: {:?}", e);
+        eprintln!("Couldn't read a config file: {e:?}");
         process::exit(1);
     });
     let config = yaml_rust::YamlLoader::load_from_str(&config).unwrap_or_else(|e| {
-        eprintln!("Couldn't read a config file: {:?}", e);
+        eprintln!("Couldn't read a config file: {e:?}");
         process::exit(1);
     });
     assert_eq!(config.len(), 1);
     let config = &config[0];
     let model = dypdl_parser::load_model_from_yaml(domain, problem).unwrap_or_else(|e| {
-        eprintln!("Couldn't load a model: {:?}", e);
+        eprintln!("Couldn't load a model: {e:?}");
         process::exit(1);
     });
 
     let (solver_name, config, dump_filename) = load_config(config).unwrap_or_else(|e| {
-        eprintln!("Couldn't load a config: {:?}", e);
+        eprintln!("Couldn't load a config: {e:?}");
         process::exit(1);
     });
 
@@ -178,7 +175,7 @@ fn main() {
             let solver: Box<dyn Search<variable_type::Integer>> =
                 heuristic_search_solver::create_solver(&solver_name, &config, model)
                     .unwrap_or_else(|e| {
-                        eprintln!("Couldn't load a solver: {:?}", e);
+                        eprintln!("Couldn't load a solver: {e:?}");
                         process::exit(1);
                     });
             let end = time::Instant::now();
@@ -189,7 +186,7 @@ fn main() {
             let solver: Box<dyn Search<variable_type::OrderedContinuous>> =
                 heuristic_search_solver::create_solver(&solver_name, &config, model)
                     .unwrap_or_else(|e| {
-                        eprintln!("Couldn't load a solver: {:?}", e);
+                        eprintln!("Couldn't load a solver: {e:?}");
                         process::exit(1);
                     });
             let end = time::Instant::now();

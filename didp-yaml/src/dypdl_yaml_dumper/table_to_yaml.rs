@@ -318,7 +318,7 @@ pub fn set_table_data_to_yaml(
         let table1d = &table_data.tables_1d[value];
 
         if table1d.shape().contains(&0) {
-            return Err(ModelErr::new(format!("Empty Set Table1D: {}", key)).into());
+            return Err(ModelErr::new(format!("Empty Set Table1D: {key}")).into());
         }
         let set_size = table1d.capacity_of_set();
         add_set_table_nd_to_yaml(
@@ -339,7 +339,7 @@ pub fn set_table_data_to_yaml(
         let table2d = &table_data.tables_2d[value];
 
         if table2d.shape().contains(&0) {
-            return Err(ModelErr::new(format!("Empty Set Table2D: {}", key)).into());
+            return Err(ModelErr::new(format!("Empty Set Table2D: {key}")).into());
         }
         let set_size = table2d.capacity_of_set();
         add_set_table_nd_to_yaml(
@@ -360,7 +360,7 @@ pub fn set_table_data_to_yaml(
         let table3d = &table_data.tables_3d[value];
 
         if table3d.shape().contains(&0) {
-            return Err(ModelErr::new(format!("Empty Set Table3D: {}", key)).into());
+            return Err(ModelErr::new(format!("Empty Set Table3D: {key}")).into());
         }
         let set_size = table3d.capacity_of_set();
         add_set_table_nd_to_yaml(

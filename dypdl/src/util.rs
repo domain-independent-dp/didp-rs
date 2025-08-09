@@ -11,7 +11,7 @@ pub struct ModelErr(String);
 impl ModelErr {
     /// Creates a new error.
     pub fn new(message: String) -> ModelErr {
-        ModelErr(format!("Error in problem definition: {}", message))
+        ModelErr(format!("Error in problem definition: {message}"))
     }
 }
 
@@ -27,7 +27,7 @@ pub fn get_id(name: &str, name_to_id: &FxHashMap<String, usize>) -> Result<usize
     if let Some(id) = name_to_id.get(name) {
         Ok(*id)
     } else {
-        Err(ModelErr::new(format!("no such name `{}`", name)))
+        Err(ModelErr::new(format!("no such name `{name}`")))
     }
 }
 
@@ -49,7 +49,10 @@ where
 
             Ok(id)
         }
-        Entry::Occupied(e) => Err(ModelErr::new(format!("name `{}` is already used", e.key()))),
+        Entry::Occupied(e) => Err(ModelErr::new(format!(
+            "name `{key}` is already used",
+            key = e.key()
+        ))),
     }
 }
 

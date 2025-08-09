@@ -58,7 +58,7 @@ where
         "dual_bound_dd_lns" => dual_bound_dd_lns::load_from_yaml(model, config),
         "dual_bound_weighted_astar" => dual_bound_weighted_astar::load_from_yaml(model, config),
         "expression_beam_search" => expression_beam_search::load_from_yaml(model, config),
-        _ => Err(util::YamlContentErr::new(format!("No such solver: {}", solver_name)).into()),
+        _ => Err(util::YamlContentErr::new(format!("No such solver: {solver_name}")).into()),
     }
 }
 
@@ -88,8 +88,10 @@ where
 
         if let Some(cost) = solution.cost {
             let line = format!(
-                "{}, {}, {}, {}\n",
-                solution.time, cost, solution.expanded, solution.generated
+                "{time}, {cost}, {expanded}, {generated}\n",
+                time = solution.time,
+                expanded = solution.expanded,
+                generated = solution.generated
             );
             file.write_all(line.as_bytes())?;
             let solution_to_dump = SolutionToDump::from(solution.clone());

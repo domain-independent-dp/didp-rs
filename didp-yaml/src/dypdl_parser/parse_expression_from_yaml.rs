@@ -24,8 +24,7 @@ pub fn parse_integer_from_yaml(
         )?),
         Yaml::Integer(value) => Ok(expression::IntegerExpression::Constant(*value as Integer)),
         _ => Err(util::YamlContentErr::new(format!(
-            "expected String or Integer, but is {:?}",
-            value
+            "expected String or Integer, but is {value:?}",
         ))
         .into()),
     }
@@ -51,8 +50,7 @@ pub fn parse_continuous_from_yaml(
         )),
         Yaml::Real(value) => Ok(expression::ContinuousExpression::Constant(value.parse()?)),
         _ => Err(util::YamlContentErr::new(format!(
-            "expected String, Integer, or Real, but is {:?}",
-            value
+            "expected String, Integer, or Real, but is {value:?}",
         ))
         .into()),
     }
@@ -75,8 +73,7 @@ pub fn parse_element_from_yaml(
         )?),
         Yaml::Integer(value) => Ok(expression::ElementExpression::Constant(*value as Element)),
         _ => Err(util::YamlContentErr::new(format!(
-            "expected String or Integer, but is {:?}",
-            value
+            "expected String or Integer, but is {value:?}",
         ))
         .into()),
     }
@@ -97,7 +94,7 @@ pub fn parse_set_from_yaml(
             registry,
             parameters,
         )?),
-        _ => Err(util::YamlContentErr::new(format!("expected String , but is {:?}", value)).into()),
+        _ => Err(util::YamlContentErr::new(format!("expected String , but is {value:?}")).into()),
     }
 }
 
@@ -118,8 +115,7 @@ pub fn parse_condition_from_yaml(
         )?),
         Yaml::Boolean(value) => Ok(expression::Condition::Constant(*value)),
         _ => Err(util::YamlContentErr::new(format!(
-            "expected String or Boolean, but is {:?}",
-            value
+            "expected String or Boolean, but is {value:?}",
         ))
         .into()),
     }
@@ -146,10 +142,7 @@ pub fn parse_vector_from_yaml(
                     expression::ReferenceExpression::Constant(vector),
                 ))
             } else {
-                Err(
-                    util::YamlContentErr::new(format!("expected String , but is {:?}", value))
-                        .into(),
-                )
+                Err(util::YamlContentErr::new(format!("expected String , but is {value:?}")).into())
             }
         }
     }

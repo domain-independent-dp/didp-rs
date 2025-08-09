@@ -209,7 +209,7 @@ where
         let discrepancy_limit = parameters.width - 1;
 
         if !quiet {
-            println!("Initial discrepancy limit: {}", discrepancy_limit);
+            println!("Initial discrepancy limit: {discrepancy_limit}");
         }
 
         let function_cache =

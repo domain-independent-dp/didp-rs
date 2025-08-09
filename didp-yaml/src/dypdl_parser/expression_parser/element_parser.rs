@@ -60,8 +60,7 @@ pub fn parse_expression<'a>(
                 Ok((expression, rest))
             } else {
                 Err(ParseErr::new(format!(
-                    "no such table, state function, or operation `{}`",
-                    name
+                    "no such table, state function, or operation `{name}`",
                 )))
             }
         }
@@ -129,9 +128,9 @@ fn parse_atom(
     } else if let Ok(expression) = functions.get_element_function(token) {
         Ok(expression)
     } else {
-        let v: Element = token.parse().map_err(|e| {
-            ParseErr::new(format!("could not parse {} as a number: {:?}", token, e))
-        })?;
+        let v: Element = token
+            .parse()
+            .map_err(|e| ParseErr::new(format!("could not parse {token} as a number: {e:?}")))?;
         Ok(ElementExpression::Constant(v))
     }
 }
@@ -285,8 +284,7 @@ pub fn parse_vector_expression<'a>(
                 parse_vector_from(rest, metadata, functions, registry, parameters)
             } else {
                 Err(ParseErr::new(format!(
-                    "no such table or operation `{}`",
-                    name
+                    "no such table or operation `{name}`",
                 )))
             }
         }
@@ -510,8 +508,7 @@ pub fn parse_set_expression<'a, 'b>(
                 Ok((expression, rest))
             } else {
                 Err(ParseErr::new(format!(
-                    "no such table, state function, object, or operation `{}`",
-                    name
+                    "no such table, state function, object, or operation `{name}`",
                 )))
             }
         }
@@ -705,10 +702,7 @@ fn parse_element_vector<'a>(
             *v
         } else {
             let v: Element = next_token.parse().map_err(|e| {
-                ParseErr::new(format!(
-                    "could not parse {} as a number: {:?}",
-                    next_token, e
-                ))
+                ParseErr::new(format!("could not parse {next_token} as a number: {e:?}",))
             })?;
             v
         };
@@ -728,8 +722,7 @@ fn parse_reference_atom<T: Clone>(
         Ok(ReferenceExpression::Variable(*i))
     } else {
         Err(ParseErr::new(format!(
-            "no such constant or variable `{}`",
-            token
+            "no such constant or variable `{token}`",
         )))
     }
 }

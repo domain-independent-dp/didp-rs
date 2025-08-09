@@ -9,7 +9,7 @@ pub struct ParseErr(String);
 impl ParseErr {
     /// Returns a new `ParseErr` with the given message.
     pub fn new(message: String) -> ParseErr {
-        ParseErr(format!("Error in parsing expression: {}", message))
+        ParseErr(format!("Error in parsing expression: {message}"))
     }
 }
 
@@ -33,7 +33,7 @@ pub fn parse_closing(tokens: &[String]) -> Result<&[String], ParseErr> {
         .split_first()
         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     if token != ")" {
-        Err(ParseErr::new(format!("unexpected {}, expected `)`", token)))
+        Err(ParseErr::new(format!("unexpected {token}, expected `)`")))
     } else {
         Ok(rest)
     }
@@ -57,9 +57,9 @@ pub fn parse_parameterized_state_function_name<'a>(
         }
 
         if let Some(v) = parameters.get(next_token) {
-            name += &format!("_{}", v);
+            name += &format!("_{v}");
         } else {
-            name += &format!("_{}", next_token);
+            name += &format!("_{next_token}");
         }
 
         xs = rest;

@@ -19,7 +19,7 @@ fn get_transition_index_from_full_name(
         let mut full_name = name.to_string();
 
         for (name, value) in t.parameter_names.iter().zip(parameters.values()) {
-            full_name += &format!(" {}:{}", name, value);
+            full_name += &format!(" {name}:{value}");
         }
 
         if t.get_full_name() == full_name {
@@ -84,8 +84,7 @@ pub fn load_transition_dominance_from_yaml(
                     (dominating, backward_transitions, true)
                 } else {
                     return Err(Box::new(ParseErr::new(format!(
-                        "dominating transition `{}` not found in forward or backward transitions",
-                        dominating_name
+                        "dominating transition `{dominating_name}` not found in forward or backward transitions",
                     ))));
                 };
 
@@ -97,8 +96,7 @@ pub fn load_transition_dominance_from_yaml(
                     dominated
                 } else {
                     return Err(Box::new(ParseErr::new(format!(
-                        "dominated transition `{}` not found",
-                        dominated_name
+                        "dominated transition `{dominated_name}` not found",
                     ))));
                 };
 
@@ -115,8 +113,7 @@ pub fn load_transition_dominance_from_yaml(
                 for (key, value) in dominated_parameters.iter() {
                     if parameters.insert(key.clone(), *value).is_some() {
                         return Err(Box::new(ParseErr::new(format!(
-                            "parameter `{}` is defined in both dominating and dominated",
-                            key
+                            "parameter `{key}` is defined in both dominating and dominated",
                         ))));
                     }
                 }

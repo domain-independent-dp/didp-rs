@@ -26,10 +26,9 @@ where
             })))
         }
         _ => {
-            return Err(util::YamlContentErr::new(format!(
-                "expected Hash, but found `{:?}`",
-                config
-            ))
+            return Err(util::YamlContentErr::new(
+                format!("expected Hash, but found `{config:?}`",),
+            )
             .into())
         }
     };

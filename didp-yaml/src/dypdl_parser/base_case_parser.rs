@@ -105,7 +105,7 @@ pub fn load_base_case_from_yaml(
         yaml_rust::Yaml::Hash(map) => {
             load_base_case_from_hash(map, metadata, functions, registry, cost_type)
         }
-        _ => Err(util::YamlContentErr::new(format!("expected Array, found `{:?}`", value)).into()),
+        _ => Err(util::YamlContentErr::new(format!("expected Array, found `{value:?}`")).into()),
     }
 }
 
@@ -162,8 +162,7 @@ pub fn load_base_state_from_yaml(
                 }
             }
             _ => Err(util::YamlContentErr::new(format!(
-                "expected Map for a base state, found `{:?}`",
-                value
+                "expected Map for a base state, found `{value:?}`",
             ))
             .into()),
         }

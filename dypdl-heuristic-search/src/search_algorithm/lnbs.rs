@@ -453,8 +453,7 @@ where
 
                     if !self.quiet {
                         println!(
-                            "A new primal bound is found with depth: {}, #beam: {}",
-                            depth, beam_size
+                            "A new primal bound is found with depth: {depth}, #beam: {beam_size}",
                         );
                         print_primal_bound(&self.input.solution);
                     }

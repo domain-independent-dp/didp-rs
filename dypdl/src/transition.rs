@@ -375,7 +375,7 @@ impl Transition {
             .iter()
             .zip(self.parameter_values.iter())
         {
-            full_name += format!(" {}:{}", name, value).as_str();
+            full_name += format!(" {name}:{value}").as_str();
         }
         full_name
     }
@@ -553,8 +553,7 @@ macro_rules! impl_add_effect {
                 for (j, (i, _)) in self.effect.$x.iter().enumerate() {
                     if *i == v.id() {
                         return Err(ModelErr::new(format!(
-                            "the transition already has an effect on variable id {}",
-                            *i
+                            "the transition already has an effect on variable id {i}",
                         )));
                     }
 

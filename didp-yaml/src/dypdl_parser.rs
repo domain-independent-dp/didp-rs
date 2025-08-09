@@ -493,7 +493,7 @@ fn load_cost_type_from_yaml(value: &Yaml) -> Result<CostType, Box<dyn Error>> {
     match &cost_type[..] {
         "integer" => Ok(CostType::Integer),
         "continuous" => Ok(CostType::Continuous),
-        _ => Err(util::YamlContentErr::new(format!("no such cost type `{}`", cost_type)).into()),
+        _ => Err(util::YamlContentErr::new(format!("no such cost type `{cost_type}`")).into()),
     }
 }
 
@@ -504,10 +504,9 @@ fn load_reduce_function_from_yaml(value: &Yaml) -> Result<ReduceFunction, Box<dy
         "max" => Ok(ReduceFunction::Max),
         "sum" => Ok(ReduceFunction::Sum),
         "product" => Ok(ReduceFunction::Product),
-        _ => Err(util::YamlContentErr::new(format!(
-            "no such reduce function `{}`",
-            reduce_function
-        ))
+        _ => Err(util::YamlContentErr::new(
+            format!("no such reduce function `{reduce_function}`",),
+        )
         .into()),
     }
 }
@@ -1471,7 +1470,6 @@ target:
 ";
 
         let domain = yaml_rust::YamlLoader::load_from_str(domain);
-        println!("{:?}", domain);
         assert!(domain.is_ok());
         let domain = domain.unwrap();
         assert_eq!(domain.len(), 1);

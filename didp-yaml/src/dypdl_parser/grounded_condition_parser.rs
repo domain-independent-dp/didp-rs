@@ -76,11 +76,10 @@ pub fn load_grounded_conditions_from_yaml(
                 }
             }
         }
-        _ => Err(util::YamlContentErr::new(format!(
-            "expected String or Hash, found `{:?}`",
-            value
-        ))
-        .into()),
+        _ => Err(
+            util::YamlContentErr::new(format!("expected String or Hash, found `{value:?}`",))
+                .into(),
+        ),
     }
 }
 

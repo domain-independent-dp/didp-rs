@@ -80,7 +80,7 @@ pub fn parse_expression<'a>(
                     )? {
                         Ok((IntegerVectorExpression::Table(Box::new(expression)), rest))
                     } else {
-                        Err(ParseErr::new(format!("no such table `{}`", name)))
+                        Err(ParseErr::new(format!("no such table `{name}`")))
                     }
                 }
                 "if" => {
@@ -125,7 +125,7 @@ pub fn parse_expression<'a>(
                             ) {
                                 Ok((parse_vector_operation(name, x, y)?, rest))
                             } else {
-                                Err(ParseErr::new(format!("could not parse `{:?}`", tokens)))
+                                Err(ParseErr::new(format!("could not parse `{token:?}`")))
                             }
                         }
                     };
@@ -147,12 +147,12 @@ pub fn parse_expression<'a>(
                     )? {
                         Ok((IntegerVectorExpression::Table(Box::new(expression)), rest))
                     } else {
-                        Err(ParseErr::new(format!("no such table `{}`", name)))
+                        Err(ParseErr::new(format!("no such table `{name}`")))
                     }
                 }
             }
         }
-        _ => Err(ParseErr::new(format!("unexpected token `{}`", token))),
+        _ => Err(ParseErr::new(format!("unexpected token `{token}`"))),
     }
 }
 
@@ -173,10 +173,7 @@ fn parse_integer_vector_constant<'a>(
             *v
         } else {
             let v: Integer = next_token.parse().map_err(|e| {
-                ParseErr::new(format!(
-                    "could not parse {} as a number: {:?}",
-                    next_token, e
-                ))
+                ParseErr::new(format!("could not parse {next_token} as a number: {e:?}",))
             })?;
             v
         };
@@ -200,7 +197,7 @@ fn parse_vector_unary_operation<'a>(
             IntegerVectorExpression::UnaryOperation(UnaryOperator::Abs, Box::new(x)),
             rest,
         )),
-        _ => Err(ParseErr::new(format!("no such unary operator `{}`", name))),
+        _ => Err(ParseErr::new(format!("no such unary operator `{name}`"))),
     }
 }
 
@@ -216,7 +213,7 @@ fn parse_vector_from_continuous<'a>(
         "ceil" => CastOperator::Ceil,
         "floor" => CastOperator::Floor,
         "round" => CastOperator::Round,
-        _ => return Err(ParseErr::new(format!("no such unary operator `{}`", name))),
+        _ => return Err(ParseErr::new(format!("no such unary operator `{name}`"))),
     };
     let (expression, rest) = continuous_vector_parser::parse_expression(
         tokens, metadata, functions, registry, parameters,
@@ -317,7 +314,7 @@ fn parse_vector_binary_operation_x(
             v,
             Box::new(vector),
         )),
-        _ => Err(ParseErr::new(format!("no such binary operator `{}`", op))),
+        _ => Err(ParseErr::new(format!("no such binary operator `{op}`"))),
     }
 }
 
@@ -362,7 +359,7 @@ fn parse_vector_binary_operation_y(
             Box::new(vector),
             v,
         )),
-        _ => Err(ParseErr::new(format!("no such binary operator `{}`", op))),
+        _ => Err(ParseErr::new(format!("no such binary operator `{op}`"))),
     }
 }
 
@@ -407,7 +404,7 @@ fn parse_vector_operation(
             Box::new(x),
             Box::new(y),
         )),
-        _ => Err(ParseErr::new(format!("no such binary operator `{}`", op))),
+        _ => Err(ParseErr::new(format!("no such binary operator `{op}`"))),
     }
 }
 

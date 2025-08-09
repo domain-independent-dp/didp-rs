@@ -161,8 +161,7 @@ pub fn load_transitions_from_yaml(
                 "backward" => true,
                 _ => {
                     return Err(util::YamlContentErr::new(format!(
-                        "no such direction `{}`",
-                        direction
+                        "no such direction `{direction}`",
                     ))
                     .into())
                 }
@@ -231,9 +230,7 @@ fn load_effect_from_yaml(
                 parse_continuous_from_yaml(effect, metadata, functions, registry, parameters)?;
             continuous_resource_effects.push((*i, effect.simplify(registry)));
         } else {
-            return Err(
-                util::YamlContentErr::new(format!("no such variable `{}`", variable)).into(),
-            );
+            return Err(util::YamlContentErr::new(format!("no such variable `{variable}`")).into());
         }
     }
 

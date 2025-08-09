@@ -139,8 +139,7 @@ fn parse_reduce(
             Box::new(vector),
         )),
         _ => Err(ParseErr::new(format!(
-            "no such reduction operator `{}`",
-            name
+            "no such reduction operator `{name}`",
         ))),
     }
 }
@@ -155,7 +154,7 @@ fn parse_unary_operation(name: &str, x: IntegerExpression) -> Result<IntegerExpr
             UnaryOperator::Neg,
             Box::new(x),
         )),
-        _ => Err(ParseErr::new(format!("no such unary operator `{}`", name))),
+        _ => Err(ParseErr::new(format!("no such unary operator `{name}`"))),
     }
 }
 
@@ -172,7 +171,7 @@ fn parse_from_continuous<'a>(
         "floor" => CastOperator::Floor,
         "round" => CastOperator::Round,
         "trunc" => CastOperator::Trunc,
-        _ => return Err(ParseErr::new(format!("no such unary operator `{}`", name))),
+        _ => return Err(ParseErr::new(format!("no such unary operator `{name}`"))),
     };
     let (expression, rest) =
         continuous_parser::parse_expression(tokens, metadata, functions, registry, parameters)?;
@@ -224,7 +223,7 @@ fn parse_binary_operation(
             Box::new(x),
             Box::new(y),
         )),
-        _ => Err(ParseErr::new(format!("no such operator `{}`", name))),
+        _ => Err(ParseErr::new(format!("no such operator `{name}`"))),
     }
 }
 
@@ -242,8 +241,7 @@ fn parse_cardinality<'a>(
         .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
     if token != "|" {
         return Err(ParseErr::new(format!(
-            "unexpected token: `{}`, expected `|`",
-            token
+            "unexpected token: `{token}`, expected `|`",
         )));
     }
     Ok((IntegerExpression::Cardinality(expression), rest))
@@ -280,10 +278,7 @@ fn parse_integer_atom(
         Ok(IntegerExpression::Cost)
     } else {
         let n: Integer = token.parse().map_err(|e| {
-            ParseErr::new(format!(
-                "could not parse {} as an integer atom: {:?}",
-                token, e
-            ))
+            ParseErr::new(format!("could not parse {token} as an integer atom: {e:?}",))
         })?;
         Ok(IntegerExpression::Constant(n))
     }

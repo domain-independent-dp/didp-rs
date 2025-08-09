@@ -42,8 +42,7 @@ pub fn parse_expression<'a, T: Numeric>(
                 Ok(Some((TableVectorExpression::Table2DY(*i, x, y), rest)))
             }
             (x, y) => Err(ParseErr::new(format!(
-                "arguments `{:?}` `{:?}` are invalid for `{}`",
-                x, y, name
+                "arguments `{x:?}` `{y:?}` are invalid for `{name}`",
             ))),
         }
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
@@ -100,8 +99,7 @@ fn parse_vector_or_element<'a>(
         Ok((VectorOrElementExpression::Vector(vector), rest))
     } else {
         Err(ParseErr::new(format!(
-            "could not parse tokens `{:?}`",
-            tokens
+            "could not parse tokens `{tokens:?}`",
         )))
     }
 }
@@ -141,8 +139,7 @@ pub fn parse_reduce_expression<'a, T: Numeric>(
                 rest,
             ))),
             (x, y) => Err(ParseErr::new(format!(
-                "arguments `{:?}` `{:?}` are invalid for `{}`",
-                x, y, name
+                "arguments `{x:?}` `{y:?}` are invalid for `{name}`",
             ))),
         }
     } else if let Some(i) = tables.name_to_table_3d.get(name) {
