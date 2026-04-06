@@ -1,4 +1,4 @@
-use dypdl::prelude::*;
+use crate::{StateFunctionCache, StateFunctions};
 
 /// Parent and child caches for state functions.
 #[derive(Clone, Debug, Default, PartialEq)]

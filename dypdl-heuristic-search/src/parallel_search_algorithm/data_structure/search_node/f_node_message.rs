@@ -2,12 +2,12 @@ use super::super::arc_chain::ArcChain;
 use super::cost_node_message::CostNodeMessage;
 use super::search_node_message::SearchNodeMessage;
 use crate::search_algorithm::data_structure::{
-    CreateTransitionChain, ParentAndChildStateFunctionCache, StateInformation,
+    CreateTransitionChain, StateInformation,
     StateWithHashableSignatureVariables, TransitionWithId,
 };
 use crate::search_algorithm::{FNode, FNodeEvaluators};
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, StateFunctionCache, Transition, TransitionInterface};
+use dypdl::{Model, ParentAndChildStateFunctionCache, StateFunctionCache, Transition, TransitionInterface};
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -149,9 +149,10 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
+    /// use dypdl::ParentAndChildStateFunctionCache;
     /// use dypdl_heuristic_search::search_algorithm::{FNode, StateInRegistry};
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
+    ///     GetTransitions, StateInformation
     /// };
     /// use std::sync::Arc;
     ///
@@ -212,9 +213,10 @@ where
         H: FnOnce(&StateWithHashableSignatureVariables, &mut StateFunctionCache) -> Option<T>,
         F: FnOnce(T, T, &StateWithHashableSignatureVariables) -> T,
     {
+        function_cache.child.clear();
         let (state, g) = model.generate_successor_state(
             self.state(),
-            &mut function_cache.parent,
+            function_cache,
             self.cost(model),
             transition.as_ref(),
             None,

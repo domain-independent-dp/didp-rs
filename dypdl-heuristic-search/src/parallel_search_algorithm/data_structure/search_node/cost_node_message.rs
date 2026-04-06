@@ -5,7 +5,7 @@ use crate::search_algorithm::data_structure::{
 };
 use crate::search_algorithm::CostNode;
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ReduceFunction, StateFunctionCache, Transition, TransitionInterface};
+use dypdl::{Model, ParentAndChildStateFunctionCache, ReduceFunction, Transition, TransitionInterface};
 use rustc_hash::FxHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -118,7 +118,7 @@ where
 {
     /// Generates a sendable successor node message given a transition and a DyPDL model.
     ///
-    /// `function_cache` is not cleared and updated by this node.
+    /// `function_cache.parent` is not cleared and updated by this node.
     ///
     /// Returns `None` if the successor state is pruned by a state constraint.
     ///
@@ -151,7 +151,7 @@ where
     ///     &model.target, &mut function_cache, &model.state_functions, &model.table_registry
     /// );
     ///
-    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
     /// let node = node.generate_sendable_successor_node(
     ///     Arc::new(transition.clone()), &mut function_cache, &model,
     /// );
@@ -165,10 +165,11 @@ where
     pub fn generate_sendable_successor_node(
         &self,
         transition: Arc<V>,
-        function_cache: &mut StateFunctionCache,
+        function_cache: &mut ParentAndChildStateFunctionCache,
         model: &Model,
     ) -> Option<CostNodeMessage<T, V>> {
         let cost = self.cost(model);
+        function_cache.child.clear();
         let (state, cost) = model.generate_successor_state(
             self.state(),
             function_cache,
@@ -374,7 +375,7 @@ mod tests {
         );
 
         let node = CostNode::generate_root_node(state, 0, &model);
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let successor = node.generate_sendable_successor_node(
             Arc::new(transition.clone()),
             &mut function_cache,
@@ -419,7 +420,7 @@ mod tests {
         );
 
         let node = CostNode::generate_root_node(state, 0, &model);
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let successor = node.generate_sendable_successor_node(
             Arc::new(transition.clone()),
             &mut function_cache,
@@ -459,7 +460,7 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result = node.generate_sendable_successor_node(
             Arc::new(transition),
             &mut function_cache,

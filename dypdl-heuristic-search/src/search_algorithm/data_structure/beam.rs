@@ -50,11 +50,12 @@ where
 ///
 /// ```
 /// use dypdl::prelude::*;
+/// use dypdl::ParentAndChildStateFunctionCache;
 /// use dypdl_heuristic_search::search_algorithm::{
 ///     FNode, StateInRegistry, StateRegistry,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-///     Beam, GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
+///     Beam, GetTransitions, StateInformation,
 ///     TransitionWithId,
 /// };
 /// use std::rc::Rc;

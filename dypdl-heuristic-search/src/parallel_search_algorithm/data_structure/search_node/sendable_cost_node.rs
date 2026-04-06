@@ -6,7 +6,7 @@ use crate::search_algorithm::data_structure::{
 };
 use crate::search_algorithm::{BfsNode, StateInRegistry};
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ReduceFunction, StateFunctionCache, Transition, TransitionInterface};
+use dypdl::{Model, ParentAndChildStateFunctionCache, ReduceFunction, Transition, TransitionInterface};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::sync::atomic;
@@ -99,7 +99,7 @@ where
 
     /// Generates a successor node given a transition and a DyPDL model.
     ///
-    /// `function_cache` is not cleared and updated by this node.
+    /// `function_cache.parent` is not cleared and updated by this node.
     ///
     /// Returns `None` if the successor state is pruned by a state constraint.
     ///
@@ -111,6 +111,7 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
+    /// use dypdl::ParentAndChildStateFunctionCache;
     /// use dypdl_heuristic_search::SendableCostNode;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
@@ -141,7 +142,7 @@ where
     ///     &model.table_registry,
     /// );
     ///
-    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
     /// let node = node.generate_successor_node(
     ///     Arc::new(transition.clone()), &mut function_cache, &model,
     /// );
@@ -155,10 +156,11 @@ where
     pub fn generate_successor_node(
         &self,
         transition: Arc<V>,
-        function_cache: &mut StateFunctionCache,
+        function_cache: &mut ParentAndChildStateFunctionCache,
         model: &Model,
     ) -> Option<Self> {
         let cost = self.cost(model);
+        function_cache.child.clear();
         let (state, cost) = model.generate_successor_state(
             &self.state,
             function_cache,
@@ -173,7 +175,7 @@ where
 
     /// Generates a successor node given a transition and inserts it into a state registry.
     ///
-    /// `function_cache` is not cleared and updated by this node.
+    /// `function_cache.parent` is not cleared and updated by this node.
     ///
     /// Returns the successor node and whether a new entry is generated or not.
     /// If the successor node dominates an existing non-closed node in the registry, the second return value is `false`.
@@ -187,6 +189,7 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
+    /// use dypdl::ParentAndChildStateFunctionCache;
     /// use dypdl_heuristic_search::SendableCostNode;
     /// use dypdl_heuristic_search::parallel_search_algorithm::ConcurrentStateRegistry;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
@@ -219,7 +222,7 @@ where
     ///     &model.target, &mut function_cache, &model.state_functions, &model.table_registry,
     /// );
     ///
-    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
     /// let result = node.insert_successor_node(
     ///     Arc::new(transition.clone()), &mut function_cache, &registry,
     /// );
@@ -234,10 +237,11 @@ where
     pub fn insert_successor_node(
         &self,
         transition: Arc<V>,
-        function_cache: &mut StateFunctionCache,
+        function_cache: &mut ParentAndChildStateFunctionCache,
         registry: &ConcurrentStateRegistry<T, Self>,
     ) -> Option<(Arc<SendableCostNode<T, V>>, bool)> {
         let model = registry.model();
+        function_cache.child.clear();
         let (state, cost) = model.generate_successor_state(
             self.state(),
             function_cache,
@@ -555,7 +559,7 @@ mod tests {
         );
         let node = SendableCostNode::generate_root_node(state, 0, &model);
 
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let successor =
             node.generate_successor_node(Arc::new(transition.clone()), &mut function_cache, &model);
         assert!(successor.is_some());
@@ -596,7 +600,7 @@ mod tests {
         );
 
         let node = SendableCostNode::generate_root_node(state, 0, &model);
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let successor =
             node.generate_successor_node(Arc::new(transition.clone()), &mut function_cache, &model);
         assert!(successor.is_some());
@@ -632,7 +636,7 @@ mod tests {
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 1);
 
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result =
             node.generate_successor_node(Arc::new(transition), &mut function_cache, &model);
         assert_eq!(result, None);
@@ -677,7 +681,7 @@ mod tests {
         let result = registry.insert(node.clone());
         assert!(result.information.is_some());
 
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result = node.insert_successor_node(
             Arc::new(transition.clone()),
             &mut function_cache,
@@ -733,7 +737,7 @@ mod tests {
         let result = registry.insert(node.clone());
         assert!(result.information.is_some());
 
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result = node.insert_successor_node(
             Arc::new(transition.clone()),
             &mut function_cache,
@@ -781,7 +785,7 @@ mod tests {
             id: 0,
         };
 
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result =
             node.insert_successor_node(Arc::new(transition), &mut function_cache, &registry);
         assert_eq!(result, None);
@@ -828,7 +832,7 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result = node.insert_successor_node(
             Arc::new(transition.clone()),
             &mut function_cache,
@@ -886,7 +890,7 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result = node.insert_successor_node(
             Arc::new(transition.clone()),
             &mut function_cache,
@@ -935,7 +939,7 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result = node.insert_successor_node(
             Arc::new(transition.clone()),
             &mut function_cache,
@@ -976,7 +980,7 @@ mod tests {
         let dominated = result.dominated;
         assert_eq!(dominated, SmallVec::<[_; 1]>::new());
 
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result = node.insert_successor_node(
             Arc::new(transition.clone()),
             &mut function_cache,
@@ -1010,7 +1014,7 @@ mod tests {
             forced: false,
             id: 0,
         };
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let node2 =
             node1.generate_successor_node(Arc::new(transition), &mut function_cache, &model);
         assert!(node2.is_some());
@@ -1024,6 +1028,7 @@ mod tests {
             id: 0,
         };
         let registry = ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model));
+        function_cache.child.clear();
         let result =
             node1.insert_successor_node(Arc::new(transition), &mut function_cache, &registry);
         assert!(result.is_some());
@@ -1064,7 +1069,7 @@ mod tests {
             forced: false,
             id: 0,
         };
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let node2 =
             node1.generate_successor_node(Arc::new(transition), &mut function_cache, &model);
         assert!(node2.is_some());
@@ -1078,6 +1083,7 @@ mod tests {
             id: 0,
         };
         let registry = ConcurrentStateRegistry::<_, SendableCostNode<_>>::new(Arc::new(model));
+        function_cache.child.clear();
         let result =
             node1.insert_successor_node(Arc::new(transition), &mut function_cache, &registry);
         assert!(result.is_some());

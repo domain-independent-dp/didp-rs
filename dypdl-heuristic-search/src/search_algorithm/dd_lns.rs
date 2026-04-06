@@ -1,6 +1,6 @@
 use super::beam_search::BeamSearchParameters;
 use super::data_structure::{
-    exceed_bound, BfsNode, ParentAndChildStateFunctionCache, StateInRegistry, StateRegistry,
+    exceed_bound, BfsNode, StateInRegistry, StateRegistry,
     TransitionMutex, TransitionWithId,
 };
 use super::neighborhood_search::NeighborhoodSearchInput;
@@ -8,7 +8,7 @@ use super::randomized_restricted_dd::{randomized_restricted_dd, RandomizedRestri
 use super::rollout::get_trace;
 use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::{print_primal_bound, update_bound_if_better, TimeKeeper};
-use dypdl::{variable_type, Transition, TransitionInterface};
+use dypdl::{variable_type, ParentAndChildStateFunctionCache, Transition, TransitionInterface};
 use rand::prelude::*;
 use rand_pcg::Pcg64Mcg;
 use std::error::Error;

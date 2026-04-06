@@ -1,10 +1,10 @@
 use super::super::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use super::super::transition::{TransitionWithCustomCost, TransitionWithId};
 use super::super::transition_chain::{CreateTransitionChain, GetTransitions};
-use super::super::{ParentAndChildStateFunctionCache, RcChain};
+use super::super::RcChain;
 use super::{BfsNode, CostNode, FNodeEvaluators};
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, StateFunctionCache};
+use dypdl::{Model, ParentAndChildStateFunctionCache, StateFunctionCache};
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display};
 use std::ops::Deref;
@@ -241,11 +241,12 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
+    /// use dypdl::ParentAndChildStateFunctionCache;
     /// use dypdl_heuristic_search::search_algorithm::{
     ///     CustomFNode, FNodeEvaluators, StateInRegistry, TransitionWithCustomCost, TransitionWithId,
     /// };
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache,
+    ///     GetTransitions, StateInformation
     /// };
     /// use std::rc::Rc;
     ///
@@ -312,10 +313,10 @@ where
             &model.state_functions,
             &model.table_registry,
         );
+        function_cache.child.clear();
         let node =
             self.node
-                .generate_successor_node(transition, &mut function_cache.parent, model)?;
-        function_cache.child.clear();
+                .generate_successor_node(transition, function_cache, model)?;
         let h = (evaluators.h)(node.state(), &mut function_cache.child)?;
         let f = (evaluators.f)(g, h, node.state());
         let (h, f) = if maximize { (h, f) } else { (-h, -f) };
@@ -348,11 +349,12 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
+    /// use dypdl::ParentAndChildStateFunctionCache;
     /// use dypdl_heuristic_search::search_algorithm::{
     ///     CustomFNode, FNodeEvaluators, StateInRegistry, StateRegistry, TransitionWithCustomCost,
     /// };
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
+    ///     GetTransitions, StateInformation, TransitionWithId
     /// };
     /// use std::rc::Rc;
     ///
@@ -422,9 +424,10 @@ where
         F: FnOnce(U, U, &StateInRegistry) -> U,
         M: Deref<Target = Model> + Clone,
     {
+        function_cache.child.clear();
         let (state, cost) = registry.model().generate_successor_state(
             self.state(),
-            &mut function_cache.parent,
+            function_cache,
             self.cost(registry.model()),
             transition.deref(),
             None,
@@ -440,8 +443,6 @@ where
                     -other.h
                 }
             } else {
-                function_cache.child.clear();
-
                 (evaluators.h)(&state, &mut function_cache.child)?
             };
             let g = transition.transition.custom_cost.eval_cost(

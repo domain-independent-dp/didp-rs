@@ -130,6 +130,7 @@ mod base_case;
 mod effect;
 pub mod expression;
 mod grounded_condition;
+mod parent_and_child_state_function_cache;
 mod state;
 mod state_functions;
 mod table;
@@ -142,6 +143,7 @@ pub mod variable_type;
 pub use base_case::BaseCase;
 pub use effect::Effect;
 pub use grounded_condition::GroundedCondition;
+pub use parent_and_child_state_function_cache::ParentAndChildStateFunctionCache;
 pub use state::{
     AccessPreference, CheckVariable, ContinuousResourceVariable, ContinuousVariable,
     ElementResourceVariable, ElementVariable, GetObjectTypeOf, IntegerResourceVariable,
@@ -175,6 +177,7 @@ pub mod prelude {
         ContinuousStateFunction, ContinuousVariable, CostExpression, CostType, Element,
         ElementResourceVariable, ElementStateFunction, ElementVariable, GetObjectTypeOf, Integer,
         IntegerResourceVariable, IntegerStateFunction, IntegerVariable, Model, ObjectType,
+        ParentAndChildStateFunctionCache,
         ReduceFunction, ResourceVariables, Set, SetStateFunction, SetVariable, SignatureVariables,
         State, StateFunctionCache, StateFunctions, StateInterface, StateMetadata, Table1DHandle,
         Table2DHandle, Table3DHandle, TableHandle, TableInterface, Transition, TransitionId,
@@ -493,6 +496,9 @@ impl Model {
 
     /// Returns the successor state and the cost of a state, given a transition and the cost of the successor state.
     ///
+    /// Note that the caller must guarantee that the cache is consistent with the parent and child states.
+    /// Clearing the cache guarantees consistency; it triggers lazy recomputations syncing the cache and the state.
+    ///
     /// Returns `None` if the cost is greater than or equal to the bound.
     ///
     /// # Panics
@@ -507,7 +513,7 @@ impl Model {
     /// let mut model = Model::default();
     /// let variable = model.add_integer_variable("variable", 2).unwrap();
     /// let state = model.target.clone();
-    /// let mut function_cache = StateFunctionCache::new(&model.state_functions);
+    /// let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
     ///
     /// let mut transition = Transition::new("transition");
     /// transition.add_effect(variable, variable + 1);
@@ -532,26 +538,26 @@ impl Model {
     >(
         &self,
         state: &S,
-        function_cache: &mut StateFunctionCache,
+        function_cache: &mut ParentAndChildStateFunctionCache,
         cost: U,
         transition: &T,
         cost_bound: Option<U>,
     ) -> Option<(R, U)> {
         let successor = transition.apply(
             state,
-            function_cache,
+            &mut function_cache.parent,
             &self.state_functions,
             &self.table_registry,
         );
 
-        if !self.check_constraints(&successor, function_cache) {
+        if !self.check_constraints(&successor, &mut function_cache.child) {
             return None;
         }
 
         let successor_cost = transition.eval_cost(
             cost,
             state,
-            function_cache,
+            &mut function_cache.parent,
             &self.state_functions,
             &self.table_registry,
         );
@@ -4324,7 +4330,7 @@ mod tests {
             forward_transitions: vec![transition.clone()],
             ..Default::default()
         };
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
 
         let result =
             model.generate_successor_state(&state, &mut function_cache, 0, &transition, None);
@@ -4384,7 +4390,7 @@ mod tests {
             reduce_function: ReduceFunction::Min,
             ..Default::default()
         };
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
 
         let result =
             model.generate_successor_state(&state, &mut function_cache, 0, &transition, Some(2));
@@ -4444,7 +4450,7 @@ mod tests {
             reduce_function: ReduceFunction::Max,
             ..Default::default()
         };
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
 
         let result =
             model.generate_successor_state(&state, &mut function_cache, 0, &transition, Some(0));
@@ -4504,7 +4510,7 @@ mod tests {
             reduce_function: ReduceFunction::Min,
             ..Default::default()
         };
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
 
         let result: Option<(State, _)> =
             model.generate_successor_state(&state, &mut function_cache, 0, &transition, Some(1));
@@ -4552,7 +4558,7 @@ mod tests {
             reduce_function: ReduceFunction::Max,
             ..Default::default()
         };
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
 
         let result: Option<(State, _)> =
             model.generate_successor_state(&state, &mut function_cache, 0, &transition, Some(1));
@@ -4607,7 +4613,7 @@ mod tests {
             forward_transitions: vec![transition.clone()],
             ..Default::default()
         };
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
 
         let result: Option<(State, _)> =
             model.generate_successor_state(&state, &mut function_cache, 0, &transition, None);
