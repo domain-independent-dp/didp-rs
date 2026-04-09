@@ -4621,6 +4621,72 @@ mod tests {
     }
 
     #[test]
+    fn generate_successor_state_pruned_by_constraint_containing_state_function() {
+        let state = State {
+            signature_variables: SignatureVariables {
+                integer_variables: vec![0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let transition = Transition {
+            name: String::from("increase"),
+            effect: Effect {
+                integer_effects: vec![(
+                    0,
+                    IntegerExpression::BinaryOperation(
+                        BinaryOperator::Add,
+                        Box::new(IntegerExpression::Variable(0)),
+                        Box::new(IntegerExpression::BinaryOperation(
+                            BinaryOperator::Add,
+                            Box::new(IntegerExpression::StateFunction(0)),
+                            Box::new(IntegerExpression::Constant(1)),
+                        )),
+                    ),
+                )],
+                ..Default::default()
+            },
+            cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                BinaryOperator::Add,
+                Box::new(IntegerExpression::Cost),
+                Box::new(IntegerExpression::Constant(1)),
+            )),
+            ..Default::default()
+        };
+        let name_to_integer_variable = FxHashMap::default();
+        let model = Model {
+            state_metadata: StateMetadata {
+                integer_variable_names: vec![String::from("v1")],
+                name_to_integer_variable,
+                ..Default::default()
+            },
+            target: state.clone(),
+            state_functions: StateFunctions{
+                integer_function_names: vec!["sf_v1".to_string()],
+                name_to_integer_function: [("sf_v1".to_string(), 0)].into_iter().collect(),
+                integer_functions: vec![IntegerExpression::Variable(0)],
+                ..Default::default()
+            },
+            state_constraints: vec![GroundedCondition {
+                condition: Condition::ComparisonI(
+                    ComparisonOperator::Le,
+                    Box::new(IntegerExpression::StateFunction(0)),
+                    Box::new(IntegerExpression::Constant(0)),
+                ),
+                ..Default::default()
+            }],
+            forward_transitions: vec![transition.clone()],
+            ..Default::default()
+        };
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
+
+        let result: Option<(State, _)> =
+            model.generate_successor_state(&state, &mut function_cache, 0, &transition, None);
+        assert_eq!(result, None);
+    }
+
+    #[test]
     fn validate_forward_true() {
         let name_to_integer_variable = FxHashMap::default();
         let model = Model {

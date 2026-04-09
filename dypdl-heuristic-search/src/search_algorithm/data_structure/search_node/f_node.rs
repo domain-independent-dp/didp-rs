@@ -1214,63 +1214,6 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_successor_pruned_by_constraint_containing_state_function() {
-        let mut model = Model::default();
-        let v1 = model.add_integer_resource_variable("v1", true, 0);
-        assert!(v1.is_ok());
-        let v1 = v1.unwrap();
-        let v2 = model.add_integer_resource_variable("v2", false, 0);
-        assert!(v2.is_ok());
-        let v2 = v2.unwrap();
-        let sf_v1 = model.add_integer_state_function(
-            "sf_v1", v1.into());
-        assert!(sf_v1.is_ok());
-        let sf_v1 = sf_v1.unwrap();
-
-        let result =
-            model.add_state_constraint(Condition::comparison_i(ComparisonOperator::Le, sf_v1.clone(), 0));
-        assert!(result.is_ok());
-
-        let state = model.target.clone();
-        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
-        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
-        let f_evaluator = |g, h, _: &StateInRegistry| g + h;
-        let node = FNode::<_>::generate_root_node(
-            state,
-            &mut function_cache.parent,
-            0,
-            &model,
-            &h_evaluator,
-            &f_evaluator,
-            None,
-        );
-        assert!(node.is_some());
-        let node = node.unwrap();
-
-        let mut transition = Transition::default();
-        let result = transition.add_effect(v1, sf_v1 + 1);
-        assert!(result.is_ok());
-        let result = transition.add_effect(v2, v2 + 1);
-        assert!(result.is_ok());
-        transition.set_cost(IntegerExpression::Cost + 1);
-        let transition = TransitionWithId {
-            transition,
-            forced: false,
-            id: 0,
-        };
-
-        let result = node.generate_successor_node(
-            Rc::new(transition),
-            &mut function_cache,
-            &model,
-            &h_evaluator,
-            &f_evaluator,
-            None,
-        );
-        assert_eq!(result, None);
-    }
-
-    #[test]
     fn test_generate_successor_pruned_by_bound_min() {
         let mut model = Model::default();
         model.set_minimize();
@@ -1699,66 +1642,6 @@ mod tests {
 
         let mut transition = Transition::default();
         let result = transition.add_effect(v1, v1 + 1);
-        assert!(result.is_ok());
-        let result = transition.add_effect(v2, v2 + 1);
-        assert!(result.is_ok());
-        transition.set_cost(IntegerExpression::Cost + 1);
-        let transition = TransitionWithId {
-            transition,
-            forced: false,
-            id: 0,
-        };
-
-        let result = node.insert_successor_node(
-            Rc::new(transition),
-            &mut function_cache,
-            &mut registry,
-            &h_evaluator,
-            &f_evaluator,
-            None,
-        );
-        assert_eq!(result, None);
-        assert!(!node.is_closed());
-    }
-
-    #[test]
-    fn test_insert_successor_pruned_by_constraint_containing_state_function() {
-        let mut model = Model::default();
-        let v1 = model.add_integer_resource_variable("v1", true, 0);
-        assert!(v1.is_ok());
-        let v1 = v1.unwrap();
-        let v2 = model.add_integer_resource_variable("v2", false, 0);
-        assert!(v2.is_ok());
-        let v2 = v2.unwrap();
-        let sf_v1 = model.add_integer_state_function(
-            "sf_v1", v1.into());
-        assert!(sf_v1.is_ok());
-        let sf_v1 = sf_v1.unwrap();
-
-        let result =
-            model.add_state_constraint(Condition::comparison_i(ComparisonOperator::Le, sf_v1.clone(), 0));
-        assert!(result.is_ok());
-
-        let state = StateInRegistry::from(model.target.clone());
-        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
-        let mut registry = StateRegistry::<_, FNode<_>>::new(Rc::new(model.clone()));
-
-        let h_evaluator = |_: &StateInRegistry, _: &mut _| Some(0);
-        let f_evaluator = |g, h, _: &StateInRegistry| g + h;
-        let node = FNode::generate_root_node(
-            state,
-            &mut function_cache.parent,
-            0,
-            &model,
-            &h_evaluator,
-            &f_evaluator,
-            None,
-        );
-        assert!(node.is_some());
-        let node = node.unwrap();
-
-        let mut transition = Transition::default();
-        let result = transition.add_effect(v1, sf_v1 + 1);
         assert!(result.is_ok());
         let result = transition.add_effect(v2, v2 + 1);
         assert!(result.is_ok());
