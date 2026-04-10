@@ -1,11 +1,11 @@
 use super::beam_search::BeamSearchParameters;
 use super::data_structure::{
-    exceed_bound, BfsNode, ParentAndChildStateFunctionCache, StateRegistry, TransitionWithId,
+    exceed_bound, BfsNode, StateRegistry, TransitionWithId,
 };
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{SearchInput, Solution};
 use super::util;
-use dypdl::{variable_type, TransitionInterface};
+use dypdl::{variable_type, ParentAndChildStateFunctionCache, TransitionInterface};
 use rand::prelude::*;
 use rand_pcg::Pcg64Mcg;
 use std::cmp;

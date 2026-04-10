@@ -1,11 +1,11 @@
 use super::data_structure::{
-    exceed_bound, BfsNode, ParentAndChildStateFunctionCache, StateRegistry, SuccessorGenerator,
+    exceed_bound, BfsNode, StateRegistry, SuccessorGenerator,
     TransitionWithId,
 };
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, Search, SearchInput, Solution};
 use super::util::{update_bound_if_better, update_solution, TimeKeeper};
-use dypdl::{variable_type, Transition, TransitionInterface};
+use dypdl::{variable_type, ParentAndChildStateFunctionCache, Transition, TransitionInterface};
 use std::collections::BinaryHeap;
 use std::error::Error;
 use std::fmt;

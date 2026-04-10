@@ -2,11 +2,10 @@ use super::super::state_registry::{StateInRegistry, StateInformation, StateRegis
 use super::super::transition::TransitionWithId;
 use super::super::transition_chain::{CreateTransitionChain, GetTransitions, RcChain};
 use super::super::util::exceed_bound;
-use super::super::ParentAndChildStateFunctionCache;
 use super::{BfsNode, CostNode};
 use dypdl::variable_type::Numeric;
 use dypdl::{
-    Model, ReduceFunction, StateFunctionCache, StateInterface, Transition, TransitionInterface,
+    Model, ParentAndChildStateFunctionCache, ReduceFunction, StateFunctionCache, StateInterface, Transition, TransitionInterface,
 };
 use std::cmp::Ordering;
 use std::fmt::Display;
@@ -175,6 +174,9 @@ where
     /// If the model is minimizing, the h- and f-values become the negatives of the values returned by the evaluators.
     /// If the model is maximizing, the h- and f-values become the values returned by the evaluators.
     /// If `other` is given, the h-value is taken from it.
+    ///
+    /// Note that the caller must guarantee that the cache is consistent with the state.
+    /// Clearing the cache guarantees consistency; it triggers lazy recomputations syncing the cache and the state.
     pub fn evaluate_state<S, H, F>(
         state: &S,
         function_cache: &mut StateFunctionCache,
@@ -196,8 +198,6 @@ where
                 -other.h
             }
         } else {
-            function_cache.clear();
-
             (evaluators.h)(state, function_cache)?
         };
         let f = (evaluators.f)(g, h, state);
@@ -308,9 +308,10 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
+    /// use dypdl::ParentAndChildStateFunctionCache;
     /// use dypdl_heuristic_search::search_algorithm::{FNode, StateInRegistry};
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
+    ///     GetTransitions, StateInformation, TransitionWithId
     /// };
     /// use std::rc::Rc;
     ///
@@ -367,9 +368,10 @@ where
         H: FnOnce(&StateInRegistry, &mut StateFunctionCache) -> Option<T>,
         F: FnOnce(T, T, &StateInRegistry) -> T,
     {
+        function_cache.child.clear();
         let (state, g) = model.generate_successor_state(
             self.state(),
-            &mut function_cache.parent,
+            function_cache,
             self.cost(model),
             transition.deref(),
             None,
@@ -420,9 +422,10 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
+    /// use dypdl::ParentAndChildStateFunctionCache;
     /// use dypdl_heuristic_search::search_algorithm::{FNode, StateInRegistry, StateRegistry};
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
+    ///     GetTransitions, StateInformation, TransitionWithId
     /// };
     /// use std::rc::Rc;
     ///
@@ -483,9 +486,10 @@ where
         F: FnOnce(T, T, &StateInRegistry) -> T,
         M: Deref<Target = Model> + Clone,
     {
+        function_cache.child.clear();
         let (state, g) = registry.model().generate_successor_state(
             self.state(),
-            &mut function_cache.parent,
+            function_cache,
             self.cost(registry.model()),
             transition.deref(),
             None,

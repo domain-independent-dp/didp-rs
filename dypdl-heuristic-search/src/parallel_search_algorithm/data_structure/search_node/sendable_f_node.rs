@@ -2,11 +2,12 @@ use super::super::arc_chain::ArcChain;
 use super::super::concurrent_state_registry::ConcurrentStateRegistry;
 use crate::search_algorithm::data_structure::{
     exceed_bound, CreateTransitionChain, GetTransitions, HashableSignatureVariables,
-    ParentAndChildStateFunctionCache, StateInformation, TransitionWithId,
+    StateInformation, TransitionWithId
 };
 use crate::search_algorithm::{BfsNode, StateInRegistry};
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, ReduceFunction, StateFunctionCache, Transition, TransitionInterface};
+use dypdl::{Model, ParentAndChildStateFunctionCache, ReduceFunction, StateFunctionCache, Transition,
+    TransitionInterface};
 use std::cmp::Ordering;
 use std::fmt::Display;
 use std::sync::atomic;
@@ -159,10 +160,11 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
+    /// use dypdl::ParentAndChildStateFunctionCache;
     /// use dypdl_heuristic_search::SendableFNode;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
+    ///     GetTransitions, StateInformation, TransitionWithId,
     /// };
     /// use std::sync::Arc;
     ///
@@ -223,14 +225,14 @@ where
         ) -> Option<T>,
         F: FnOnce(T, T, &StateInRegistry<Arc<HashableSignatureVariables>>) -> T,
     {
+        function_cache.child.clear();
         let (state, g) = model.generate_successor_state(
             &self.state,
-            &mut function_cache.parent,
+            function_cache,
             self.g,
             transition.as_ref(),
             None,
         )?;
-        function_cache.child.clear();
         let h = h_evaluator(&state, &mut function_cache.child)?;
         let f = f_evaluator(g, h, &state);
 
@@ -277,11 +279,12 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
+    /// use dypdl::ParentAndChildStateFunctionCache;
     /// use dypdl_heuristic_search::SendableFNode;
     /// use dypdl_heuristic_search::parallel_search_algorithm::ConcurrentStateRegistry;
     /// use dypdl_heuristic_search::search_algorithm::StateInRegistry;
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
+    ///     GetTransitions, StateInformation, TransitionWithId,
     /// };
     /// use std::sync::Arc;
     ///
@@ -343,9 +346,10 @@ where
         ) -> Option<T>,
         F: FnOnce(T, T, &StateInRegistry<Arc<HashableSignatureVariables>>) -> T,
     {
+        function_cache.child.clear();
         let (state, g) = registry.model().generate_successor_state(
             &self.state,
-            &mut function_cache.parent,
+            function_cache,
             self.g,
             transition.as_ref(),
             None,
@@ -362,7 +366,6 @@ where
                     -other.h
                 }
             } else {
-                function_cache.child.clear();
                 h_evaluator(&state, &mut function_cache.child)?
             };
             let f = f_evaluator(g, h, &state);

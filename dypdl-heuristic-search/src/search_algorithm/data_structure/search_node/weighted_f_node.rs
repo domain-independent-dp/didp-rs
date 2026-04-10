@@ -1,10 +1,9 @@
 use super::super::state_registry::{StateInRegistry, StateInformation, StateRegistry};
 use super::super::transition::TransitionWithId;
 use super::super::transition_chain::{CreateTransitionChain, GetTransitions, RcChain};
-use super::super::ParentAndChildStateFunctionCache;
 use super::{BfsNode, CostNode, FNode, FNodeEvaluators};
 use dypdl::{
-    variable_type::Numeric, Model, ReduceFunction, StateFunctionCache, Transition,
+    variable_type::Numeric, Model, ParentAndChildStateFunctionCache, ReduceFunction, StateFunctionCache, Transition,
     TransitionInterface,
 };
 use std::cmp::Ordering;
@@ -270,11 +269,12 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
+    /// use dypdl::ParentAndChildStateFunctionCache;
     /// use dypdl_heuristic_search::search_algorithm::{
     ///     FNodeEvaluators, StateInRegistry, WeightedFNode,
     /// };
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
+    ///     GetTransitions, StateInformation, TransitionWithId,
     /// };
     /// use std::rc::Rc;
     ///
@@ -380,11 +380,12 @@ where
     ///
     /// ```
     /// use dypdl::prelude::*;
+    /// use dypdl::ParentAndChildStateFunctionCache;
     /// use dypdl_heuristic_search::search_algorithm::{
     ///     FNodeEvaluators, StateInRegistry, StateRegistry, WeightedFNode,
     /// };
     /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-    ///     GetTransitions, StateInformation, ParentAndChildStateFunctionCache, TransitionWithId,
+    ///     GetTransitions, StateInformation, TransitionWithId,
     /// };
     /// use std::rc::Rc;
     ///
@@ -459,9 +460,10 @@ where
         F: FnOnce(T, T, &StateInRegistry) -> U,
         M: Deref<Target = Model> + Clone,
     {
+        function_cache.child.clear();
         let (state, g) = registry.model().generate_successor_state(
             self.state(),
-            &mut function_cache.parent,
+            function_cache,
             self.cost(registry.model()),
             transition.deref(),
             None,

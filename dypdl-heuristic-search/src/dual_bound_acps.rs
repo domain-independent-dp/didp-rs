@@ -1,11 +1,9 @@
-use crate::search_algorithm::data_structure::ParentAndChildStateFunctionCache;
-
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
     Acps, CostNode, FNode, Parameters, ProgressiveSearchParameters, Search, SearchInput,
     SuccessorGenerator,
 };
-use dypdl::{variable_type, StateFunctionCache, Transition};
+use dypdl::{variable_type, ParentAndChildStateFunctionCache, StateFunctionCache, Transition};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -127,7 +125,7 @@ where
              transition,
              cache: &mut ParentAndChildStateFunctionCache,
              registry: &mut _,
-             _| { node.insert_successor_node(transition, &mut cache.parent, registry) };
+             _| { node.insert_successor_node(transition, cache, registry) };
         Box::new(Acps::<_, CostNode<_>, _, _>::new(
             input,
             transition_evaluator,

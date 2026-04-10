@@ -1,7 +1,7 @@
-use super::data_structure::{ParentAndChildStateFunctionCache, StateInformation};
+use super::data_structure::{StateInformation};
 use super::StateInRegistry;
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, State, StateFunctionCache, StateInterface, TransitionInterface};
+use dypdl::{Model, ParentAndChildStateFunctionCache, State, StateFunctionCache, StateInterface, TransitionInterface};
 use std::fmt::Debug;
 use std::hash::Hash;
 
@@ -39,9 +39,8 @@ where
 ///
 /// ```
 /// use dypdl::prelude::*;
-/// use dypdl_heuristic_search::search_algorithm::{
-///     data_structure::ParentAndChildStateFunctionCache, rollout,
-/// };
+/// use dypdl::ParentAndChildStateFunctionCache;
+/// use dypdl_heuristic_search::search_algorithm::rollout;
 ///
 /// let mut model = Model::default();
 /// let variable = model.add_integer_variable("variable", 1).unwrap();
@@ -194,9 +193,9 @@ where
 ///
 /// ```
 /// use dypdl::prelude::*;
+/// use dypdl::ParentAndChildStateFunctionCache;
 /// use dypdl_heuristic_search::Solution;
 /// use dypdl_heuristic_search::search_algorithm::{
-///     data_structure::ParentAndChildStateFunctionCache,
 ///     FNode, StateInRegistry, get_solution_cost_and_suffix,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::data_structure::{

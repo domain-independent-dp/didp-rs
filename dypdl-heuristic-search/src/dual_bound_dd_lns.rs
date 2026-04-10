@@ -1,10 +1,10 @@
 use super::f_evaluator_type::FEvaluatorType;
 use super::search_algorithm::{
-    beam_search, data_structure::ParentAndChildStateFunctionCache, rollout, Cabs, CabsParameters,
+    beam_search, rollout, Cabs, CabsParameters,
     CostNode, DdLns, DdLnsParameters, FNode, NeighborhoodSearchInput, Search, SearchInput,
     Solution, StateInRegistry, SuccessorGenerator, TransitionMutex, TransitionWithId,
 };
-use dypdl::{variable_type, StateFunctionCache, Transition};
+use dypdl::{variable_type, ParentAndChildStateFunctionCache, StateFunctionCache, Transition};
 use std::fmt;
 use std::rc::Rc;
 use std::str;
@@ -252,7 +252,7 @@ where
                                              transition,
                                              cache: &mut ParentAndChildStateFunctionCache,
                                              _| {
-                node.generate_successor_node(transition, &mut cache.parent, &t_model)
+                node.generate_successor_node(transition, cache, &t_model)
             };
             let input = SearchInput {
                 node: node_generator(StateInRegistry::from(model.target.clone()), root_cost),
@@ -277,7 +277,7 @@ where
                                          cache: &mut ParentAndChildStateFunctionCache,
                                          registry: &mut _,
                                          _| {
-            node.insert_successor_node(transition, &mut cache.parent, registry)
+            node.insert_successor_node(transition, cache, registry)
         };
         parameters.beam_search_parameters.parameters.time_limit = parameters
             .beam_search_parameters

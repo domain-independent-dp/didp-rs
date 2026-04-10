@@ -3,12 +3,12 @@ use super::hd_search_statistics::{HdSearchResult, HdSearchStatistics};
 use crate::search_algorithm::data_structure::{exceed_bound, Beam};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
-    data_structure::{ParentAndChildStateFunctionCache, TransitionWithId},
+    data_structure::{TransitionWithId},
     get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
     StateRegistry,
 };
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
-use dypdl::{variable_type, Model, TransitionInterface};
+use dypdl::{variable_type, Model, ParentAndChildStateFunctionCache, TransitionInterface};
 use std::error::Error;
 use std::fmt::Display;
 use std::sync::Arc;

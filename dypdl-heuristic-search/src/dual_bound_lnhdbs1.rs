@@ -1,13 +1,12 @@
 use super::f_evaluator_type::FEvaluatorType;
 use super::parallel_search_algorithm::{hd_beam_search2, CostNodeMessage, FNodeMessage};
-use super::search_algorithm::{
-    data_structure::ParentAndChildStateFunctionCache, rollout, Cabs, CabsParameters, CostNode,
+use super::search_algorithm::{rollout, Cabs, CabsParameters, CostNode,
     FNode, Lnbs, LnbsParameters, NeighborhoodSearchInput, Search, SearchInput, StateInRegistry,
     SuccessorGenerator, TransitionMutex, TransitionWithId,
 };
 use super::Solution;
 use dypdl::variable_type;
-use dypdl::{StateFunctionCache, Transition};
+use dypdl::{ParentAndChildStateFunctionCache, StateFunctionCache, Transition};
 use std::fmt;
 use std::str;
 use std::sync::Arc;
@@ -256,7 +255,7 @@ where
                                          transition,
                                          cache: &mut ParentAndChildStateFunctionCache,
                                          _| {
-            node.generate_sendable_successor_node(transition, &mut cache.parent, &t_model)
+            node.generate_sendable_successor_node(transition, cache, &t_model)
         };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
             let (solution, _) = hd_beam_search2(

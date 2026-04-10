@@ -1,10 +1,10 @@
 use super::data_structure::{
-    exceed_bound, Beam, BfsNode, ParentAndChildStateFunctionCache, StateRegistry, TransitionWithId,
+    exceed_bound, Beam, BfsNode, StateRegistry, TransitionWithId,
 };
 use super::rollout::get_solution_cost_and_suffix;
 use super::search::{Parameters, SearchInput, Solution};
 use super::util::TimeKeeper;
-use dypdl::{variable_type, TransitionInterface};
+use dypdl::{variable_type, ParentAndChildStateFunctionCache, TransitionInterface};
 use std::fmt::Display;
 use std::mem;
 use std::rc::Rc;
