@@ -1,11 +1,11 @@
-use crate::search_algorithm::data_structure::{ParentAndChildStateFunctionCache, TransitionWithId};
+use crate::search_algorithm::data_structure::TransitionWithId;
 
 use super::f_evaluator_type::FEvaluatorType;
 use super::parallel_search_algorithm::{hd_beam_search1, CostNodeMessage, FNodeMessage};
 use super::search_algorithm::{
     Cabs, CabsParameters, CostNode, FNode, Search, SearchInput, SuccessorGenerator,
 };
-use dypdl::{variable_type, StateFunctionCache, Transition};
+use dypdl::{variable_type, ParentAndChildStateFunctionCache, StateFunctionCache, Transition};
 use std::fmt;
 use std::str;
 use std::sync::Arc;
@@ -148,7 +148,7 @@ where
                                          transition,
                                          cache: &mut ParentAndChildStateFunctionCache,
                                          _| {
-            node.generate_sendable_successor_node(transition, &mut cache.parent, &model)
+            node.generate_sendable_successor_node(transition, cache, &model)
         };
         let beam_search = move |input: &SearchInput<_, _, _, _>, parameters| {
             let (solution, statistics) = hd_beam_search1(

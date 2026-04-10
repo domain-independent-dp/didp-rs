@@ -1,12 +1,12 @@
 use crate::search_algorithm::{
     data_structure::{
-        HashableSignatureVariables, ParentAndChildStateFunctionCache, TransitionWithId,
+        HashableSignatureVariables, TransitionWithId
     },
     BfsNode, SuccessorGenerator,
 };
 use crate::ConcurrentStateRegistry;
 use dypdl::variable_type::Numeric;
-use dypdl::{Model, TransitionInterface};
+use dypdl::{Model, ParentAndChildStateFunctionCache, TransitionInterface};
 use std::fmt::Display;
 use std::sync::Arc;
 
@@ -168,7 +168,7 @@ mod tests {
         let result = transition.add_effect(var, var + 2);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 2);
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result = model.generate_successor_state(
             &model.target,
             &mut function_cache,
@@ -279,7 +279,7 @@ mod tests {
         let result = transition.add_effect(var, var + 3);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 3);
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result = model.generate_successor_state(
             &model.target,
             &mut function_cache,
@@ -297,7 +297,7 @@ mod tests {
         let result = transition.add_effect(var, var + 4);
         assert!(result.is_ok());
         transition.set_cost(IntegerExpression::Cost + 4);
-        let mut function_cache = StateFunctionCache::new(&model.state_functions);
+        let mut function_cache = ParentAndChildStateFunctionCache::new(&model.state_functions);
         let result = model.generate_successor_state(
             &model.target,
             &mut function_cache,

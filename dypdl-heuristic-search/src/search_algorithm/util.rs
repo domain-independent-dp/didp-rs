@@ -119,12 +119,13 @@ where
 ///
 /// ```
 /// use dypdl::prelude::*;
+/// use dypdl::ParentAndChildStateFunctionCache;
 /// use dypdl_heuristic_search::Solution;
 /// use dypdl_heuristic_search::search_algorithm::{
 ///     FNode, StateInRegistry, get_solution_cost_and_suffix,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::data_structure::{
-///     GetTransitions, ParentAndChildStateFunctionCache, TransitionWithId,
+///     GetTransitions, TransitionWithId,
 /// };
 /// use dypdl_heuristic_search::search_algorithm::util::update_solution;
 /// use std::rc::Rc;
@@ -252,9 +253,10 @@ pub fn update_bound_if_better<T, V>(
 #[cfg(test)]
 mod tests {
     use super::super::data_structure::{
-        FNode, ParentAndChildStateFunctionCache, StateInRegistry, TransitionWithId,
+        FNode, StateInRegistry, TransitionWithId,
     };
     use super::*;
+    use dypdl::ParentAndChildStateFunctionCache;
     use dypdl::prelude::*;
     use std::rc::Rc;
 
