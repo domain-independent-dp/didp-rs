@@ -1073,8 +1073,8 @@ impl StateMetadata {
             let m = self.object_numbers[self.set_variable_to_object[i]];
             if v.len() > m {
                 return Err(ModelErr::new(format!(
-                    "set size {} for {i} th set variable > #objects ({m})",
-                    v.len(),
+                    "set size {len} for {i} th set variable > #objects ({m})",
+                    len = v.len(),
                 )));
             }
         }
