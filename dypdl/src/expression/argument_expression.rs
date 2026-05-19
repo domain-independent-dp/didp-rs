@@ -339,7 +339,7 @@ mod tests {
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
-        let args = vec![
+        let args = [
             ArgumentExpression::Element(ElementExpression::Constant(8)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
@@ -414,7 +414,7 @@ mod tests {
 
         let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
-        let args = vec![
+        let args = [
             ElementExpression::from(8).into(),
             v.into(),
             f.into(),
@@ -468,7 +468,7 @@ mod tests {
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = TableRegistry::default();
-        let args = vec![
+        let args = [
             ArgumentExpression::Element(ElementExpression::Constant(8)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
@@ -498,7 +498,7 @@ mod tests {
 
     #[test]
     fn simplify_args_some() {
-        let args = vec![
+        let args = [
             ArgumentExpression::Element(ElementExpression::Constant(8)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
                 let mut set = Set::with_capacity(4);
@@ -544,7 +544,7 @@ mod tests {
 
     #[test]
     fn simplify_args_none() {
-        let args = vec![
+        let args = [
             ArgumentExpression::Element(ElementExpression::Constant(8)),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
                 let mut set = Set::with_capacity(4);

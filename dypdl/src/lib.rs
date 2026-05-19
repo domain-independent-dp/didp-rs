@@ -562,7 +562,7 @@ impl Model {
             &self.table_registry,
         );
 
-        if cost_bound.map_or(false, |bound| match self.reduce_function {
+        if cost_bound.is_some_and(|bound| match self.reduce_function {
             ReduceFunction::Max => successor_cost <= bound,
             ReduceFunction::Min => successor_cost >= bound,
             _ => false,

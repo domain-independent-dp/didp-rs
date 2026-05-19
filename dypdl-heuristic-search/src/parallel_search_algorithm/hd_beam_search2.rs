@@ -372,7 +372,7 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
     let mut layer_dual_bound = None;
     let mut time_out = time_keeper
         .as_ref()
-        .map_or(false, |time_keeper| time_keeper.check_time_limit(quiet));
+        .is_some_and(|time_keeper| time_keeper.check_time_limit(quiet));
     let mut incumbent = None;
 
     // Initiates the search by sending messages.
@@ -447,7 +447,7 @@ fn single_beam_search<'a, T, N, M, E, B, V>(
                                 if exceed_bound(model, value, primal_bound) {
                                     best_dual_bound = primal_bound;
                                 } else if best_dual_bound
-                                    .map_or(true, |bound| !exceed_bound(model, bound, Some(value)))
+                                    .is_none_or(|bound| !exceed_bound(model, bound, Some(value)))
                                 {
                                     best_dual_bound = Some(value);
                                 }

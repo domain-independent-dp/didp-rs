@@ -209,7 +209,7 @@ where
     fn clean_garbage(&mut self) {
         let mut peek = self.queue.peek();
 
-        while peek.map_or(false, |node| node.0.is_closed()) {
+        while peek.is_some_and(|node| node.0.is_closed()) {
             self.queue.pop();
             peek = self.queue.peek();
         }
@@ -276,7 +276,7 @@ where
             removed: None,
         };
 
-        if self.size < self.capacity || self.queue.peek().map_or(true, |peek| node > *peek.0) {
+        if self.size < self.capacity || self.queue.peek().is_none_or(|peek| node > *peek.0) {
             let insertion_result = registry.insert(node);
 
             for d in insertion_result.dominated.iter() {

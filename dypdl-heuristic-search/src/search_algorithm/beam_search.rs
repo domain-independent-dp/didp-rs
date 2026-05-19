@@ -291,7 +291,7 @@ where
             if exceed_bound(&model, value, primal_bound) {
                 best_dual_bound = primal_bound;
             } else if best_dual_bound
-                .map_or(true, |bound| !exceed_bound(&model, bound, Some(value)))
+                .is_none_or(|bound| !exceed_bound(&model, bound, Some(value)))
             {
                 best_dual_bound = layer_dual_bound;
             }

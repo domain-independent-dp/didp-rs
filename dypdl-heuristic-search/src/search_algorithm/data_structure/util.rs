@@ -18,7 +18,7 @@ use dypdl::{Model, ReduceFunction};
 /// assert!(!exceed_bound(&model, 1, Some(2)));
 /// ```
 pub fn exceed_bound<T: Numeric + PartialOrd>(model: &Model, value: T, bound: Option<T>) -> bool {
-    bound.map_or(false, |bound| match model.reduce_function {
+    bound.is_some_and(|bound| match model.reduce_function {
         ReduceFunction::Max => value <= bound,
         ReduceFunction::Min => value >= bound,
         _ => false,

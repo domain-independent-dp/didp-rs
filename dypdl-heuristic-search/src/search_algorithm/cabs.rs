@@ -181,7 +181,7 @@ where
         let model = &self.input.generator.model;
 
         while !self.solution.is_terminated() {
-            let last = self.max_beam_size.map_or(false, |max_beam_size| {
+            let last = self.max_beam_size.is_some_and(|max_beam_size| {
                 if self.beam_size >= max_beam_size {
                     self.beam_size = max_beam_size;
 
