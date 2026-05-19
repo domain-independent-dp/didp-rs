@@ -3,15 +3,16 @@ use super::hd_search_statistics::{HdSearchResult, HdSearchStatistics};
 use crate::search_algorithm::data_structure::{exceed_bound, Beam};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
-    data_structure::{TransitionWithId},
-    get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
-    StateRegistry,
+    data_structure::TransitionWithId, get_solution_cost_and_suffix, BeamSearchParameters, BfsNode,
+    SearchInput, Solution, StateRegistry,
 };
-use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use dypdl::{variable_type, Model, ParentAndChildStateFunctionCache, TransitionInterface};
 use std::error::Error;
 use std::fmt::Display;
-use std::sync::Arc;
+use std::sync::{
+    mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
+    Arc,
+};
 use std::{cmp, mem, thread};
 
 /// Performs hash distributed beam search 2 (HDBS2).
@@ -133,12 +134,12 @@ where
     let base_beam_size = parameters.beam_size / threads;
     let modulo = parameters.beam_size % threads;
 
-    let (node_txs, node_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| unbounded()).unzip();
+    let (node_txs, node_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| channel()).unzip();
     let (layer_txs, layer_rxs): (Vec<_>, Vec<_>) =
-        (0..threads).map(|_| bounded(threads - 1)).unzip();
-    let (solution_tx, solution_rx) = bounded(1);
-    let (optimality_tx, optimality_rx) = bounded(1);
-    let (statistics_tx, statistics_rx) = bounded(threads);
+        (0..threads).map(|_| sync_channel(threads - 1)).unzip();
+    let (solution_tx, solution_rx) = sync_channel(1);
+    let (optimality_tx, optimality_rx) = sync_channel(1);
+    let (statistics_tx, statistics_rx) = sync_channel(threads);
 
     thread::scope(|s| {
         for (id, (node_rx, layer_rx)) in node_rxs.into_iter().zip(layer_rxs).enumerate() {
@@ -290,11 +291,11 @@ struct Channels<T, M, V> {
     id: usize,
     node_tx: NodeSender<Option<M>>,
     node_rx: Receiver<Option<M>>,
-    layer_txs: Vec<Sender<LocalLayerMessage<T>>>,
+    layer_txs: Vec<SyncSender<LocalLayerMessage<T>>>,
     layer_rx: Receiver<LocalLayerMessage<T>>,
-    solution_tx: Sender<Option<(T, Vec<V>)>>,
-    optimality_tx: Sender<OptimalityMessage<T>>,
-    statistics_tx: Sender<Statistics>,
+    solution_tx: SyncSender<Option<(T, Vec<V>)>>,
+    optimality_tx: SyncSender<OptimalityMessage<T>>,
+    statistics_tx: SyncSender<Statistics>,
 }
 
 fn single_beam_search<'a, T, N, M, E, B, V>(

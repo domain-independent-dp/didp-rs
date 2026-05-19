@@ -3,16 +3,16 @@ use super::hd_search_statistics::{HdSearchResult, HdSearchStatistics};
 use crate::search_algorithm::data_structure::{exceed_bound, Beam};
 use crate::search_algorithm::util::TimeKeeper;
 use crate::search_algorithm::{
-    data_structure::TransitionWithId,
-    get_solution_cost_and_suffix, BeamSearchParameters, BfsNode, SearchInput, Solution,
-    StateRegistry,
+    data_structure::TransitionWithId, get_solution_cost_and_suffix, BeamSearchParameters, BfsNode,
+    SearchInput, Solution, StateRegistry,
 };
-use bus::{Bus, BusReader};
-use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use dypdl::{variable_type, Model, ParentAndChildStateFunctionCache, TransitionInterface};
 use std::error::Error;
 use std::fmt::Display;
-use std::sync::Arc;
+use std::sync::{
+    mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
+    Arc,
+};
 use std::{cmp, iter, mem, thread};
 
 /// Performs hash distributed beam search 1 (HDBS1).
@@ -135,17 +135,19 @@ where
     let base_beam_size = parameters.beam_size / threads;
     let modulo = parameters.beam_size % threads;
 
-    let (node_txs, node_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| unbounded()).unzip();
-    let (solution_tx, solution_rx) = bounded(1);
-    let (optimality_tx, optimality_rx) = bounded(1);
-    let (statistics_tx, statistics_rx) = bounded(threads);
+    let (node_txs, node_rxs): (Vec<_>, Vec<_>) = (0..threads).map(|_| channel()).unzip();
+    let (solution_tx, solution_rx) = sync_channel(1);
+    let (optimality_tx, optimality_rx) = sync_channel(1);
+    let (statistics_tx, statistics_rx) = sync_channel(threads);
 
-    let (local_layer_tx, local_layer_rx) = bounded(threads - 1);
-    let mut global_layer_tx = Bus::new(1);
-    let follower_channels = (0..threads - 1)
-        .map(|_| LayerChannel::Follower(local_layer_tx.clone(), global_layer_tx.add_rx()))
+    let (local_layer_tx, local_layer_rx) = sync_channel(threads - 1);
+    let (global_layer_txs, global_layer_rxs): (Vec<_>, Vec<_>) =
+        (0..threads - 1).map(|_| sync_channel(1)).unzip();
+    let follower_channels = global_layer_rxs
+        .into_iter()
+        .map(|rx| LayerChannel::Follower(local_layer_tx.clone(), rx))
         .collect::<Vec<_>>();
-    let leader_channel = LayerChannel::Leader(local_layer_rx, global_layer_tx);
+    let leader_channel = LayerChannel::Leader(local_layer_rx, global_layer_txs);
     let layer_channels = iter::once(leader_channel).chain(follower_channels);
 
     thread::scope(|s| {
@@ -250,10 +252,13 @@ struct Statistics {
 }
 
 enum LayerChannel<T> {
-    Leader(Receiver<LocalLayerMessage<T>>, Bus<GlobalLayerMessage<T>>),
+    Leader(
+        Receiver<LocalLayerMessage<T>>,
+        Vec<SyncSender<GlobalLayerMessage<T>>>,
+    ),
     Follower(
-        Sender<LocalLayerMessage<T>>,
-        BusReader<GlobalLayerMessage<T>>,
+        SyncSender<LocalLayerMessage<T>>,
+        Receiver<GlobalLayerMessage<T>>,
     ),
 }
 
@@ -262,9 +267,9 @@ struct Channels<T, M, V> {
     node_txs: Vec<Sender<Option<M>>>,
     node_rx: Receiver<Option<M>>,
     layer_channel: LayerChannel<T>,
-    solution_tx: Sender<Option<(T, Vec<V>)>>,
-    optimality_tx: Sender<OptimalityMessage<T>>,
-    statistics_tx: Sender<Statistics>,
+    solution_tx: SyncSender<Option<(T, Vec<V>)>>,
+    optimality_tx: SyncSender<OptimalityMessage<T>>,
+    statistics_tx: SyncSender<Statistics>,
 }
 
 fn single_sync_beam_search<'a, T, N, M, E, B, V>(
@@ -543,7 +548,7 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                     }
                 }
             }
-            LayerChannel::Leader(rx, tx) => {
+            LayerChannel::Leader(rx, txs) => {
                 let mut is_empty = next_beam.is_empty();
                 let mut cost = incumbent.as_ref().map(|(_, cost, _)| *cost);
                 let mut goal_id = if cost.is_some() { Some(id) } else { None };
@@ -597,7 +602,10 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                         if threads > 1 {
                             // Sends the termination signal to all followers
                             // with the id of the thread that finds the best solution.
-                            tx.broadcast(GlobalLayerMessage::Terminate(Some(goal_id)));
+                            for tx in txs.iter() {
+                                tx.send(GlobalLayerMessage::Terminate(Some(goal_id)))
+                                    .unwrap();
+                            }
                         }
 
                         if cost == best_dual_bound {
@@ -617,7 +625,9 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                     } else {
                         if threads > 1 {
                             // Sends the termination signal to all followers without a solution.
-                            tx.broadcast(GlobalLayerMessage::Terminate(None));
+                            for tx in txs.iter() {
+                                tx.send(GlobalLayerMessage::Terminate(None)).unwrap();
+                            }
                         }
 
                         // Sends no solution to the original thread.
@@ -651,7 +661,9 @@ fn single_sync_beam_search<'a, T, N, M, E, B, V>(
                     return;
                 } else if threads > 1 {
                     // Sends the dual bound to all followers.
-                    tx.broadcast(GlobalLayerMessage::Bound(best_dual_bound));
+                    for tx in txs.iter() {
+                        tx.send(GlobalLayerMessage::Bound(best_dual_bound)).unwrap();
+                    }
                 }
             }
         }
