@@ -12,7 +12,7 @@ use pyo3::prelude::*;
 /// ----------
 /// Ryo Kuroiwa and J. Christopher Beck. "Parallel Beam Search Algorithms for Domain-Independent Dynamic Programming,"
 /// Proceedings of the 38th Annual AAAI Conference on Artificial Intelligence (AAAI), 2024.
-#[pyclass(eq, eq_int, name = "BeamParallelizationMethod")]
+#[pyclass(eq, eq_int, name = "BeamParallelizationMethod", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum BeamParallelizationMethod {
     /// Use HDBS2.

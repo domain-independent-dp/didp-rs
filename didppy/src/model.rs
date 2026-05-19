@@ -19,7 +19,7 @@ pub use transition::{CostUnion, IntOrFloat, TransitionPy};
 
 /// Object type.
 /// This class is used to define :class:`ElementVar`, :class:`ElementResourceVar`, :class:`SetVar`, and :class:`SetConst`.
-#[pyclass(name = "ObjectType")]
+#[pyclass(name = "ObjectType", from_py_object)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ObjectTypePy(ObjectType);
 
@@ -247,7 +247,7 @@ pub enum FloatTableUnion {
     Table(FloatTablePy),
 }
 
-#[pyclass(name = "TransitionId")]
+#[pyclass(name = "TransitionId", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct TransitionIdPy(TransitionId);
 
@@ -284,7 +284,7 @@ pub struct TransitionIdPy(TransitionId);
 /// >>> model.target_state = state
 /// >>> model.target_state[var]
 /// 5
-#[pyclass(name = "Model")]
+#[pyclass(name = "Model", from_py_object)]
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct ModelPy(Model);
 
@@ -4344,7 +4344,7 @@ mod tests {
 
     #[test]
     fn set_element_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4354,7 +4354,7 @@ mod tests {
         let v = model.add_element_var(ob, 0, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1usize.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -4368,7 +4368,7 @@ mod tests {
 
     #[test]
     fn set_element_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4379,7 +4379,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1.5f64.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -4391,7 +4391,7 @@ mod tests {
 
     #[test]
     fn set_element_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4403,7 +4403,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1usize.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -4543,7 +4543,7 @@ mod tests {
 
     #[test]
     fn set_element_resource_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4553,7 +4553,7 @@ mod tests {
         let v = model.add_element_resource_var(ob, 0, false, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1usize.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -4567,7 +4567,7 @@ mod tests {
 
     #[test]
     fn set_element_resource_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4578,7 +4578,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1.5f64.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -4590,7 +4590,7 @@ mod tests {
 
     #[test]
     fn set_element_resource_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -4602,7 +4602,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1usize.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5046,7 +5046,7 @@ mod tests {
 
     #[test]
     fn set_set_target_from_list_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5057,7 +5057,7 @@ mod tests {
         let v = model.add_set_var(ob, target, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = vec![3usize, 4usize, 5usize].into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5074,7 +5074,7 @@ mod tests {
 
     #[test]
     fn set_set_target_from_list_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5086,7 +5086,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = vec![3usize, 4usize, 5usize, 10usize].into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5098,7 +5098,7 @@ mod tests {
 
     #[test]
     fn set_set_target_from_set_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5109,7 +5109,7 @@ mod tests {
         let v = model.add_set_var(ob, target, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = {
                 let mut set = HashSet::<Element>::default();
                 set.insert(3);
@@ -5133,7 +5133,7 @@ mod tests {
 
     #[test]
     fn set_set_target_from_set_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5145,7 +5145,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = {
                 let mut set = HashSet::<Element>::default();
                 set.insert(3);
@@ -5165,7 +5165,7 @@ mod tests {
 
     #[test]
     fn set_set_target_from_set_const_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5176,7 +5176,7 @@ mod tests {
         let v = model.add_set_var(ob, target, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = SetConstPy::from({
                 let mut set = Set::with_capacity(10);
                 set.insert(3);
@@ -5200,7 +5200,7 @@ mod tests {
 
     #[test]
     fn set_set_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5212,7 +5212,7 @@ mod tests {
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1usize.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5224,7 +5224,7 @@ mod tests {
 
     #[test]
     fn set_set_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let ob = model.add_object_type(10, None);
@@ -5237,7 +5237,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = vec![3usize, 4usize, 5usize].into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5342,13 +5342,13 @@ mod tests {
 
     #[test]
     fn set_int_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_var(0, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5362,14 +5362,14 @@ mod tests {
 
     #[test]
     fn set_int_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_var(0, None);
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1.5f64.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5381,7 +5381,7 @@ mod tests {
 
     #[test]
     fn set_int_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_var(0, None);
@@ -5389,7 +5389,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5490,13 +5490,13 @@ mod tests {
 
     #[test]
     fn set_int_resource_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_resource_var(0, false, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5510,14 +5510,14 @@ mod tests {
 
     #[test]
     fn set_int_resource_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_resource_var(0, false, None);
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1.5f64.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5529,7 +5529,7 @@ mod tests {
 
     #[test]
     fn set_int_resource_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_int_resource_var(0, false, None);
@@ -5537,7 +5537,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5665,13 +5665,13 @@ mod tests {
 
     #[test]
     fn set_float_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_var(0.0, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5685,14 +5685,14 @@ mod tests {
 
     #[test]
     fn set_float_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_var(0.0, None);
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = (0, 1).into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5704,7 +5704,7 @@ mod tests {
 
     #[test]
     fn set_float_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_var(0.0, None);
@@ -5712,7 +5712,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5813,13 +5813,13 @@ mod tests {
 
     #[test]
     fn set_float_resource_target_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_resource_var(0.0, false, None);
         assert!(v.is_ok());
         let v = v.unwrap();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5833,14 +5833,14 @@ mod tests {
 
     #[test]
     fn set_float_resource_target_extract_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_resource_var(0.0, false, None);
         assert!(v.is_ok());
         let v = v.unwrap();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = (0, 1).into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();
@@ -5852,7 +5852,7 @@ mod tests {
 
     #[test]
     fn set_float_resource_target_no_variable_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let mut model = ModelPy::default();
         let v = model.add_float_resource_var(0.0, false, None);
@@ -5860,7 +5860,7 @@ mod tests {
         let v = v.unwrap();
         let mut model = ModelPy::default();
         let snapshot = model.clone();
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let target = 1i32.into_bound_py_any(py);
             assert!(target.is_ok());
             let target = target.unwrap();

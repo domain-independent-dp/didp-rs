@@ -136,7 +136,7 @@ impl From<ElementUnion> for ElementExpression {
 /// False
 /// >>> (expr >= 3).eval(state, model)
 /// True
-#[pyclass(name = "ElementExpr")]
+#[pyclass(name = "ElementExpr", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct ElementExprPy(ElementExpression);
 
@@ -310,7 +310,7 @@ impl ElementExprPy {
 /// False
 /// >>> (var >= 3).eval(state, model)
 /// True
-#[pyclass(name = "ElementVar")]
+#[pyclass(name = "ElementVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ElementVarPy(ElementVariable);
 
@@ -447,7 +447,7 @@ impl ElementVarPy {
 /// False
 /// >>> (var >= 3).eval(state, model)
 /// True
-#[pyclass(name = "ElementResourceVar")]
+#[pyclass(name = "ElementResourceVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct ElementResourceVarPy(ElementResourceVariable);
 
@@ -602,7 +602,7 @@ impl From<SetUnion> for SetExpression {
 /// False
 /// >>> (expr >= const).eval(state, model)
 /// False
-#[pyclass(name = "SetExpr")]
+#[pyclass(name = "SetExpr", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct SetExprPy(SetExpression);
 
@@ -1162,7 +1162,7 @@ impl SetExprPy {
 /// False
 /// >>> (var >= const).eval(state, model)
 /// False
-#[pyclass(name = "SetVar")]
+#[pyclass(name = "SetVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct SetVarPy(SetVariable);
 
@@ -1628,7 +1628,7 @@ impl SetVarPy {
 }
 
 /// Set constant.
-#[pyclass(name = "SetConst")]
+#[pyclass(name = "SetConst", from_py_object)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetConstPy(Set);
 
@@ -2264,7 +2264,7 @@ impl From<CostExpression> for IntOrFloatExpr {
 /// False
 /// >>> (expr >= 3).eval(state, model)
 /// True
-#[pyclass(name = "IntExpr")]
+#[pyclass(name = "IntExpr", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct IntExprPy(IntegerExpression);
 
@@ -2607,7 +2607,7 @@ impl IntExprPy {
 /// False
 /// >>> (var >= 3).eval(state, model)
 /// True
-#[pyclass(name = "IntVar")]
+#[pyclass(name = "IntVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct IntVarPy(IntegerVariable);
 
@@ -2853,7 +2853,7 @@ impl IntVarPy {
 /// False
 /// >>> (var >= 3).eval(state, model)
 /// True
-#[pyclass(name = "IntResourceVar")]
+#[pyclass(name = "IntResourceVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct IntResourceVarPy(IntegerResourceVariable);
 
@@ -3135,7 +3135,7 @@ impl From<FloatUnion> for ContinuousExpression {
 /// False
 /// >>> (expr > 3.0).eval(state, model)
 /// True
-#[pyclass(name = "FloatExpr")]
+#[pyclass(name = "FloatExpr", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct FloatExprPy(ContinuousExpression);
 
@@ -3431,7 +3431,7 @@ impl FloatExprPy {
 /// False
 /// >>> (var > 3.0).eval(state, model)
 /// True
-#[pyclass(name = "FloatVar")]
+#[pyclass(name = "FloatVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FloatVarPy(ContinuousVariable);
 
@@ -3628,7 +3628,7 @@ impl FloatVarPy {
 /// False
 /// >>> (var > 3.0).eval(state, model)
 /// True
-#[pyclass(name = "FloatResourceVar")]
+#[pyclass(name = "FloatResourceVar", from_py_object)]
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct FloatResourceVarPy(ContinuousResourceVariable);
 
@@ -3987,7 +3987,7 @@ pub fn min(x: Bound<'_, PyAny>, y: Bound<'_, PyAny>) -> PyResult<ExprUnion> {
 /// True
 /// >>> (condition | (var <= 5)).eval(state, model)
 /// True
-#[pyclass(name = "Condition")]
+#[pyclass(name = "Condition", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct ConditionPy(Condition);
 
@@ -10963,11 +10963,11 @@ mod tests {
 
     #[test]
     fn max_int_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = IntExprPy(IntegerExpression::Constant(4));
         let y = IntExprPy(IntegerExpression::Constant(2));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -10989,11 +10989,11 @@ mod tests {
 
     #[test]
     fn max_float_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = FloatExprPy(ContinuousExpression::Constant(4.0));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11015,11 +11015,11 @@ mod tests {
 
     #[test]
     fn max_element_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = ElementExprPy(ElementExpression::Constant(2));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11041,11 +11041,11 @@ mod tests {
 
     #[test]
     fn max_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11059,11 +11059,11 @@ mod tests {
 
     #[test]
     fn min_int_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = IntExprPy(IntegerExpression::Constant(4));
         let y = IntExprPy(IntegerExpression::Constant(2));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11085,11 +11085,11 @@ mod tests {
 
     #[test]
     fn min_float_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = FloatExprPy(ContinuousExpression::Constant(4.0));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11111,11 +11111,11 @@ mod tests {
 
     #[test]
     fn min_element_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = ElementExprPy(ElementExpression::Constant(2));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11137,11 +11137,11 @@ mod tests {
 
     #[test]
     fn min_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(4));
         let y = FloatExprPy(ContinuousExpression::Constant(2.0));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11203,12 +11203,12 @@ mod tests {
 
     #[test]
     fn if_then_else_int_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = IntExprPy(IntegerExpression::Constant(0));
         let y = IntExprPy(IntegerExpression::Constant(1));
         let condition = ConditionPy(Condition::Constant(true));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11230,12 +11230,12 @@ mod tests {
 
     #[test]
     fn if_then_else_float_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = FloatExprPy(ContinuousExpression::Constant(0.0));
         let y = FloatExprPy(ContinuousExpression::Constant(1.0));
         let condition = ConditionPy(Condition::Constant(true));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11257,12 +11257,12 @@ mod tests {
 
     #[test]
     fn if_then_else_element_ok() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(0));
         let y = ElementExprPy(ElementExpression::Constant(1));
         let condition = ConditionPy(Condition::Constant(true));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();
@@ -11284,12 +11284,12 @@ mod tests {
 
     #[test]
     fn if_then_else_err() {
-        pyo3::prepare_freethreaded_python();
+        Python::initialize();
 
         let x = ElementExprPy(ElementExpression::Constant(0));
         let y = FloatExprPy(ContinuousExpression::Constant(1.0));
         let condition = ConditionPy(Condition::Constant(true));
-        let result = Python::with_gil(|py| {
+        let result = Python::attach(|py| {
             let x = x.into_bound_py_any(py);
             assert!(x.is_ok());
             let x = x.unwrap();

@@ -13,7 +13,7 @@ pub enum WrappedCost {
 }
 
 /// Solution returned by a heuristic search solver.
-#[pyclass(name = "Solution")]
+#[pyclass(name = "Solution", from_py_object)]
 #[derive(Debug, PartialEq, Clone)]
 pub struct SolutionPy {
     /// int, float, or None : Solution cost. None if a solution is not found.

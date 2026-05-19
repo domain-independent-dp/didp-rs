@@ -2,7 +2,7 @@
 name = "didp-yaml"
 version = "0.10.1"
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.85"
 description = "YAML interface for Dynamic Programming Description Language (DyPDL) and DyPDL solvers."
 license = "MIT OR Apache-2.0"
 authors = [
@@ -18,13 +18,12 @@ repository = "https://github.com/domain-independent-dp/didp-rs"
 [dependencies]
 dypdl = { path = "../dypdl", version = "0.10.1" }
 dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.10.1" }
-rustc-hash = "2.1"
-yaml-rust = { package = "yaml-rust2", version = "0.11" }
-num-traits = "0.2"
-lazy_static = "1.5"
-approx = "0.5"
-itertools = "0.14"
+rustc-hash = "2.1.2"
+yaml-rust = { package = "yaml-rust2", version = "0.11.0" }
+num-traits = "0.2.19"
+lazy_static = "1.5.0"
+approx = "0.5.1"
+itertools = "0.14.0"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
-# 0.6 does not support Rust 1.65.
-tikv-jemallocator = "0.5"
+tikv-jemallocator = "0.6.1"
