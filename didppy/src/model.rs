@@ -15691,7 +15691,6 @@ mod tests {
     fn load_from_str_ok() {
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -16140,7 +16139,6 @@ table_values:
         connected: {[0, 0]: false, [1, 1]: false, [2, 2]: false}
 ";
         let domain = r"
-reduce: min
 objects: [cities]
 variables:
         - name: unvisited
@@ -16185,7 +16183,6 @@ transitions:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 state_variables:
         - name: unvisited
           type: set
@@ -16229,7 +16226,6 @@ transitions:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [null]
 tables:
         - name: ready_time
@@ -16264,7 +16260,6 @@ transitions:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -16328,7 +16323,6 @@ constraints:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -16498,7 +16492,6 @@ table_values:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -16562,7 +16555,6 @@ table_values:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited

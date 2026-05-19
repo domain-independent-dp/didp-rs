@@ -23,7 +23,7 @@ dypdl = { path = "../dypdl", version = "0.10.1" }
 dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.10.1" }
 didp-yaml = { path = "../didp-yaml", version = "0.10.1" }
 rustc-hash = "2.1"
-yaml-rust = "0.4"
+yaml-rust = { package = "yaml-rust2", version = "0.11" }
 
 [dependencies.pyo3]
 version = "0.25"

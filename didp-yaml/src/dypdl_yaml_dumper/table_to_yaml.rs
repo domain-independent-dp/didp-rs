@@ -202,9 +202,12 @@ pub fn table_data_to_yaml<T: ToYaml>(
         )?;
     }
 
-    for key in table_data.name_to_table.keys() {
+    let mut key_value_pairs: Vec<(String, usize)> =
+        table_data.name_to_table.clone().drain().collect();
+    key_value_pairs.sort_by_key(|k| k.1);
+    for (key, _) in key_value_pairs {
         add_dictionary_to_yaml(
-            key,
+            &key,
             table_type,
             &table_data.name_to_table,
             &table_data.tables,
@@ -374,13 +377,15 @@ pub fn set_table_data_to_yaml(
         )?;
     }
 
-    for key in table_data.name_to_table.keys() {
-        let table_index = &table_data.name_to_table.get(key);
-        let table = &table_data.tables[*table_index.unwrap()];
+    let mut key_value_pairs: Vec<(String, usize)> =
+        table_data.name_to_table.clone().drain().collect();
+    key_value_pairs.sort_by_key(|k| k.1);
+    for (key, table_index) in key_value_pairs {
+        let table = &table_data.tables[table_index];
         let set_size = table.capacity_of_set();
 
         add_set_dictionary_to_yaml(
-            key,
+            &key,
             table_type,
             set_size,
             &table_data.name_to_table,

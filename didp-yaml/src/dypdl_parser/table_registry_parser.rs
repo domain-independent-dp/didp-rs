@@ -1860,7 +1860,6 @@ t_dic: { [0, 1, 0, 0]: 1, [0, 1, 0, 1]: 0, [0, 1, 2, 0]: 0, [0, 1, 2, 1]: 0 }
         let tables = &tables[0];
 
         let table_values = r"
-f0: 0
 f0:
       0: 10
       1: 20
@@ -2396,10 +2395,6 @@ f0: [0, 10]
 i0: 
       [0, 1]: 1
       [0, 2]: 2
-i0:
-      [0]: 10
-      [1]: 20
-      [2]: 30
 ";
         let dictionary_values = yaml_rust::YamlLoader::load_from_str(dictionary_values);
         assert!(dictionary_values.is_ok());

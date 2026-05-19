@@ -19,13 +19,10 @@ repository = "https://github.com/domain-independent-dp/didp-rs"
 dypdl = { path = "../dypdl", version = "0.10.1" }
 dypdl-heuristic-search = { path = "../dypdl-heuristic-search", version = "0.10.1" }
 rustc-hash = "2.1"
-yaml-rust = "0.4"
-linked-hash-map = "0.5"
+yaml-rust = { package = "yaml-rust2", version = "0.11" }
 num-traits = "0.2"
 lazy_static = "1.5"
 approx = "0.5"
-serde = { version = "1.0", features = ["derive"] }
-serde_yml = "0.0.12"
 itertools = "0.14"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]

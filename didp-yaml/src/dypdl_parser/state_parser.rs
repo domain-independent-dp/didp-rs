@@ -4,6 +4,7 @@ use dypdl::{ResourceVariables, SignatureVariables, State, StateMetadata};
 use lazy_static::lazy_static;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::BTreeMap;
+use yaml_rust::yaml::Hash;
 
 /// Returns a state loaded from YAML
 ///
@@ -303,9 +304,7 @@ pub fn load_metadata_from_yaml(
     Ok(metadata)
 }
 
-fn get_less_is_better(
-    map: &linked_hash_map::LinkedHashMap<yaml_rust::Yaml, yaml_rust::Yaml>,
-) -> Result<Option<bool>, util::YamlContentErr> {
+fn get_less_is_better(map: &Hash) -> Result<Option<bool>, util::YamlContentErr> {
     lazy_static! {
         static ref KEY: yaml_rust::Yaml = yaml_rust::Yaml::from_str("preference");
     }
@@ -1072,7 +1071,7 @@ object: object
             ..Default::default()
         };
         let objects = yaml_rust::Yaml::Array(Vec::new());
-        let object_numbers = yaml_rust::Yaml::Hash(linked_hash_map::LinkedHashMap::default());
+        let object_numbers = yaml_rust::Yaml::Hash(Hash::new());
         let variables = r"
 - name: n0
   type: integer
