@@ -1,5 +1,5 @@
 use super::TerminationDetector;
-use crossbeam_channel::{Receiver, Sender};
+use std::sync::mpsc::{Receiver, Sender};
 
 /// Channel to send and receive nodes between threads with termination detection.
 ///
@@ -77,16 +77,16 @@ impl<N> HdNodeChannel<N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossbeam_channel::{bounded, unbounded};
+    use std::sync::mpsc::{channel, sync_channel};
     use std::thread;
 
     #[test]
     fn test_send_receive() {
-        let (node_tx1, node_rx1) = unbounded();
-        let (termination_detection_tx1, termination_detection_rx1) = unbounded();
+        let (node_tx1, node_rx1) = channel();
+        let (termination_detection_tx1, termination_detection_rx1) = channel();
 
-        let (node_tx2, node_rx2) = unbounded();
-        let (termination_detection_tx2, termination_detection_rx2) = unbounded();
+        let (node_tx2, node_rx2) = channel();
+        let (termination_detection_tx2, termination_detection_rx2) = channel();
 
         let mut channel1 = HdNodeChannel::new(
             0,
@@ -112,11 +112,11 @@ mod tests {
 
     #[test]
     fn test_send_try_receive() {
-        let (node_tx1, node_rx1) = unbounded();
-        let (termination_detection_tx1, termination_detection_rx1) = unbounded();
+        let (node_tx1, node_rx1) = channel();
+        let (termination_detection_tx1, termination_detection_rx1) = channel();
 
-        let (node_tx2, node_rx2) = unbounded();
-        let (termination_detection_tx2, termination_detection_rx2) = unbounded();
+        let (node_tx2, node_rx2) = channel();
+        let (termination_detection_tx2, termination_detection_rx2) = channel();
 
         let mut channel1 = HdNodeChannel::new(
             0,
@@ -146,14 +146,14 @@ mod tests {
 
     #[test]
     fn test_termination_success() {
-        let (node_tx1, node_rx1) = unbounded();
-        let (termination_detection_tx1, termination_detection_rx1) = unbounded();
+        let (node_tx1, node_rx1) = channel();
+        let (termination_detection_tx1, termination_detection_rx1) = channel();
 
-        let (node_tx2, node_rx2) = unbounded();
-        let (termination_detection_tx2, termination_detection_rx2) = unbounded();
+        let (node_tx2, node_rx2) = channel();
+        let (termination_detection_tx2, termination_detection_rx2) = channel();
 
-        let (node_tx3, node_rx3) = unbounded();
-        let (termination_detection_tx3, termination_detection_rx3) = unbounded();
+        let (node_tx3, node_rx3) = channel();
+        let (termination_detection_tx3, termination_detection_rx3) = channel();
 
         let mut channel1 = HdNodeChannel::new(
             0,
@@ -179,8 +179,8 @@ mod tests {
             termination_detection_rx3,
         );
 
-        let (termination_tx2, termination_rx2) = bounded(0);
-        let (termination_tx3, termination_rx3) = bounded(0);
+        let (termination_tx2, termination_rx2) = sync_channel(0);
+        let (termination_tx3, termination_rx3) = sync_channel(0);
 
         thread::scope(|s| {
             s.spawn(move || {
@@ -235,14 +235,14 @@ mod tests {
 
     #[test]
     fn test_termination_success_with_receive() {
-        let (node_tx1, node_rx1) = unbounded();
-        let (termination_detection_tx1, termination_detection_rx1) = unbounded();
+        let (node_tx1, node_rx1) = channel();
+        let (termination_detection_tx1, termination_detection_rx1) = channel();
 
-        let (node_tx2, node_rx2) = unbounded();
-        let (termination_detection_tx2, termination_detection_rx2) = unbounded();
+        let (node_tx2, node_rx2) = channel();
+        let (termination_detection_tx2, termination_detection_rx2) = channel();
 
-        let (node_tx3, node_rx3) = unbounded();
-        let (termination_detection_tx3, termination_detection_rx3) = unbounded();
+        let (node_tx3, node_rx3) = channel();
+        let (termination_detection_tx3, termination_detection_rx3) = channel();
 
         let mut channel1 = HdNodeChannel::new(
             0,
@@ -268,8 +268,8 @@ mod tests {
             termination_detection_rx3,
         );
 
-        let (termination_tx2, termination_rx2) = bounded(0);
-        let (termination_tx3, termination_rx3) = bounded(0);
+        let (termination_tx2, termination_rx2) = sync_channel(0);
+        let (termination_tx3, termination_rx3) = sync_channel(0);
 
         thread::scope(|s| {
             s.spawn(move || {
@@ -318,14 +318,14 @@ mod tests {
 
     #[test]
     fn test_termination_fail_due_to_count() {
-        let (node_tx1, node_rx1) = unbounded();
-        let (termination_detection_tx1, termination_detection_rx1) = unbounded();
+        let (node_tx1, node_rx1) = channel();
+        let (termination_detection_tx1, termination_detection_rx1) = channel();
 
-        let (node_tx2, node_rx2) = unbounded();
-        let (termination_detection_tx2, termination_detection_rx2) = unbounded();
+        let (node_tx2, node_rx2) = channel();
+        let (termination_detection_tx2, termination_detection_rx2) = channel();
 
-        let (node_tx3, node_rx3) = unbounded();
-        let (termination_detection_tx3, termination_detection_rx3) = unbounded();
+        let (node_tx3, node_rx3) = channel();
+        let (termination_detection_tx3, termination_detection_rx3) = channel();
 
         let mut channel1 = HdNodeChannel::new(
             0,
@@ -376,14 +376,14 @@ mod tests {
 
     #[test]
     fn test_termination_fail_due_to_time() {
-        let (node_tx1, node_rx1) = unbounded();
-        let (termination_detection_tx1, termination_detection_rx1) = unbounded();
+        let (node_tx1, node_rx1) = channel();
+        let (termination_detection_tx1, termination_detection_rx1) = channel();
 
-        let (node_tx2, node_rx2) = unbounded();
-        let (termination_detection_tx2, termination_detection_rx2) = unbounded();
+        let (node_tx2, node_rx2) = channel();
+        let (termination_detection_tx2, termination_detection_rx2) = channel();
 
-        let (node_tx3, node_rx3) = unbounded();
-        let (termination_detection_tx3, termination_detection_rx3) = unbounded();
+        let (node_tx3, node_rx3) = channel();
+        let (termination_detection_tx3, termination_detection_rx3) = channel();
 
         let mut channel1 = HdNodeChannel::new(
             0,
@@ -437,14 +437,14 @@ mod tests {
 
     #[test]
     fn test_termination_fail_due_to_local() {
-        let (node_tx1, node_rx1) = unbounded();
-        let (termination_detection_tx1, termination_detection_rx1) = unbounded();
+        let (node_tx1, node_rx1) = channel();
+        let (termination_detection_tx1, termination_detection_rx1) = channel();
 
-        let (node_tx2, node_rx2) = unbounded();
-        let (termination_detection_tx2, termination_detection_rx2) = unbounded();
+        let (node_tx2, node_rx2) = channel();
+        let (termination_detection_tx2, termination_detection_rx2) = channel();
 
-        let (node_tx3, node_rx3) = unbounded();
-        let (termination_detection_tx3, termination_detection_rx3) = unbounded();
+        let (node_tx3, node_rx3) = channel();
+        let (termination_detection_tx3, termination_detection_rx3) = channel();
 
         let mut channel1 = HdNodeChannel::new(
             0,

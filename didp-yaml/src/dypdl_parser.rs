@@ -152,7 +152,7 @@ pub fn load_model_from_yaml(domain: &Yaml, problem: &Yaml) -> Result<Model, Box<
         }
         (None, None) => {
             let objects = yaml_rust::Yaml::Array(Vec::new());
-            let object_numbers = yaml_rust::Yaml::Hash(linked_hash_map::LinkedHashMap::new());
+            let object_numbers = yaml_rust::Yaml::Hash(Hash::new());
             state_parser::load_metadata_from_yaml(&objects, variables, &object_numbers)?
         }
         (Some(_), None) => {
@@ -1074,7 +1074,6 @@ base_states:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -1610,7 +1609,6 @@ target:
     fn model_load_from_yaml_with_dictionary_ok() {
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -2121,7 +2119,6 @@ table_values:
         let problem = &problem[0];
 
         let domain = r"
-reduce: min
 objects: [cities]
 variables:
         - name: unvisited
@@ -2172,7 +2169,6 @@ transitions:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 state_variables:
         - name: unvisited
           type: set
@@ -2222,7 +2218,6 @@ transitions:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [null]
 tables:
         - name: ready_time
@@ -2263,7 +2258,6 @@ transitions:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -2339,7 +2333,6 @@ constraints:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -2563,7 +2556,6 @@ table_values:
     fn model_load_from_yaml_with_dictionary_err() {
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited
@@ -2639,7 +2631,6 @@ table_values:
 
         let domain = r"
 domain: TSPTW
-reduce: min
 objects: [cities]
 state_variables:
         - name: unvisited

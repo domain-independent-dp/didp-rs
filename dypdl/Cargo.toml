@@ -2,7 +2,7 @@
 name = "dypdl"
 version = "0.10.1"
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.85"
 description = "Libarary for Dynamic Programming Description Language (DyPDL)."
 license = "MIT OR Apache-2.0"
 authors = [
@@ -16,10 +16,10 @@ repository = "https://github.com/domain-independent-dp/didp-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ordered-float = "5.0"
+ordered-float = "5.3.0"
 # While 0.4 is not the latest version, we tentatively use it because we observed some slowdown with 0.5.7.
 fixedbitset = "0.4"
-approx = "0.5"
-num-traits = "0.2"
-rustc-hash = "2.1"
-itertools = "0.14"
+approx = "0.5.1"
+num-traits = "0.2.19"
+rustc-hash = "2.1.2"
+itertools = "0.14.0"

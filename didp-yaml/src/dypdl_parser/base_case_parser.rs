@@ -5,9 +5,9 @@ use crate::util;
 use dypdl::prelude::*;
 use dypdl::{BaseCase, GroundedCondition, ModelErr, TableRegistry};
 use lazy_static::lazy_static;
-use linked_hash_map::LinkedHashMap;
 use rustc_hash::FxHashMap;
 use std::error::Error;
+use yaml_rust::yaml::Hash;
 
 fn load_conditions_from_array(
     array: &Vec<yaml_rust::Yaml>,
@@ -44,7 +44,7 @@ fn load_conditions_from_array(
 }
 
 fn load_base_case_from_hash(
-    map: &LinkedHashMap<yaml_rust::Yaml, yaml_rust::Yaml>,
+    map: &Hash,
     metadata: &StateMetadata,
     functions: &StateFunctions,
     registry: &TableRegistry,

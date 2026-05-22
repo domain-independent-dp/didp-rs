@@ -1,5 +1,5 @@
-use crossbeam_channel::{Receiver, Sender};
 use std::cmp::max;
+use std::sync::mpsc::{Receiver, Sender};
 
 /// Distributed termination algorithm by Mattern (1987).
 ///
@@ -84,20 +84,20 @@ impl TerminationDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crossbeam_channel::{bounded, unbounded};
+    use std::sync::mpsc::{channel, sync_channel};
     use std::thread;
 
     #[test]
     fn test_termination_success() {
-        let (tx1, rx1) = unbounded();
-        let (tx2, rx2) = unbounded();
-        let (tx3, rx3) = unbounded();
+        let (tx1, rx1) = channel();
+        let (tx2, rx2) = channel();
+        let (tx3, rx3) = channel();
         let mut detector1 = TerminationDetector::new(1, tx2, rx1);
         let mut detector2 = TerminationDetector::new(2, tx3, rx2);
         let mut detector3 = TerminationDetector::new(3, tx1, rx3);
 
-        let (termination_tx2, termination_rx2) = bounded(0);
-        let (termination_tx3, termination_rx3) = bounded(0);
+        let (termination_tx2, termination_rx2) = sync_channel(0);
+        let (termination_tx3, termination_rx3) = sync_channel(0);
 
         thread::scope(|s| {
             s.spawn(move || {
@@ -148,15 +148,15 @@ mod tests {
 
     #[test]
     fn test_termination_success_with_receive() {
-        let (tx1, rx1) = unbounded();
-        let (tx2, rx2) = unbounded();
-        let (tx3, rx3) = unbounded();
+        let (tx1, rx1) = channel();
+        let (tx2, rx2) = channel();
+        let (tx3, rx3) = channel();
         let mut detector1 = TerminationDetector::new(1, tx2, rx1);
         let mut detector2 = TerminationDetector::new(2, tx3, rx2);
         let mut detector3 = TerminationDetector::new(3, tx1, rx3);
 
-        let (termination_tx2, termination_rx2) = bounded(0);
-        let (termination_tx3, termination_rx3) = bounded(0);
+        let (termination_tx2, termination_rx2) = sync_channel(0);
+        let (termination_tx3, termination_rx3) = sync_channel(0);
 
         thread::scope(|s| {
             s.spawn(move || {
@@ -200,9 +200,9 @@ mod tests {
 
     #[test]
     fn test_termination_fail_due_to_count() {
-        let (tx1, rx1) = unbounded();
-        let (tx2, rx2) = unbounded();
-        let (tx3, rx3) = unbounded();
+        let (tx1, rx1) = channel();
+        let (tx2, rx2) = channel();
+        let (tx3, rx3) = channel();
         let mut detector1 = TerminationDetector::new(1, tx2, rx1);
         let mut detector2 = TerminationDetector::new(2, tx3, rx2);
         let mut detector3 = TerminationDetector::new(3, tx1, rx3);
@@ -232,9 +232,9 @@ mod tests {
 
     #[test]
     fn test_termination_fail_due_to_time() {
-        let (tx1, rx1) = unbounded();
-        let (tx2, rx2) = unbounded();
-        let (tx3, rx3) = unbounded();
+        let (tx1, rx1) = channel();
+        let (tx2, rx2) = channel();
+        let (tx3, rx3) = channel();
         let mut detector1 = TerminationDetector::new(1, tx2, rx1);
         let mut detector2 = TerminationDetector::new(2, tx3, rx2);
         let mut detector3 = TerminationDetector::new(3, tx1, rx3);
@@ -267,9 +267,9 @@ mod tests {
 
     #[test]
     fn test_termination_fail_due_to_local() {
-        let (tx1, rx1) = unbounded();
-        let (tx2, rx2) = unbounded();
-        let (tx3, rx3) = unbounded();
+        let (tx1, rx1) = channel();
+        let (tx2, rx2) = channel();
+        let (tx3, rx3) = channel();
         let mut detector1 = TerminationDetector::new(1, tx2, rx1);
         let mut detector2 = TerminationDetector::new(2, tx3, rx2);
         let mut detector3 = TerminationDetector::new(3, tx1, rx3);

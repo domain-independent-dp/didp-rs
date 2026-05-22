@@ -239,7 +239,7 @@ pub fn update_bound_if_better<T, V>(
     T: Numeric + std::fmt::Display,
     V: TransitionInterface + Clone,
 {
-    if solution.best_bound.map_or(true, |best_bound| {
+    if solution.best_bound.is_none_or(|best_bound| {
         !exceed_bound(model, best_bound, Some(bound))
     }) {
         solution.best_bound = Some(bound);

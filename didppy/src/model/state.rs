@@ -33,7 +33,7 @@ pub enum VariableValueUnion {
 /// >>> state[var] = 5
 /// >>> state[var]
 /// 5
-#[pyclass(name = "State")]
+#[pyclass(name = "State", from_py_object)]
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct StatePy(State);
 

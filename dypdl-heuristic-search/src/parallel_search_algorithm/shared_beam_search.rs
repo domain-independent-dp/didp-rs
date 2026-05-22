@@ -319,7 +319,7 @@ where
 
                             if exceed_bound(model, bound, primal_bound) {
                                 best_dual_bound = primal_bound;
-                            } else if best_dual_bound.map_or(true, |best_bound| {
+                            } else if best_dual_bound.is_none_or(|best_bound| {
                                 !exceed_bound(model, best_bound, Some(bound))
                             }) {
                                 best_dual_bound = Some(bound);
