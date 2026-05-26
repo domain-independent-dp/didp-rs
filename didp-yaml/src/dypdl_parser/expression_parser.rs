@@ -6,12 +6,9 @@ use rustc_hash::FxHashMap;
 mod argument_parser;
 mod condition_parser;
 mod continuous_parser;
-mod continuous_vector_parser;
 mod element_parser;
 mod integer_parser;
-mod integer_vector_parser;
 mod numeric_table_parser;
-mod table_vector_parser;
 mod util;
 
 pub use util::ParseErr;
@@ -124,34 +121,6 @@ pub fn parse_set(
     }
 }
 
-/// Returns a vector expression parsed from a string value.
-///
-/// `parameters` specify names and values of constants.
-///
-/// # Errors
-///
-/// If the format is invalid.
-pub fn parse_vector(
-    text: String,
-    metadata: &dypdl::StateMetadata,
-    functions: &dypdl::StateFunctions,
-    registry: &dypdl::TableRegistry,
-    parameters: &FxHashMap<String, usize>,
-) -> Result<expression::VectorExpression, ParseErr> {
-    let tokens = tokenize(text);
-    let (expression, rest) = element_parser::parse_vector_expression(
-        &tokens, metadata, functions, registry, parameters,
-    )?;
-    if rest.is_empty() {
-        Ok(expression)
-    } else {
-        Err(ParseErr::new(format!(
-            "unexpected tokens: `{rest}`",
-            rest = rest.join(" ")
-        )))
-    }
-}
-
 /// Returns a condition parsed from a string value.
 ///
 /// `parameters` specify names and values of constants.
@@ -217,19 +186,6 @@ mod tests {
         name_to_set_variable.insert("s3".to_string(), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
 
-        let vector_variable_names = vec![
-            "p0".to_string(),
-            "p1".to_string(),
-            "p2".to_string(),
-            "p3".to_string(),
-        ];
-        let mut name_to_vector_variable = FxHashMap::default();
-        name_to_vector_variable.insert("p0".to_string(), 0);
-        name_to_vector_variable.insert("p1".to_string(), 1);
-        name_to_vector_variable.insert("p2".to_string(), 2);
-        name_to_vector_variable.insert("p3".to_string(), 3);
-        let vector_variable_to_object = vec![0, 0, 0, 0];
-
         let element_variable_names = vec![
             "e0".to_string(),
             "e1".to_string(),
@@ -286,9 +242,6 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            vector_variable_names,
-            name_to_vector_variable,
-            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,

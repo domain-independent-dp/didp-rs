@@ -14,7 +14,6 @@ fn transition_equality_ignoring_parameter(t1: Vec<Transition>, t2: Vec<Transitio
             parameter_names: vec![],
             parameter_values: vec![],
             elements_in_set_variable: vec![],
-            elements_in_vector_variable: vec![],
             preconditions: t1_element
                 .get_preconditions()
                 .iter()
@@ -27,7 +26,6 @@ fn transition_equality_ignoring_parameter(t1: Vec<Transition>, t2: Vec<Transitio
             parameter_names: vec![],
             parameter_values: vec![],
             elements_in_set_variable: vec![],
-            elements_in_vector_variable: vec![],
             preconditions: t2_element
                 .get_preconditions()
                 .iter()

@@ -7,8 +7,6 @@ use std::str;
 
 /// Set value.
 pub type Set = fixedbitset::FixedBitSet;
-/// Vector value.
-pub type Vector = Vec<usize>;
 /// Element value.
 pub type Element = usize;
 /// Integer numeric value.

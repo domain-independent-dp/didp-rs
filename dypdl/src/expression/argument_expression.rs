@@ -2,7 +2,6 @@ use super::element_expression::ElementExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
 use super::util;
-use super::vector_expression::VectorExpression;
 use crate::state::{ElementResourceVariable, ElementVariable, SetVariable, StateInterface};
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry::TableRegistry;
@@ -12,7 +11,6 @@ use crate::variable_type::{Element, Set};
 #[derive(Debug, PartialEq, Clone)]
 pub enum ArgumentExpression {
     Set(SetExpression),
-    Vector(VectorExpression),
     Element(ElementExpression),
 }
 
@@ -20,13 +18,6 @@ impl From<SetExpression> for ArgumentExpression {
     #[inline]
     fn from(v: SetExpression) -> ArgumentExpression {
         Self::Set(v)
-    }
-}
-
-impl From<VectorExpression> for ArgumentExpression {
-    #[inline]
-    fn from(v: VectorExpression) -> ArgumentExpression {
-        Self::Vector(v)
     }
 }
 
@@ -63,7 +54,6 @@ impl ArgumentExpression {
     pub fn simplify(&self, registry: &TableRegistry) -> ArgumentExpression {
         match self {
             Self::Set(expression) => ArgumentExpression::Set(expression.simplify(registry)),
-            Self::Vector(expression) => ArgumentExpression::Vector(expression.simplify(registry)),
             Self::Element(expression) => ArgumentExpression::Element(expression.simplify(registry)),
         }
     }
@@ -103,19 +93,6 @@ impl ArgumentExpression {
                         ),
                     }
                 }
-                ArgumentExpression::Vector(vector) => {
-                    result = match vector {
-                        VectorExpression::Reference(vector) => {
-                            let vector =
-                                vector.eval(state, function_cache, state_functions, registry);
-                            util::expand_vector_with_slice(result, vector)
-                        }
-                        _ => util::expand_vector_with_slice(
-                            result,
-                            &vector.eval(state, function_cache, state_functions, registry),
-                        ),
-                    }
-                }
                 ArgumentExpression::Element(element) => {
                     let element = element.eval(state, function_cache, state_functions, registry);
                     result.iter_mut().for_each(|r| r.push(element));
@@ -140,9 +117,6 @@ impl ArgumentExpression {
                 ArgumentExpression::Set(SetExpression::Reference(
                     ReferenceExpression::Constant(set),
                 )) => simplified_args = util::expand_vector_with_set(simplified_args, set),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vector),
-                )) => simplified_args = util::expand_vector_with_slice(simplified_args, vector),
                 ArgumentExpression::Element(ElementExpression::Constant(element)) => {
                     simplified_args.iter_mut().for_each(|r| r.push(*element));
                 }
@@ -209,18 +183,6 @@ mod tests {
             ArgumentExpression::from(v),
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(
                 v.id()
-            )))
-        );
-    }
-
-    #[test]
-    fn from_vector_expression() {
-        assert_eq!(
-            ArgumentExpression::from(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![1, 2]
-            ))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![1, 2]
             )))
         );
     }
@@ -302,86 +264,6 @@ mod tests {
     }
 
     #[test]
-    fn simplify_vector() {
-        let registry = TableRegistry::default();
-        let expression = ArgumentExpression::Vector(VectorExpression::If(
-            Box::new(Condition::Constant(true)),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                1,
-            ))),
-        ));
-        assert_eq!(
-            expression.simplify(&registry),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
-                0
-            )))
-        );
-    }
-
-    #[test]
-    fn eval_args() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                set_variables: vec![{
-                    let mut set = Set::with_capacity(4);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }],
-                vector_variables: vec![vec![4, 5], vec![6, 7]],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry::default();
-        let args = [
-            ArgumentExpression::Element(ElementExpression::Constant(8)),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-            ArgumentExpression::Set(SetExpression::Complement(Box::new(
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-            ))),
-            ArgumentExpression::Vector(VectorExpression::Reverse(Box::new(
-                VectorExpression::Reference(ReferenceExpression::Variable(1)),
-            ))),
-        ];
-        assert_eq!(
-            ArgumentExpression::eval_args(
-                args.iter(),
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry
-            ),
-            vec![
-                vec![8, 0, 4, 2, 7],
-                vec![8, 0, 4, 2, 6],
-                vec![8, 0, 4, 3, 7],
-                vec![8, 0, 4, 3, 6],
-                vec![8, 0, 5, 2, 7],
-                vec![8, 0, 5, 2, 6],
-                vec![8, 0, 5, 3, 7],
-                vec![8, 0, 5, 3, 6],
-                vec![8, 1, 4, 2, 7],
-                vec![8, 1, 4, 2, 6],
-                vec![8, 1, 4, 3, 7],
-                vec![8, 1, 4, 3, 6],
-                vec![8, 1, 5, 2, 7],
-                vec![8, 1, 5, 2, 6],
-                vec![8, 1, 5, 3, 7],
-                vec![8, 1, 5, 3, 6],
-            ]
-        );
-    }
-
-    #[test]
     fn eval_args_with_state_function() {
         let mut metadata = StateMetadata::default();
         let ob = metadata.add_object_type("something", 10);
@@ -448,124 +330,5 @@ mod tests {
                 vec![8, 1, 5, 3, 7],
             ]
         );
-    }
-
-    #[test]
-    fn eval_empty_args() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                set_variables: vec![{
-                    let mut set = Set::with_capacity(4);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }],
-                vector_variables: vec![vec![4, 5], vec![6, 7]],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry::default();
-        let args = [
-            ArgumentExpression::Element(ElementExpression::Constant(8)),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-            ArgumentExpression::Set(SetExpression::Complement(Box::new(
-                SetExpression::Reference(ReferenceExpression::Variable(0)),
-            ))),
-            ArgumentExpression::Vector(VectorExpression::Reverse(Box::new(
-                VectorExpression::Reference(ReferenceExpression::Variable(1)),
-            ))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![],
-            ))),
-        ];
-        assert_eq!(
-            ArgumentExpression::eval_args(
-                args.iter(),
-                &state,
-                &mut function_cache,
-                &state_functions,
-                &registry
-            ),
-            Vec::<Vec<Element>>::new()
-        );
-    }
-
-    #[test]
-    fn simplify_args_some() {
-        let args = [
-            ArgumentExpression::Element(ElementExpression::Constant(8)),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
-                let mut set = Set::with_capacity(4);
-                set.insert(0);
-                set.insert(1);
-                set
-            }))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![4, 5],
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
-                let mut set = Set::with_capacity(4);
-                set.insert(2);
-                set.insert(3);
-                set
-            }))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![7, 6],
-            ))),
-        ];
-        assert_eq!(
-            ArgumentExpression::simplify_args(args.iter()),
-            Some(vec![
-                vec![8, 0, 4, 2, 7],
-                vec![8, 0, 4, 2, 6],
-                vec![8, 0, 4, 3, 7],
-                vec![8, 0, 4, 3, 6],
-                vec![8, 0, 5, 2, 7],
-                vec![8, 0, 5, 2, 6],
-                vec![8, 0, 5, 3, 7],
-                vec![8, 0, 5, 3, 6],
-                vec![8, 1, 4, 2, 7],
-                vec![8, 1, 4, 2, 6],
-                vec![8, 1, 4, 3, 7],
-                vec![8, 1, 4, 3, 6],
-                vec![8, 1, 5, 2, 7],
-                vec![8, 1, 5, 2, 6],
-                vec![8, 1, 5, 3, 7],
-                vec![8, 1, 5, 3, 6],
-            ])
-        );
-    }
-
-    #[test]
-    fn simplify_args_none() {
-        let args = [
-            ArgumentExpression::Element(ElementExpression::Constant(8)),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
-                let mut set = Set::with_capacity(4);
-                set.insert(0);
-                set.insert(1);
-                set
-            }))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![4, 5],
-            ))),
-            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
-                let mut set = Set::with_capacity(4);
-                set.insert(2);
-                set.insert(3);
-                set
-            }))),
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![7, 6],
-            ))),
-            ArgumentExpression::Element(ElementExpression::Variable(0)),
-        ];
-        assert_eq!(ArgumentExpression::simplify_args(args.iter()), None);
     }
 }

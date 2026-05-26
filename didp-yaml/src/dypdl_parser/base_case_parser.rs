@@ -27,10 +27,7 @@ fn load_conditions_from_array(
         )?;
         for c in condition {
             match c.condition {
-                Condition::Constant(false)
-                    if c.elements_in_set_variable.is_empty()
-                        && c.elements_in_vector_variable.is_empty() =>
-                {
+                Condition::Constant(false) if c.elements_in_set_variable.is_empty() => {
                     return Err(
                         ModelErr::new(String::from("a base case is never satisfied")).into(),
                     )

@@ -249,7 +249,6 @@ mod tests {
         State {
             signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2, set3, set4],
-                vector_variables: vec![vec![0, 2], vec![], vec![], vec![]],
                 element_variables: vec![1, 2, 3, 4],
                 ..Default::default()
             },

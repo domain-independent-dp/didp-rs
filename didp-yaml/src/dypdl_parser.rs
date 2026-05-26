@@ -20,7 +20,6 @@ use yaml_rust::yaml::{Array, Hash};
 use crate::util;
 use dypdl::expression::{
     Condition, ContinuousExpression, ElementExpression, IntegerExpression, SetExpression,
-    VectorExpression,
 };
 use dypdl::variable_type::Element;
 use dypdl::{CostType, GroundedCondition, Model, ModelErr, ReduceFunction, StateFunctions};
@@ -104,27 +103,6 @@ pub fn load_set_expression_from_yaml(
     parameters: &FxHashMap<String, Element>,
 ) -> Result<SetExpression, Box<dyn Error>> {
     parse_expression_from_yaml::parse_set_from_yaml(
-        value,
-        &model.state_metadata,
-        &model.state_functions,
-        &model.table_registry,
-        parameters,
-    )
-}
-
-/// Returns a vector expression loaded from YAML.
-///
-/// `parameters` specify names and values of constants.
-///
-/// # Errors
-///
-/// If the format is invalid.
-pub fn load_vector_expression_from_yaml(
-    value: &Yaml,
-    model: &Model,
-    parameters: &FxHashMap<String, Element>,
-) -> Result<VectorExpression, Box<dyn Error>> {
-    parse_expression_from_yaml::parse_vector_from_yaml(
         value,
         &model.state_metadata,
         &model.state_functions,
@@ -518,10 +496,7 @@ fn filter_constraints(
     for condition in conditions {
         match condition.condition {
             Condition::Constant(true) => continue,
-            Condition::Constant(false)
-                if condition.elements_in_set_variable.is_empty()
-                    && condition.elements_in_vector_variable.is_empty() =>
-            {
+            Condition::Constant(false) if condition.elements_in_set_variable.is_empty() => {
                 return Err(ModelErr::new(String::from(
                     "model has a constraint never satisfied",
                 )))
@@ -664,42 +639,6 @@ mod tests {
 
         let value = Yaml::Array(vec![Yaml::Integer(0), Yaml::Integer(1)]);
         let result = load_set_expression_from_yaml(&value, &model, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn load_vector_expression_from_yaml_ok() {
-        let model = Model::default();
-        let parameters = FxHashMap::default();
-
-        let value = Yaml::String(String::from("(vector 0 1)"));
-        let result = load_vector_expression_from_yaml(&value, &model, &parameters);
-        assert!(result.is_ok());
-        assert_eq!(
-            result.unwrap(),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1]))
-        );
-
-        let value = Yaml::Array(vec![Yaml::Integer(0), Yaml::Integer(1)]);
-        let result = load_vector_expression_from_yaml(&value, &model, &parameters);
-        assert!(result.is_ok());
-        assert_eq!(
-            result.unwrap(),
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1]))
-        );
-    }
-
-    #[test]
-    fn load_vector_expression_from_yaml_err() {
-        let model = Model::default();
-        let parameters = FxHashMap::default();
-
-        let value = Yaml::Integer(0);
-        let result = load_vector_expression_from_yaml(&value, &model, &parameters);
-        assert!(result.is_err());
-
-        let value = Yaml::Array(vec![Yaml::String(String::from("1")), Yaml::Integer(1)]);
-        let result = load_vector_expression_from_yaml(&value, &model, &parameters);
         assert!(result.is_err());
     }
 

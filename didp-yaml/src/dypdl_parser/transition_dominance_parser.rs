@@ -138,7 +138,6 @@ pub fn load_transition_dominance_from_yaml(
                         // Skip dominance if the condition is always false
                         if c.condition == Condition::Constant(false)
                             && c.elements_in_set_variable.is_empty()
-                            && c.elements_in_vector_variable.is_empty()
                         {
                             continue 'dominated;
                         }

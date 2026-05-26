@@ -41,12 +41,9 @@ impl<T: Clone> TableExpression<T> {
     ) -> &'a T {
         match self {
             Self::Constant(value) => value,
-            Self::Table1D(i, x) => tables.tables_1d[*i].get(x.eval(
-                state,
-                function_cache,
-                state_functions,
-                registry,
-            )),
+            Self::Table1D(i, x) => {
+                tables.tables_1d[*i].get(x.eval(state, function_cache, state_functions, registry))
+            }
             Self::Table2D(i, x, y) => tables.tables_2d[*i].get(
                 x.eval(state, function_cache, state_functions, registry),
                 y.eval(state, function_cache, state_functions, registry),
@@ -158,14 +155,6 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_table_1d = FxHashMap::default();
-        name_to_table_1d.insert(String::from("t1"), 0);
-        let vector_tables = TableData {
-            tables_1d: vec![Table1D::new(vec![vec![0, 1]])],
-            name_to_table_1d,
-            ..Default::default()
-        };
-
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
@@ -182,7 +171,6 @@ mod tests {
         TableRegistry {
             element_tables,
             set_tables,
-            vector_tables,
             ..Default::default()
         }
     }
@@ -197,7 +185,6 @@ mod tests {
         State {
             signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2]],
                 element_variables: vec![1],
                 ..Default::default()
             },

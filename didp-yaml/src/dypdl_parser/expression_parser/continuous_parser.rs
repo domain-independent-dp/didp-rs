@@ -1,5 +1,4 @@
 use super::condition_parser;
-use super::continuous_vector_parser;
 use super::element_parser;
 use super::integer_parser;
 use super::numeric_table_parser;
@@ -7,8 +6,7 @@ use super::util;
 use super::util::ParseErr;
 use dypdl::expression::{
     BinaryOperator, CastOperator, ContinuousBinaryOperator, ContinuousExpression,
-    ContinuousUnaryOperator, ContinuousVectorExpression, IntegerExpression, ReduceOperator,
-    UnaryOperator,
+    ContinuousUnaryOperator, IntegerExpression, UnaryOperator,
 };
 use dypdl::variable_type::{Continuous, Element};
 use dypdl::{StateFunctions, StateMetadata, TableRegistry};
@@ -55,28 +53,6 @@ pub fn parse_expression<'a>(
                     ))),
                     rest,
                 ))
-            } else if name == "length" {
-                parse_length(rest, metadata, functions, registry, parameters)
-            } else if name == "last" {
-                let (vector, rest) = continuous_vector_parser::parse_expression(
-                    rest, metadata, functions, registry, parameters,
-                )?;
-                let rest = util::parse_closing(rest)?;
-                Ok((ContinuousExpression::Last(Box::new(vector)), rest))
-            } else if name == "at" {
-                let (vector, rest) = continuous_vector_parser::parse_expression(
-                    rest, metadata, functions, registry, parameters,
-                )?;
-                let (i, rest) = element_parser::parse_expression(
-                    rest, metadata, functions, registry, parameters,
-                )?;
-                let rest = util::parse_closing(rest)?;
-                Ok((ContinuousExpression::At(Box::new(vector), i), rest))
-            } else if let Ok((vector, rest)) = continuous_vector_parser::parse_expression(
-                rest, metadata, functions, registry, parameters,
-            ) {
-                let rest = util::parse_closing(rest)?;
-                Ok((parse_reduce(name, vector)?, rest))
             } else if name == "if" {
                 let (condition, rest) = condition_parser::parse_expression(
                     rest, metadata, functions, registry, parameters,
@@ -133,33 +109,6 @@ fn parse_parameterized_state_function<'a>(
         .get_continuous_function(&name)
         .map(|expression| Ok(Some((expression, rest))))
         .unwrap_or_else(|_| Ok(None))
-}
-
-fn parse_reduce(
-    name: &str,
-    vector: ContinuousVectorExpression,
-) -> Result<ContinuousExpression, ParseErr> {
-    match name {
-        "reduce-sum" => Ok(ContinuousExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(vector),
-        )),
-        "reduce-product" => Ok(ContinuousExpression::Reduce(
-            ReduceOperator::Product,
-            Box::new(vector),
-        )),
-        "reduce-max" => Ok(ContinuousExpression::Reduce(
-            ReduceOperator::Max,
-            Box::new(vector),
-        )),
-        "reduce-min" => Ok(ContinuousExpression::Reduce(
-            ReduceOperator::Min,
-            Box::new(vector),
-        )),
-        _ => Err(ParseErr::new(format!(
-            "no such reduction operator `{name}`",
-        ))),
-    }
 }
 
 fn parse_unary_operation(
@@ -290,19 +239,6 @@ fn parse_cardinality<'a>(
     Ok((ContinuousExpression::Cardinality(expression), rest))
 }
 
-fn parse_length<'a>(
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, Element>,
-) -> Result<(ContinuousExpression, &'a [String]), ParseErr> {
-    let (expression, rest) =
-        element_parser::parse_vector_expression(tokens, metadata, functions, registry, parameters)?;
-    let rest = util::parse_closing(rest)?;
-    Ok((ContinuousExpression::Length(expression), rest))
-}
-
 fn parse_continuous_atom(
     token: &str,
     metadata: &StateMetadata,
@@ -363,19 +299,6 @@ mod tests {
         name_to_set_variable.insert(String::from("s2"), 2);
         name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
-
-        let vector_variable_names = vec![
-            String::from("v0"),
-            String::from("v1"),
-            String::from("v2"),
-            String::from("v3"),
-        ];
-        let mut name_to_vector_variable = FxHashMap::default();
-        name_to_vector_variable.insert(String::from("v0"), 0);
-        name_to_vector_variable.insert(String::from("v1"), 1);
-        name_to_vector_variable.insert(String::from("v2"), 2);
-        name_to_vector_variable.insert(String::from("v3"), 3);
-        let vector_variable_to_object = vec![0, 0, 0, 0];
 
         let element_variable_names = vec![
             String::from("e0"),
@@ -458,9 +381,6 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            vector_variable_names,
-            name_to_vector_variable,
-            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -721,40 +641,6 @@ mod tests {
             .collect();
         let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_continuous_table_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "sum", "cf4", "0", "e0", "s0", "v0", ")", "c0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ContinuousExpression::Table(Box::new(NumericTableExpression::TableReduce(
-                ReduceOperator::Sum,
-                0,
-                vec![
-                    ArgumentExpression::Element(ElementExpression::Constant(0)),
-                    ArgumentExpression::Element(ElementExpression::Variable(0)),
-                    ArgumentExpression::Set(SetExpression::Reference(
-                        ReferenceExpression::Variable(0)
-                    )),
-                    ArgumentExpression::Vector(VectorExpression::Reference(
-                        ReferenceExpression::Variable(0)
-                    ))
-                ]
-            )))
-        );
-        assert_eq!(rest, &tokens[8..]);
     }
 
     #[test]
@@ -1219,28 +1105,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_continuous_length_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "length", "v0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ContinuousExpression::Length(VectorExpression::Reference(
-                ReferenceExpression::Variable(0)
-            ))
-        );
-        assert_eq!(rest, &tokens[4..]);
-    }
-
-    #[test]
     fn parse_continuous_length_err() {
         let metadata = generate_metadata();
         let functions = StateFunctions::default();
@@ -1255,38 +1119,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_continuous_last_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-        let tokens: Vec<String> = [
-            "(",
-            "last",
-            "(",
-            "continuous-vector",
-            "0",
-            "1",
-            ")",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ContinuousExpression::Last(Box::new(ContinuousVectorExpression::Constant(vec![
-                0.0, 1.0
-            ])))
-        );
-        assert_eq!(rest, &tokens[8..]);
-    }
-
-    #[test]
     fn parse_continuous_last_err() {
         let metadata = generate_metadata();
         let functions = StateFunctions::default();
@@ -1298,40 +1130,6 @@ mod tests {
             .collect();
         let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_continuous_at() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-        let tokens: Vec<String> = [
-            "(",
-            "at",
-            "(",
-            "continuous-vector",
-            "0",
-            "1",
-            ")",
-            "0",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ContinuousExpression::At(
-                Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0]),),
-                ElementExpression::Constant(0),
-            )
-        );
-        assert_eq!(rest, &tokens[9..]);
     }
 
     #[test]
@@ -1361,118 +1159,6 @@ mod tests {
             .collect();
         let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_continuous_reduce_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = [
-            "(",
-            "reduce-sum",
-            "(",
-            "continuous-vector",
-            "0",
-            "1",
-            ")",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ContinuousExpression::Reduce(
-                ReduceOperator::Sum,
-                Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0]))
-            )
-        );
-        assert_eq!(rest, &tokens[8..]);
-
-        let tokens: Vec<String> = [
-            "(",
-            "reduce-product",
-            "(",
-            "continuous-vector",
-            "0",
-            "1",
-            ")",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ContinuousExpression::Reduce(
-                ReduceOperator::Product,
-                Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0]))
-            )
-        );
-        assert_eq!(rest, &tokens[8..]);
-
-        let tokens: Vec<String> = [
-            "(",
-            "reduce-max",
-            "(",
-            "continuous-vector",
-            "0",
-            "1",
-            ")",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ContinuousExpression::Reduce(
-                ReduceOperator::Max,
-                Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0]))
-            )
-        );
-        assert_eq!(rest, &tokens[8..]);
-
-        let tokens: Vec<String> = [
-            "(",
-            "reduce-min",
-            "(",
-            "continuous-vector",
-            "0",
-            "1",
-            ")",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ContinuousExpression::Reduce(
-                ReduceOperator::Min,
-                Box::new(ContinuousVectorExpression::Constant(vec![0.0, 1.0]))
-            )
-        );
-        assert_eq!(rest, &tokens[8..]);
     }
 
     #[test]

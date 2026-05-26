@@ -4,7 +4,6 @@ use super::element_expression::ElementExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_reduce_expression::{SetReduceExpression, SetReduceOperator};
 use super::table_expression::TableExpression;
-use super::vector_expression::VectorExpression;
 use crate::state::{ElementResourceVariable, ElementVariable, SetVariable, StateInterface};
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
@@ -27,8 +26,6 @@ pub enum SetExpression {
     SetElementOperation(SetElementOperator, ElementExpression, Box<SetExpression>),
     /// Reduce operation on a table of sets.
     Reduce(SetReduceExpression),
-    /// Conversion from a vector.
-    FromVector(usize, Box<VectorExpression>),
     /// If-then-else expression, which returns the first one if the condition holds and the second one otherwise.
     If(Box<Condition>, Box<SetExpression>, Box<SetExpression>),
 }
@@ -1263,21 +1260,6 @@ impl SetExpression {
             Self::Reduce(expression) => {
                 expression.eval(state, function_cache, state_functions, registry)
             }
-            Self::FromVector(capacity, vector) => match vector.as_ref() {
-                VectorExpression::Reference(ReferenceExpression::Constant(vector)) => {
-                    let mut set = Set::with_capacity(*capacity);
-                    vector.iter().for_each(|v| set.insert(*v));
-                    set
-                }
-                vector => {
-                    let mut set = Set::with_capacity(*capacity);
-                    vector
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter()
-                        .for_each(|v| set.insert(v));
-                    set
-                }
-            },
             Self::If(condition, x, y) => {
                 if condition.eval(state, function_cache, state_functions, registry) {
                     x.eval(state, function_cache, state_functions, registry)
@@ -1350,14 +1332,6 @@ impl SetExpression {
                     Self::Reference(ReferenceExpression::Constant(set))
                 }
                 expression => Self::Reduce(expression),
-            },
-            Self::FromVector(capacity, vector) => match vector.simplify(registry) {
-                VectorExpression::Reference(ReferenceExpression::Constant(vector)) => {
-                    let mut set = Set::with_capacity(*capacity);
-                    vector.into_iter().for_each(|v| set.insert(v));
-                    Self::Reference(ReferenceExpression::Constant(set))
-                }
-                vector => Self::FromVector(*capacity, Box::new(vector)),
             },
             Self::If(condition, x, y) => match condition.simplify(registry) {
                 Condition::Constant(true) => x.simplify(registry),
@@ -1450,14 +1424,6 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_table_1d = FxHashMap::default();
-        name_to_table_1d.insert(String::from("t1"), 0);
-        let vector_tables = TableData {
-            tables_1d: vec![Table1D::new(vec![vec![0, 1]])],
-            name_to_table_1d,
-            ..Default::default()
-        };
-
         let mut set = Set::with_capacity(3);
         set.insert(0);
         set.insert(2);
@@ -1474,7 +1440,6 @@ mod tests {
         TableRegistry {
             element_tables,
             set_tables,
-            vector_tables,
             ..Default::default()
         }
     }
@@ -1489,7 +1454,6 @@ mod tests {
         State {
             signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2]],
                 element_variables: vec![1],
                 ..Default::default()
             },
@@ -3168,113 +3132,6 @@ mod tests {
     }
 
     #[test]
-    fn set_reduce_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables: vec![Table::new(
-                    {
-                        let mut map = FxHashMap::default();
-                        map.insert(vec![0, 0, 0, 0], {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        });
-                        map.insert(vec![0, 0, 0, 1], {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        });
-                        map.insert(vec![0, 0, 1, 0], {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        });
-                        map
-                    },
-                    {
-                        let mut set = Set::with_capacity(5);
-                        set.insert(0);
-                        set.insert(4);
-                        set
-                    },
-                )],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetExpression::Reduce(SetReduceExpression::Table(
-            SetReduceOperator::Union,
-            5,
-            0,
-            vec![
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-            ],
-        ));
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn set_from_vector_eval() {
-        let registry = generate_registry();
-        let state = generate_state();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let expression = SetExpression::FromVector(
-            3,
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-        );
-        let mut set = Set::with_capacity(3);
-        set.insert(0);
-        set.insert(1);
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            set
-        );
-        let expression = SetExpression::FromVector(
-            3,
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        let mut set = Set::with_capacity(3);
-        set.insert(0);
-        set.insert(2);
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            set
-        );
-    }
-
-    #[test]
     fn set_reference_simplify() {
         let registry = generate_registry();
         let mut set = Set::with_capacity(3);
@@ -3475,193 +3332,6 @@ mod tests {
             expression.simplify(&registry),
             SetExpression::Reference(ReferenceExpression::Constant(set))
         );
-    }
-
-    #[test]
-    fn set_reduce_constant_simplify() {
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables: vec![Table::new(
-                    {
-                        let mut map = FxHashMap::default();
-                        map.insert(vec![0, 0, 0, 0], {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        });
-                        map.insert(vec![0, 0, 0, 1], {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        });
-                        map.insert(vec![0, 0, 1, 0], {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        });
-                        map
-                    },
-                    {
-                        let mut set = Set::with_capacity(5);
-                        set.insert(0);
-                        set.insert(4);
-                        set
-                    },
-                )],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetExpression::Reduce(SetReduceExpression::Table(
-            SetReduceOperator::Union,
-            5,
-            0,
-            vec![
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Element(ElementExpression::Constant(0)),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-            ],
-        ));
-        assert_eq!(
-            expression.simplify(&registry),
-            SetExpression::Reference(ReferenceExpression::Constant({
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }))
-        );
-    }
-
-    #[test]
-    fn set_reduce_simplify() {
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables: vec![Table::new(
-                    {
-                        let mut map = FxHashMap::default();
-                        map.insert(vec![0, 0, 0, 0], {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        });
-                        map.insert(vec![0, 0, 0, 1], {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        });
-                        map.insert(vec![0, 0, 1, 0], {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        });
-                        map
-                    },
-                    {
-                        let mut set = Set::with_capacity(5);
-                        set.insert(0);
-                        set.insert(4);
-                        set
-                    },
-                )],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetExpression::Reduce(SetReduceExpression::Table(
-            SetReduceOperator::Union,
-            5,
-            0,
-            vec![
-                ArgumentExpression::Element(ElementExpression::If(
-                    Box::new(Condition::Constant(true)),
-                    Box::new(ElementExpression::Variable(0)),
-                    Box::new(ElementExpression::Constant(0)),
-                )),
-                ArgumentExpression::Element(ElementExpression::If(
-                    Box::new(Condition::Constant(true)),
-                    Box::new(ElementExpression::Variable(0)),
-                    Box::new(ElementExpression::Constant(0)),
-                )),
-                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
-            ],
-        ));
-        assert_eq!(
-            expression.simplify(&registry),
-            SetExpression::Reduce(SetReduceExpression::Table(
-                SetReduceOperator::Union,
-                5,
-                0,
-                vec![
-                    ArgumentExpression::Element(ElementExpression::Variable(0),),
-                    ArgumentExpression::Element(ElementExpression::Variable(0),),
-                    ArgumentExpression::Set(SetExpression::Reference(
-                        ReferenceExpression::Constant({
-                            let mut set = Set::with_capacity(2);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        })
-                    )),
-                    ArgumentExpression::Vector(VectorExpression::Reference(
-                        ReferenceExpression::Constant(vec![0, 1]),
-                    )),
-                ],
-            ))
-        );
-    }
-
-    #[test]
-    fn set_from_vector_simplify() {
-        let registry = generate_registry();
-        let expression = SetExpression::FromVector(
-            3,
-            Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                vec![0, 1],
-            ))),
-        );
-        let mut set = Set::with_capacity(3);
-        set.insert(0);
-        set.insert(1);
-        assert_eq!(
-            expression.simplify(&registry),
-            SetExpression::Reference(ReferenceExpression::Constant(set))
-        );
-        let expression = SetExpression::FromVector(
-            3,
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        let mut set = Set::with_capacity(3);
-        set.insert(0);
-        set.insert(2);
-        assert_eq!(expression.simplify(&registry), expression);
     }
 
     #[test]
