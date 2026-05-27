@@ -881,7 +881,7 @@ mod tests {
 
         let transition = Transition {
             name: String::from(""),
-            elements_in_set_variable: vec![(0, 0), (1, 1)],
+            elements_in_set_variable: vec![(0, 0), (1, 1), (0, 2), (1, 0)],
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
@@ -921,6 +921,19 @@ mod tests {
         let transition = Transition {
             name: String::from(""),
             elements_in_set_variable: vec![(0, 1), (1, 1)],
+            cost: CostExpression::Integer(IntegerExpression::Constant(0)),
+            ..Default::default()
+        };
+        assert!(!transition.is_applicable(
+            &state,
+            &mut function_cache,
+            &state_functions,
+            &registry
+        ));
+
+        let transition = Transition {
+            name: String::from(""),
+            elements_in_set_variable: vec![(0, 0), (1, 2)],
             cost: CostExpression::Integer(IntegerExpression::Constant(0)),
             ..Default::default()
         };
@@ -1047,7 +1060,7 @@ mod tests {
     #[test]
     fn get_preconditions() {
         let transition = Transition {
-            elements_in_set_variable: vec![(0, 1), (1, 2)],
+            elements_in_set_variable: vec![(0, 1), (1, 2), (2, 3), (3, 4)],
             preconditions: vec![
                 grounded_condition::GroundedCondition {
                     condition: Condition::Set(Box::new(SetCondition::IsIn(
@@ -1076,6 +1089,14 @@ mod tests {
                 Condition::Set(Box::new(SetCondition::IsIn(
                     ElementExpression::Constant(2),
                     SetExpression::Reference(ReferenceExpression::Variable(1)),
+                ))),
+                Condition::Set(Box::new(SetCondition::IsIn(
+                    ElementExpression::Constant(3),
+                    SetExpression::Reference(ReferenceExpression::Variable(2)),
+                ))),
+                Condition::Set(Box::new(SetCondition::IsIn(
+                    ElementExpression::Constant(4),
+                    SetExpression::Reference(ReferenceExpression::Variable(3)),
                 ))),
                 Condition::Set(Box::new(SetCondition::IsIn(
                     ElementExpression::Variable(0),
@@ -1114,6 +1135,28 @@ mod tests {
                 ..Default::default()
             }
         );
+        transition.add_precondition(Condition::Set(Box::new(SetCondition::IsIn(
+            ElementExpression::Constant(2),
+            SetExpression::Reference(ReferenceExpression::Variable(2)),
+        ))));
+        assert_eq!(
+            transition,
+            Transition {
+                elements_in_set_variable: vec![(0, 0), (1, 1), (2, 2)],
+                ..Default::default()
+            }
+        );
+        transition.add_precondition(Condition::Set(Box::new(SetCondition::IsIn(
+            ElementExpression::Constant(3),
+            SetExpression::Reference(ReferenceExpression::Variable(3)),
+        ))));
+        assert_eq!(
+            transition,
+            Transition {
+                elements_in_set_variable: vec![(0, 0), (1, 1), (2, 2), (3, 3)],
+                ..Default::default()
+            }
+        );
         transition.add_precondition(Condition::ComparisonE(
             ComparisonOperator::Eq,
             Box::new(ElementExpression::Variable(0)),
@@ -1122,7 +1165,7 @@ mod tests {
         assert_eq!(
             transition,
             Transition {
-                elements_in_set_variable: vec![(0, 0), (1, 1)],
+                elements_in_set_variable: vec![(0, 0), (1, 1), (2, 2), (3, 3)],
                 preconditions: vec![grounded_condition::GroundedCondition {
                     condition: Condition::ComparisonE(
                         ComparisonOperator::Eq,
@@ -1142,7 +1185,7 @@ mod tests {
         assert_eq!(
             transition,
             Transition {
-                elements_in_set_variable: vec![(0, 0), (1, 1)],
+                elements_in_set_variable: vec![(0, 0), (1, 1), (2, 2), (3, 3)],
                 preconditions: vec![
                     grounded_condition::GroundedCondition {
                         condition: Condition::ComparisonE(

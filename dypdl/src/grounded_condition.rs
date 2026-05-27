@@ -337,37 +337,12 @@ mod tests {
     #[test]
     fn is_satisfied_condition() {
         let registry = generate_registry();
-        let state = state::State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-
-        let condition = GroundedCondition {
-            condition: Condition::Table(Box::new(TableExpression::Table1D(
-                0,
-                ElementExpression::Constant(0),
-            ))),
-            ..Default::default()
-        };
-        assert!(condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
-
-        let condition = GroundedCondition {
-            condition: Condition::Table(Box::new(TableExpression::Table1D(
-                0,
-                ElementExpression::Constant(1),
-            ))),
-            ..Default::default()
-        };
-        assert!(!condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
-    }
-
-    #[test]
-    fn is_satisfied_set_parameter() {
-        let registry = table_registry::TableRegistry::default();
         let mut s0 = variable_type::Set::with_capacity(2);
         s0.insert(0);
         let state = state::State {
             signature_variables: state::SignatureVariables {
                 set_variables: vec![s0],
+                element_variables: vec![0],
                 ..Default::default()
             },
             ..Default::default()
@@ -376,13 +351,54 @@ mod tests {
         let mut function_cache = StateFunctionCache::new(&state_functions);
 
         let condition = GroundedCondition {
-            condition: Condition::Constant(false),
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
+                ElementExpression::Variable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            ))),
+            ..Default::default()
+        };
+        assert!(condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
+
+        let condition = GroundedCondition {
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
+                ElementExpression::Constant(1),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            ))),
+            ..Default::default()
+        };
+        assert!(!condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
+    }
+
+    #[test]
+    fn is_satisfied_set_parameter() {
+        let registry = generate_registry();
+        let mut s0 = variable_type::Set::with_capacity(2);
+        s0.insert(0);
+        let state = state::State {
+            signature_variables: state::SignatureVariables {
+                set_variables: vec![s0],
+                element_variables: vec![1],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+
+        let condition = GroundedCondition {
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
+                ElementExpression::Variable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            ))),
             elements_in_set_variable: vec![(0, 0)],
         };
         assert!(!condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
 
         let condition = GroundedCondition {
-            condition: Condition::Constant(false),
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
+                ElementExpression::Variable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            ))),
             elements_in_set_variable: vec![(0, 1)],
         };
         assert!(condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
