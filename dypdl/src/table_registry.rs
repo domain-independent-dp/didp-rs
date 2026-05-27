@@ -580,6 +580,255 @@ mod tests {
         assert!(t.is_err());
     }
 
+    #[test]
+    fn table_registry_get_name_set() {
+        let mut registry = TableRegistry::default();
+
+        registry
+            .integer_tables
+            .name_to_constant
+            .insert(String::from("i0"), 1);
+        let result = registry.add_table_1d(String::from("i1"), vec![1, 0, 0]);
+        assert!(result.is_ok());
+        let result = registry.add_table_2d(
+            String::from("i2"),
+            vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+        );
+        assert!(result.is_ok());
+        let result = registry.add_table_3d(
+            String::from("i3"),
+            vec![
+                vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+                vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+                vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+            ],
+        );
+        assert!(result.is_ok());
+        let mut map = FxHashMap::default();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, 1);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, 0);
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, 0);
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, 0);
+        let result = registry.add_table(String::from("i4"), map, 0);
+        assert!(result.is_ok());
+
+        registry
+            .continuous_tables
+            .name_to_constant
+            .insert(String::from("c0"), 1.0);
+        let result = registry.add_table_1d(String::from("c1"), vec![1.0, 0.0, 0.0]);
+        assert!(result.is_ok());
+        let result = registry.add_table_2d(
+            String::from("c2"),
+            vec![
+                vec![1.0, 0.0, 0.0],
+                vec![0.0, 0.0, 0.0],
+                vec![0.0, 0.0, 0.0],
+            ],
+        );
+        assert!(result.is_ok());
+        let result = registry.add_table_3d(
+            String::from("c3"),
+            vec![
+                vec![
+                    vec![1.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0],
+                ],
+                vec![
+                    vec![1.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0],
+                ],
+                vec![
+                    vec![1.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0],
+                ],
+            ],
+        );
+        assert!(result.is_ok());
+        let mut map = FxHashMap::default();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, 1.0);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, 0.0);
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, 0.0);
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, 0.0);
+        let result = registry.add_table(String::from("c4"), map, 0.0);
+        assert!(result.is_ok());
+
+        registry
+            .bool_tables
+            .name_to_constant
+            .insert(String::from("b0"), true);
+        let result = registry.add_table_1d(String::from("b1"), vec![true, false, false]);
+        assert!(result.is_ok());
+        let result = registry.add_table_2d(
+            String::from("b2"),
+            vec![
+                vec![true, false, false],
+                vec![false, false, false],
+                vec![false, false, false],
+            ],
+        );
+        assert!(result.is_ok());
+        let result = registry.add_table_3d(
+            String::from("b3"),
+            vec![
+                vec![
+                    vec![true, false, false],
+                    vec![false, false, false],
+                    vec![false, false, false],
+                ],
+                vec![
+                    vec![true, false, false],
+                    vec![false, false, false],
+                    vec![false, false, false],
+                ],
+                vec![
+                    vec![true, false, false],
+                    vec![false, false, false],
+                    vec![false, false, false],
+                ],
+            ],
+        );
+        assert!(result.is_ok());
+        let mut map = FxHashMap::default();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, true);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, false);
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, false);
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, false);
+        let result = registry.add_table(String::from("b4"), map, false);
+        assert!(result.is_ok());
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(2);
+        let default = Set::with_capacity(3);
+        registry
+            .set_tables
+            .name_to_constant
+            .insert(String::from("s0"), set.clone());
+        let result = registry.add_table_1d(
+            String::from("s1"),
+            vec![set.clone(), default.clone(), default.clone()],
+        );
+        assert!(result.is_ok());
+        let result = registry.add_table_2d(
+            String::from("s2"),
+            vec![
+                vec![set.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+            ],
+        );
+        assert!(result.is_ok());
+        let result = registry.add_table_3d(
+            String::from("s3"),
+            vec![
+                vec![
+                    vec![set.clone(), default.clone(), default.clone()],
+                    vec![default.clone(), default.clone(), default.clone()],
+                    vec![default.clone(), default.clone(), default.clone()],
+                ],
+                vec![
+                    vec![set.clone(), default.clone(), default.clone()],
+                    vec![default.clone(), default.clone(), default.clone()],
+                    vec![default.clone(), default.clone(), default.clone()],
+                ],
+                vec![
+                    vec![set.clone(), default.clone(), default.clone()],
+                    vec![default.clone(), default.clone(), default.clone()],
+                ],
+            ],
+        );
+        assert!(result.is_ok());
+        let mut map = FxHashMap::default();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, set);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, default.clone());
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, default.clone());
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, default.clone());
+        let result = registry.add_table(String::from("s4"), map, default);
+        assert!(result.is_ok());
+
+        registry
+            .element_tables
+            .name_to_constant
+            .insert(String::from("t0"), 1);
+        let result: Result<Table1DHandle<Element>, _> =
+            registry.add_table_1d(String::from("t1"), vec![1, 0, 0]);
+        assert!(result.is_ok());
+        let result: Result<Table2DHandle<Element>, _> = registry.add_table_2d(
+            String::from("t2"),
+            vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+        );
+        assert!(result.is_ok());
+        let result: Result<Table3DHandle<Element>, _> = registry.add_table_3d(
+            String::from("t3"),
+            vec![
+                vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+                vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+                vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+            ],
+        );
+        assert!(result.is_ok());
+        let mut map = FxHashMap::default();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, 1);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, 0);
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, 0);
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, 0);
+        let result: Result<TableHandle<Element>, _> =
+            registry.add_table(String::from("t4"), map, 0);
+        assert!(result.is_ok());
+
+        let mut expected = FxHashSet::default();
+        expected.insert(String::from("i0"));
+        expected.insert(String::from("i1"));
+        expected.insert(String::from("i2"));
+        expected.insert(String::from("i3"));
+        expected.insert(String::from("i4"));
+        expected.insert(String::from("c0"));
+        expected.insert(String::from("c1"));
+        expected.insert(String::from("c2"));
+        expected.insert(String::from("c3"));
+        expected.insert(String::from("c4"));
+        expected.insert(String::from("b0"));
+        expected.insert(String::from("b1"));
+        expected.insert(String::from("b2"));
+        expected.insert(String::from("b3"));
+        expected.insert(String::from("b4"));
+        expected.insert(String::from("s0"));
+        expected.insert(String::from("s1"));
+        expected.insert(String::from("s2"));
+        expected.insert(String::from("s3"));
+        expected.insert(String::from("s4"));
+        expected.insert(String::from("t0"));
+        expected.insert(String::from("t1"));
+        expected.insert(String::from("t2"));
+        expected.insert(String::from("t3"));
+        expected.insert(String::from("t4"));
+        assert_eq!(registry.get_name_set(), expected);
+    }
+
     // #[test]
     // fn set_table_ok() {
     //     let mut registry = TableRegistry::default();

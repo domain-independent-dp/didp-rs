@@ -1477,6 +1477,8 @@ impl_access_preference!(ContinuousResourceVariable, continuous_less_is_better);
 
 #[cfg(test)]
 mod tests {
+    use crate::expression::*;
+
     use super::*;
 
     fn generate_metadata() -> StateMetadata {
@@ -1869,6 +1871,123 @@ mod tests {
     }
 
     #[test]
+    fn apply_effect() {
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+
+        let mut set1 = Set::with_capacity(3);
+        set1.insert(0);
+        set1.insert(2);
+        let mut set2 = Set::with_capacity(3);
+        set2.insert(0);
+        set2.insert(1);
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![set1, set2],
+                element_variables: vec![1, 2],
+                integer_variables: vec![1, 2, 3],
+                continuous_variables: vec![1.0, 2.0, 3.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![],
+                integer_variables: vec![4, 5, 6],
+                continuous_variables: vec![4.0, 5.0, 6.0],
+            },
+        };
+        let registry = table_registry::TableRegistry::default();
+        let set_effect1 = SetExpression::SetElementOperation(
+            SetElementOperator::Add,
+            ElementExpression::Constant(1),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+        );
+        let set_effect2 = SetExpression::SetElementOperation(
+            SetElementOperator::Remove,
+            ElementExpression::Constant(0),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
+        );
+        let element_effect1 = ElementExpression::Constant(2);
+        let element_effect2 = ElementExpression::Constant(1);
+        let integer_effect1 = IntegerExpression::BinaryOperation(
+            BinaryOperator::Sub,
+            Box::new(IntegerExpression::Variable(0)),
+            Box::new(IntegerExpression::Constant(1)),
+        );
+        let integer_effect2 = IntegerExpression::BinaryOperation(
+            BinaryOperator::Mul,
+            Box::new(IntegerExpression::Variable(1)),
+            Box::new(IntegerExpression::Constant(2)),
+        );
+        let continuous_effect1 = ContinuousExpression::BinaryOperation(
+            BinaryOperator::Sub,
+            Box::new(ContinuousExpression::Variable(0)),
+            Box::new(ContinuousExpression::Constant(1.0)),
+        );
+        let continuous_effect2 = ContinuousExpression::BinaryOperation(
+            BinaryOperator::Mul,
+            Box::new(ContinuousExpression::Variable(1)),
+            Box::new(ContinuousExpression::Constant(2.0)),
+        );
+        let integer_resource_effect1 = IntegerExpression::BinaryOperation(
+            BinaryOperator::Add,
+            Box::new(IntegerExpression::ResourceVariable(0)),
+            Box::new(IntegerExpression::Constant(1)),
+        );
+        let integer_resource_effect2 = IntegerExpression::BinaryOperation(
+            BinaryOperator::Div,
+            Box::new(IntegerExpression::ResourceVariable(1)),
+            Box::new(IntegerExpression::Constant(2)),
+        );
+        let continuous_resource_effect1 = ContinuousExpression::BinaryOperation(
+            BinaryOperator::Add,
+            Box::new(ContinuousExpression::ResourceVariable(0)),
+            Box::new(ContinuousExpression::Constant(1.0)),
+        );
+        let continuous_resource_effect2 = ContinuousExpression::BinaryOperation(
+            BinaryOperator::Div,
+            Box::new(ContinuousExpression::ResourceVariable(1)),
+            Box::new(ContinuousExpression::Constant(2.0)),
+        );
+        let effect = effect::Effect {
+            set_effects: vec![(0, set_effect1), (1, set_effect2)],
+            element_effects: vec![(0, element_effect1), (1, element_effect2)],
+            integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
+            continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+            element_resource_effects: vec![],
+            integer_resource_effects: vec![
+                (0, integer_resource_effect1),
+                (1, integer_resource_effect2),
+            ],
+            continuous_resource_effects: vec![
+                (0, continuous_resource_effect1),
+                (1, continuous_resource_effect2),
+            ],
+        };
+
+        let mut set1 = Set::with_capacity(3);
+        set1.insert(0);
+        set1.insert(1);
+        set1.insert(2);
+        let mut set2 = Set::with_capacity(3);
+        set2.insert(1);
+        let expected = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![set1, set2],
+                element_variables: vec![2, 1],
+                integer_variables: vec![0, 4, 3],
+                continuous_variables: vec![0.0, 4.0, 3.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![],
+                integer_variables: vec![5, 2, 6],
+                continuous_variables: vec![5.0, 2.5, 6.0],
+            },
+        };
+        let successor: State =
+            state.apply_effect(&effect, &mut function_cache, &state_functions, &registry);
+        assert_eq!(successor, expected);
+    }
+
+    #[test]
     fn is_satisfied() {
         let state = State {
             signature_variables: SignatureVariables {
@@ -2167,6 +2286,224 @@ mod tests {
             ..Default::default()
         };
         metadata.dominance(&b, &a);
+    }
+
+    #[test]
+    fn check_state_ok() {
+        let metadata = generate_metadata();
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9, 1],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![4, 8, 9, 1],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_ok())
+    }
+
+    #[test]
+    fn chech_state_err() {
+        let metadata = generate_metadata();
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![4, 8, 9, 1],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9, 1],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![4, 8, 9, 1],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9, 1],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
+                integer_variables: vec![-1, 2, 4],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![4, 8, 9, 1],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9, 1],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![4, 8, 9, 1],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9, 1],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![4, 8, 9],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9, 1],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![4, 8, 9, 1],
+                integer_variables: vec![-1, 2, 4],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9, 1],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![4, 8, 9, 1],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 10, 1],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![4, 8, 9, 1],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9, 1],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(11),
+                    Set::with_capacity(2),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![4, 8, 9, 1],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
+        let state = State {
+            signature_variables: SignatureVariables {
+                element_variables: vec![4, 8, 9, 1],
+                set_variables: vec![
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(10),
+                    Set::with_capacity(2),
+                ],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![4, 8, 10, 1],
+                integer_variables: vec![-1, 2, 4, 5],
+                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
+            },
+        };
+        assert!(metadata.check_state(&state).is_err());
     }
 
     #[test]

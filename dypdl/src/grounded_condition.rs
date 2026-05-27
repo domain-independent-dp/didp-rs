@@ -135,6 +135,35 @@ impl GroundedCondition {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state;
+    use crate::table;
+    use crate::table_data;
+    use crate::variable_type;
+    use rustc_hash::FxHashMap;
+
+    fn generate_registry() -> table_registry::TableRegistry {
+        let tables_1d = vec![table::Table1D::new(vec![true, false])];
+        let mut name_to_table_1d = FxHashMap::default();
+        name_to_table_1d.insert(String::from("b1"), 0);
+
+        let tables_2d = vec![table::Table2D::new(vec![
+            vec![false, true],
+            vec![true, false],
+        ])];
+        let mut name_to_table_2d = FxHashMap::default();
+        name_to_table_2d.insert(String::from("b2"), 0);
+
+        table_registry::TableRegistry {
+            bool_tables: table_data::TableData {
+                tables_1d,
+                name_to_table_1d,
+                tables_2d,
+                name_to_table_2d,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
 
     #[test]
     fn from_condition_to_grounded() {
@@ -238,5 +267,124 @@ mod tests {
             SetExpression::Reference(ReferenceExpression::Variable(0)),
         )))));
         assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn from_grounded_to_condition_true() {
+        let condition = Condition::from(GroundedCondition {
+            condition: Condition::Constant(true),
+            elements_in_set_variable: vec![(0, 1), (3, 4)],
+        });
+        let expected = Condition::Constant(true);
+        assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn from_grounded_to_condition_false_multi() {
+        let condition = Condition::from(GroundedCondition {
+            condition: Condition::Constant(false),
+            elements_in_set_variable: vec![(0, 1), (3, 4)],
+        });
+        let expected = Condition::Or(
+            Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+                SetCondition::IsIn(
+                    ElementExpression::Constant(1),
+                    SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ),
+            ))))),
+            Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+                SetCondition::IsIn(
+                    ElementExpression::Constant(4),
+                    SetExpression::Reference(ReferenceExpression::Variable(3)),
+                ),
+            ))))),
+        );
+        assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn from_grounded_to_condition() {
+        let condition = Condition::from(GroundedCondition {
+            condition: Condition::Set(Box::new(SetCondition::IsIn(
+                ElementExpression::Variable(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            ))),
+            elements_in_set_variable: vec![(0, 1), (3, 4)],
+        });
+        let expected = Condition::Or(
+            Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+                SetCondition::IsIn(
+                    ElementExpression::Constant(1),
+                    SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ),
+            ))))),
+            Box::new(Condition::Or(
+                Box::new(Condition::Not(Box::new(Condition::Set(Box::new(
+                    SetCondition::IsIn(
+                        ElementExpression::Constant(4),
+                        SetExpression::Reference(ReferenceExpression::Variable(3)),
+                    ),
+                ))))),
+                Box::new(Condition::Set(Box::new(SetCondition::IsIn(
+                    ElementExpression::Variable(0),
+                    SetExpression::Reference(ReferenceExpression::Variable(0)),
+                )))),
+            )),
+        );
+        assert_eq!(condition, expected);
+    }
+
+    #[test]
+    fn is_satisfied_condition() {
+        let registry = generate_registry();
+        let state = state::State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+
+        let condition = GroundedCondition {
+            condition: Condition::Table(Box::new(TableExpression::Table1D(
+                0,
+                ElementExpression::Constant(0),
+            ))),
+            ..Default::default()
+        };
+        assert!(condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
+
+        let condition = GroundedCondition {
+            condition: Condition::Table(Box::new(TableExpression::Table1D(
+                0,
+                ElementExpression::Constant(1),
+            ))),
+            ..Default::default()
+        };
+        assert!(!condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
+    }
+
+    #[test]
+    fn is_satisfied_set_parameter() {
+        let registry = table_registry::TableRegistry::default();
+        let mut s0 = variable_type::Set::with_capacity(2);
+        s0.insert(0);
+        let state = state::State {
+            signature_variables: state::SignatureVariables {
+                set_variables: vec![s0],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+
+        let condition = GroundedCondition {
+            condition: Condition::Constant(false),
+            elements_in_set_variable: vec![(0, 0)],
+        };
+        assert!(!condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
+
+        let condition = GroundedCondition {
+            condition: Condition::Constant(false),
+            elements_in_set_variable: vec![(0, 1)],
+        };
+        assert!(condition.is_satisfied(&state, &mut function_cache, &state_functions, &registry));
     }
 }
