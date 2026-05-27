@@ -278,6 +278,10 @@ fn parse_continuous_atom(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dypdl::expression::{
+        ArgumentExpression, ElementExpression, NumericTableExpression, ReduceOperator,
+        ReferenceExpression, SetExpression,
+    };
     use dypdl::expression::*;
     use dypdl::*;
 
@@ -586,6 +590,38 @@ mod tests {
     }
 
     #[test]
+    fn parse_continuous_table_ok() {
+        let metadata = generate_metadata();
+        let functions = StateFunctions::default();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "sum", "cf4", "0", "e0", "s0", "0", ")", "c0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ContinuousExpression::Table(Box::new(NumericTableExpression::TableReduce(
+                ReduceOperator::Sum,
+                0,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ]
+            )))
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
+
+    #[test]
     fn parse_parameterized_continuous_state_function_ok() {
         let metadata = StateMetadata::default();
         let registry = TableRegistry::default();
@@ -650,7 +686,7 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", "cf4", "0.0", "e0", "s0", "v0", "c0", ")", "c0", ")"]
+        let tokens: Vec<String> = ["(", "cf4", "0.0", "e0", "s0", "0", "c0", ")", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();

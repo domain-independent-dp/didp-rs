@@ -264,6 +264,71 @@ mod tests {
     }
 
     #[test]
+    fn eval_args() {
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![{
+                    let mut set = Set::with_capacity(4);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let args = vec![
+            ArgumentExpression::Element(ElementExpression::Constant(8)),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(8);
+                set.insert(4);
+                set.insert(5);
+                set
+            }))),
+            ArgumentExpression::Set(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            ))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(8);
+                set.insert(6);
+                set.insert(7);
+                set
+            }))),
+        ];
+        assert_eq!(
+            ArgumentExpression::eval_args(
+                args.iter(),
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            vec![
+                vec![8, 0, 4, 2, 6],
+                vec![8, 0, 4, 2, 7],
+                vec![8, 0, 4, 3, 6],
+                vec![8, 0, 4, 3, 7],
+                vec![8, 0, 5, 2, 6],
+                vec![8, 0, 5, 2, 7],
+                vec![8, 0, 5, 3, 6],
+                vec![8, 0, 5, 3, 7],
+                vec![8, 1, 4, 2, 6],
+                vec![8, 1, 4, 2, 7],
+                vec![8, 1, 4, 3, 6],
+                vec![8, 1, 4, 3, 7],
+                vec![8, 1, 5, 2, 6],
+                vec![8, 1, 5, 2, 7],
+                vec![8, 1, 5, 3, 6],
+                vec![8, 1, 5, 3, 7],
+            ]
+        );
+    }
+
+    #[test]
     fn eval_args_with_state_function() {
         let mut metadata = StateMetadata::default();
         let ob = metadata.add_object_type("something", 10);
@@ -330,5 +395,117 @@ mod tests {
                 vec![8, 1, 5, 3, 7],
             ]
         );
+    }
+
+    #[test]
+    fn eval_empty_args() {
+        let state = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![{
+                    let mut set = Set::with_capacity(4);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = TableRegistry::default();
+        let args = vec![
+            ArgumentExpression::Element(ElementExpression::Constant(8)),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            ArgumentExpression::Set(SetExpression::Complement(Box::new(
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+            ))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(
+                Set::with_capacity(3),
+            ))),
+        ];
+        assert_eq!(
+            ArgumentExpression::eval_args(
+                args.iter(),
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry
+            ),
+            Vec::<Vec<Element>>::new()
+        );
+    }
+
+    #[test]
+    fn simplify_args_some() {
+        let args = vec![
+            ArgumentExpression::Element(ElementExpression::Constant(8)),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(4);
+                set.insert(0);
+                set.insert(1);
+                set
+            }))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(6);
+                set.insert(4);
+                set.insert(5);
+                set
+            }))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(4);
+                set.insert(2);
+                set.insert(3);
+                set
+            }))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(8);
+                set.insert(6);
+                set.insert(7);
+                set
+            }))),
+        ];
+        assert_eq!(
+            ArgumentExpression::simplify_args(args.iter()),
+            Some(vec![
+                vec![8, 0, 4, 2, 6],
+                vec![8, 0, 4, 2, 7],
+                vec![8, 0, 4, 3, 6],
+                vec![8, 0, 4, 3, 7],
+                vec![8, 0, 5, 2, 6],
+                vec![8, 0, 5, 2, 7],
+                vec![8, 0, 5, 3, 6],
+                vec![8, 0, 5, 3, 7],
+                vec![8, 1, 4, 2, 6],
+                vec![8, 1, 4, 2, 7],
+                vec![8, 1, 4, 3, 6],
+                vec![8, 1, 4, 3, 7],
+                vec![8, 1, 5, 2, 6],
+                vec![8, 1, 5, 2, 7],
+                vec![8, 1, 5, 3, 6],
+                vec![8, 1, 5, 3, 7],
+            ])
+        );
+    }
+
+    #[test]
+    fn simplify_args_none() {
+        let args = vec![
+            ArgumentExpression::Element(ElementExpression::Constant(8)),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(4);
+                set.insert(0);
+                set.insert(1);
+                set
+            }))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(4);
+                set.insert(2);
+                set.insert(3);
+                set
+            }))),
+            ArgumentExpression::Element(ElementExpression::Variable(0)),
+        ];
+        assert_eq!(ArgumentExpression::simplify_args(args.iter()), None);
     }
 }

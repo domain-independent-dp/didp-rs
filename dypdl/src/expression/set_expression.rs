@@ -3131,6 +3131,186 @@ mod tests {
         );
     }
 
+    fn generate_set_reduce_registry() -> TableRegistry {
+        TableRegistry {
+            set_tables: TableData {
+                tables: vec![Table::new(
+                    {
+                        let mut map = FxHashMap::default();
+                        map.insert(vec![0, 0, 0, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        });
+                        map.insert(vec![0, 0, 0, 1], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(2);
+                            set
+                        });
+                        map.insert(vec![0, 0, 1, 0], {
+                            let mut set = Set::with_capacity(5);
+                            set.insert(0);
+                            set.insert(3);
+                            set
+                        });
+                        map
+                    },
+                    {
+                        let mut set = Set::with_capacity(5);
+                        set.insert(0);
+                        set.insert(4);
+                        set
+                    },
+                )],
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn set_reduce_eval() {
+        let state = State::default();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = generate_set_reduce_registry();
+        let expression = SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            5,
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+            ],
+        ));
+        assert_eq!(
+            expression.eval(&state, &mut function_cache, &state_functions, &registry),
+            {
+                let mut set = Set::with_capacity(5);
+                set.insert(0);
+                set.insert(1);
+                set.insert(2);
+                set.insert(3);
+                set.insert(4);
+                set
+            }
+        );
+    }
+
+    #[test]
+    fn set_reduce_constant_simplify() {
+        let registry = generate_set_reduce_registry();
+        let expression = SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            5,
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+            ],
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(5);
+                set.insert(0);
+                set.insert(1);
+                set.insert(2);
+                set.insert(3);
+                set.insert(4);
+                set
+            }))
+        );
+    }
+
+    #[test]
+    fn set_reduce_simplify() {
+        let registry = generate_set_reduce_registry();
+        let expression = SetExpression::Reduce(SetReduceExpression::Table(
+            SetReduceOperator::Union,
+            5,
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::If(
+                    Box::new(Condition::Constant(true)),
+                    Box::new(ElementExpression::Variable(0)),
+                    Box::new(ElementExpression::Constant(0)),
+                )),
+                ArgumentExpression::Element(ElementExpression::If(
+                    Box::new(Condition::Constant(true)),
+                    Box::new(ElementExpression::Variable(0)),
+                    Box::new(ElementExpression::Constant(0)),
+                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+            ],
+        ));
+        assert_eq!(
+            expression.simplify(&registry),
+            SetExpression::Reduce(SetReduceExpression::Table(
+                SetReduceOperator::Union,
+                5,
+                0,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant({
+                            let mut set = Set::with_capacity(2);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        })
+                    )),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant({
+                            let mut set = Set::with_capacity(2);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        })
+                    )),
+                ],
+            ))
+        );
+    }
+
     #[test]
     fn set_reference_simplify() {
         let registry = generate_registry();

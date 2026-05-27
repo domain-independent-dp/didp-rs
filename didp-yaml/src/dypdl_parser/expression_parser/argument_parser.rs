@@ -51,6 +51,7 @@ pub fn parse_multiple_arguments<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dypdl::expression::*;
     use dypdl::variable_type::*;
     use dypdl::TableData;
 
@@ -199,18 +200,79 @@ mod tests {
     }
 
     #[test]
+    fn parse_argument_ok() {
+        let metadata = generate_metadata();
+        let functions = StateFunctions::default();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["e0", "0", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_argument(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ArgumentExpression::Element(ElementExpression::Variable(0))
+        );
+        assert_eq!(rest, &tokens[1..]);
+
+        let tokens: Vec<String> = ["s0", "0", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_argument(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0)))
+        );
+        assert_eq!(rest, &tokens[1..]);
+    }
+
+    #[test]
     fn parse_argument_err() {
         let metadata = generate_metadata();
         let functions = StateFunctions::default();
         let parameters = generate_parameters();
         let registry = generate_registry();
 
-        let tokens: Vec<String> = ["n0", "v3", "i0", ")"]
+        let tokens: Vec<String> = ["n0", "0", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_argument(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_multiple_arguments_ok() {
+        let metadata = generate_metadata();
+        let functions = StateFunctions::default();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["s2", "1", "e0", "0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result =
+            parse_multiple_arguments(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_ok());
+        let (result, rest) = result.unwrap();
+        assert_eq!(
+            result,
+            vec![
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(2))),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Element(ElementExpression::Variable(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ]
+        );
+        assert_eq!(rest, &tokens[5..]);
     }
 
     #[test]
@@ -220,7 +282,7 @@ mod tests {
         let parameters = generate_parameters();
         let registry = generate_registry();
 
-        let tokens: Vec<String> = ["s2", "1", "e0", "v3", "i0", ")"]
+        let tokens: Vec<String> = ["s2", "1", "e0", "0", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -236,7 +298,7 @@ mod tests {
         let parameters = generate_parameters();
         let registry = generate_registry();
 
-        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", "i0"]
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "0", "i0"]
             .iter()
             .map(|x| x.to_string())
             .collect();

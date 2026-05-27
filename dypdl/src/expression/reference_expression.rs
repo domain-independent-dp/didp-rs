@@ -63,3 +63,169 @@ impl ReferenceExpression<Set> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::super::element_expression::*;
+    use super::*;
+    use crate::state::*;
+    use crate::table::*;
+    use crate::table_data::TableData;
+    use rustc_hash::FxHashMap;
+
+    fn generate_registry() -> TableRegistry {
+        let mut name_to_table_1d = FxHashMap::default();
+        name_to_table_1d.insert(String::from("t1"), 0);
+        TableRegistry {
+            set_tables: TableData {
+                tables_1d: vec![Table1D::new(vec![{
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }])],
+                name_to_table_1d,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    fn generate_state() -> State {
+        State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![{
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(2);
+                    set
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn constant_eval() {
+        let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = generate_registry();
+        let expression = ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(3);
+            set.insert(0);
+            set
+        });
+        let mut expected = Set::with_capacity(3);
+        expected.insert(0);
+        assert_eq!(
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+            ),
+            expected
+        );
+    }
+
+    #[test]
+    fn variable_eval() {
+        let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = generate_registry();
+        let expression = ReferenceExpression::Variable(0);
+        let mut expected = Set::with_capacity(3);
+        expected.insert(0);
+        expected.insert(2);
+        assert_eq!(
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+            ),
+            expected
+        );
+    }
+
+    #[test]
+    fn table_eval() {
+        let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let registry = generate_registry();
+        let expression =
+            ReferenceExpression::Table(TableExpression::Table1D(0, ElementExpression::Constant(0)));
+        let mut expected = Set::with_capacity(3);
+        expected.insert(0);
+        expected.insert(1);
+        assert_eq!(
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+            ),
+            expected
+        );
+    }
+
+    #[test]
+    fn constant_simplify() {
+        let registry = generate_registry();
+        let expression = ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(3);
+            set.insert(0);
+            set
+        });
+        assert_eq!(
+            expression.simplify(&registry, &registry.set_tables),
+            expression
+        );
+    }
+
+    #[test]
+    fn variable_simplify() {
+        let registry = generate_registry();
+        let expression = ReferenceExpression::Variable(0);
+        assert_eq!(
+            expression.simplify(&registry, &registry.set_tables),
+            expression
+        );
+    }
+
+    #[test]
+    fn table_simplify_constant() {
+        let registry = generate_registry();
+        let expression = ReferenceExpression::<Set>::Table(TableExpression::Table1D(
+            0,
+            ElementExpression::Constant(0),
+        ));
+        let expected = ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(3);
+            set.insert(0);
+            set.insert(1);
+            set
+        });
+        assert_eq!(
+            expression.simplify(&registry, &registry.set_tables),
+            expected
+        );
+    }
+
+    #[test]
+    fn table_simplify_variable() {
+        let registry = generate_registry();
+        let expression =
+            ReferenceExpression::Table(TableExpression::Table1D(0, ElementExpression::Variable(0)));
+        let expected =
+            ReferenceExpression::Table(TableExpression::Table1D(0, ElementExpression::Variable(0)));
+        assert_eq!(
+            expression.simplify(&registry, &registry.set_tables),
+            expected
+        );
+    }
+}

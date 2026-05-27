@@ -4,7 +4,9 @@ use super::element_parser;
 use super::numeric_table_parser;
 use super::util;
 use super::util::ParseErr;
-use dypdl::expression::{BinaryOperator, CastOperator, IntegerExpression, UnaryOperator};
+use dypdl::expression::{
+    BinaryOperator, CastOperator, IntegerExpression, UnaryOperator,
+};
 use dypdl::variable_type::{Element, Integer};
 use dypdl::{StateFunctions, StateMetadata, TableRegistry};
 use rustc_hash::FxHashMap;
@@ -221,6 +223,10 @@ fn parse_integer_atom(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dypdl::expression::{
+        ArgumentExpression, ElementExpression, NumericTableExpression, ReduceOperator,
+        ReferenceExpression, SetExpression,
+    };
     use dypdl::expression::*;
     use dypdl::*;
 
@@ -565,20 +571,52 @@ mod tests {
     }
 
     #[test]
+    fn parse_integer_table_ok() {
+        let metadata = generate_metadata();
+        let functions = StateFunctions::default();
+        let registry = generate_registry();
+        let parameters = generate_parameters();
+
+        let tokens: Vec<String> = ["(", "sum", "f4", "0", "e0", "s0", "0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
+        assert!(result.is_ok());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            IntegerExpression::Table(Box::new(NumericTableExpression::TableReduce(
+                ReduceOperator::Sum,
+                0,
+                vec![
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(0)
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ]
+            )))
+        );
+        assert_eq!(rest, &tokens[8..]);
+    }
+
+    #[test]
     fn parse_integer_table_err() {
         let metadata = generate_metadata();
         let functions = StateFunctions::default();
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", "sum", "cf4", "0", "e0", "s0", "v0", ")", "c0", ")"]
+        let tokens: Vec<String> = ["(", "sum", "cf4", "0", "e0", "s0", "0", ")", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", "f4", "0", "e0", "s0", "v0", "i0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["(", "f4", "0", "e0", "s0", "0", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();

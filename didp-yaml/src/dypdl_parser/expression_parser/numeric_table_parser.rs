@@ -167,7 +167,7 @@ fn parse_reduce<'a, T: Numeric>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dypdl::expression::*;
+    use dypdl::expression::{ReferenceExpression, SetExpression};
     use dypdl::*;
 
     fn generate_metadata() -> StateMetadata {
@@ -361,6 +361,60 @@ mod tests {
             &registry.integer_tables,
         );
         assert!(result.is_err());
+    }
+
+    fn assert_table_1d_reduce_ok(name: &str, op: ReduceOperator) {
+        let metadata = generate_metadata();
+        let functions = StateFunctions::default();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f1", "s0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            name,
+            &tokens,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table1DReduce(
+                op,
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[3..]);
+    }
+
+    #[test]
+    fn parse_table_1d_sum_ok() {
+        assert_table_1d_reduce_ok("sum", ReduceOperator::Sum);
+    }
+
+    #[test]
+    fn parse_table_1d_product_ok() {
+        assert_table_1d_reduce_ok("product", ReduceOperator::Product);
+    }
+
+    #[test]
+    fn parse_table_1d_max_ok() {
+        assert_table_1d_reduce_ok("max", ReduceOperator::Max);
+    }
+
+    #[test]
+    fn parse_table_1d_min_ok() {
+        assert_table_1d_reduce_ok("min", ReduceOperator::Min);
     }
 
     #[test]
@@ -631,6 +685,117 @@ mod tests {
             &registry.integer_tables,
         );
         assert!(result.is_err());
+    }
+
+    fn assert_table_2d_reduce_ok(name: &str, op: ReduceOperator) {
+        let metadata = generate_metadata();
+        let functions = StateFunctions::default();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f2", "s0", "s1", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            name,
+            &tokens,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduce(
+                op.clone(),
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                SetExpression::Reference(ReferenceExpression::Variable(1))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "s0", "e0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            name,
+            &tokens,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduceX(
+                op.clone(),
+                0,
+                SetExpression::Reference(ReferenceExpression::Variable(0)),
+                ElementExpression::Variable(0)
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+
+        let tokens: Vec<String> = ["f2", "0", "s0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            name,
+            &tokens,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::Table2DReduceY(
+                op,
+                0,
+                ElementExpression::Constant(0),
+                SetExpression::Reference(ReferenceExpression::Variable(0))
+            )
+        );
+        assert_eq!(rest, &tokens[4..]);
+    }
+
+    #[test]
+    fn parse_table_2d_sum_ok() {
+        assert_table_2d_reduce_ok("sum", ReduceOperator::Sum);
+    }
+
+    #[test]
+    fn parse_table_2d_product_ok() {
+        assert_table_2d_reduce_ok("product", ReduceOperator::Product);
+    }
+
+    #[test]
+    fn parse_table_2d_max_ok() {
+        assert_table_2d_reduce_ok("max", ReduceOperator::Max);
+    }
+
+    #[test]
+    fn parse_table_2d_min_ok() {
+        assert_table_2d_reduce_ok("min", ReduceOperator::Min);
     }
 
     #[test]
@@ -1203,6 +1368,67 @@ mod tests {
             &registry.integer_tables,
         );
         assert!(result.is_err());
+    }
+
+    fn assert_table_reduce_ok(name: &str, op: ReduceOperator) {
+        let metadata = generate_metadata();
+        let functions = StateFunctions::default();
+        let parameters = generate_parameters();
+        let registry = generate_registry();
+
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "0", ")", "i0", ")"]
+            .iter()
+            .map(|x| x.to_string())
+            .collect();
+        let result = parse_expression(
+            name,
+            &tokens,
+            &metadata,
+            &functions,
+            &registry,
+            &parameters,
+            &registry.integer_tables,
+        );
+        assert!(result.is_ok());
+        let result = result.unwrap();
+        assert!(result.is_some());
+        let (expression, rest) = result.unwrap();
+        assert_eq!(
+            expression,
+            NumericTableExpression::TableReduce(
+                op,
+                0,
+                vec![
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Variable(2)
+                    )),
+                    ArgumentExpression::Element(ElementExpression::Constant(1)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ]
+            )
+        );
+        assert_eq!(rest, &tokens[6..]);
+    }
+
+    #[test]
+    fn parse_table_sum_ok() {
+        assert_table_reduce_ok("sum", ReduceOperator::Sum);
+    }
+
+    #[test]
+    fn parse_table_product_ok() {
+        assert_table_reduce_ok("product", ReduceOperator::Product);
+    }
+
+    #[test]
+    fn parse_table_max_ok() {
+        assert_table_reduce_ok("max", ReduceOperator::Max);
+    }
+
+    #[test]
+    fn parse_table_min_ok() {
+        assert_table_reduce_ok("min", ReduceOperator::Min);
     }
 
     #[test]

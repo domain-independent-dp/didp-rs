@@ -1094,6 +1094,31 @@ mod tests {
     }
 
     #[test]
+    fn table_3d_sum_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let expression = NumericTableExpression::Table3DReduce(
+            ReduceOperator::Sum,
+            0,
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(1))),
+        );
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.integer_tables
+            ),
+            180
+        );
+    }
+
+    #[test]
     fn table_eval() {
         let registry = generate_registry();
         let state = generate_state();
@@ -1174,6 +1199,38 @@ mod tests {
                 &registry.integer_tables
             ),
             400
+        );
+    }
+
+    #[test]
+    fn table_sum_eval() {
+        let registry = generate_registry();
+        let state = generate_state();
+        let state_functions = StateFunctions::default();
+        let mut function_cache = StateFunctionCache::new(&state_functions);
+        let expression = NumericTableExpression::TableReduce(
+            ReduceOperator::Sum,
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Set(SetExpression::Complement(Box::new(
+                    SetExpression::Complement(Box::new(SetExpression::Reference(
+                        ReferenceExpression::Variable(0),
+                    ))),
+                ))),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(1))),
+            ],
+        );
+        assert_eq!(
+            expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+                &registry.integer_tables
+            ),
+            1000
         );
     }
 
@@ -1375,6 +1432,43 @@ mod tests {
     }
 
     #[test]
+    fn table_3d_sum_simplify() {
+        let registry = generate_registry();
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(2);
+        let expression = NumericTableExpression::Table3DReduce(
+            ReduceOperator::Sum,
+            0,
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant(set))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                let mut set = Set::with_capacity(3);
+                set.insert(0);
+                set.insert(1);
+                set
+            }))),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(180)
+        );
+
+        let expression = NumericTableExpression::Table3DReduce(
+            ReduceOperator::Sum,
+            0,
+            ArgumentExpression::Element(ElementExpression::Constant(0)),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
+            ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(1))),
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
+    }
+
+    #[test]
     fn table_simplify() {
         let registry = generate_registry();
 
@@ -1399,6 +1493,53 @@ mod tests {
                 ElementExpression::Constant(1),
                 ElementExpression::Constant(0),
                 ElementExpression::Variable(0),
+            ],
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            expression
+        );
+    }
+
+    #[test]
+    fn table_sum_simplify() {
+        let registry = generate_registry();
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(2);
+        let expression = NumericTableExpression::TableReduce(
+            ReduceOperator::Sum,
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Set(SetExpression::Complement(Box::new(
+                    SetExpression::Complement(Box::new(SetExpression::Reference(
+                        ReferenceExpression::Constant(set),
+                    ))),
+                ))),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
+            ],
+        );
+        assert_eq!(
+            expression.simplify(&registry, &registry.integer_tables),
+            NumericTableExpression::Constant(1000)
+        );
+
+        let expression = NumericTableExpression::TableReduce(
+            ReduceOperator::Sum,
+            0,
+            vec![
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Element(ElementExpression::Constant(1)),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0))),
             ],
         );
         assert_eq!(
