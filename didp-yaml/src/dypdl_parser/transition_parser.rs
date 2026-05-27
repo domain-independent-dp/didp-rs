@@ -234,6 +234,7 @@ mod tests {
     use dypdl::expression::*;
     use dypdl::prelude::*;
     use dypdl::CostExpression;
+    use dypdl::GroundedCondition;
 
     fn create_metadata() -> StateMetadata {
         let mut metadata = StateMetadata::default();
@@ -600,5 +601,530 @@ direction: backward
             ..Default::default()
         }];
         assert_eq!(transitions.unwrap(), (expected, false, true));
+    }
+
+    #[test]
+    fn load_transition_multiple_effects_from_yaml_ok() {
+        let metadata = create_metadata();
+        let functions = StateFunctions::default();
+        let registry = create_registry();
+        let cost_type = CostType::Integer;
+
+        let transition = r"
+name: transition
+parameters:
+        - name: e
+          object: s0
+preconditions:
+        - (>= (f2 e0 e) 10)
+        - (!= e 2)
+effect:
+        e0: e
+        s0: (add e s0)
+        i0: '1'
+        ir0: '2'
+cost: (+ cost (f1 e))
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        assert!(transitions.is_ok());
+        let expected = vec![
+            Transition {
+                name: String::from("transition"),
+                parameter_names: vec![String::from("e")],
+                parameter_values: vec![0],
+                elements_in_set_variable: vec![(0, 0)],
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Ge,
+                        Box::new(IntegerExpression::Table(Box::new(
+                            NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(0),
+                            ),
+                        ))),
+                        Box::new(IntegerExpression::Constant(10)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![(
+                        0,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(0),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                        ),
+                    )],
+                    element_effects: vec![(0, ElementExpression::Constant(0))],
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    integer_resource_effects: vec![(0, IntegerExpression::Constant(2))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(IntegerExpression::Cost),
+                    Box::new(IntegerExpression::Constant(10)),
+                )),
+                ..Default::default()
+            },
+            Transition {
+                name: String::from("transition"),
+                parameter_names: vec![String::from("e")],
+                parameter_values: vec![1],
+                elements_in_set_variable: vec![(0, 1)],
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Ge,
+                        Box::new(IntegerExpression::Table(Box::new(
+                            NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(1),
+                            ),
+                        ))),
+                        Box::new(IntegerExpression::Constant(10)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![(
+                        0,
+                        SetExpression::SetElementOperation(
+                            SetElementOperator::Add,
+                            ElementExpression::Constant(1),
+                            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                        ),
+                    )],
+                    element_effects: vec![(0, ElementExpression::Constant(1))],
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    integer_resource_effects: vec![(0, IntegerExpression::Constant(2))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(IntegerExpression::Cost),
+                    Box::new(IntegerExpression::Constant(20)),
+                )),
+                ..Default::default()
+            },
+        ];
+        assert_eq!(transitions.unwrap(), (expected, false, false));
+    }
+
+    #[test]
+    fn load_transition_multiple_set_effects_from_yaml_ok() {
+        let metadata = create_metadata();
+        let functions = StateFunctions::default();
+        let registry = create_registry();
+        let cost_type = CostType::Integer;
+
+        let transition = r"
+name: transition
+parameters:
+        - name: e
+          object: s0
+preconditions:
+        - (>= (f2 e0 e) 10)
+        - (!= e 2)
+effect:
+        e0: e
+        s1: (add e s0)
+        s3: (remove e s1)
+        s0: (add e s3)
+        s2: (add e s2)
+        i0: '1'
+        ir0: '2'
+cost: (+ cost (f1 e))
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        assert!(transitions.is_ok());
+        let expected = vec![
+            Transition {
+                name: String::from("transition"),
+                parameter_names: vec![String::from("e")],
+                parameter_values: vec![0],
+                elements_in_set_variable: vec![(0, 0)],
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Ge,
+                        Box::new(IntegerExpression::Table(Box::new(
+                            NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(0),
+                            ),
+                        ))),
+                        Box::new(IntegerExpression::Constant(10)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![
+                        (
+                            0,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(0),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    3,
+                                ))),
+                            ),
+                        ),
+                        (
+                            1,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(0),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    0,
+                                ))),
+                            ),
+                        ),
+                        (
+                            2,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(0),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    2,
+                                ))),
+                            ),
+                        ),
+                        (
+                            3,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Remove,
+                                ElementExpression::Constant(0),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    1,
+                                ))),
+                            ),
+                        ),
+                    ],
+                    element_effects: vec![(0, ElementExpression::Constant(0))],
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    integer_resource_effects: vec![(0, IntegerExpression::Constant(2))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(IntegerExpression::Cost),
+                    Box::new(IntegerExpression::Constant(10)),
+                )),
+                ..Default::default()
+            },
+            Transition {
+                name: String::from("transition"),
+                parameter_names: vec![String::from("e")],
+                parameter_values: vec![1],
+                elements_in_set_variable: vec![(0, 1)],
+                preconditions: vec![GroundedCondition {
+                    condition: Condition::ComparisonI(
+                        ComparisonOperator::Ge,
+                        Box::new(IntegerExpression::Table(Box::new(
+                            NumericTableExpression::Table2D(
+                                0,
+                                ElementExpression::Variable(0),
+                                ElementExpression::Constant(1),
+                            ),
+                        ))),
+                        Box::new(IntegerExpression::Constant(10)),
+                    ),
+                    ..Default::default()
+                }],
+                effect: Effect {
+                    set_effects: vec![
+                        (
+                            0,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(1),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    3,
+                                ))),
+                            ),
+                        ),
+                        (
+                            1,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(1),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    0,
+                                ))),
+                            ),
+                        ),
+                        (
+                            2,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Add,
+                                ElementExpression::Constant(1),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    2,
+                                ))),
+                            ),
+                        ),
+                        (
+                            3,
+                            SetExpression::SetElementOperation(
+                                SetElementOperator::Remove,
+                                ElementExpression::Constant(1),
+                                Box::new(SetExpression::Reference(ReferenceExpression::Variable(
+                                    1,
+                                ))),
+                            ),
+                        ),
+                    ],
+                    element_effects: vec![(0, ElementExpression::Constant(1))],
+                    integer_effects: vec![(0, IntegerExpression::Constant(1))],
+                    integer_resource_effects: vec![(0, IntegerExpression::Constant(2))],
+                    ..Default::default()
+                },
+                cost: CostExpression::Integer(IntegerExpression::BinaryOperation(
+                    BinaryOperator::Add,
+                    Box::new(IntegerExpression::Cost),
+                    Box::new(IntegerExpression::Constant(20)),
+                )),
+                ..Default::default()
+            },
+        ];
+        assert_eq!(transitions.unwrap(), (expected, false, false));
+    }
+
+    #[test]
+    fn load_transitions_from_yaml_err() {
+        let metadata = create_metadata();
+        let functions = StateFunctions::default();
+        let registry = create_registry();
+        let cost_type = CostType::Integer;
+
+        let transition = r"
+parameters:
+        - name: e
+          object: s0
+preconditions:
+        - (>= (f2 e0 e) 10)
+effect:
+        e0: e
+        s0: (add e s0)
+        i0: '1'
+        ir0: '2'
+cost: (+ cost (f1 e))
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        assert!(transitions.is_err());
+
+        let transition = r"
+name: transition
+preconditions:
+        - (>= (f2 e0 e) 10)
+effect:
+        e0: e
+        s0: (add e s0)
+        i0: '1'
+        ir0: '2'
+cost: (+ cost (f1 e))
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        assert!(transitions.is_err());
+
+        let transition = r"
+name: transition
+parameters:
+        - name: e
+          object: s0
+preconditions:
+        - (>= (f2 e0 e) 10)
+effect:
+        e0: e
+        s0: (add e s0)
+        i0: '1'
+        ir0: '2'
+        ir5: '5'
+cost: (+ cost (f1 e))
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        assert!(transitions.is_err());
+
+        let transition = r"
+name: transition
+effect: {e0: '0'}
+cost: '0'
+forced: fasle
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        assert!(transitions.is_err());
+
+        let transition = r"
+name: transition
+effect: {e0: '0'}
+cost: '0'
+direction: both
+";
+        let transition = yaml_rust::YamlLoader::load_from_str(transition);
+        assert!(transition.is_ok());
+        let transition = transition.unwrap();
+        assert_eq!(transition.len(), 1);
+        let transition = &transition[0];
+        let transitions =
+            load_transitions_from_yaml(transition, &metadata, &functions, &registry, &cost_type);
+        assert!(transitions.is_err());
+    }
+
+    #[test]
+    fn load_effect_from_yaml_ok() {
+        let metadata = create_metadata();
+        let functions = StateFunctions::default();
+        let registry = create_registry();
+
+        let mut parameters = FxHashMap::default();
+        parameters.insert(String::from("e"), 0);
+
+        let effect = r"
+ e0: e
+ s0: (add e s0)
+ i0: 1
+ er0: 1
+ ir0: '2'
+ c0: 1.0
+ cr0: '2.0'
+";
+        let effect = yaml_rust::YamlLoader::load_from_str(effect);
+        assert!(effect.is_ok());
+        let effect = effect.unwrap();
+        assert_eq!(effect.len(), 1);
+        let effect = &effect[0];
+        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
+        assert!(effect.is_ok());
+        let expected = Effect {
+            set_effects: vec![(
+                0,
+                SetExpression::SetElementOperation(
+                    SetElementOperator::Add,
+                    ElementExpression::Constant(0),
+                    Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+                ),
+            )],
+            element_effects: vec![(0, ElementExpression::Constant(0))],
+            integer_effects: vec![(0, IntegerExpression::Constant(1))],
+            element_resource_effects: vec![(0, ElementExpression::Constant(1))],
+            integer_resource_effects: vec![(0, IntegerExpression::Constant(2))],
+            continuous_effects: vec![(0, ContinuousExpression::Constant(1.0))],
+            continuous_resource_effects: vec![(0, ContinuousExpression::Constant(2.0))],
+        };
+        assert_eq!(effect.unwrap(), expected);
+    }
+
+    #[test]
+    fn load_effect_from_yaml_err() {
+        let metadata = create_metadata();
+        let functions = StateFunctions::default();
+        let registry = create_registry();
+
+        let mut parameters = FxHashMap::default();
+        parameters.insert(String::from("e"), 0);
+
+        let effect = r"
+ e0: f
+ s0: (add e s0)
+ i0: '1'
+ er0: -1
+ ir0: '2'
+ c0: '1.0'
+ cr0: '2.0'
+";
+        let effect = yaml_rust::YamlLoader::load_from_str(effect);
+        assert!(effect.is_ok());
+        let effect = effect.unwrap();
+        assert_eq!(effect.len(), 1);
+        let effect = &effect[0];
+        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
+        assert!(effect.is_err());
+
+        let effect = r"
+ e0: f
+ s0: (add e s0)
+ i0: '1'
+ ir0: '2'
+ c0: '1.0'
+ cr0: '2.0'
+";
+        let effect = yaml_rust::YamlLoader::load_from_str(effect);
+        assert!(effect.is_ok());
+        let effect = effect.unwrap();
+        assert_eq!(effect.len(), 1);
+        let effect = &effect[0];
+        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
+        assert!(effect.is_err());
+
+        let effect = r"
+ e0: e
+ e4: e
+ s0: (add e s0)
+ i0: '1'
+ ir0: '2'
+ c0: '1.0'
+ cr0: '2.0'
+";
+        let effect = yaml_rust::YamlLoader::load_from_str(effect);
+        assert!(effect.is_ok());
+        let effect = effect.unwrap();
+        assert_eq!(effect.len(), 1);
+        let effect = &effect[0];
+        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
+        assert!(effect.is_err());
+
+        let effect = r"
+ - e0: e
+ - s0: (add e s0)
+ - i0: '1'
+ - ir0: '2'
+ - c0: '1.0'
+ - cr0: '2.0'
+";
+        let effect = yaml_rust::YamlLoader::load_from_str(effect);
+        assert!(effect.is_ok());
+        let effect = effect.unwrap();
+        assert_eq!(effect.len(), 1);
+        let effect = &effect[0];
+        let effect = load_effect_from_yaml(effect, &metadata, &functions, &registry, &parameters);
+        assert!(effect.is_err());
     }
 }

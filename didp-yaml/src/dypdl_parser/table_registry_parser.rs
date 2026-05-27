@@ -778,9 +778,371 @@ fn load_set_dictionary_from_yaml(
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
-    use dypdl::{Table1DHandle, TableHandle};
+    use dypdl::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
     use yaml_rust::yaml::{Array, Hash};
     extern crate lazy_static;
+
+    #[test]
+    fn load_table_from_yaml_ok() {
+        let mut metadata = StateMetadata::default();
+        let ob = metadata.add_object_type(String::from("object"), 3);
+        assert!(ob.is_ok());
+        let ob = ob.unwrap();
+        let result = metadata.add_element_variable(String::from("e0"), ob);
+        assert!(result.is_ok());
+
+        let mut expected = TableRegistry::default();
+
+        expected
+            .integer_tables
+            .name_to_constant
+            .insert(String::from("i0"), 0);
+        let result = expected.add_table_1d(String::from("i1"), vec![10, 20, 30]);
+        assert!(result.is_ok());
+        let result = expected.add_table_2d(
+            String::from("i2"),
+            vec![vec![10, 20, 30], vec![10, 10, 10], vec![10, 10, 10]],
+        );
+        assert!(result.is_ok());
+        let result = expected.add_table_3d(
+            String::from("i3"),
+            vec![
+                vec![vec![10, 20, 30], vec![0, 0, 0], vec![0, 0, 0]],
+                vec![vec![0, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+                vec![vec![0, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+            ],
+        );
+        assert!(result.is_ok());
+        let mut map = FxHashMap::default();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, 100);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, 200);
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, 300);
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, 400);
+        let result = expected.add_table(String::from("i4"), map, 0);
+        assert!(result.is_ok());
+
+        expected
+            .continuous_tables
+            .name_to_constant
+            .insert(String::from("c0"), 0.0);
+        let result = expected.add_table_1d(String::from("c1"), vec![10.0, 20.0, 30.0]);
+        assert!(result.is_ok());
+        let result = expected.add_table_2d(
+            String::from("c2"),
+            vec![
+                vec![10.0, 20.0, 30.0],
+                vec![10.0, 10.0, 10.0],
+                vec![10.0, 10.0, 10.0],
+            ],
+        );
+        assert!(result.is_ok());
+        let result = expected.add_table_3d(
+            String::from("c3"),
+            vec![
+                vec![
+                    vec![10.0, 20.0, 30.0],
+                    vec![0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0],
+                ],
+                vec![
+                    vec![0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0],
+                ],
+                vec![
+                    vec![0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.0],
+                ],
+            ],
+        );
+        assert!(result.is_ok());
+        let mut map = FxHashMap::default();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, 100.0);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, 200.0);
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, 300.0);
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, 400.0);
+        let result = expected.add_table(String::from("c4"), map, 0.0);
+        assert!(result.is_ok());
+
+        expected
+            .bool_tables
+            .name_to_constant
+            .insert(String::from("b0"), true);
+        let result = expected.add_table_1d(String::from("b1"), vec![true, false, false]);
+        assert!(result.is_ok());
+        let result = expected.add_table_2d(
+            String::from("b2"),
+            vec![
+                vec![true, false, false],
+                vec![false, false, false],
+                vec![false, false, false],
+            ],
+        );
+        assert!(result.is_ok());
+        let result = expected.add_table_3d(
+            String::from("b3"),
+            vec![
+                vec![
+                    vec![true, false, false],
+                    vec![false, false, false],
+                    vec![false, false, false],
+                ],
+                vec![
+                    vec![true, false, false],
+                    vec![false, false, false],
+                    vec![false, false, false],
+                ],
+                vec![
+                    vec![true, false, false],
+                    vec![false, false, false],
+                    vec![false, false, false],
+                ],
+            ],
+        );
+        assert!(result.is_ok());
+        let mut map = FxHashMap::default();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, true);
+        let key = vec![0, 1, 0, 1];
+        map.insert(key, false);
+        let key = vec![0, 1, 2, 0];
+        map.insert(key, false);
+        let key = vec![0, 1, 2, 1];
+        map.insert(key, false);
+        let result = expected.add_table(String::from("b4"), map, false);
+        assert!(result.is_ok());
+
+        let mut set = Set::with_capacity(3);
+        set.insert(0);
+        set.insert(2);
+        let default = Set::with_capacity(3);
+        expected
+            .set_tables
+            .name_to_constant
+            .insert(String::from("s0"), set.clone());
+        let result = expected.add_table_1d(
+            String::from("s1"),
+            vec![set.clone(), default.clone(), default.clone()],
+        );
+        assert!(result.is_ok());
+        let result = expected.add_table_2d(
+            String::from("s2"),
+            vec![
+                vec![set.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+                vec![default.clone(), default.clone(), default.clone()],
+            ],
+        );
+        assert!(result.is_ok());
+        let mut table = vec![vec![vec![default.clone(); 3]; 3]; 3];
+        table[0][0][0] = set.clone();
+        table[1][0][0] = set.clone();
+        table[2][0][0] = set.clone();
+        let result = expected.add_table_3d(String::from("s3"), table);
+        assert!(result.is_ok());
+        let mut map = FxHashMap::default();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, set.clone());
+        let result = expected.add_table(String::from("s4"), map, default);
+        assert!(result.is_ok());
+
+        expected
+            .element_tables
+            .name_to_constant
+            .insert(String::from("t0"), 1);
+        let result: Result<Table1DHandle<Element>, _> =
+            expected.add_table_1d(String::from("t1"), vec![1, 0, 0]);
+        assert!(result.is_ok());
+        let result: Result<Table2DHandle<Element>, _> = expected.add_table_2d(
+            String::from("t2"),
+            vec![vec![1, 10, 10], vec![10, 10, 10], vec![10, 10, 10]],
+        );
+        assert!(result.is_ok());
+        let mut table = vec![vec![vec![0; 3]; 3]; 3];
+        table[0][0][0] = 1;
+        table[1][0][0] = 1;
+        table[2][0][0] = 1;
+        let result: Result<Table3DHandle<Element>, _> =
+            expected.add_table_3d(String::from("t3"), table);
+        assert!(result.is_ok());
+        let mut map = FxHashMap::default();
+        let key = vec![0, 1, 0, 0];
+        map.insert(key, 1);
+        let result: Result<TableHandle<Element>, _> =
+            expected.add_table(String::from("t4"), map, 0);
+        assert!(result.is_ok());
+
+        let tables = r"
+- name: i0
+  type: integer
+- name: i1
+  type: integer
+  args:
+        - object
+- name: i2
+  type: integer
+  args:
+        - object
+        - object
+  default: 10
+- name: i3
+  type: integer
+  args: [object, object, object]
+- name: i4
+  type: integer
+  args: [object, object, object, object]
+- name: c0
+  type: continuous
+  args: []
+- name: c1
+  type: continuous
+  args:
+        - object
+- name: c2
+  type: continuous
+  args:
+        - object
+        - object
+  default: 10
+- name: c3
+  type: continuous
+  args: [object, object, object]
+- name: c4
+  type: continuous
+  args: [object, object, object, object]
+- name: b0
+  type: bool
+- name: b1
+  type: bool
+  args: [object]
+- name: b2
+  type: bool
+  args: [object, object]
+- name: b3
+  type: bool
+  args:
+        - object
+        - object
+        - object
+  default: false
+- name: b4
+  type: bool
+  args:
+        - object
+        - object
+        - object
+        - object
+- name: s0
+  type: set
+  object: object
+- name: s1
+  type: set
+  object: object
+  args: [object]
+  default: []
+- name: s2
+  type: set
+  object: object
+  args: [object, object]
+- name: s3
+  type: set
+  object: object
+  args: [object, object, object]
+- name: s4
+  type: set
+  object: object
+  args: [object, object, object, object]
+- name: t0
+  type: element
+- name: t1
+  type: element
+  args:
+        - object
+- name: t2
+  type: element
+  args:
+        - object
+        - object
+  default: 10
+- name: t3
+  type: element
+  args: [object, object, object]
+- name: t4
+  type: element
+  args: [object, object, object, object]
+";
+        let table_values = r"
+i0: 0
+i1:
+      0: 10
+      1: 20
+      2: 30
+i2: { [0, 0]: 10, [0, 1]: 20, [0, 2]: 30 }
+i3: { [0, 0, 0]: 10, [0, 0, 1]: 20, [0, 0, 2]: 30 }
+i4: { [0, 1, 0, 0]: 100, [0, 1, 0, 1]: 200, [0, 1, 2, 0]: 300, [0, 1, 2, 1]: 400 }
+c0: 0
+c1:
+      0: 10
+      1: 20
+      2: 30
+c2: { [0, 0]: 10, [0, 1]: 20, [0, 2]: 30 }
+c3: { [0, 0, 0]: 10, [0, 0, 1]: 20, [0, 0, 2]: 30 }
+c4: { [0, 1, 0, 0]: 100, [0, 1, 0, 1]: 200, [0, 1, 2, 0]: 300, [0, 1, 2, 1]: 400 }
+b0: true
+b1: { 0: true, 1: false, 2: false }
+b2: { [0, 0]: true }
+b3: { [0, 0, 0]: true, [1, 0, 0]: true, [2, 0, 0]: true }
+b4: { [0, 1, 0, 0]: true, [0, 1, 0, 1]: false, [0, 1, 2, 0]: false, [0, 1, 2, 1]: false }
+s0: [0, 2]
+s1: { 0: [0, 2] }
+s2: { [0, 0]: [0, 2] }
+s3: { [0, 0, 0]: [0, 2], [1, 0, 0]: [0, 2], [2, 0, 0]: [0, 2] }
+s4: { [0, 1, 0, 0]: [0, 2]}
+t0: 1
+t1: { 0: 1 }
+t2: { [0, 0]: 1 }
+t3: { [0, 0, 0]: 1, [1, 0, 0]: 1, [2, 0, 0]: 1 }
+t4: { [0, 1, 0, 0]: 1 }
+";
+
+        let tables = yaml_rust::YamlLoader::load_from_str(tables);
+        assert!(tables.is_ok());
+        let tables = tables.unwrap();
+        assert_eq!(tables.len(), 1);
+        let tables = &tables[0];
+
+        let table_values = yaml_rust::YamlLoader::load_from_str(table_values);
+        assert!(table_values.is_ok());
+        let table_values = table_values.unwrap();
+        assert_eq!(table_values.len(), 1);
+        let table_values = &table_values[0];
+
+        let empty_array = Yaml::Array(Array::new());
+        let empty_hash = Yaml::Hash(Hash::new());
+        let registry = load_table_registry_from_yaml(
+            tables,
+            table_values,
+            &empty_array,
+            &empty_hash,
+            &metadata,
+        );
+        assert!(registry.is_ok());
+        let registry = registry.unwrap();
+        assert_eq!(registry.integer_tables, expected.integer_tables);
+        assert_relative_eq!(registry.continuous_tables, expected.continuous_tables);
+        assert_eq!(registry.bool_tables, expected.bool_tables);
+        assert_eq!(registry.set_tables, expected.set_tables);
+        assert_eq!(registry.element_tables, expected.element_tables);
+    }
 
     #[test]
     fn load_combined_from_yaml_ok() {

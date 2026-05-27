@@ -275,6 +275,222 @@ fn get_less_is_better(map: &Hash) -> Result<Option<bool>, util::YamlContentErr> 
 mod tests {
     use super::*;
 
+    fn create_metadata() -> StateMetadata {
+        let mut metadata = StateMetadata::default();
+        let result = metadata.add_object_type(String::from("object"), 10);
+        assert!(result.is_ok());
+        let ob1 = result.unwrap();
+        let result = metadata.add_object_type(String::from("small"), 2);
+        assert!(result.is_ok());
+        let ob2 = result.unwrap();
+        let result = metadata.add_set_variable(String::from("s0"), ob1);
+        assert!(result.is_ok());
+        let result = metadata.add_set_variable(String::from("s1"), ob1);
+        assert!(result.is_ok());
+        let result = metadata.add_set_variable(String::from("s2"), ob1);
+        assert!(result.is_ok());
+        let result = metadata.add_set_variable(String::from("s3"), ob2);
+        assert!(result.is_ok());
+        let result = metadata.add_element_variable(String::from("e0"), ob1);
+        assert!(result.is_ok());
+        let result = metadata.add_element_variable(String::from("e1"), ob1);
+        assert!(result.is_ok());
+        let result = metadata.add_element_variable(String::from("e2"), ob1);
+        assert!(result.is_ok());
+        let result = metadata.add_element_variable(String::from("e3"), ob2);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_variable(String::from("i0"));
+        assert!(result.is_ok());
+        let result = metadata.add_integer_variable(String::from("i1"));
+        assert!(result.is_ok());
+        let result = metadata.add_integer_variable(String::from("i2"));
+        assert!(result.is_ok());
+        let result = metadata.add_integer_variable(String::from("i3"));
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_variable(String::from("c0"));
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_variable(String::from("c1"));
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_variable(String::from("c2"));
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_variable(String::from("c3"));
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable(String::from("er0"), ob1, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable(String::from("er1"), ob1, false);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable(String::from("er2"), ob1, true);
+        assert!(result.is_ok());
+        let result = metadata.add_element_resource_variable(String::from("er3"), ob2, false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable(String::from("ir0"), false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable(String::from("ir1"), false);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable(String::from("ir2"), true);
+        assert!(result.is_ok());
+        let result = metadata.add_integer_resource_variable(String::from("ir3"), false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable(String::from("cr0"), false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable(String::from("cr1"), false);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable(String::from("cr2"), true);
+        assert!(result.is_ok());
+        let result = metadata.add_continuous_resource_variable(String::from("cr3"), false);
+        assert!(result.is_ok());
+
+        metadata
+    }
+
+    #[test]
+    fn state_load_from_yaml_ok() {
+        let metadata = create_metadata();
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+s0: [0, 2]
+s1: [0, 1]
+s2: [0]
+s3: []
+e0: 0
+e1: 1
+e2: 2
+e3: 0
+i0: 0
+i1: 1
+i2: 2
+i3: 3
+c0: 0
+c1: 1
+c2: 2
+c3: 3
+er0: 0
+er1: 1
+er2: 2
+er3: 0
+ir0: 0
+ir1: 1
+ir2: 2
+ir3: 3
+cr0: 0
+cr1: 1
+cr2: 2
+cr3: 3
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let state = load_state_from_yaml(yaml, &metadata);
+        let mut s0 = Set::with_capacity(10);
+        s0.insert(0);
+        s0.insert(2);
+        let mut s1 = Set::with_capacity(10);
+        s1.insert(0);
+        s1.insert(1);
+        let mut s2 = Set::with_capacity(10);
+        s2.insert(0);
+        let s3 = Set::with_capacity(2);
+        let expected = State {
+            signature_variables: SignatureVariables {
+                set_variables: vec![s0, s1, s2, s3],
+                element_variables: vec![0, 1, 2, 0],
+                integer_variables: vec![0, 1, 2, 3],
+                continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
+            },
+            resource_variables: ResourceVariables {
+                element_variables: vec![0, 1, 2, 0],
+                integer_variables: vec![0, 1, 2, 3],
+                continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
+            },
+        };
+        assert_eq!(state.unwrap(), expected);
+    }
+
+    #[test]
+    fn state_load_from_yaml_err() {
+        let metadata = create_metadata();
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+s0: [0, 2]
+s1: [0, 1]
+s2: [0]
+s3: []
+e0: 0
+e1: 1
+e3: 0
+er0: 0
+er1: 1
+er2: 1
+er3: 0
+i0: 0
+i1: 1
+i2: 2
+i3: 3
+c0: 0
+c1: 1
+c2: 2
+c3: 3
+ir0: 0
+ir1: 1
+ir2: 2
+ir3: 3
+cr0: 0
+cr1: 1
+cr2: 2
+cr3: 3
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let state = load_state_from_yaml(yaml, &metadata);
+        assert!(state.is_err());
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+s0: [0, 2]
+s1: [0, 1]
+s2: [0]
+s3: [3]
+e0: 0
+e1: 1
+e2: 1
+e3: 3
+er0: 0
+er1: 1
+er2: 1
+er3: 0
+i0: 0
+i1: 1
+i2: 2
+i3: 3
+c0: 0
+c1: 1
+c2: 2
+c3: 3
+ir0: 0
+ir1: 1
+ir2: 2
+ir3: 3
+cr0: 0
+cr1: 1
+cr2: 2
+cr3: 3
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let state = load_state_from_yaml(yaml, &metadata);
+        assert!(state.is_err());
+    }
+
     #[test]
     fn ground_static_parameters_from_yaml_ok() {
         let mut metadata = StateMetadata::default();
@@ -411,6 +627,220 @@ object: object
         let yaml = &yaml[0];
         let result = ground_static_parameters_from_yaml(&metadata, yaml);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn ground_parameters_from_yaml_ok() {
+        let metadata = create_metadata();
+
+        let mut map1 = FxHashMap::default();
+        map1.insert(String::from("v0"), 0);
+        map1.insert(String::from("v1"), 0);
+        let mut map2 = FxHashMap::default();
+        map2.insert(String::from("v0"), 0);
+        map2.insert(String::from("v1"), 1);
+        let mut map3 = FxHashMap::default();
+        map3.insert(String::from("v0"), 1);
+        map3.insert(String::from("v1"), 0);
+        let mut map4 = FxHashMap::default();
+        map4.insert(String::from("v0"), 1);
+        map4.insert(String::from("v1"), 1);
+        let expected_parameters = vec![map1, map2, map3, map4];
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+- name: v0
+  object: small
+- name: v1
+  object: s3
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let result = ground_parameters_from_yaml(&metadata, yaml);
+        assert!(result.is_ok());
+        let (parameters, elements_in_set_variable_array) = result.unwrap();
+        let expected_elements_in_set_variable_array =
+            vec![vec![(3, 0)], vec![(3, 1)], vec![(3, 0)], vec![(3, 1)]];
+        assert_eq!(parameters, expected_parameters);
+        assert_eq!(
+            elements_in_set_variable_array,
+            expected_elements_in_set_variable_array
+        );
+    }
+
+    #[test]
+    fn ground_parameters_from_yaml_err() {
+        let metadata = create_metadata();
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+- name: v0
+  object: small
+- name: v1
+  object: s5
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let result = ground_parameters_from_yaml(&metadata, yaml);
+        assert!(result.is_err());
+
+        let yaml = yaml_rust::YamlLoader::load_from_str(
+            r"
+- name: v0
+  object: small
+- name: v0
+  object: s5
+",
+        );
+        assert!(yaml.is_ok());
+        let yaml = yaml.unwrap();
+        assert_eq!(yaml.len(), 1);
+        let yaml = &yaml[0];
+        let result = ground_parameters_from_yaml(&metadata, yaml);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn state_metadata_load_from_yaml_ok() {
+        let mut expected = StateMetadata::default();
+        let result = expected.add_integer_variable(String::from("n0"));
+        assert!(result.is_ok());
+        let objects = yaml_rust::Yaml::Array(Vec::new());
+        let object_numbers = yaml_rust::Yaml::Hash(Hash::new());
+        let variables = r"
+- name: n0
+  type: integer
+";
+
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
+
+        let metadata = load_metadata_from_yaml(&objects, variables, &object_numbers);
+        assert!(metadata.is_ok());
+        assert_eq!(metadata.unwrap(), expected);
+
+        let expected = create_metadata();
+
+        let objects = r"
+- object
+- small
+";
+        let variables = r"
+- name: s0
+  type: set
+  object: object
+- name: s1
+  type: set
+  object: object
+- name: s2
+  type: set
+  object: object
+- name: s3
+  type: set
+  object: small
+- name: e0
+  type: element
+  object: object
+- name: e1
+  type: element
+  object: object
+- name: e2
+  type: element
+  object: object
+- name: e3
+  type: element
+  object: small
+- name: i0
+  type: integer
+- name: i1
+  type: integer
+- name: i2
+  type: integer
+- name: i3
+  type: integer
+- name: c0
+  type: continuous
+- name: c1
+  type: continuous
+- name: c2
+  type: continuous
+- name: c3
+  type: continuous
+- name: er0
+  type: element
+  object: object
+  preference: greater
+- name: er1
+  type: element
+  object: object
+  preference: greater
+- name: er2
+  type: element
+  object: object
+  preference: less
+- name: er3
+  type: element
+  object: small
+  preference: greater
+- name: ir0
+  type: integer
+  preference: greater
+- name: ir1
+  type: integer
+  preference: greater
+- name: ir2
+  type: integer
+  preference: less
+- name: ir3
+  type: integer
+  preference: greater
+- name: cr0
+  type: continuous
+  preference: greater
+- name: cr1
+  type: continuous
+  preference: greater
+- name: cr2
+  type: continuous
+  preference: less
+- name: cr3
+  type: continuous
+  preference: greater
+";
+        let object_numbers = r"
+object: 10
+small: 2
+";
+        let objects = yaml_rust::YamlLoader::load_from_str(objects);
+        assert!(objects.is_ok());
+        let objects = objects.unwrap();
+        assert_eq!(objects.len(), 1);
+        let objects = &objects[0];
+
+        let variables = yaml_rust::YamlLoader::load_from_str(variables);
+        assert!(variables.is_ok());
+        let variables = variables.unwrap();
+        assert_eq!(variables.len(), 1);
+        let variables = &variables[0];
+
+        let object_numbers = yaml_rust::YamlLoader::load_from_str(object_numbers);
+        assert!(object_numbers.is_ok());
+        let object_numbers = object_numbers.unwrap();
+        assert_eq!(object_numbers.len(), 1);
+        let object_numbers = &object_numbers[0];
+
+        let metadata = load_metadata_from_yaml(objects, variables, object_numbers);
+        assert!(metadata.is_ok());
+        assert_eq!(metadata.unwrap(), expected);
     }
 
     #[test]
