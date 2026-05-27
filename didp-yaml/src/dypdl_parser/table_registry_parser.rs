@@ -12,7 +12,6 @@ enum TableReturnType {
     Integer(Integer),
     Continuous(Continuous),
     Set(Set),
-    Vector(usize, Vector),
     Element(Element),
     Bool(bool),
 }
@@ -106,37 +105,6 @@ pub fn load_table_registry_from_yaml(
                     (dimension_sizes, TableReturnType::Set(default)),
                 );
             }
-            "vector" => {
-                let object_name = util::get_string_by_key(map, "object")?;
-                let object = match metadata.name_to_object_type.get(&object_name) {
-                    Some(object) => *object,
-                    None => {
-                        return Err(util::YamlContentErr::new(format!(
-                            "no such object `{object_name}`",
-                        ))
-                        .into())
-                    }
-                };
-                let n = metadata.object_numbers[object];
-                let default = match util::get_usize_array_by_key(map, "default") {
-                    Ok(array) => {
-                        for v in &array {
-                            if *v >= n {
-                                return Err(util::YamlContentErr::new(format!(
-                                    "element `{v}` is too large for object `{object_name}`",
-                                ))
-                                .into());
-                            }
-                        }
-                        array
-                    }
-                    _ => Vec::new(),
-                };
-                name_to_signature.insert(
-                    name.clone(),
-                    (dimension_sizes, TableReturnType::Vector(n, default)),
-                );
-            }
             "element" => {
                 if let Ok(value) = util::get_usize_by_key(map, "default") {
                     name_to_signature.insert(
@@ -195,10 +163,6 @@ pub fn load_table_registry_from_yaml(
                     let value = load_set_from_yaml(value, default.len())?;
                     registry.set_tables.name_to_constant.insert(name, value);
                 }
-                TableReturnType::Vector(capacity, _) => {
-                    let value = load_vector_from_yaml(value, *capacity)?;
-                    registry.vector_tables.name_to_constant.insert(name, value);
-                }
                 TableReturnType::Element(_) => {
                     registry
                         .element_tables
@@ -227,10 +191,6 @@ pub fn load_table_registry_from_yaml(
                     let f = load_set_table_1d_from_yaml(value, size, default)?;
                     registry.add_table_1d(name, f)?;
                 }
-                TableReturnType::Vector(capacity, default) => {
-                    let f = load_vector_table_1d_from_yaml(value, size, default, *capacity)?;
-                    registry.add_table_1d(name, f)?;
-                }
                 TableReturnType::Element(default) => {
                     let f = load_numeric_table_1d_from_yaml(value, size, *default)?;
                     registry.add_table_1d(name, f)?;
@@ -254,11 +214,6 @@ pub fn load_table_registry_from_yaml(
                 }
                 TableReturnType::Set(default) => {
                     let f = load_set_table_2d_from_yaml(value, size_x, size_y, default)?;
-                    registry.add_table_2d(name, f)?;
-                }
-                TableReturnType::Vector(capacity, default) => {
-                    let f =
-                        load_vector_table_2d_from_yaml(value, size_x, size_y, default, *capacity)?;
                     registry.add_table_2d(name, f)?;
                 }
                 TableReturnType::Element(default) => {
@@ -289,12 +244,6 @@ pub fn load_table_registry_from_yaml(
                     let f = load_set_table_3d_from_yaml(value, size_x, size_y, size_z, default)?;
                     registry.add_table_3d(name, f)?;
                 }
-                TableReturnType::Vector(capacity, default) => {
-                    let f = load_vector_table_3d_from_yaml(
-                        value, size_x, size_y, size_z, default, *capacity,
-                    )?;
-                    registry.add_table_3d(name, f)?;
-                }
                 TableReturnType::Element(default) => {
                     let f =
                         load_numeric_table_3d_from_yaml(value, size_x, size_y, size_z, *default)?;
@@ -318,11 +267,6 @@ pub fn load_table_registry_from_yaml(
                 }
                 TableReturnType::Set(default) => {
                     let (f, default) = load_set_table_from_yaml(value, size, default.clone())?;
-                    registry.add_table(name, f, default)?;
-                }
-                TableReturnType::Vector(capacity, default) => {
-                    let (f, default) =
-                        load_vector_table_from_yaml(value, size, default.clone(), *capacity)?;
                     registry.add_table(name, f, default)?;
                 }
                 TableReturnType::Element(default) => {
@@ -390,35 +334,6 @@ pub fn load_table_registry_from_yaml(
                 }
                 name_to_signature.insert(name.clone(), TableReturnType::Set(default));
             }
-            "vector" => {
-                let object_name = util::get_string_by_key(map, "object")?;
-                let object = match metadata.name_to_object_type.get(&object_name) {
-                    Some(object) => *object,
-                    None => {
-                        return Err(util::YamlContentErr::new(format!(
-                            "no such object `{object_name}`",
-                        ))
-                        .into())
-                    }
-                };
-                let n = metadata.object_numbers[object];
-                let default = match util::get_usize_array_by_key(map, "default") {
-                    Ok(array) => {
-                        for v in &array {
-                            if *v >= n {
-                                return Err(util::YamlContentErr::new(format!(
-                                    "element `{}` is too large for object `{}`",
-                                    *v, object_name
-                                ))
-                                .into());
-                            }
-                        }
-                        array
-                    }
-                    _ => Vec::new(),
-                };
-                name_to_signature.insert(name.clone(), TableReturnType::Vector(n, default));
-            }
             "element" => {
                 if let Ok(value) = util::get_usize_by_key(map, "default") {
                     name_to_signature.insert(name.clone(), TableReturnType::Element(value));
@@ -460,11 +375,6 @@ pub fn load_table_registry_from_yaml(
             }
             TableReturnType::Set(default) => {
                 let (f, default) = load_set_dictionary_from_yaml(value, default.clone())?;
-                registry.add_table(name, f, default)?;
-            }
-            TableReturnType::Vector(capacity, default) => {
-                let (f, default) =
-                    load_vector_dictionary_from_yaml(value, default.clone(), *capacity)?;
                 registry.add_table(name, f, default)?;
             }
             TableReturnType::Element(default) => {
@@ -864,142 +774,6 @@ fn load_set_dictionary_from_yaml(
     Ok((body, default))
 }
 
-fn load_vector_from_yaml(value: &Yaml, capacity: usize) -> Result<Vector, util::YamlContentErr> {
-    let value = util::get_usize_array(value)?;
-    for v in &value {
-        if *v >= capacity {
-            return Err(util::YamlContentErr::new(format!(
-                "element `{v}` in a vector table is too large for the object",
-            )));
-        }
-    }
-    Ok(value)
-}
-
-fn load_vector_table_1d_from_yaml(
-    value: &Yaml,
-    size: usize,
-    default: &[Element],
-    capacity: usize,
-) -> Result<Vec<Vector>, util::YamlContentErr> {
-    let mut body: Vec<Vector> = (0..size).map(|_| default.to_vec()).collect();
-    let map = util::get_map(value)?;
-    for (args, value) in map {
-        let args = util::get_usize(args)?;
-        let value = load_vector_from_yaml(value, capacity)?;
-        if args >= size {
-            return Err(util::YamlContentErr::new(format!(
-                "`{args}` is greater than the number of the objects for table",
-            )));
-        }
-        body[args] = value;
-    }
-    Ok(body)
-}
-
-fn load_vector_table_2d_from_yaml(
-    value: &Yaml,
-    size_x: usize,
-    size_y: usize,
-    default: &[Element],
-    capacity: usize,
-) -> Result<Vec<Vec<Vector>>, util::YamlContentErr> {
-    let mut body: Vec<Vec<Vector>> = (0..size_x)
-        .map(|_| (0..size_y).map(|_| default.to_vec()).collect())
-        .collect();
-    let map = util::get_map(value)?;
-    for (args, value) in map {
-        let args = util::get_usize_array(args)?;
-        let x = args[0];
-        let y = args[1];
-        let value = load_vector_from_yaml(value, capacity)?;
-        if x >= size_x || y >= size_y {
-            return Err(util::YamlContentErr::new(format!(
-                "`({x}, {y})` is greater than the numbers of objects for table",
-            )));
-        }
-        body[x][y] = value;
-    }
-    Ok(body)
-}
-
-fn load_vector_table_3d_from_yaml(
-    value: &Yaml,
-    size_x: usize,
-    size_y: usize,
-    size_z: usize,
-    default: &[Element],
-    capacity: usize,
-) -> Result<Vec<Vec<Vec<Vector>>>, util::YamlContentErr> {
-    let mut body: Vec<Vec<Vec<Vector>>> = (0..size_x)
-        .map(|_| {
-            (0..size_y)
-                .map(|_| (0..size_z).map(|_| default.to_vec()).collect())
-                .collect()
-        })
-        .collect();
-    let map = util::get_map(value)?;
-    for (args, value) in map {
-        let args = util::get_usize_array(args)?;
-        let x = args[0];
-        let y = args[1];
-        let z = args[2];
-        let value = load_vector_from_yaml(value, capacity)?;
-        if x >= size_x || y >= size_y || z >= size_z {
-            return Err(util::YamlContentErr::new(format!(
-                "`({x}, {y}, {z})` is greater than the numbers of objects for table",
-            )));
-        }
-        body[x][y][z] = value;
-    }
-    Ok(body)
-}
-
-fn load_vector_table_from_yaml(
-    value: &Yaml,
-    size: Vec<usize>,
-    default: Vector,
-    capacity: usize,
-) -> Result<(FxHashMap<Vec<Element>, Vector>, Vector), util::YamlContentErr> {
-    let map = util::get_map(value)?;
-    let mut body = FxHashMap::default();
-
-    for (args, value) in map {
-        let args = util::get_usize_array(args)?;
-        if args.len() != size.len() {
-            return Err(util::YamlContentErr::new(format!(
-                "expected `{expected}` arguments for table, but passed `{passed}`",
-                expected = size.len(),
-                passed = args.len()
-            )));
-        }
-        let value = load_vector_from_yaml(value, capacity)?;
-        if args.iter().zip(size.iter()).any(|(a, b)| a >= b) {
-            return Err(util::YamlContentErr::new(format!(
-                "`{args:?}` is greater than the numbers of objects for table",
-            )));
-        }
-        body.insert(args, value);
-    }
-    Ok((body, default))
-}
-
-fn load_vector_dictionary_from_yaml(
-    value: &Yaml,
-    default: Vector,
-    capacity: usize,
-) -> Result<(FxHashMap<Vec<Element>, Vector>, Vector), util::YamlContentErr> {
-    let map = util::get_map(value)?;
-    let mut body = FxHashMap::default();
-
-    for (args, value) in map {
-        let args = util::get_usize_array(args)?;
-        let value = load_vector_from_yaml(value, capacity)?;
-        body.insert(args, value);
-    }
-    Ok((body, default))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1169,88 +943,16 @@ mod tests {
             ],
         );
         assert!(result.is_ok());
-        let result = expected.add_table_3d(
-            String::from("s3"),
-            vec![
-                vec![
-                    vec![set.clone(), default.clone(), default.clone()],
-                    vec![default.clone(), default.clone(), default.clone()],
-                    vec![default.clone(), default.clone(), default.clone()],
-                ],
-                vec![
-                    vec![set.clone(), default.clone(), default.clone()],
-                    vec![default.clone(), default.clone(), default.clone()],
-                    vec![default.clone(), default.clone(), default.clone()],
-                ],
-                vec![
-                    vec![set.clone(), default.clone(), default.clone()],
-                    vec![default.clone(), default.clone(), default.clone()],
-                ],
-            ],
-        );
+        let mut table = vec![vec![vec![default.clone(); 3]; 3]; 3];
+        table[0][0][0] = set.clone();
+        table[1][0][0] = set.clone();
+        table[2][0][0] = set.clone();
+        let result = expected.add_table_3d(String::from("s3"), table);
         assert!(result.is_ok());
         let mut map = FxHashMap::default();
         let key = vec![0, 1, 0, 0];
-        map.insert(key, set);
-        let key = vec![0, 1, 0, 1];
-        map.insert(key, default.clone());
-        let key = vec![0, 1, 2, 0];
-        map.insert(key, default.clone());
-        let key = vec![0, 1, 2, 1];
-        map.insert(key, default.clone());
+        map.insert(key, set.clone());
         let result = expected.add_table(String::from("s4"), map, default);
-        assert!(result.is_ok());
-
-        let vector = vec![0, 2];
-        let default = Vec::new();
-        expected
-            .vector_tables
-            .name_to_constant
-            .insert(String::from("v0"), vector.clone());
-        let result = expected.add_table_1d(
-            String::from("v1"),
-            vec![vector.clone(), default.clone(), default.clone()],
-        );
-        assert!(result.is_ok());
-        let result = expected.add_table_2d(
-            String::from("v2"),
-            vec![
-                vec![vector.clone(), default.clone(), default.clone()],
-                vec![default.clone(), default.clone(), default.clone()],
-                vec![default.clone(), default.clone(), default.clone()],
-            ],
-        );
-        assert!(result.is_ok());
-        let result = expected.add_table_3d(
-            String::from("v3"),
-            vec![
-                vec![
-                    vec![vector.clone(), default.clone(), default.clone()],
-                    vec![default.clone(), default.clone(), default.clone()],
-                    vec![default.clone(), default.clone(), default.clone()],
-                ],
-                vec![
-                    vec![vector.clone(), default.clone(), default.clone()],
-                    vec![default.clone(), default.clone(), default.clone()],
-                    vec![default.clone(), default.clone(), default.clone()],
-                ],
-                vec![
-                    vec![vector.clone(), default.clone(), default.clone()],
-                    vec![default.clone(), default.clone(), default.clone()],
-                ],
-            ],
-        );
-        assert!(result.is_ok());
-        let mut map = FxHashMap::default();
-        let key = vec![0, 1, 0, 0];
-        map.insert(key, vector);
-        let key = vec![0, 1, 0, 1];
-        map.insert(key, default.clone());
-        let key = vec![0, 1, 2, 0];
-        map.insert(key, default.clone());
-        let key = vec![0, 1, 2, 1];
-        map.insert(key, default.clone());
-        let result = expected.add_table(String::from("v4"), map, default);
         assert!(result.is_ok());
 
         expected
@@ -1262,27 +964,19 @@ mod tests {
         assert!(result.is_ok());
         let result: Result<Table2DHandle<Element>, _> = expected.add_table_2d(
             String::from("t2"),
-            vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
+            vec![vec![1, 10, 10], vec![10, 10, 10], vec![10, 10, 10]],
         );
         assert!(result.is_ok());
-        let result: Result<Table3DHandle<Element>, _> = expected.add_table_3d(
-            String::from("t3"),
-            vec![
-                vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
-                vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
-                vec![vec![1, 0, 0], vec![0, 0, 0], vec![0, 0, 0]],
-            ],
-        );
+        let mut table = vec![vec![vec![0; 3]; 3]; 3];
+        table[0][0][0] = 1;
+        table[1][0][0] = 1;
+        table[2][0][0] = 1;
+        let result: Result<Table3DHandle<Element>, _> =
+            expected.add_table_3d(String::from("t3"), table);
         assert!(result.is_ok());
         let mut map = FxHashMap::default();
         let key = vec![0, 1, 0, 0];
         map.insert(key, 1);
-        let key = vec![0, 1, 0, 1];
-        map.insert(key, 0);
-        let key = vec![0, 1, 2, 0];
-        map.insert(key, 0);
-        let key = vec![0, 1, 2, 1];
-        map.insert(key, 0);
         let result: Result<TableHandle<Element>, _> =
             expected.add_table(String::from("t4"), map, 0);
         assert!(result.is_ok());
@@ -1295,13 +989,13 @@ mod tests {
   args:
         - object
 - name: i2
-  type: integer 
+  type: integer
   args:
         - object
         - object
   default: 10
 - name: i3
-  type: integer 
+  type: integer
   args: [object, object, object]
 - name: i4
   type: integer
@@ -1314,13 +1008,13 @@ mod tests {
   args:
         - object
 - name: c2
-  type: continuous 
+  type: continuous
   args:
         - object
         - object
   default: 10
 - name: c3
-  type: continuous 
+  type: continuous
   args: [object, object, object]
 - name: c4
   type: continuous
@@ -1331,7 +1025,7 @@ mod tests {
   type: bool
   args: [object]
 - name: b2
-  type: bool 
+  type: bool
   args: [object, object]
 - name: b3
   type: bool
@@ -1367,26 +1061,6 @@ mod tests {
   type: set
   object: object
   args: [object, object, object, object]
-- name: v0
-  type: vector
-  object: object
-- name: v1
-  type: vector
-  object: object
-  args: [object]
-  default: []
-- name: v2
-  type: vector
-  object: object
-  args: [object, object]
-- name: v3
-  type: vector
-  object: object
-  args: [object, object, object]
-- name: v4
-  type: vector 
-  object: object
-  args: [object, object, object, object]
 - name: t0
   type: element
 - name: t1
@@ -1400,7 +1074,7 @@ mod tests {
         - object
   default: 10
 - name: t3
-  type: element 
+  type: element
   args: [object, object, object]
 - name: t4
   type: element
@@ -1433,12 +1107,7 @@ s1: { 0: [0, 2] }
 s2: { [0, 0]: [0, 2] }
 s3: { [0, 0, 0]: [0, 2], [1, 0, 0]: [0, 2], [2, 0, 0]: [0, 2] }
 s4: { [0, 1, 0, 0]: [0, 2]}
-v0: [0, 2]
-v1: { 0: [0, 2] }
-v2: { [0, 0]: [0, 2] }
-v3: { [0, 0, 0]: [0, 2], [1, 0, 0]: [0, 2], [2, 0, 0]: [0, 2] }
-v4: { [0, 1, 0, 0]: [0, 2]}
-t0: 0
+t0: 1
 t1: { 0: 1 }
 t2: { [0, 0]: 1 }
 t3: { [0, 0, 0]: 1, [1, 0, 0]: 1, [2, 0, 0]: 1 }
@@ -1471,6 +1140,8 @@ t4: { [0, 1, 0, 0]: 1 }
         assert_eq!(registry.integer_tables, expected.integer_tables);
         assert_relative_eq!(registry.continuous_tables, expected.continuous_tables);
         assert_eq!(registry.bool_tables, expected.bool_tables);
+        assert_eq!(registry.set_tables, expected.set_tables);
+        assert_eq!(registry.element_tables, expected.element_tables);
     }
 
     #[test]

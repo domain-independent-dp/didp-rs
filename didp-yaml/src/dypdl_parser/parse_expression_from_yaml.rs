@@ -121,33 +121,6 @@ pub fn parse_condition_from_yaml(
     }
 }
 
-pub fn parse_vector_from_yaml(
-    value: &Yaml,
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
-) -> Result<expression::VectorExpression, Box<dyn Error>> {
-    match value {
-        Yaml::String(value) => Ok(expression_parser::parse_vector(
-            value.clone(),
-            metadata,
-            functions,
-            registry,
-            parameters,
-        )?),
-        value => {
-            if let Ok(vector) = util::get_usize_array(value) {
-                Ok(expression::VectorExpression::Reference(
-                    expression::ReferenceExpression::Constant(vector),
-                ))
-            } else {
-                Err(util::YamlContentErr::new(format!("expected String , but is {value:?}")).into())
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -367,50 +340,6 @@ mod tests {
         let value = Yaml::Integer(0);
         let result =
             parse_condition_from_yaml(&value, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_from_yaml_ok() {
-        let metadata = StateMetadata::default();
-        let functions = StateFunctions::default();
-        let registry = TableRegistry::default();
-        let parameters = FxHashMap::default();
-
-        let value = Yaml::String(String::from("(vector 0 1)"));
-        let result = parse_vector_from_yaml(&value, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        assert_eq!(
-            result.unwrap(),
-            expression::VectorExpression::Reference(expression::ReferenceExpression::Constant(
-                vec![0, 1]
-            ))
-        );
-
-        let value = Yaml::Array(vec![Yaml::Integer(0), Yaml::Integer(1)]);
-        let result = parse_vector_from_yaml(&value, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        assert_eq!(
-            result.unwrap(),
-            expression::VectorExpression::Reference(expression::ReferenceExpression::Constant(
-                vec![0, 1]
-            ))
-        );
-    }
-
-    #[test]
-    fn parse_vector_from_yaml_err() {
-        let metadata = StateMetadata::default();
-        let functions = StateFunctions::default();
-        let registry = TableRegistry::default();
-        let parameters = FxHashMap::default();
-
-        let value = Yaml::Integer(0);
-        let result = parse_vector_from_yaml(&value, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-
-        let value = Yaml::Array(vec![Yaml::String(String::from("1")), Yaml::Integer(1)]);
-        let result = parse_vector_from_yaml(&value, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 }

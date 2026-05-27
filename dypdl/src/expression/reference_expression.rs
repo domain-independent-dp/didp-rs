@@ -3,7 +3,7 @@ use crate::state::StateInterface;
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::TableData;
 use crate::table_registry::TableRegistry;
-use crate::variable_type::{Set, Vector};
+use crate::variable_type::Set;
 
 /// Expression referring to a constant or a variable.
 #[derive(Debug, PartialEq, Clone)]
@@ -64,33 +64,6 @@ impl ReferenceExpression<Set> {
     }
 }
 
-impl ReferenceExpression<Vector> {
-    /// Returns the evaluation result.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
-    pub fn eval<'a, U: StateInterface>(
-        &'a self,
-        state: &'a U,
-        function_cache: &mut StateFunctionCache,
-        state_functions: &StateFunctions,
-        registry: &'a TableRegistry,
-    ) -> &'a Vector {
-        match self {
-            Self::Constant(value) => value,
-            Self::Variable(i) => state.get_vector_variable(*i),
-            Self::Table(table) => table.eval(
-                state,
-                function_cache,
-                state_functions,
-                registry,
-                &registry.vector_tables,
-            ),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::super::element_expression::*;
@@ -104,8 +77,13 @@ mod tests {
         let mut name_to_table_1d = FxHashMap::default();
         name_to_table_1d.insert(String::from("t1"), 0);
         TableRegistry {
-            vector_tables: TableData {
-                tables_1d: vec![Table1D::new(vec![vec![0, 1]])],
+            set_tables: TableData {
+                tables_1d: vec![Table1D::new(vec![{
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }])],
                 name_to_table_1d,
                 ..Default::default()
             },
@@ -116,7 +94,12 @@ mod tests {
     fn generate_state() -> State {
         State {
             signature_variables: SignatureVariables {
-                vector_variables: vec![vec![0, 2]],
+                set_variables: vec![{
+                    let mut set = Set::with_capacity(3);
+                    set.insert(0);
+                    set.insert(2);
+                    set
+                }],
                 ..Default::default()
             },
             ..Default::default()
@@ -129,10 +112,21 @@ mod tests {
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
-        let expression = ReferenceExpression::Constant(vec![0, 1, 2]);
+        let expression = ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(3);
+            set.insert(0);
+            set
+        });
+        let mut expected = Set::with_capacity(3);
+        expected.insert(0);
         assert_eq!(
-            *expression.eval(&state, &mut function_cache, &state_functions, &registry,),
-            vec![0, 1, 2]
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+            ),
+            expected
         );
     }
 
@@ -142,10 +136,18 @@ mod tests {
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
-        let expression: ReferenceExpression<Vector> = ReferenceExpression::Variable(0);
+        let expression = ReferenceExpression::Variable(0);
+        let mut expected = Set::with_capacity(3);
+        expected.insert(0);
+        expected.insert(2);
         assert_eq!(
-            *expression.eval(&state, &mut function_cache, &state_functions, &registry,),
-            vec![0, 2]
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+            ),
+            expected
         );
     }
 
@@ -155,20 +157,32 @@ mod tests {
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
         let registry = generate_registry();
-        let expression: ReferenceExpression<Vector> =
+        let expression =
             ReferenceExpression::Table(TableExpression::Table1D(0, ElementExpression::Constant(0)));
+        let mut expected = Set::with_capacity(3);
+        expected.insert(0);
+        expected.insert(1);
         assert_eq!(
-            *expression.eval(&state, &mut function_cache, &state_functions, &registry,),
-            vec![0, 1]
+            *expression.eval(
+                &state,
+                &mut function_cache,
+                &state_functions,
+                &registry,
+            ),
+            expected
         );
     }
 
     #[test]
     fn constant_simplify() {
         let registry = generate_registry();
-        let expression: ReferenceExpression<Vector> = ReferenceExpression::Constant(vec![0, 1, 2]);
+        let expression = ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(3);
+            set.insert(0);
+            set
+        });
         assert_eq!(
-            expression.simplify(&registry, &registry.vector_tables),
+            expression.simplify(&registry, &registry.set_tables),
             expression
         );
     }
@@ -176,27 +190,42 @@ mod tests {
     #[test]
     fn variable_simplify() {
         let registry = generate_registry();
-        let expression: ReferenceExpression<Vector> = ReferenceExpression::Variable(0);
+        let expression = ReferenceExpression::Variable(0);
         assert_eq!(
-            expression.simplify(&registry, &registry.vector_tables),
+            expression.simplify(&registry, &registry.set_tables),
             expression
         );
     }
 
     #[test]
-    fn table_simplify() {
+    fn table_simplify_constant() {
+        let registry = generate_registry();
+        let expression = ReferenceExpression::<Set>::Table(TableExpression::Table1D(
+            0,
+            ElementExpression::Constant(0),
+        ));
+        let expected = ReferenceExpression::Constant({
+            let mut set = Set::with_capacity(3);
+            set.insert(0);
+            set.insert(1);
+            set
+        });
+        assert_eq!(
+            expression.simplify(&registry, &registry.set_tables),
+            expected
+        );
+    }
+
+    #[test]
+    fn table_simplify_variable() {
         let registry = generate_registry();
         let expression =
-            ReferenceExpression::Table(TableExpression::Table1D(0, ElementExpression::Constant(0)));
-        assert_eq!(
-            expression.simplify(&registry, &registry.vector_tables),
-            ReferenceExpression::Constant(vec![0, 1])
-        );
-        let expression =
+            ReferenceExpression::Table(TableExpression::Table1D(0, ElementExpression::Variable(0)));
+        let expected =
             ReferenceExpression::Table(TableExpression::Table1D(0, ElementExpression::Variable(0)));
         assert_eq!(
-            expression.simplify(&registry, &registry.vector_tables),
-            expression
+            expression.simplify(&registry, &registry.set_tables),
+            expected
         );
     }
 }

@@ -19,10 +19,6 @@ pub fn parse_argument<'a>(
         element_parser::parse_set_expression(tokens, metadata, functions, registry, parameters)
     {
         Ok((ArgumentExpression::Set(set), rest))
-    } else if let Ok((vector, rest)) =
-        element_parser::parse_vector_expression(tokens, metadata, functions, registry, parameters)
-    {
-        Ok((ArgumentExpression::Vector(vector), rest))
     } else {
         Err(ParseErr::new(format!(
             "could not parse tokens `{tokens:?}`",
@@ -78,19 +74,6 @@ mod tests {
         name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
 
-        let vector_variable_names = vec![
-            String::from("v0"),
-            String::from("v1"),
-            String::from("v2"),
-            String::from("v3"),
-        ];
-        let mut name_to_vector_variable = FxHashMap::default();
-        name_to_vector_variable.insert(String::from("v0"), 0);
-        name_to_vector_variable.insert(String::from("v1"), 1);
-        name_to_vector_variable.insert(String::from("v2"), 2);
-        name_to_vector_variable.insert(String::from("v3"), 3);
-        let vector_variable_to_object = vec![0, 0, 0, 0];
-
         let element_variable_names = vec![
             String::from("e0"),
             String::from("e1"),
@@ -136,9 +119,6 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            vector_variable_names,
-            name_to_vector_variable,
-            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -206,23 +186,9 @@ mod tests {
             ..Default::default()
         };
 
-        let mut name_to_constant = FxHashMap::default();
-        name_to_constant.insert(String::from("vt0"), vec![0, 1]);
-        let tables_1d = vec![dypdl::Table1D::new(vec![vec![0, 1]])];
-        let mut name_to_table_1d = FxHashMap::default();
-        name_to_table_1d.insert(String::from("vt1"), 0);
-
-        let vector_tables = TableData {
-            name_to_constant,
-            tables_1d,
-            name_to_table_1d,
-            ..Default::default()
-        };
-
         TableRegistry {
             element_tables,
             set_tables,
-            vector_tables,
             ..Default::default()
         }
     }
@@ -240,7 +206,7 @@ mod tests {
         let parameters = generate_parameters();
         let registry = generate_registry();
 
-        let tokens: Vec<String> = ["e0", "v3", "i0", ")"]
+        let tokens: Vec<String> = ["e0", "0", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -253,7 +219,7 @@ mod tests {
         );
         assert_eq!(rest, &tokens[1..]);
 
-        let tokens: Vec<String> = ["s0", "v3", "i0", ")"]
+        let tokens: Vec<String> = ["s0", "0", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -265,21 +231,6 @@ mod tests {
             ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(0)))
         );
         assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["v0", "v3", "i0", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_argument(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ArgumentExpression::Vector(VectorExpression::Reference(ReferenceExpression::Variable(
-                0
-            )))
-        );
-        assert_eq!(rest, &tokens[1..]);
     }
 
     #[test]
@@ -289,7 +240,7 @@ mod tests {
         let parameters = generate_parameters();
         let registry = generate_registry();
 
-        let tokens: Vec<String> = ["n0", "v3", "i0", ")"]
+        let tokens: Vec<String> = ["n0", "0", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -304,7 +255,7 @@ mod tests {
         let parameters = generate_parameters();
         let registry = generate_registry();
 
-        let tokens: Vec<String> = ["s2", "1", "e0", "v3", ")", "i0", ")"]
+        let tokens: Vec<String> = ["s2", "1", "e0", "0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -318,9 +269,7 @@ mod tests {
                 ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Variable(2))),
                 ArgumentExpression::Element(ElementExpression::Constant(1)),
                 ArgumentExpression::Element(ElementExpression::Variable(0)),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Variable(3)
-                )),
+                ArgumentExpression::Element(ElementExpression::Constant(0)),
             ]
         );
         assert_eq!(rest, &tokens[5..]);
@@ -333,7 +282,7 @@ mod tests {
         let parameters = generate_parameters();
         let registry = generate_registry();
 
-        let tokens: Vec<String> = ["s2", "1", "e0", "v3", "i0", ")"]
+        let tokens: Vec<String> = ["s2", "1", "e0", "0", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -349,7 +298,7 @@ mod tests {
         let parameters = generate_parameters();
         let registry = generate_registry();
 
-        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "v3", "i0"]
+        let tokens: Vec<String> = ["f4", "s2", "1", "e0", "0", "i0"]
             .iter()
             .map(|x| x.to_string())
             .collect();

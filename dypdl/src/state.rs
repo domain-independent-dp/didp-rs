@@ -2,7 +2,7 @@ use crate::effect;
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_registry;
 use crate::util::{self, ModelErr};
-use crate::variable_type::{Continuous, Element, Integer, Set, Vector};
+use crate::variable_type::{Continuous, Element, Integer, Set};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
@@ -19,16 +19,6 @@ pub trait StateInterface: Sized {
     ///
     /// Panics if no variable has the id of `i`.
     fn get_set_variable(&self, i: usize) -> &Set;
-
-    /// Returns the number of vector variables;
-    fn get_number_of_vector_variables(&self) -> usize;
-
-    /// Returns the value of a vector variable.
-    ///
-    /// # Panics
-    ///
-    /// Panics if no variable has the id of `i`.
-    fn get_vector_variable(&self, i: usize) -> &Vector;
 
     /// Returns the number of element variables;
     fn get_number_of_element_variables(&self) -> usize;
@@ -92,11 +82,11 @@ pub trait StateInterface: Sized {
 
     /// Returns the transitioned state by the effect.
     ///
-    /// Set and vector effects must be sorted by the indices of the variables.
+    /// Set effects must be sorted by the indices of the variables.
     ///
     /// # Panics
     ///
-    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set or vector.
+    /// Panics if the cost of the transition state is used or a min/max reduce operation is performed on an empty set.
     fn apply_effect<T: From<State>>(
         &self,
         effect: &effect::Effect,
@@ -117,22 +107,6 @@ pub trait StateInterface: Sized {
         }
         while i < len {
             set_variables.push(self.get_set_variable(i).clone());
-            i += 1;
-        }
-
-        let len = self.get_number_of_vector_variables();
-        let mut vector_variables = Vec::with_capacity(len);
-        let mut i = 0;
-        for e in &effect.vector_effects {
-            while i < e.0 {
-                vector_variables.push(self.get_vector_variable(i).clone());
-                i += 1;
-            }
-            vector_variables.push(e.1.eval(self, function_cache, state_functions, registry));
-            i += 1;
-        }
-        while i < len {
-            vector_variables.push(self.get_vector_variable(i).clone());
             i += 1;
         }
 
@@ -188,7 +162,6 @@ pub trait StateInterface: Sized {
         T::from(State {
             signature_variables: SignatureVariables {
                 set_variables,
-                vector_variables,
                 element_variables,
                 integer_variables,
                 continuous_variables,
@@ -207,8 +180,6 @@ pub trait StateInterface: Sized {
 pub struct SignatureVariables {
     /// Set variables.
     pub set_variables: Vec<Set>,
-    /// Vector variables.
-    pub vector_variables: Vec<Vector>,
     /// Element variables.
     pub element_variables: Vec<Element>,
     /// Integer numeric variables.
@@ -280,47 +251,6 @@ impl StateInterface for State {
     #[inline]
     fn get_set_variable(&self, i: usize) -> &Set {
         &self.signature_variables.set_variables[i]
-    }
-
-    /// Returns the number of vector variables;
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dypdl::prelude::*;
-    ///
-    /// let mut model = Model::default();
-    /// let object_type = model.add_object_type("object", 4).unwrap();
-    /// model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).unwrap();
-    /// let state = model.target.clone();
-    ///
-    /// assert_eq!(state.get_number_of_vector_variables(), 1);
-    /// ```
-    #[inline]
-    fn get_number_of_vector_variables(&self) -> usize {
-        self.signature_variables.vector_variables.len()
-    }
-
-    /// Returns the value of a vector variable.
-    ///
-    /// # Panics
-    ///
-    /// Panics if no variable has the id of `i`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dypdl::prelude::*;
-    ///
-    /// let mut model = Model::default();
-    /// let object_type = model.add_object_type("object", 4).unwrap();
-    /// let variable = model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).unwrap();
-    /// let state = model.target.clone();
-    ///
-    /// assert_eq!(state.get_vector_variable(variable.id()), &vec![0, 1, 2, 3]);
-    #[inline]
-    fn get_vector_variable(&self, i: usize) -> &Vector {
-        &self.signature_variables.vector_variables[i]
     }
 
     /// Returns the number of vector variables;
@@ -618,11 +548,6 @@ impl State {
                 return false;
             }
         }
-        for i in 0..metadata.number_of_vector_variables() {
-            if self.get_vector_variable(i) != state.get_vector_variable(i) {
-                return false;
-            }
-        }
         true
     }
 }
@@ -647,7 +572,6 @@ define_handle!(ObjectType);
 define_handle!(ElementVariable);
 define_handle!(ElementResourceVariable);
 define_handle!(SetVariable);
-define_handle!(VectorVariable);
 define_handle!(IntegerVariable);
 define_handle!(IntegerResourceVariable);
 define_handle!(ContinuousVariable);
@@ -669,13 +593,6 @@ pub struct StateMetadata {
     pub name_to_set_variable: FxHashMap<String, usize>,
     /// Map from a set variable id to its object type id.
     pub set_variable_to_object: Vec<usize>,
-
-    /// Map from a vector variable id to the name.
-    pub vector_variable_names: Vec<String>,
-    /// Map from a name to a set variable id.
-    pub name_to_vector_variable: FxHashMap<String, usize>,
-    /// Map from a vector variable id to its object type id.
-    pub vector_variable_to_object: Vec<usize>,
 
     /// Map from an element variable id to the name.
     pub element_variable_names: Vec<String>,
@@ -753,24 +670,6 @@ impl StateMetadata {
     #[inline]
     pub fn number_of_set_variables(&self) -> usize {
         self.set_variable_names.len()
-    }
-
-    /// Returns the number of vector variables.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use dypdl::prelude::*;
-    ///
-    /// let mut model = Model::default();
-    /// let object_type = model.add_object_type("object", 4).unwrap();
-    /// model.add_vector_variable("variable", object_type, vec![0, 1, 2, 3]).unwrap();
-    ///
-    /// assert_eq!(model.state_metadata.number_of_vector_variables(), 1);
-    /// ```
-    #[inline]
-    pub fn number_of_vector_variables(&self) -> usize {
-        self.vector_variable_names.len()
     }
 
     /// Returns the number of element variables.
@@ -889,9 +788,6 @@ impl StateMetadata {
             name_set.insert(name.clone());
         }
         for name in &self.set_variable_names {
-            name_set.insert(name.clone());
-        }
-        for name in &self.vector_variable_names {
             name_set.insert(name.clone());
         }
         for name in &self.element_variable_names {
@@ -1075,22 +971,6 @@ impl StateMetadata {
                 return Err(ModelErr::new(format!(
                     "set size {len} for {i} th set variable > #objects ({m})",
                     len = v.len(),
-                )));
-            }
-        }
-        let n = self.number_of_vector_variables();
-        for i in 0..n {
-            let v = panic::catch_unwind(|| state.get_vector_variable(i));
-            if v.is_err() {
-                return Err(ModelErr::new(format!(
-                    "{i} th vector variable does not exists",
-                )));
-            }
-            let v = v.unwrap();
-            let m = self.object_numbers[self.vector_variable_to_object[i]];
-            if v.iter().any(|v| *v >= m) {
-                return Err(ModelErr::new(format!(
-                    "vector for {i} th vector variable contains a value >= #objects ({m})",
                 )));
             }
         }
@@ -1321,42 +1201,6 @@ impl StateMetadata {
         Ok(SetVariable(id))
     }
 
-    /// Returns a vector variable given a name.
-    ///
-    /// # Errors
-    ///
-    /// If no such variable.
-    #[inline]
-    pub fn get_vector_variable(&self, name: &str) -> Result<VectorVariable, ModelErr> {
-        let id = util::get_id(name, &self.name_to_vector_variable)?;
-        Ok(VectorVariable(id))
-    }
-
-    /// Adds and returns a vector variable.
-    ///
-    /// The value in the target state must be specified.
-    ///
-    /// # Errors
-    ///
-    /// If the name is already used or the object type is not in the model.
-    pub fn add_vector_variable<T>(
-        &mut self,
-        name: T,
-        ob: ObjectType,
-    ) -> Result<VectorVariable, ModelErr>
-    where
-        String: From<T>,
-    {
-        self.check_object(ob)?;
-        let id = util::add_name(
-            name,
-            &mut self.vector_variable_names,
-            &mut self.name_to_vector_variable,
-        )?;
-        self.vector_variable_to_object.push(ob.id());
-        Ok(VectorVariable(id))
-    }
-
     /// Returns an integer variable given a name.
     ///
     /// # Errors
@@ -1536,7 +1380,6 @@ macro_rules! impl_check_variable {
 impl_check_variable!(ElementVariable, element_variable_names);
 impl_check_variable!(ElementResourceVariable, element_resource_variable_names);
 impl_check_variable!(SetVariable, set_variable_names);
-impl_check_variable!(VectorVariable, vector_variable_names);
 impl_check_variable!(IntegerVariable, integer_variable_names);
 impl_check_variable!(IntegerResourceVariable, integer_resource_variable_names);
 impl_check_variable!(ContinuousVariable, continuous_variable_names);
@@ -1581,7 +1424,6 @@ macro_rules! impl_get_object_type_of {
 impl_get_object_type_of!(ElementVariable, element_variable_to_object);
 impl_get_object_type_of!(ElementResourceVariable, element_resource_variable_to_object);
 impl_get_object_type_of!(SetVariable, set_variable_to_object);
-impl_get_object_type_of!(VectorVariable, vector_variable_to_object);
 
 /// Trait for accessing preference of resource variables.
 ///
@@ -1635,7 +1477,8 @@ impl_access_preference!(ContinuousResourceVariable, continuous_less_is_better);
 
 #[cfg(test)]
 mod tests {
-    use super::super::expression::*;
+    use crate::expression::*;
+
     use super::*;
 
     fn generate_metadata() -> StateMetadata {
@@ -1657,19 +1500,6 @@ mod tests {
         name_to_set_variable.insert(String::from("s2"), 2);
         name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 1];
-
-        let vector_variable_names = vec![
-            String::from("p0"),
-            String::from("p1"),
-            String::from("p2"),
-            String::from("p3"),
-        ];
-        let mut name_to_vector_variable = FxHashMap::default();
-        name_to_vector_variable.insert(String::from("p0"), 0);
-        name_to_vector_variable.insert(String::from("p1"), 1);
-        name_to_vector_variable.insert(String::from("p2"), 2);
-        name_to_vector_variable.insert(String::from("p3"), 3);
-        let vector_variable_to_object = vec![0, 0, 0, 1];
 
         let element_variable_names = vec![
             String::from("e0"),
@@ -1752,9 +1582,6 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            vector_variable_names,
-            name_to_vector_variable,
-            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -1813,44 +1640,6 @@ mod tests {
             ..Default::default()
         };
         state.get_set_variable(1);
-    }
-
-    #[test]
-    fn state_get_number_of_vector_variables() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                vector_variables: vec![Vector::default()],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        assert_eq!(state.get_number_of_vector_variables(), 1);
-    }
-
-    #[test]
-    fn state_get_vector_variable() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                vector_variables: vec![Vector::default(), vec![1]],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        assert_eq!(state.get_vector_variable(0), &Vector::default());
-        assert_eq!(state.get_vector_variable(1), &vec![1]);
-    }
-
-    #[test]
-    #[should_panic]
-    fn state_get_vector_variable_panic() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                vector_variables: vec![Vector::default()],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        state.get_vector_variable(1);
     }
 
     #[test]
@@ -2095,7 +1884,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2], vec![1, 2]],
                 element_variables: vec![1, 2],
                 integer_variables: vec![1, 2, 3],
                 continuous_variables: vec![1.0, 2.0, 3.0],
@@ -2116,18 +1904,6 @@ mod tests {
             SetElementOperator::Remove,
             ElementExpression::Constant(0),
             Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
-        );
-        let vector_effect1 = VectorExpression::Push(
-            ElementExpression::Constant(1),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        let vector_effect2 = VectorExpression::Push(
-            ElementExpression::Constant(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                1,
-            ))),
         );
         let element_effect1 = ElementExpression::Constant(2);
         let element_effect2 = ElementExpression::Constant(1);
@@ -2173,7 +1949,6 @@ mod tests {
         );
         let effect = effect::Effect {
             set_effects: vec![(0, set_effect1), (1, set_effect2)],
-            vector_effects: vec![(0, vector_effect1), (1, vector_effect2)],
             element_effects: vec![(0, element_effect1), (1, element_effect2)],
             integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
             continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
@@ -2197,7 +1972,6 @@ mod tests {
         let expected = State {
             signature_variables: SignatureVariables {
                 set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
                 element_variables: vec![2, 1],
                 integer_variables: vec![0, 4, 3],
                 continuous_variables: vec![0.0, 4.0, 3.0],
@@ -2262,12 +2036,6 @@ mod tests {
     }
 
     #[test]
-    fn number_of_vector_variables() {
-        let metadata = generate_metadata();
-        assert_eq!(metadata.number_of_vector_variables(), 4);
-    }
-
-    #[test]
     fn number_of_element_variables() {
         let metadata = generate_metadata();
         assert_eq!(metadata.number_of_element_variables(), 4);
@@ -2306,8 +2074,6 @@ mod tests {
             continuous_variable_names: vec![String::from("v")],
             set_variable_names: vec![String::from("v")],
             set_variable_to_object: vec![0],
-            vector_variable_names: vec![String::from("v")],
-            vector_variable_to_object: vec![0],
             ..Default::default()
         };
         assert!(!metadata.has_resource_variables());
@@ -2342,10 +2108,6 @@ mod tests {
         expected.insert(String::from("s1"));
         expected.insert(String::from("s2"));
         expected.insert(String::from("s3"));
-        expected.insert(String::from("p0"));
-        expected.insert(String::from("p1"));
-        expected.insert(String::from("p2"));
-        expected.insert(String::from("p3"));
         expected.insert(String::from("e0"));
         expected.insert(String::from("e1"));
         expected.insert(String::from("e2"));
@@ -2532,7 +2294,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2557,7 +2318,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2577,27 +2337,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9]],
-                set_variables: vec![
-                    Set::with_capacity(10),
-                    Set::with_capacity(10),
-                    Set::with_capacity(10),
-                    Set::with_capacity(2),
-                ],
-                integer_variables: vec![-1, 2, 4, 5],
-                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
-            },
-            resource_variables: ResourceVariables {
-                element_variables: vec![4, 8, 9, 1],
-                integer_variables: vec![-1, 2, 4, 5],
-                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
-            },
-        };
-        assert!(metadata.check_state(&state).is_err());
-        let state = State {
-            signature_variables: SignatureVariables {
-                element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2616,7 +2355,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2636,7 +2374,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2656,7 +2393,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2676,7 +2412,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2696,7 +2431,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2716,7 +2450,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 10, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2736,27 +2469,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![10], vec![1]],
-                set_variables: vec![
-                    Set::with_capacity(10),
-                    Set::with_capacity(10),
-                    Set::with_capacity(10),
-                    Set::with_capacity(2),
-                ],
-                integer_variables: vec![-1, 2, 4, 5],
-                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
-            },
-            resource_variables: ResourceVariables {
-                element_variables: vec![4, 8, 9, 1],
-                integer_variables: vec![-1, 2, 4, 5],
-                continuous_variables: vec![-1.0, 2.0, 4.0, 5.0],
-            },
-        };
-        assert!(metadata.check_state(&state).is_err());
-        let state = State {
-            signature_variables: SignatureVariables {
-                element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -2776,7 +2488,6 @@ mod tests {
         let state = State {
             signature_variables: SignatureVariables {
                 element_variables: vec![4, 8, 9, 1],
-                vector_variables: vec![vec![4], vec![8], vec![9], vec![1]],
                 set_variables: vec![
                     Set::with_capacity(10),
                     Set::with_capacity(10),
@@ -3258,104 +2969,6 @@ mod tests {
         let v = metadata2.add_set_variable(String::from("v"), ob);
         assert!(v.is_ok());
         let v = metadata2.add_set_variable(String::from("u"), ob);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-
-        let ob = metadata.get_object_type_of(v);
-        assert!(ob.is_err());
-    }
-
-    #[test]
-    fn add_vector_variable_ok() {
-        let mut metadata = StateMetadata::default();
-        let ob = metadata.add_object_type(String::from("something"), 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = metadata.add_vector_variable(String::from("v"), ob);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        assert_eq!(v, VectorVariable(0));
-        assert_eq!(v.id(), 0);
-        assert_eq!(metadata.vector_variable_names, vec![String::from("v")]);
-        assert_eq!(metadata.vector_variable_to_object, vec![0]);
-        let mut name_to_variable = FxHashMap::default();
-        name_to_variable.insert(String::from("v"), 0);
-        assert_eq!(metadata.name_to_vector_variable, name_to_variable);
-        let v = metadata.add_vector_variable(String::from("u"), ob);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        assert_eq!(v, VectorVariable(1));
-        assert_eq!(v.id(), 1);
-        assert_eq!(
-            metadata.vector_variable_names,
-            vec![String::from("v"), String::from("u")]
-        );
-        assert_eq!(metadata.vector_variable_to_object, vec![0, 0]);
-        name_to_variable.insert(String::from("u"), 1);
-        assert_eq!(metadata.name_to_vector_variable, name_to_variable);
-    }
-
-    #[test]
-    fn add_vector_variable_err() {
-        let mut metadata = StateMetadata::default();
-        let ob = metadata.add_object_type(String::from("something"), 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = metadata.add_vector_variable(String::from("v"), ob);
-        assert!(v.is_ok());
-        let v = metadata.add_vector_variable(String::from("v"), ob);
-        assert!(v.is_err());
-        assert_eq!(metadata.vector_variable_names, vec![String::from("v")]);
-        assert_eq!(metadata.vector_variable_to_object, vec![0]);
-        let mut name_to_variable = FxHashMap::default();
-        name_to_variable.insert(String::from("v"), 0);
-        assert_eq!(metadata.name_to_vector_variable, name_to_variable);
-
-        let mut metadata2 = StateMetadata::default();
-        let ob = metadata2.add_object_type(String::from("something"), 10);
-        assert!(ob.is_ok());
-        let ob = metadata2.add_object_type(String::from("other"), 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = metadata.add_vector_variable(String::from("u"), ob);
-        assert!(v.is_err());
-        assert_eq!(metadata.vector_variable_names, vec![String::from("v")]);
-        assert_eq!(metadata.vector_variable_to_object, vec![0]);
-        let mut name_to_variable = FxHashMap::default();
-        name_to_variable.insert(String::from("v"), 0);
-        assert_eq!(metadata.name_to_vector_variable, name_to_variable);
-    }
-
-    #[test]
-    fn get_object_type_of_vector_variable_ok() {
-        let mut metadata = StateMetadata::default();
-        let ob = metadata.add_object_type(String::from("something"), 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = metadata.add_vector_variable(String::from("v"), ob);
-        assert!(v.is_ok());
-        let v = v.unwrap();
-        let ob1 = metadata.get_object_type_of(v);
-        assert!(ob1.is_ok());
-        assert_eq!(ob1.unwrap(), ob);
-    }
-
-    #[test]
-    fn get_object_type_of_vector_variable_err() {
-        let mut metadata = StateMetadata::default();
-        let ob = metadata.add_object_type(String::from("something"), 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = metadata.add_vector_variable(String::from("v"), ob);
-        assert!(v.is_ok());
-
-        let mut metadata2 = StateMetadata::default();
-        let ob = metadata2.add_object_type(String::from("something"), 10);
-        assert!(ob.is_ok());
-        let ob = ob.unwrap();
-        let v = metadata2.add_vector_variable(String::from("v"), ob);
-        assert!(v.is_ok());
-        let v = metadata2.add_vector_variable(String::from("u"), ob);
         assert!(v.is_ok());
         let v = v.unwrap();
 

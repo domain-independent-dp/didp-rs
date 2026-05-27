@@ -1,13 +1,11 @@
 use super::condition_parser;
 use super::continuous_parser;
 use super::element_parser;
-use super::integer_vector_parser;
 use super::numeric_table_parser;
 use super::util;
 use super::util::ParseErr;
 use dypdl::expression::{
-    BinaryOperator, CastOperator, IntegerExpression, IntegerVectorExpression, ReduceOperator,
-    UnaryOperator,
+    BinaryOperator, CastOperator, IntegerExpression, UnaryOperator,
 };
 use dypdl::variable_type::{Element, Integer};
 use dypdl::{StateFunctions, StateMetadata, TableRegistry};
@@ -39,28 +37,6 @@ pub fn parse_expression<'a>(
                 &registry.integer_tables,
             )? {
                 Ok((IntegerExpression::Table(Box::new(expression)), rest))
-            } else if name == "length" {
-                parse_length(rest, metadata, functions, registry, parameters)
-            } else if name == "last" {
-                let (vector, rest) = integer_vector_parser::parse_expression(
-                    rest, metadata, functions, registry, parameters,
-                )?;
-                let rest = util::parse_closing(rest)?;
-                Ok((IntegerExpression::Last(Box::new(vector)), rest))
-            } else if name == "at" {
-                let (vector, rest) = integer_vector_parser::parse_expression(
-                    rest, metadata, functions, registry, parameters,
-                )?;
-                let (i, rest) = element_parser::parse_expression(
-                    rest, metadata, functions, registry, parameters,
-                )?;
-                let rest = util::parse_closing(rest)?;
-                Ok((IntegerExpression::At(Box::new(vector), i), rest))
-            } else if let Ok((vector, rest)) = integer_vector_parser::parse_expression(
-                rest, metadata, functions, registry, parameters,
-            ) {
-                let rest = util::parse_closing(rest)?;
-                Ok((parse_reduce(name, vector)?, rest))
             } else if name == "if" {
                 let (condition, rest) = condition_parser::parse_expression(
                     rest, metadata, functions, registry, parameters,
@@ -115,33 +91,6 @@ fn parse_parameterized_state_function<'a>(
         .get_integer_function(&name)
         .map(|expression| Ok(Some((expression, rest))))
         .unwrap_or_else(|_| Ok(None))
-}
-
-fn parse_reduce(
-    name: &str,
-    vector: IntegerVectorExpression,
-) -> Result<IntegerExpression, ParseErr> {
-    match name {
-        "reduce-sum" => Ok(IntegerExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(vector),
-        )),
-        "reduce-product" => Ok(IntegerExpression::Reduce(
-            ReduceOperator::Product,
-            Box::new(vector),
-        )),
-        "reduce-max" => Ok(IntegerExpression::Reduce(
-            ReduceOperator::Max,
-            Box::new(vector),
-        )),
-        "reduce-min" => Ok(IntegerExpression::Reduce(
-            ReduceOperator::Min,
-            Box::new(vector),
-        )),
-        _ => Err(ParseErr::new(format!(
-            "no such reduction operator `{name}`",
-        ))),
-    }
 }
 
 fn parse_unary_operation(name: &str, x: IntegerExpression) -> Result<IntegerExpression, ParseErr> {
@@ -247,19 +196,6 @@ fn parse_cardinality<'a>(
     Ok((IntegerExpression::Cardinality(expression), rest))
 }
 
-fn parse_length<'a>(
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, Element>,
-) -> Result<(IntegerExpression, &'a [String]), ParseErr> {
-    let (expression, rest) =
-        element_parser::parse_vector_expression(tokens, metadata, functions, registry, parameters)?;
-    let rest = util::parse_closing(rest)?;
-    Ok((IntegerExpression::Length(expression), rest))
-}
-
 fn parse_integer_atom(
     token: &str,
     metadata: &StateMetadata,
@@ -287,6 +223,10 @@ fn parse_integer_atom(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use dypdl::expression::{
+        ArgumentExpression, ElementExpression, NumericTableExpression, ReduceOperator,
+        ReferenceExpression, SetExpression,
+    };
     use dypdl::expression::*;
     use dypdl::*;
 
@@ -308,19 +248,6 @@ mod tests {
         name_to_set_variable.insert(String::from("s2"), 2);
         name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
-
-        let vector_variable_names = vec![
-            String::from("v0"),
-            String::from("v1"),
-            String::from("v2"),
-            String::from("v3"),
-        ];
-        let mut name_to_vector_variable = FxHashMap::default();
-        name_to_vector_variable.insert(String::from("v0"), 0);
-        name_to_vector_variable.insert(String::from("v1"), 1);
-        name_to_vector_variable.insert(String::from("v2"), 2);
-        name_to_vector_variable.insert(String::from("v3"), 3);
-        let vector_variable_to_object = vec![0, 0, 0, 0];
 
         let element_variable_names = vec![
             String::from("e0"),
@@ -403,9 +330,6 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            vector_variable_names,
-            name_to_vector_variable,
-            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -653,7 +577,7 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", "sum", "f4", "0", "e0", "s0", "v0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["(", "sum", "f4", "0", "e0", "s0", "0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -671,9 +595,7 @@ mod tests {
                     ArgumentExpression::Set(SetExpression::Reference(
                         ReferenceExpression::Variable(0)
                     )),
-                    ArgumentExpression::Vector(VectorExpression::Reference(
-                        ReferenceExpression::Variable(0)
-                    ))
+                    ArgumentExpression::Element(ElementExpression::Constant(0)),
                 ]
             )))
         );
@@ -687,14 +609,14 @@ mod tests {
         let registry = generate_registry();
         let parameters = generate_parameters();
 
-        let tokens: Vec<String> = ["(", "sum", "cf4", "0", "e0", "s0", "v0", ")", "c0", ")"]
+        let tokens: Vec<String> = ["(", "sum", "cf4", "0", "e0", "s0", "0", ")", "c0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
         let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
 
-        let tokens: Vec<String> = ["(", "f4", "0", "e0", "s0", "v0", "i0", ")", "i0", ")"]
+        let tokens: Vec<String> = ["(", "f4", "0", "e0", "s0", "0", "i0", ")", "i0", ")"]
             .iter()
             .map(|x| x.to_string())
             .collect();
@@ -1130,28 +1052,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_integer_length_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "length", "v0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            IntegerExpression::Length(VectorExpression::Reference(ReferenceExpression::Variable(
-                0
-            )))
-        );
-        assert_eq!(rest, &tokens[4..]);
-    }
-
-    #[test]
     fn parse_integer_length_err() {
         let metadata = generate_metadata();
         let functions = StateFunctions::default();
@@ -1166,26 +1066,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_integer_last_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "last", "(", "integer-vector", "0", "1", ")", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            IntegerExpression::Last(Box::new(IntegerVectorExpression::Constant(vec![0, 1])))
-        );
-        assert_eq!(rest, &tokens[8..]);
-    }
-
-    #[test]
     fn parse_integer_last_err() {
         let metadata = generate_metadata();
         let functions = StateFunctions::default();
@@ -1197,40 +1077,6 @@ mod tests {
             .collect();
         let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_integer_at() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-        let tokens: Vec<String> = [
-            "(",
-            "at",
-            "(",
-            "integer-vector",
-            "0",
-            "1",
-            ")",
-            "0",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            IntegerExpression::At(
-                Box::new(IntegerVectorExpression::Constant(vec![0, 1]),),
-                ElementExpression::Constant(0),
-            )
-        );
-        assert_eq!(rest, &tokens[9..]);
     }
 
     #[test]
@@ -1260,118 +1106,6 @@ mod tests {
             .collect();
         let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_integer_reduce_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = [
-            "(",
-            "reduce-sum",
-            "(",
-            "integer-vector",
-            "0",
-            "1",
-            ")",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            IntegerExpression::Reduce(
-                ReduceOperator::Sum,
-                Box::new(IntegerVectorExpression::Constant(vec![0, 1]))
-            )
-        );
-        assert_eq!(rest, &tokens[8..]);
-
-        let tokens: Vec<String> = [
-            "(",
-            "reduce-product",
-            "(",
-            "integer-vector",
-            "0",
-            "1",
-            ")",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            IntegerExpression::Reduce(
-                ReduceOperator::Product,
-                Box::new(IntegerVectorExpression::Constant(vec![0, 1]))
-            )
-        );
-        assert_eq!(rest, &tokens[8..]);
-
-        let tokens: Vec<String> = [
-            "(",
-            "reduce-max",
-            "(",
-            "integer-vector",
-            "0",
-            "1",
-            ")",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            IntegerExpression::Reduce(
-                ReduceOperator::Max,
-                Box::new(IntegerVectorExpression::Constant(vec![0, 1]))
-            )
-        );
-        assert_eq!(rest, &tokens[8..]);
-
-        let tokens: Vec<String> = [
-            "(",
-            "reduce-min",
-            "(",
-            "integer-vector",
-            "0",
-            "1",
-            ")",
-            ")",
-            ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            IntegerExpression::Reduce(
-                ReduceOperator::Min,
-                Box::new(IntegerVectorExpression::Constant(vec![0, 1]))
-            )
-        );
-        assert_eq!(rest, &tokens[8..]);
     }
 
     #[test]

@@ -34,22 +34,6 @@ pub fn load_state_from_yaml(
         }
         set_variables.push(set);
     }
-    let mut vector_variables = Vec::with_capacity(metadata.vector_variable_names.len());
-    for name in &metadata.vector_variable_names {
-        let vector = util::get_usize_array_by_key(value, name)?;
-        let variable = metadata.get_vector_variable(name)?;
-        let object = metadata.get_object_type_of(variable)?;
-        let capacity = metadata.get_number_of_objects(object)?;
-        for v in &vector {
-            if *v >= capacity {
-                return Err(util::YamlContentErr::new(format!(
-                    "value `{v}` is out of range of a vector variable `{name}`"
-                ))
-                .into());
-            }
-        }
-        vector_variables.push(vector);
-    }
     let mut element_variables = Vec::with_capacity(metadata.element_variable_names.len());
     for name in &metadata.element_variable_names {
         let element = util::get_usize_by_key(value, name)?;
@@ -86,7 +70,6 @@ pub fn load_state_from_yaml(
     Ok(State {
         signature_variables: SignatureVariables {
             set_variables,
-            vector_variables,
             element_variables,
             integer_variables,
             continuous_variables,
@@ -141,25 +124,18 @@ pub fn ground_static_parameters_from_yaml(
     Ok(parameters_array)
 }
 
-type GroundedParameterTriplet = (
-    Vec<FxHashMap<String, usize>>,
-    Vec<Vec<(usize, usize)>>,
-    Vec<Vec<(usize, usize, usize)>>,
-);
+type GroundedParameterPair = (Vec<FxHashMap<String, usize>>, Vec<Vec<(usize, usize)>>);
 
 pub fn ground_parameters_from_yaml(
     metadata: &StateMetadata,
     value: &yaml_rust::Yaml,
-) -> Result<GroundedParameterTriplet, Box<dyn std::error::Error>> {
+) -> Result<GroundedParameterPair, Box<dyn std::error::Error>> {
     let array = util::get_array(value)?;
     let mut parameters_array: Vec<FxHashMap<String, usize>> = Vec::with_capacity(array.len());
     parameters_array.push(FxHashMap::default());
     let mut elements_in_set_variable_array: Vec<Vec<(usize, usize)>> =
         Vec::with_capacity(array.len());
     elements_in_set_variable_array.push(vec![]);
-    let mut elements_in_vector_variable_array: Vec<Vec<(usize, usize, usize)>> =
-        Vec::with_capacity(array.len());
-    elements_in_vector_variable_array.push(vec![]);
     let mut reserved_names = FxHashSet::default();
     for value in array {
         let map = util::get_map(value)?;
@@ -172,30 +148,23 @@ pub fn ground_parameters_from_yaml(
         }
         reserved_names.insert(name.clone());
         let object = util::get_string_by_key(map, "object")?;
-        let (n, set_index, vector_index) = if let Ok(object) = metadata.get_object_type(&object) {
-            (metadata.get_number_of_objects(object)?, None, None)
+        let (n, set_index) = if let Ok(object) = metadata.get_object_type(&object) {
+            (metadata.get_number_of_objects(object)?, None)
         } else if let Ok(v) = metadata.get_set_variable(&object) {
             let object = metadata.get_object_type_of(v)?;
-            (metadata.get_number_of_objects(object)?, Some(v.id()), None)
-        } else if let Ok(v) = metadata.get_vector_variable(&object) {
-            let object = metadata.get_object_type_of(v)?;
-            (metadata.get_number_of_objects(object)?, None, Some(v.id()))
+            (metadata.get_number_of_objects(object)?, Some(v.id()))
         } else {
             return Err(util::YamlContentErr::new(format!(
-                "no such object, set variable, or vector variable `{object}`"
+                "no such object or set variable `{object}`"
             ))
             .into());
         };
         let mut new_parameteres_set = Vec::with_capacity(parameters_array.len() * n);
         let mut new_elements_in_set_variable_array =
             Vec::with_capacity(elements_in_set_variable_array.len() * n);
-        let mut new_elements_in_vector_variable_array =
-            Vec::with_capacity(elements_in_vector_variable_array.len() * n);
-        for ((parameters, elements_in_set_variable), elements_in_vector_variable) in
-            parameters_array
-                .iter()
-                .zip(elements_in_set_variable_array.iter())
-                .zip(elements_in_vector_variable_array.iter())
+        for (parameters, elements_in_set_variable) in parameters_array
+            .iter()
+            .zip(elements_in_set_variable_array.iter())
         {
             for i in 0..n {
                 let mut parameters = parameters.clone();
@@ -204,26 +173,15 @@ pub fn ground_parameters_from_yaml(
                 if let Some(j) = set_index {
                     elements_in_set_variable.push((j, i));
                 }
-                let mut elements_in_vector_variable = elements_in_vector_variable.clone();
-                if let Some(j) = vector_index {
-                    let capacity = metadata.object_numbers[metadata.vector_variable_to_object[j]];
-                    elements_in_vector_variable.push((j, i, capacity));
-                }
                 new_parameteres_set.push(parameters);
                 new_elements_in_set_variable_array.push(elements_in_set_variable);
-                new_elements_in_vector_variable_array.push(elements_in_vector_variable);
             }
         }
         parameters_array = new_parameteres_set;
         elements_in_set_variable_array = new_elements_in_set_variable_array;
-        elements_in_vector_variable_array = new_elements_in_vector_variable_array;
     }
 
-    Ok((
-        parameters_array,
-        elements_in_set_variable_array,
-        elements_in_vector_variable_array,
-    ))
+    Ok((parameters_array, elements_in_set_variable_array))
 }
 
 pub fn load_metadata_from_yaml(
@@ -259,11 +217,6 @@ pub fn load_metadata_from_yaml(
                 let object_name = util::get_string_by_key(map, "object")?;
                 let ob = metadata.get_object_type(&object_name)?;
                 metadata.add_set_variable(name, ob)?;
-            }
-            "vector" => {
-                let object_name = util::get_string_by_key(map, "object")?;
-                let ob = metadata.get_object_type(&object_name)?;
-                metadata.add_vector_variable(name, ob)?;
             }
             "element" => match get_less_is_better(map)? {
                 Some(value) => {
@@ -322,8 +275,7 @@ fn get_less_is_better(map: &Hash) -> Result<Option<bool>, util::YamlContentErr> 
 mod tests {
     use super::*;
 
-    #[test]
-    fn state_load_from_yaml_ok() {
+    fn create_metadata() -> StateMetadata {
         let mut metadata = StateMetadata::default();
         let result = metadata.add_object_type(String::from("object"), 10);
         assert!(result.is_ok());
@@ -338,14 +290,6 @@ mod tests {
         let result = metadata.add_set_variable(String::from("s2"), ob1);
         assert!(result.is_ok());
         let result = metadata.add_set_variable(String::from("s3"), ob2);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p0"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p1"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p2"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p3"), ob2);
         assert!(result.is_ok());
         let result = metadata.add_element_variable(String::from("e0"), ob1);
         assert!(result.is_ok());
@@ -396,16 +340,19 @@ mod tests {
         let result = metadata.add_continuous_resource_variable(String::from("cr3"), false);
         assert!(result.is_ok());
 
+        metadata
+    }
+
+    #[test]
+    fn state_load_from_yaml_ok() {
+        let metadata = create_metadata();
+
         let yaml = yaml_rust::YamlLoader::load_from_str(
             r"
 s0: [0, 2]
 s1: [0, 1]
 s2: [0]
 s3: []
-p0: [0, 2]
-p1: [0, 1]
-p2: [0]
-p3: []
 e0: 0
 e1: 1
 e2: 2
@@ -449,7 +396,6 @@ cr3: 3
         let expected = State {
             signature_variables: SignatureVariables {
                 set_variables: vec![s0, s1, s2, s3],
-                vector_variables: vec![vec![0, 2], vec![0, 1], vec![0], vec![]],
                 element_variables: vec![0, 1, 2, 0],
                 integer_variables: vec![0, 1, 2, 3],
                 continuous_variables: vec![0.0, 1.0, 2.0, 3.0],
@@ -465,77 +411,7 @@ cr3: 3
 
     #[test]
     fn state_load_from_yaml_err() {
-        let mut metadata = StateMetadata::default();
-        let result = metadata.add_object_type(String::from("object"), 10);
-        assert!(result.is_ok());
-        let ob1 = result.unwrap();
-        let result = metadata.add_object_type(String::from("small"), 2);
-        assert!(result.is_ok());
-        let ob2 = result.unwrap();
-        let result = metadata.add_set_variable(String::from("s0"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_set_variable(String::from("s1"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_set_variable(String::from("s2"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_set_variable(String::from("s3"), ob2);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p0"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p1"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p2"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p3"), ob2);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e0"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e1"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e2"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e3"), ob2);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i0"));
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i1"));
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i2"));
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i3"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c0"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c1"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c2"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c3"));
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er0"), ob1, false);
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er1"), ob1, false);
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er2"), ob1, true);
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er3"), ob2, false);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir0"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir1"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir2"), true);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir3"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr0"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr1"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr2"), true);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr3"), false);
-        assert!(result.is_ok());
+        let metadata = create_metadata();
 
         let yaml = yaml_rust::YamlLoader::load_from_str(
             r"
@@ -543,10 +419,6 @@ s0: [0, 2]
 s1: [0, 1]
 s2: [0]
 s3: []
-p0: [0, 2]
-p1: [0, 1]
-p2: [0]
-p3: []
 e0: 0
 e1: 1
 e3: 0
@@ -585,10 +457,6 @@ s0: [0, 2]
 s1: [0, 1]
 s2: [0]
 s3: [3]
-p0: [0, 2]
-p1: [0, 1]
-p2: [0]
-p3: []
 e0: 0
 e1: 1
 e2: 1
@@ -597,49 +465,6 @@ er0: 0
 er1: 1
 er2: 1
 er3: 0
-i0: 0
-i1: 1
-i2: 2
-i3: 3
-c0: 0
-c1: 1
-c2: 2
-c3: 3
-ir0: 0
-ir1: 1
-ir2: 2
-ir3: 3
-cr0: 0
-cr1: 1
-cr2: 2
-cr3: 3
-",
-        );
-        assert!(yaml.is_ok());
-        let yaml = yaml.unwrap();
-        assert_eq!(yaml.len(), 1);
-        let yaml = &yaml[0];
-        let state = load_state_from_yaml(yaml, &metadata);
-        assert!(state.is_err());
-
-        let yaml = yaml_rust::YamlLoader::load_from_str(
-            r"
-s0: [0, 2]
-s1: [0, 1]
-s2: [0]
-s3: []
-p0: [0, 2]
-p1: [0, 1]
-p2: [0]
-p3: [3]
-e0: 0
-e1: 1
-e2: 1
-e3: 0
-er0: 0
-er1: 1
-er2: 1
-er3: 3
 i0: 0
 i1: 1
 i2: 2
@@ -806,77 +631,7 @@ object: object
 
     #[test]
     fn ground_parameters_from_yaml_ok() {
-        let mut metadata = StateMetadata::default();
-        let result = metadata.add_object_type(String::from("object"), 10);
-        assert!(result.is_ok());
-        let ob1 = result.unwrap();
-        let result = metadata.add_object_type(String::from("small"), 2);
-        assert!(result.is_ok());
-        let ob2 = result.unwrap();
-        let result = metadata.add_set_variable(String::from("s0"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_set_variable(String::from("s1"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_set_variable(String::from("s2"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_set_variable(String::from("s3"), ob2);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p0"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p1"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p2"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p3"), ob2);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e0"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e1"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e2"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e3"), ob2);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i0"));
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i1"));
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i2"));
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i3"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c0"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c1"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c2"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c3"));
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er0"), ob1, false);
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er1"), ob1, false);
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er2"), ob1, true);
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er3"), ob2, false);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir0"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir1"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir2"), true);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir3"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr0"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr1"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr2"), true);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr3"), false);
-        assert!(result.is_ok());
+        let metadata = create_metadata();
 
         let mut map1 = FxHashMap::default();
         map1.insert(String::from("v0"), 0);
@@ -906,129 +661,19 @@ object: object
         let yaml = &yaml[0];
         let result = ground_parameters_from_yaml(&metadata, yaml);
         assert!(result.is_ok());
-        let (parameters, elements_in_set_variable_array, elements_in_vector_variable_array) =
-            result.unwrap();
+        let (parameters, elements_in_set_variable_array) = result.unwrap();
         let expected_elements_in_set_variable_array =
             vec![vec![(3, 0)], vec![(3, 1)], vec![(3, 0)], vec![(3, 1)]];
-        let expected_elements_in_vector_variable_array = vec![vec![], vec![], vec![], vec![]];
         assert_eq!(parameters, expected_parameters);
         assert_eq!(
             elements_in_set_variable_array,
             expected_elements_in_set_variable_array
-        );
-        assert_eq!(
-            elements_in_vector_variable_array,
-            expected_elements_in_vector_variable_array
-        );
-
-        let yaml = yaml_rust::YamlLoader::load_from_str(
-            r"
-- name: v0
-  object: s3
-- name: v1
-  object: p3
-",
-        );
-        assert!(yaml.is_ok());
-        let yaml = yaml.unwrap();
-        assert_eq!(yaml.len(), 1);
-        let yaml = &yaml[0];
-        let result = ground_parameters_from_yaml(&metadata, yaml);
-        assert!(result.is_ok());
-        let (parameters, elements_in_set_variable_array, elements_in_vector_variable_array) =
-            result.unwrap();
-        let expected_elements_in_set_variable_array =
-            vec![vec![(3, 0)], vec![(3, 0)], vec![(3, 1)], vec![(3, 1)]];
-        let expected_elements_in_vector_variable_array = vec![
-            vec![(3, 0, 2)],
-            vec![(3, 1, 2)],
-            vec![(3, 0, 2)],
-            vec![(3, 1, 2)],
-        ];
-        assert_eq!(parameters, expected_parameters);
-        assert_eq!(
-            elements_in_set_variable_array,
-            expected_elements_in_set_variable_array
-        );
-        assert_eq!(
-            elements_in_vector_variable_array,
-            expected_elements_in_vector_variable_array
         );
     }
 
     #[test]
     fn ground_parameters_from_yaml_err() {
-        let mut metadata = StateMetadata::default();
-        let result = metadata.add_object_type(String::from("object"), 10);
-        assert!(result.is_ok());
-        let ob1 = result.unwrap();
-        let result = metadata.add_object_type(String::from("small"), 2);
-        assert!(result.is_ok());
-        let ob2 = result.unwrap();
-        let result = metadata.add_set_variable(String::from("s0"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_set_variable(String::from("s1"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_set_variable(String::from("s2"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_set_variable(String::from("s3"), ob2);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p0"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p1"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p2"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p3"), ob2);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e0"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e1"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e2"), ob1);
-        assert!(result.is_ok());
-        let result = metadata.add_element_variable(String::from("e3"), ob2);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i0"));
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i1"));
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i2"));
-        assert!(result.is_ok());
-        let result = metadata.add_integer_variable(String::from("i3"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c0"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c1"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c2"));
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_variable(String::from("c3"));
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er0"), ob1, false);
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er1"), ob1, false);
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er2"), ob1, true);
-        assert!(result.is_ok());
-        let result = metadata.add_element_resource_variable(String::from("er3"), ob2, false);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir0"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir1"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir2"), true);
-        assert!(result.is_ok());
-        let result = metadata.add_integer_resource_variable(String::from("ir3"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr0"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr1"), false);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr2"), true);
-        assert!(result.is_ok());
-        let result = metadata.add_continuous_resource_variable(String::from("cr3"), false);
-        assert!(result.is_ok());
+        let metadata = create_metadata();
 
         let yaml = yaml_rust::YamlLoader::load_from_str(
             r"
@@ -1063,13 +708,9 @@ object: object
 
     #[test]
     fn state_metadata_load_from_yaml_ok() {
-        let mut name_to_integer_variable = FxHashMap::default();
-        name_to_integer_variable.insert(String::from("n0"), 0);
-        let expected = StateMetadata {
-            integer_variable_names: vec![String::from("n0")],
-            name_to_integer_variable,
-            ..Default::default()
-        };
+        let mut expected = StateMetadata::default();
+        let result = expected.add_integer_variable(String::from("n0"));
+        assert!(result.is_ok());
         let objects = yaml_rust::Yaml::Array(Vec::new());
         let object_numbers = yaml_rust::Yaml::Hash(Hash::new());
         let variables = r"
@@ -1087,77 +728,7 @@ object: object
         assert!(metadata.is_ok());
         assert_eq!(metadata.unwrap(), expected);
 
-        let mut expected = StateMetadata::default();
-        let result = expected.add_object_type(String::from("object"), 10);
-        assert!(result.is_ok());
-        let ob1 = result.unwrap();
-        let result = expected.add_object_type(String::from("small"), 2);
-        assert!(result.is_ok());
-        let ob2 = result.unwrap();
-        let result = expected.add_set_variable(String::from("s0"), ob1);
-        assert!(result.is_ok());
-        let result = expected.add_set_variable(String::from("s1"), ob1);
-        assert!(result.is_ok());
-        let result = expected.add_set_variable(String::from("s2"), ob1);
-        assert!(result.is_ok());
-        let result = expected.add_set_variable(String::from("s3"), ob2);
-        assert!(result.is_ok());
-        let result = expected.add_vector_variable(String::from("p0"), ob1);
-        assert!(result.is_ok());
-        let result = expected.add_vector_variable(String::from("p1"), ob1);
-        assert!(result.is_ok());
-        let result = expected.add_vector_variable(String::from("p2"), ob1);
-        assert!(result.is_ok());
-        let result = expected.add_vector_variable(String::from("p3"), ob2);
-        assert!(result.is_ok());
-        let result = expected.add_element_variable(String::from("e0"), ob1);
-        assert!(result.is_ok());
-        let result = expected.add_element_variable(String::from("e1"), ob1);
-        assert!(result.is_ok());
-        let result = expected.add_element_variable(String::from("e2"), ob1);
-        assert!(result.is_ok());
-        let result = expected.add_element_variable(String::from("e3"), ob2);
-        assert!(result.is_ok());
-        let result = expected.add_integer_variable(String::from("i0"));
-        assert!(result.is_ok());
-        let result = expected.add_integer_variable(String::from("i1"));
-        assert!(result.is_ok());
-        let result = expected.add_integer_variable(String::from("i2"));
-        assert!(result.is_ok());
-        let result = expected.add_integer_variable(String::from("i3"));
-        assert!(result.is_ok());
-        let result = expected.add_continuous_variable(String::from("c0"));
-        assert!(result.is_ok());
-        let result = expected.add_continuous_variable(String::from("c1"));
-        assert!(result.is_ok());
-        let result = expected.add_continuous_variable(String::from("c2"));
-        assert!(result.is_ok());
-        let result = expected.add_continuous_variable(String::from("c3"));
-        assert!(result.is_ok());
-        let result = expected.add_element_resource_variable(String::from("er0"), ob1, false);
-        assert!(result.is_ok());
-        let result = expected.add_element_resource_variable(String::from("er1"), ob1, false);
-        assert!(result.is_ok());
-        let result = expected.add_element_resource_variable(String::from("er2"), ob1, true);
-        assert!(result.is_ok());
-        let result = expected.add_element_resource_variable(String::from("er3"), ob2, false);
-        assert!(result.is_ok());
-        let result = expected.add_integer_resource_variable(String::from("ir0"), false);
-        assert!(result.is_ok());
-        let result = expected.add_integer_resource_variable(String::from("ir1"), false);
-        assert!(result.is_ok());
-        let result = expected.add_integer_resource_variable(String::from("ir2"), true);
-        assert!(result.is_ok());
-        let result = expected.add_integer_resource_variable(String::from("ir3"), false);
-        assert!(result.is_ok());
-        let result = expected.add_continuous_resource_variable(String::from("cr0"), false);
-        assert!(result.is_ok());
-        let result = expected.add_continuous_resource_variable(String::from("cr1"), false);
-        assert!(result.is_ok());
-        let result = expected.add_continuous_resource_variable(String::from("cr2"), true);
-        assert!(result.is_ok());
-        let result = expected.add_continuous_resource_variable(String::from("cr3"), false);
-        assert!(result.is_ok());
+        let expected = create_metadata();
 
         let objects = r"
 - object
@@ -1176,20 +747,8 @@ object: object
 - name: s3
   type: set
   object: small
-- name: p0
-  type: vector
-  object: object
-- name: p1
-  type: vector 
-  object: object
-- name: p2
-  type: vector
-  object: object
-- name: p3
-  type: vector
-  object: small
 - name: e0
-  type: element 
+  type: element
   object: object
 - name: e1
   type: element
@@ -1205,11 +764,11 @@ object: object
 - name: i1
   type: integer
 - name: i2
-  type: integer 
+  type: integer
 - name: i3
   type: integer
 - name: c0
-  type: continuous 
+  type: continuous
 - name: c1
   type: continuous
 - name: c2
@@ -1217,7 +776,7 @@ object: object
 - name: c3
   type: continuous
 - name: er0
-  type: element 
+  type: element
   object: object
   preference: greater
 - name: er1
@@ -1239,13 +798,13 @@ object: object
   type: integer
   preference: greater
 - name: ir2
-  type: integer 
+  type: integer
   preference: less
 - name: ir3
   type: integer
   preference: greater
 - name: cr0
-  type: continuous 
+  type: continuous
   preference: greater
 - name: cr1
   type: continuous

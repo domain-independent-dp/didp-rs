@@ -299,10 +299,6 @@ impl ToYamlString for expression::IntegerExpression {
                 op_str = op.to_yaml_string(state_data, state_functions, table_registry)?,
                 cexp_str = cexp.to_yaml_string(state_data, state_functions, table_registry)?
             )),
-            Self::Length(_) => Err("Current version doesn't support vector expressions"),
-            Self::Last(_) => Err("Current version doesn't support vector expressions"),
-            Self::At(_, _) => Err("Current version doesn't support vector expressions"),
-            Self::Reduce(_, _) => Err("Current version doesn't support vector expressions"),
         }
     }
 }
@@ -365,10 +361,6 @@ impl ToYamlString for expression::ContinuousExpression {
             Self::FromInteger(iexp) => {
                 iexp.to_yaml_string(state_data, state_functions, table_registry)
             }
-            Self::Length(_) => Err("Current version doesn't support vector expressions"),
-            Self::Last(_) => Err("Current version doesn't support vector expressions"),
-            Self::At(_, _) => Err("Current version doesn't support vector expressions"),
-            Self::Reduce(_, _) => Err("Current version doesn't support vector expressions"),
         }
     }
 }
@@ -418,8 +410,6 @@ impl ToYamlString for expression::ElementExpression {
                 eexp1_str = eexp1.to_yaml_string(state_data, state_functions, table_registry)?,
                 eexp2_str = eexp2.to_yaml_string(state_data, state_functions, table_registry)?
             )),
-            Self::Last(_) => Err("Current version doesn't support vector expressions"),
-            Self::At(_, _) => Err("Current version doesn't support vector expressions"),
         }
     }
 }
@@ -461,7 +451,6 @@ impl ToYamlString for expression::SetExpression {
                 sexp1_str = sexp1.to_yaml_string(state_data, state_functions, table_registry)?,
                 sexp2_str = sexp2.to_yaml_string(state_data, state_functions, table_registry)?
             )),
-            Self::FromVector(_, _) => Err("Current version doesn't support vector expressions"),
         }
     }
 }
@@ -559,7 +548,6 @@ impl ToYamlString for expression::ArgumentExpression {
         match self {
             Self::Set(sexp) => sexp.to_yaml_string(state_data, state_functions, table_registry),
             Self::Element(eexp) => eexp.to_yaml_string(state_data, state_functions, table_registry),
-            Self::Vector(_) => Err("Current version doesn't support vector expressions"),
         }
     }
 }
@@ -675,7 +663,6 @@ macro_rules! define_numeric_table_exp_to_yaml {
                             eexp1_str=eexp1.to_yaml_string(state_data, state_functions, table_registry)?,
                             eexp2_str=eexp2.to_yaml_string(state_data, state_functions, table_registry)?,
                             eexp3_str=eexp3.to_yaml_string(state_data, state_functions, table_registry)?)),
-                    _ => Err("Current version doesn't support vector expressions"),
                 }
             }
         }
@@ -715,19 +702,6 @@ mod tests {
         name_to_set_variable.insert("s2".to_string(), 2);
         name_to_set_variable.insert("s3".to_string(), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
-
-        let vector_variable_names = vec![
-            "p0".to_string(),
-            "p1".to_string(),
-            "p2".to_string(),
-            "p3".to_string(),
-        ];
-        let mut name_to_vector_variable = FxHashMap::default();
-        name_to_vector_variable.insert("p0".to_string(), 0);
-        name_to_vector_variable.insert("p1".to_string(), 1);
-        name_to_vector_variable.insert("p2".to_string(), 2);
-        name_to_vector_variable.insert("p3".to_string(), 3);
-        let vector_variable_to_object = vec![0, 0, 0, 0];
 
         let element_variable_names = vec![
             "e0".to_string(),
@@ -785,9 +759,6 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            vector_variable_names,
-            name_to_vector_variable,
-            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,

@@ -146,9 +146,6 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            vector_variable_names: vec![],
-            name_to_vector_variable: FxHashMap::default(),
-            vector_variable_to_object: vec![],
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -176,7 +173,6 @@ mod tests {
             parameter_names: vec![],
             parameter_values: vec![],
             elements_in_set_variable: vec![(0, 0)],
-            elements_in_vector_variable: vec![],
             preconditions: vec![GroundedCondition {
                 condition: Condition::And(
                     Condition::Constant(true).into(),

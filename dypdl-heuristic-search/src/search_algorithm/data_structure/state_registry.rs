@@ -73,16 +73,6 @@ where
     }
 
     #[inline]
-    fn get_number_of_vector_variables(&self) -> usize {
-        self.signature_variables.vector_variables.len()
-    }
-
-    #[inline]
-    fn get_vector_variable(&self, i: usize) -> &Vector {
-        &self.signature_variables.vector_variables[i]
-    }
-
-    #[inline]
     fn get_number_of_element_variables(&self) -> usize {
         self.signature_variables.element_variables.len()
     }
@@ -574,14 +564,16 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::super::hashable_state::HashableSignatureVariables;
+    use super::super::hashable_state::{
+        HashableSignatureVariables, StateWithHashableSignatureVariables,
+    };
     use super::*;
     use dypdl::expression::*;
     use dypdl::variable_type::OrderedContinuous;
     use dypdl::variable_type::Set;
-    use dypdl::ResourceVariables;
-    use dypdl::StateInterface;
-    use ordered_float::OrderedFloat;
+    use dypdl::{
+        ResourceVariables, StateFunctionCache, StateFunctions, StateInterface, TableRegistry,
+    };
     use rustc_hash::FxHashMap;
     use std::cell::Cell;
 
@@ -682,148 +674,159 @@ mod tests {
         }
     }
 
-    fn generate_registry() -> dypdl::TableRegistry {
-        let tables_1d = vec![dypdl::Table1D::new(vec![10, 20, 30])];
-        let mut name_to_table_1d = FxHashMap::default();
-        name_to_table_1d.insert(String::from("f1"), 0);
-
-        let tables_2d = vec![dypdl::Table2D::new(vec![
-            vec![10, 20, 30],
-            vec![40, 50, 60],
-        ])];
-        let mut name_to_table_2d = FxHashMap::default();
-        name_to_table_2d.insert(String::from("f2"), 0);
-
-        dypdl::TableRegistry {
-            integer_tables: dypdl::TableData {
-                tables_1d,
-                name_to_table_1d,
-                tables_2d,
-                name_to_table_2d,
-                ..Default::default()
-            },
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn state_in_registry_from_state() {
+    fn generate_full_signature_variables() -> dypdl::SignatureVariables {
         let mut set1 = Set::with_capacity(3);
         set1.insert(0);
         set1.insert(2);
         let mut set2 = Set::with_capacity(3);
         set2.insert(0);
         set2.insert(1);
-        let signature_variables = dypdl::SignatureVariables {
+
+        dypdl::SignatureVariables {
             set_variables: vec![set1, set2],
-            vector_variables: vec![vec![0, 2], vec![1, 2]],
             element_variables: vec![1, 2],
             integer_variables: vec![1, 2, 3],
             continuous_variables: vec![1.0, 2.0, 3.0],
-        };
-        let resource_variables = dypdl::ResourceVariables {
-            element_variables: vec![],
-            integer_variables: vec![4, 5, 6],
-            continuous_variables: vec![4.0, 5.0, 6.0],
-        };
-        let state = StateInRegistry::<Rc<_>>::from(dypdl::State {
-            signature_variables: signature_variables.clone(),
-            resource_variables: resource_variables.clone(),
-        });
-        assert_eq!(
-            state.signature_variables.set_variables,
-            signature_variables.set_variables
-        );
-        assert_eq!(
-            state.signature_variables.vector_variables,
-            signature_variables.vector_variables
-        );
-        assert_eq!(
-            state.signature_variables.element_variables,
-            signature_variables.element_variables
-        );
-        assert_eq!(
-            state.signature_variables.integer_variables,
-            signature_variables.integer_variables
-        );
-        assert_eq!(
-            state.signature_variables.continuous_variables,
-            vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)]
-        );
-        assert_eq!(
-            state.resource_variables.element_variables,
-            resource_variables.element_variables
-        );
-        assert_eq!(
-            state.resource_variables.integer_variables,
-            resource_variables.integer_variables
-        );
-        assert_eq!(
-            state.resource_variables.continuous_variables,
-            resource_variables.continuous_variables
-        );
+        }
     }
 
-    #[test]
-    fn state_in_registry_from_state_with_hashable_signature_variables() {
-        let mut set1 = Set::with_capacity(3);
-        set1.insert(0);
-        set1.insert(2);
-        let mut set2 = Set::with_capacity(3);
-        set2.insert(0);
-        set2.insert(1);
-        let signature_variables = HashableSignatureVariables {
-            set_variables: vec![set1, set2],
-            vector_variables: vec![vec![0, 2], vec![1, 2]],
-            element_variables: vec![1, 2],
-            integer_variables: vec![1, 2, 3],
+    fn generate_hashable_full_signature_variables() -> HashableSignatureVariables {
+        let signature_variables = generate_full_signature_variables();
+
+        HashableSignatureVariables {
+            set_variables: signature_variables.set_variables,
+            element_variables: signature_variables.element_variables,
+            integer_variables: signature_variables.integer_variables,
             continuous_variables: vec![
                 OrderedContinuous::from(1.0),
                 OrderedContinuous::from(2.0),
                 OrderedContinuous::from(3.0),
             ],
-        };
-        let resource_variables = dypdl::ResourceVariables {
-            element_variables: vec![],
+        }
+    }
+
+    fn generate_full_resource_variables() -> dypdl::ResourceVariables {
+        dypdl::ResourceVariables {
+            element_variables: vec![0, 1],
             integer_variables: vec![4, 5, 6],
             continuous_variables: vec![4.0, 5.0, 6.0],
+        }
+    }
+
+    fn generate_effect() -> dypdl::Effect {
+        let set_effect1 = SetExpression::SetElementOperation(
+            SetElementOperator::Add,
+            ElementExpression::Constant(1),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
+        );
+        let set_effect2 = SetExpression::SetElementOperation(
+            SetElementOperator::Remove,
+            ElementExpression::Constant(0),
+            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
+        );
+        let element_effect1 = ElementExpression::Constant(2);
+        let element_effect2 = ElementExpression::Constant(1);
+        let integer_effect1 = IntegerExpression::BinaryOperation(
+            BinaryOperator::Sub,
+            Box::new(IntegerExpression::Variable(0)),
+            Box::new(IntegerExpression::Constant(1)),
+        );
+        let integer_effect2 = IntegerExpression::BinaryOperation(
+            BinaryOperator::Mul,
+            Box::new(IntegerExpression::Variable(1)),
+            Box::new(IntegerExpression::Constant(2)),
+        );
+        let continuous_effect1 = ContinuousExpression::BinaryOperation(
+            BinaryOperator::Sub,
+            Box::new(ContinuousExpression::Variable(0)),
+            Box::new(ContinuousExpression::Constant(1.0)),
+        );
+        let continuous_effect2 = ContinuousExpression::BinaryOperation(
+            BinaryOperator::Mul,
+            Box::new(ContinuousExpression::Variable(1)),
+            Box::new(ContinuousExpression::Constant(2.0)),
+        );
+        let element_resource_effect1 = ElementExpression::Constant(1);
+        let element_resource_effect2 = ElementExpression::Constant(0);
+        let integer_resource_effect1 = IntegerExpression::BinaryOperation(
+            BinaryOperator::Add,
+            Box::new(IntegerExpression::ResourceVariable(0)),
+            Box::new(IntegerExpression::Constant(1)),
+        );
+        let integer_resource_effect2 = IntegerExpression::BinaryOperation(
+            BinaryOperator::Div,
+            Box::new(IntegerExpression::ResourceVariable(1)),
+            Box::new(IntegerExpression::Constant(2)),
+        );
+        let continuous_resource_effect1 = ContinuousExpression::BinaryOperation(
+            BinaryOperator::Add,
+            Box::new(ContinuousExpression::ResourceVariable(0)),
+            Box::new(ContinuousExpression::Constant(1.0)),
+        );
+        let continuous_resource_effect2 = ContinuousExpression::BinaryOperation(
+            BinaryOperator::Div,
+            Box::new(ContinuousExpression::ResourceVariable(1)),
+            Box::new(ContinuousExpression::Constant(2.0)),
+        );
+
+        dypdl::Effect {
+            set_effects: vec![(0, set_effect1), (1, set_effect2)],
+            element_effects: vec![(0, element_effect1), (1, element_effect2)],
+            integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
+            continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
+            element_resource_effects: vec![
+                (0, element_resource_effect1),
+                (1, element_resource_effect2),
+            ],
+            integer_resource_effects: vec![
+                (0, integer_resource_effect1),
+                (1, integer_resource_effect2),
+            ],
+            continuous_resource_effects: vec![
+                (0, continuous_resource_effect1),
+                (1, continuous_resource_effect2),
+            ],
+        }
+    }
+
+    fn expected_set_variables() -> Vec<Set> {
+        let mut set1 = Set::with_capacity(3);
+        set1.insert(0);
+        set1.insert(1);
+        set1.insert(2);
+        let mut set2 = Set::with_capacity(3);
+        set2.insert(1);
+
+        vec![set1, set2]
+    }
+
+    #[test]
+    fn state_in_registry_from_state() {
+        let resource_variables = generate_full_resource_variables();
+        let state = StateInRegistry::<Rc<_>>::from(dypdl::State {
+            signature_variables: generate_full_signature_variables(),
+            resource_variables: resource_variables.clone(),
+        });
+        let expected = StateInRegistry {
+            signature_variables: Rc::new(generate_hashable_full_signature_variables()),
+            resource_variables,
         };
+        assert_eq!(state, expected);
+    }
+
+    #[test]
+    fn state_in_registry_from_state_with_hashable_signature_variables() {
+        let signature_variables = generate_hashable_full_signature_variables();
+        let resource_variables = generate_full_resource_variables();
         let state = StateInRegistry::<Rc<_>>::from(StateWithHashableSignatureVariables {
             signature_variables: signature_variables.clone(),
             resource_variables: resource_variables.clone(),
         });
-        assert_eq!(
-            state.signature_variables.set_variables,
-            signature_variables.set_variables
-        );
-        assert_eq!(
-            state.signature_variables.vector_variables,
-            signature_variables.vector_variables
-        );
-        assert_eq!(
-            state.signature_variables.element_variables,
-            signature_variables.element_variables
-        );
-        assert_eq!(
-            state.signature_variables.integer_variables,
-            signature_variables.integer_variables
-        );
-        assert_eq!(
-            state.signature_variables.continuous_variables,
-            signature_variables.continuous_variables
-        );
-        assert_eq!(
-            state.resource_variables.element_variables,
-            resource_variables.element_variables
-        );
-        assert_eq!(
-            state.resource_variables.integer_variables,
-            resource_variables.integer_variables
-        );
-        assert_eq!(
-            state.resource_variables.continuous_variables,
-            resource_variables.continuous_variables
-        );
+        let expected = StateInRegistry {
+            signature_variables: Rc::new(signature_variables),
+            resource_variables,
+        };
+        assert_eq!(state, expected);
     }
 
     #[test]
@@ -864,44 +867,6 @@ mod tests {
             ..Default::default()
         };
         state.get_set_variable(1);
-    }
-
-    #[test]
-    fn state_get_number_of_vector_variables() {
-        let state = StateInRegistry {
-            signature_variables: Rc::new(HashableSignatureVariables {
-                vector_variables: vec![Vector::default()],
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        assert_eq!(state.get_number_of_vector_variables(), 1);
-    }
-
-    #[test]
-    fn state_get_vector_variable() {
-        let state = StateInRegistry {
-            signature_variables: Rc::new(HashableSignatureVariables {
-                vector_variables: vec![Vector::default(), vec![1]],
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        assert_eq!(state.get_vector_variable(0), &Vector::default());
-        assert_eq!(state.get_vector_variable(1), &vec![1]);
-    }
-
-    #[test]
-    #[should_panic]
-    fn state_get_vector_variable_panic() {
-        let state = StateInRegistry {
-            signature_variables: Rc::new(HashableSignatureVariables {
-                vector_variables: vec![Vector::default()],
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-        state.get_vector_variable(1);
     }
 
     #[test]
@@ -1139,127 +1104,22 @@ mod tests {
     fn apply_effect() {
         let state_functions = StateFunctions::default();
         let mut function_cache = StateFunctionCache::new(&state_functions);
-
-        let mut set1 = Set::with_capacity(3);
-        set1.insert(0);
-        set1.insert(2);
-        let mut set2 = Set::with_capacity(3);
-        set2.insert(0);
-        set2.insert(1);
         let state = StateInRegistry {
-            signature_variables: Rc::new(HashableSignatureVariables {
-                set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2], vec![1, 2]],
-                element_variables: vec![1, 2],
-                integer_variables: vec![1, 2, 3],
-                continuous_variables: vec![OrderedFloat(1.0), OrderedFloat(2.0), OrderedFloat(3.0)],
-            }),
-            resource_variables: ResourceVariables {
-                element_variables: vec![0, 1],
-                integer_variables: vec![4, 5, 6],
-                continuous_variables: vec![4.0, 5.0, 6.0],
-            },
+            signature_variables: Rc::new(generate_hashable_full_signature_variables()),
+            resource_variables: generate_full_resource_variables(),
         };
-        let registry = generate_registry();
-        let set_effect1 = SetExpression::SetElementOperation(
-            SetElementOperator::Add,
-            ElementExpression::Constant(1),
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-        );
-        let set_effect2 = SetExpression::SetElementOperation(
-            SetElementOperator::Remove,
-            ElementExpression::Constant(0),
-            Box::new(SetExpression::Reference(ReferenceExpression::Variable(1))),
-        );
-        let vector_effect1 = VectorExpression::Push(
-            ElementExpression::Constant(1),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                0,
-            ))),
-        );
-        let vector_effect2 = VectorExpression::Push(
-            ElementExpression::Constant(0),
-            Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                1,
-            ))),
-        );
-        let element_effect1 = ElementExpression::Constant(2);
-        let element_effect2 = ElementExpression::Constant(1);
-        let integer_effect1 = IntegerExpression::BinaryOperation(
-            BinaryOperator::Sub,
-            Box::new(IntegerExpression::Variable(0)),
-            Box::new(IntegerExpression::Constant(1)),
-        );
-        let integer_effect2 = IntegerExpression::BinaryOperation(
-            BinaryOperator::Mul,
-            Box::new(IntegerExpression::Variable(1)),
-            Box::new(IntegerExpression::Constant(2)),
-        );
-        let continuous_effect1 = ContinuousExpression::BinaryOperation(
-            BinaryOperator::Sub,
-            Box::new(ContinuousExpression::Variable(0)),
-            Box::new(ContinuousExpression::Constant(1.0)),
-        );
-        let continuous_effect2 = ContinuousExpression::BinaryOperation(
-            BinaryOperator::Mul,
-            Box::new(ContinuousExpression::Variable(1)),
-            Box::new(ContinuousExpression::Constant(2.0)),
-        );
-        let element_resource_effect1 = ElementExpression::Constant(1);
-        let element_resource_effect2 = ElementExpression::Constant(0);
-        let integer_resource_effect1 = IntegerExpression::BinaryOperation(
-            BinaryOperator::Add,
-            Box::new(IntegerExpression::ResourceVariable(0)),
-            Box::new(IntegerExpression::Constant(1)),
-        );
-        let integer_resource_effect2 = IntegerExpression::BinaryOperation(
-            BinaryOperator::Div,
-            Box::new(IntegerExpression::ResourceVariable(1)),
-            Box::new(IntegerExpression::Constant(2)),
-        );
-        let continuous_resource_effect1 = ContinuousExpression::BinaryOperation(
-            BinaryOperator::Add,
-            Box::new(ContinuousExpression::ResourceVariable(0)),
-            Box::new(ContinuousExpression::Constant(1.0)),
-        );
-        let continuous_resource_effect2 = ContinuousExpression::BinaryOperation(
-            BinaryOperator::Div,
-            Box::new(ContinuousExpression::ResourceVariable(1)),
-            Box::new(ContinuousExpression::Constant(2.0)),
-        );
-        let effect = dypdl::Effect {
-            set_effects: vec![(0, set_effect1), (1, set_effect2)],
-            vector_effects: vec![(0, vector_effect1), (1, vector_effect2)],
-            element_effects: vec![(0, element_effect1), (1, element_effect2)],
-            integer_effects: vec![(0, integer_effect1), (1, integer_effect2)],
-            continuous_effects: vec![(0, continuous_effect1), (1, continuous_effect2)],
-            element_resource_effects: vec![
-                (0, element_resource_effect1),
-                (1, element_resource_effect2),
-            ],
-            integer_resource_effects: vec![
-                (0, integer_resource_effect1),
-                (1, integer_resource_effect2),
-            ],
-            continuous_resource_effects: vec![
-                (0, continuous_resource_effect1),
-                (1, continuous_resource_effect2),
-            ],
-        };
-
-        let mut set1 = Set::with_capacity(3);
-        set1.insert(0);
-        set1.insert(1);
-        set1.insert(2);
-        let mut set2 = Set::with_capacity(3);
-        set2.insert(1);
+        let registry = TableRegistry::default();
+        let effect = generate_effect();
         let expected = StateInRegistry {
             signature_variables: Rc::new(HashableSignatureVariables {
-                set_variables: vec![set1, set2],
-                vector_variables: vec![vec![0, 2, 1], vec![1, 2, 0]],
+                set_variables: expected_set_variables(),
                 element_variables: vec![2, 1],
                 integer_variables: vec![0, 4, 3],
-                continuous_variables: vec![OrderedFloat(0.0), OrderedFloat(4.0), OrderedFloat(3.0)],
+                continuous_variables: vec![
+                    OrderedContinuous::from(0.0),
+                    OrderedContinuous::from(4.0),
+                    OrderedContinuous::from(3.0),
+                ],
             }),
             resource_variables: ResourceVariables {
                 element_variables: vec![1, 0],
@@ -1267,12 +1127,8 @@ mod tests {
                 continuous_variables: vec![5.0, 2.5, 6.0],
             },
         };
-        let successor: StateInRegistry = state.apply_effect(
-            &effect,
-            &mut function_cache,
-            &state_functions,
-            &registry,
-        );
+        let successor: StateInRegistry =
+            state.apply_effect(&effect, &mut function_cache, &state_functions, &registry);
         assert_eq!(successor, expected);
     }
 

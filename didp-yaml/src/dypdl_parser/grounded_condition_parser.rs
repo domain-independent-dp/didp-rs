@@ -39,17 +39,12 @@ pub fn load_grounded_conditions_from_yaml(
             let condition = util::get_string_by_key(map, "condition")?;
             match map.get(&FORALL_KEY) {
                 Some(forall) => {
-                    let (
-                        parameters_array,
-                        elements_in_set_variable_array,
-                        elements_in_vector_variable_array,
-                    ) = ground_parameters_from_yaml(metadata, forall)?;
+                    let (parameters_array, elements_in_set_variable_array) =
+                        ground_parameters_from_yaml(metadata, forall)?;
                     let mut conditions = Vec::with_capacity(parameters_array.len());
-                    for ((forall, elements_in_set_variable), elements_in_vector_variable) in
-                        parameters_array
-                            .into_iter()
-                            .zip(elements_in_set_variable_array.into_iter())
-                            .zip(elements_in_vector_variable_array.into_iter())
+                    for (forall, elements_in_set_variable) in parameters_array
+                        .into_iter()
+                        .zip(elements_in_set_variable_array.into_iter())
                     {
                         let mut parameters = parameters.clone();
                         parameters.extend(forall);
@@ -63,7 +58,6 @@ pub fn load_grounded_conditions_from_yaml(
                         conditions.push(GroundedCondition {
                             condition: condition.simplify(registry),
                             elements_in_set_variable,
-                            elements_in_vector_variable,
                         });
                     }
                     Ok(conditions)
@@ -95,8 +89,6 @@ mod tests {
         assert!(result.is_ok());
         let ob = result.unwrap();
         let result = metadata.add_set_variable(String::from("s0"), ob);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p0"), ob);
         assert!(result.is_ok());
         let result = metadata.add_element_variable(String::from("e0"), ob);
         assert!(result.is_ok());
@@ -132,7 +124,6 @@ condition: (and (is_in e0 s0) true)
         assert!(conditions.is_ok());
         let expected = vec![GroundedCondition {
             elements_in_set_variable: Vec::new(),
-            elements_in_vector_variable: Vec::new(),
             condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Variable(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -175,7 +166,6 @@ condition: (and (is_in e0 s0) true)
         assert!(conditions.is_ok());
         let expected = vec![GroundedCondition {
             elements_in_set_variable: Vec::new(),
-            elements_in_vector_variable: Vec::new(),
             condition: Condition::Set(Box::new(SetCondition::IsIn(
                 ElementExpression::Constant(0),
                 SetExpression::Reference(ReferenceExpression::Variable(0)),
@@ -207,53 +197,11 @@ forall:
         let expected = vec![
             GroundedCondition {
                 elements_in_set_variable: vec![(0, 0)],
-                elements_in_vector_variable: Vec::new(),
                 condition: Condition::Constant(true),
             },
             GroundedCondition {
                 elements_in_set_variable: vec![(0, 1)],
-                elements_in_vector_variable: Vec::new(),
                 condition: Condition::Constant(false),
-            },
-        ];
-        assert_eq!(conditions.unwrap(), expected);
-
-        let condition = r"
-condition: (is_in e s0)
-forall:
-        - name: e
-          object: p0
-";
-        let condition = yaml_rust::YamlLoader::load_from_str(condition);
-        assert!(condition.is_ok());
-        let condition = condition.unwrap();
-        assert_eq!(condition.len(), 1);
-        let condition = &condition[0];
-
-        let conditions = load_grounded_conditions_from_yaml(
-            condition,
-            &metadata,
-            &functions,
-            &registry,
-            &parameters,
-        );
-        assert!(conditions.is_ok());
-        let expected = vec![
-            GroundedCondition {
-                elements_in_set_variable: Vec::new(),
-                elements_in_vector_variable: vec![(0, 0, 2)],
-                condition: Condition::Set(Box::new(SetCondition::IsIn(
-                    ElementExpression::Constant(0),
-                    SetExpression::Reference(ReferenceExpression::Variable(0)),
-                ))),
-            },
-            GroundedCondition {
-                elements_in_set_variable: Vec::new(),
-                elements_in_vector_variable: vec![(0, 1, 2)],
-                condition: Condition::Set(Box::new(SetCondition::IsIn(
-                    ElementExpression::Constant(1),
-                    SetExpression::Reference(ReferenceExpression::Variable(0)),
-                ))),
             },
         ];
         assert_eq!(conditions.unwrap(), expected);
@@ -266,8 +214,6 @@ forall:
         assert!(result.is_ok());
         let ob = result.unwrap();
         let result = metadata.add_set_variable(String::from("s0"), ob);
-        assert!(result.is_ok());
-        let result = metadata.add_vector_variable(String::from("p0"), ob);
         assert!(result.is_ok());
         let result = metadata.add_element_variable(String::from("e0"), ob);
         assert!(result.is_ok());

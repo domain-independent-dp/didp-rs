@@ -1,6 +1,5 @@
 use super::argument_expression::ArgumentExpression;
 use super::condition::{Condition, IfThenElse};
-use super::continuous_vector_expression::ContinuousVectorExpression;
 use super::element_expression::ElementExpression;
 use super::integer_expression::IntegerExpression;
 use super::numeric_operator::{
@@ -10,7 +9,6 @@ use super::numeric_operator::{
 use super::numeric_table_expression::NumericTableExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
-use super::vector_expression::VectorExpression;
 use crate::state::{
     ContinuousResourceVariable, ContinuousVariable, IntegerResourceVariable, IntegerVariable,
     SetVariable, StateInterface,
@@ -55,8 +53,6 @@ pub enum ContinuousExpression {
     ),
     /// Cardinality of a set expression.
     Cardinality(SetExpression),
-    /// Length of a vector expression.
-    Length(VectorExpression),
     /// A constant in a continuous table.
     Table(Box<NumericTableExpression<Continuous>>),
     /// If-then-else expression, which returns the first one if the condition holds and the second one otherwise.
@@ -67,12 +63,6 @@ pub enum ContinuousExpression {
     ),
     /// Conversion from an integer expression.
     FromInteger(Box<IntegerExpression>),
-    /// The last element of a continuosu vector expression.
-    Last(Box<ContinuousVectorExpression>),
-    /// An item of a continuosu vector expression.
-    At(Box<ContinuousVectorExpression>, ElementExpression),
-    /// Reduce operation on a continuous vector expression.
-    Reduce(ReduceOperator, Box<ContinuousVectorExpression>),
 }
 
 impl Default for ContinuousExpression {
@@ -2176,37 +2166,6 @@ impl ContinuousExpression {
             } else {
                 x.eval(state, function_cache, state_functions, registry)
             }),
-            Self::Length(VectorExpression::Reference(expression)) => {
-                let vector = expression.eval(state, function_cache, state_functions, registry);
-                vector.len() as Continuous
-            }
-            Self::Length(vector) => vector
-                .eval(state, function_cache, state_functions, registry)
-                .len() as Continuous,
-            Self::Last(vector) => match vector.as_ref() {
-                ContinuousVectorExpression::Constant(vector) => *vector.last().unwrap(),
-                vector => *vector
-                    .eval_inner(cost, state, function_cache, state_functions, registry)
-                    .last()
-                    .unwrap(),
-            },
-            Self::At(vector, i) => match vector.as_ref() {
-                ContinuousVectorExpression::Constant(vector) => {
-                    vector[i.eval(state, function_cache, state_functions, registry)]
-                }
-                vector => vector.eval_inner(cost, state, function_cache, state_functions, registry)
-                    [i.eval(state, function_cache, state_functions, registry)],
-            },
-            Self::Reduce(op, vector) => match vector.as_ref() {
-                ContinuousVectorExpression::Constant(vector) => op.eval(vector),
-                vector => op.eval(&vector.eval_inner(
-                    cost,
-                    state,
-                    function_cache,
-                    state_functions,
-                    registry,
-                )),
-            },
         }
     }
 
@@ -2245,12 +2204,6 @@ impl ContinuousExpression {
                 }
                 expression => Self::Cardinality(expression),
             },
-            Self::Length(expression) => match expression.simplify(registry) {
-                VectorExpression::Reference(ReferenceExpression::Constant(vector)) => {
-                    Self::Constant(vector.len() as Continuous)
-                }
-                expression => Self::Length(expression),
-            },
             Self::Table(expression) => {
                 match expression.simplify(registry, &registry.continuous_tables) {
                     NumericTableExpression::Constant(value) => Self::Constant(value),
@@ -2270,22 +2223,6 @@ impl ContinuousExpression {
                 IntegerExpression::Constant(x) => Self::Constant(x as Continuous),
                 x => Self::FromInteger(Box::new(x)),
             },
-            Self::Last(vector) => match vector.simplify(registry) {
-                ContinuousVectorExpression::Constant(vector) => {
-                    Self::Constant(*vector.last().unwrap())
-                }
-                vector => Self::Last(Box::new(vector)),
-            },
-            Self::At(vector, i) => match (vector.simplify(registry), i.simplify(registry)) {
-                (ContinuousVectorExpression::Constant(vector), ElementExpression::Constant(i)) => {
-                    Self::Constant(vector[i])
-                }
-                (vector, i) => Self::At(Box::new(vector), i),
-            },
-            Self::Reduce(op, vector) => match vector.simplify(registry) {
-                ContinuousVectorExpression::Constant(vector) => Self::Constant(op.eval(&vector)),
-                vector => Self::Reduce(op.clone(), Box::new(vector)),
-            },
             _ => self.clone(),
         }
     }
@@ -2294,7 +2231,6 @@ impl ContinuousExpression {
 #[cfg(test)]
 mod tests {
     use super::super::table_expression::TableExpression;
-    use super::super::table_vector_expression::TableVectorExpression;
     use super::*;
     use crate::state::*;
     use crate::table_data::TableInterface;
@@ -8012,21 +7948,6 @@ mod tests {
     }
 
     #[test]
-    fn length_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry::default();
-        let expression = ContinuousExpression::Length(VectorExpression::Reference(
-            ReferenceExpression::Constant(vec![1, 4]),
-        ));
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            2.0
-        );
-    }
-
-    #[test]
     fn table_eval() {
         let state = State::default();
         let state_functions = StateFunctions::default();
@@ -8080,57 +8001,6 @@ mod tests {
         assert_eq!(
             expression.eval(&state, &mut function_cache, &state_functions, &registry),
             1.0
-        );
-    }
-
-    #[test]
-    fn last_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry::default();
-
-        let expression =
-            ContinuousExpression::Last(Box::new(ContinuousVectorExpression::Constant(vec![
-                1.0, 2.0, 3.0,
-            ])));
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            3.0
-        );
-    }
-
-    #[test]
-    fn at_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry::default();
-
-        let expression = ContinuousExpression::At(
-            Box::new(ContinuousVectorExpression::Constant(vec![1.0, 2.0, 3.0])),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            1.0
-        );
-    }
-
-    #[test]
-    fn reduce_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry::default();
-
-        let expression = ContinuousExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(ContinuousVectorExpression::Constant(vec![1.0, 2.0, 3.0])),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            6.0
         );
     }
 
@@ -8276,22 +8146,6 @@ mod tests {
     }
 
     #[test]
-    fn length_simplify() {
-        let registry = TableRegistry::default();
-        let expression = ContinuousExpression::Length(VectorExpression::Reference(
-            ReferenceExpression::Constant(vec![1, 4]),
-        ));
-        assert_eq!(
-            expression.simplify(&registry),
-            ContinuousExpression::Constant(2.0)
-        );
-        let expression = ContinuousExpression::Length(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        ));
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
     fn table_simplify() {
         let registry = TableRegistry::default();
         let expression =
@@ -8355,78 +8209,6 @@ mod tests {
 
         let expression =
             ContinuousExpression::FromInteger(Box::new(IntegerExpression::Variable(0)));
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
-    fn last_simplify() {
-        let registry = TableRegistry::default();
-
-        let expression =
-            ContinuousExpression::Last(Box::new(ContinuousVectorExpression::Constant(vec![
-                1.0, 2.0, 3.0,
-            ])));
-        assert_eq!(
-            expression.simplify(&registry),
-            ContinuousExpression::Constant(3.0)
-        );
-
-        let expression = ContinuousExpression::Last(Box::new(ContinuousVectorExpression::Table(
-            Box::new(TableVectorExpression::Table1D(
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            )),
-        )));
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
-    fn at_simplify() {
-        let registry = TableRegistry::default();
-
-        let expression = ContinuousExpression::At(
-            Box::new(ContinuousVectorExpression::Constant(vec![1.0, 2.0, 3.0])),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            ContinuousExpression::Constant(1.0)
-        );
-
-        let expression = ContinuousExpression::At(
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                ),
-            ))),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
-    fn reduce_simplify() {
-        let registry = TableRegistry::default();
-
-        let expression = ContinuousExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(ContinuousVectorExpression::Constant(vec![1.0, 2.0, 3.0])),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            ContinuousExpression::Constant(6.0)
-        );
-
-        let expression = ContinuousExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(ContinuousVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                ),
-            ))),
-        );
         assert_eq!(expression.simplify(&registry), expression);
     }
 }

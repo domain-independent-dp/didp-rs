@@ -2,14 +2,12 @@ use super::argument_expression::ArgumentExpression;
 use super::condition::{Condition, IfThenElse};
 use super::continuous_expression::ContinuousExpression;
 use super::element_expression::ElementExpression;
-use super::integer_vector_expression::IntegerVectorExpression;
 use super::numeric_operator::{
     BinaryOperator, CastOperator, MaxMin, ReduceOperator, UnaryOperator,
 };
 use super::numeric_table_expression::NumericTableExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
-use super::vector_expression::VectorExpression;
 use crate::state::{IntegerResourceVariable, IntegerVariable, SetVariable, StateInterface};
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table_data::{Table1DHandle, Table2DHandle, Table3DHandle, TableHandle};
@@ -41,8 +39,6 @@ pub enum IntegerExpression {
     ),
     /// The cardinality of a set expression.
     Cardinality(SetExpression),
-    /// The cardinality of a set expression.
-    Length(VectorExpression),
     /// A constant in an integer table.
     Table(Box<NumericTableExpression<Integer>>),
     /// If-then-else expression, which returns the first one if the condition holds and the second one otherwise.
@@ -53,12 +49,6 @@ pub enum IntegerExpression {
     ),
     /// Conversion from a continuous expression.
     FromContinuous(CastOperator, Box<ContinuousExpression>),
-    /// The last value in an integer vector.
-    Last(Box<IntegerVectorExpression>),
-    /// An item in an integer vector.
-    At(Box<IntegerVectorExpression>, ElementExpression),
-    /// Reduce operation on an integer vector expression.
-    Reduce(ReduceOperator, Box<IntegerVectorExpression>),
 }
 
 impl Default for IntegerExpression {
@@ -1912,37 +1902,6 @@ impl IntegerExpression {
             } else {
                 x.eval(state, function_cache, state_functions, registry)
             }) as Integer,
-            Self::Length(VectorExpression::Reference(expression)) => {
-                let vector = expression.eval(state, function_cache, state_functions, registry);
-                vector.len() as Integer
-            }
-            Self::Length(vector) => vector
-                .eval(state, function_cache, state_functions, registry)
-                .len() as Integer,
-            Self::Last(vector) => match vector.as_ref() {
-                IntegerVectorExpression::Constant(vector) => *vector.last().unwrap(),
-                vector => *vector
-                    .eval_inner(cost, state, function_cache, state_functions, registry)
-                    .last()
-                    .unwrap(),
-            },
-            Self::At(vector, i) => match vector.as_ref() {
-                IntegerVectorExpression::Constant(vector) => {
-                    vector[i.eval(state, function_cache, state_functions, registry)]
-                }
-                vector => vector.eval_inner(cost, state, function_cache, state_functions, registry)
-                    [i.eval(state, function_cache, state_functions, registry)],
-            },
-            Self::Reduce(op, vector) => match vector.as_ref() {
-                IntegerVectorExpression::Constant(vector) => op.eval(vector),
-                vector => op.eval(&vector.eval_inner(
-                    cost,
-                    state,
-                    function_cache,
-                    state_functions,
-                    registry,
-                )),
-            },
         }
     }
 
@@ -1967,12 +1926,6 @@ impl IntegerExpression {
                 }
                 expression => Self::Cardinality(expression),
             },
-            Self::Length(expression) => match expression.simplify(registry) {
-                VectorExpression::Reference(ReferenceExpression::Constant(vector)) => {
-                    Self::Constant(vector.len() as Integer)
-                }
-                expression => Self::Length(expression),
-            },
             Self::Table(expression) => {
                 match expression.simplify(registry, &registry.integer_tables) {
                     NumericTableExpression::Constant(value) => Self::Constant(value),
@@ -1992,22 +1945,6 @@ impl IntegerExpression {
                 ContinuousExpression::Constant(x) => Self::Constant(op.eval(x) as Integer),
                 x => Self::FromContinuous(op.clone(), Box::new(x)),
             },
-            Self::Last(vector) => match vector.simplify(registry) {
-                IntegerVectorExpression::Constant(vector) => {
-                    Self::Constant(*vector.last().unwrap())
-                }
-                vector => Self::Last(Box::new(vector)),
-            },
-            Self::At(vector, i) => match (vector.simplify(registry), i.simplify(registry)) {
-                (IntegerVectorExpression::Constant(vector), ElementExpression::Constant(i)) => {
-                    Self::Constant(vector[i])
-                }
-                (vector, i) => Self::At(Box::new(vector), i),
-            },
-            Self::Reduce(op, vector) => match vector.simplify(registry) {
-                IntegerVectorExpression::Constant(vector) => Self::Constant(op.eval(&vector)),
-                vector => Self::Reduce(op.clone(), Box::new(vector)),
-            },
             _ => self.clone(),
         }
     }
@@ -2016,7 +1953,6 @@ impl IntegerExpression {
 #[cfg(test)]
 mod tests {
     use super::super::table_expression::TableExpression;
-    use super::super::table_vector_expression::TableVectorExpression;
     use super::*;
     use crate::state::*;
     use crate::table_data::TableInterface;
@@ -3973,21 +3909,6 @@ mod tests {
     }
 
     #[test]
-    fn length_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry::default();
-        let expression = IntegerExpression::Length(VectorExpression::Reference(
-            ReferenceExpression::Constant(vec![1, 4]),
-        ));
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            2
-        );
-    }
-
-    #[test]
     fn table_eval() {
         let state = State::default();
         let state_functions = StateFunctions::default();
@@ -4042,55 +3963,6 @@ mod tests {
         assert_eq!(
             expression.eval(&state, &mut function_cache, &state_functions, &registry),
             1
-        );
-    }
-
-    #[test]
-    fn last_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry::default();
-
-        let expression =
-            IntegerExpression::Last(Box::new(IntegerVectorExpression::Constant(vec![1, 2, 3])));
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            3
-        );
-    }
-
-    #[test]
-    fn at_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry::default();
-
-        let expression = IntegerExpression::At(
-            Box::new(IntegerVectorExpression::Constant(vec![1, 2, 3])),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            1
-        );
-    }
-
-    #[test]
-    fn reduce_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry::default();
-
-        let expression = IntegerExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(IntegerVectorExpression::Constant(vec![1, 2, 3])),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            6
         );
     }
 
@@ -4180,22 +4052,6 @@ mod tests {
     }
 
     #[test]
-    fn length_simplify() {
-        let registry = TableRegistry::default();
-        let expression = IntegerExpression::Length(VectorExpression::Reference(
-            ReferenceExpression::Constant(vec![1, 4]),
-        ));
-        assert_eq!(
-            expression.simplify(&registry),
-            IntegerExpression::Constant(2)
-        );
-        let expression = IntegerExpression::Length(VectorExpression::Reference(
-            ReferenceExpression::Variable(0),
-        ));
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
     fn table_simplify() {
         let registry = TableRegistry::default();
         let expression = IntegerExpression::Table(Box::new(NumericTableExpression::Constant(0)));
@@ -4261,76 +4117,6 @@ mod tests {
         let expression = IntegerExpression::FromContinuous(
             CastOperator::Floor,
             Box::new(ContinuousExpression::Variable(0)),
-        );
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
-    fn last_simplify() {
-        let registry = TableRegistry::default();
-
-        let expression =
-            IntegerExpression::Last(Box::new(IntegerVectorExpression::Constant(vec![1, 2, 3])));
-        assert_eq!(
-            expression.simplify(&registry),
-            IntegerExpression::Constant(3)
-        );
-
-        let expression = IntegerExpression::Last(Box::new(IntegerVectorExpression::Table(
-            Box::new(TableVectorExpression::Table1D(
-                0,
-                VectorExpression::Reference(ReferenceExpression::Variable(0)),
-            )),
-        )));
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
-    fn at_simplify() {
-        let registry = TableRegistry::default();
-
-        let expression = IntegerExpression::At(
-            Box::new(IntegerVectorExpression::Constant(vec![1, 2, 3])),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            IntegerExpression::Constant(1)
-        );
-
-        let expression = IntegerExpression::At(
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                ),
-            ))),
-            ElementExpression::Constant(0),
-        );
-        assert_eq!(expression.simplify(&registry), expression);
-    }
-
-    #[test]
-    fn reduce_simplify() {
-        let registry = TableRegistry::default();
-
-        let expression = IntegerExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(IntegerVectorExpression::Constant(vec![1, 2, 3])),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            IntegerExpression::Constant(6)
-        );
-
-        let expression = IntegerExpression::Reduce(
-            ReduceOperator::Sum,
-            Box::new(IntegerVectorExpression::Table(Box::new(
-                TableVectorExpression::Table1D(
-                    0,
-                    VectorExpression::Reference(ReferenceExpression::Variable(0)),
-                ),
-            ))),
         );
         assert_eq!(expression.simplify(&registry), expression);
     }

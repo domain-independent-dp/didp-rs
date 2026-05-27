@@ -2,7 +2,6 @@ use super::argument_expression::ArgumentExpression;
 use super::element_expression::ElementExpression;
 use super::reference_expression::ReferenceExpression;
 use super::set_expression::SetExpression;
-use super::vector_expression::VectorExpression;
 use crate::state::StateInterface;
 use crate::state_functions::{StateFunctionCache, StateFunctions};
 use crate::table::{Table1D, Table2D};
@@ -108,19 +107,6 @@ impl SetReduceExpression {
                     let x = x.eval(state, function_cache, state_functions, registry);
                     Self::reduce_table_1d(op, *capacity, &set_tables.tables_1d[*i], x.ones())
                 }
-                ArgumentExpression::Vector(VectorExpression::Reference(x)) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied();
-                    Self::reduce_table_1d(op, *capacity, &set_tables.tables_1d[*i], x)
-                }
-                ArgumentExpression::Vector(x) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter();
-                    Self::reduce_table_1d(op, *capacity, &set_tables.tables_1d[*i], x)
-                }
             },
             Self::Table2D(op, capacity, i, x, y) => match (x.as_ref(), y.as_ref()) {
                 (ArgumentExpression::Element(x), ArgumentExpression::Element(y)) => {
@@ -150,24 +136,6 @@ impl SetReduceExpression {
                     Self::reduce_table_2d_y(op, *capacity, &set_tables.tables_2d[*i], x, y.ones())
                 }
                 (
-                    ArgumentExpression::Element(x),
-                    ArgumentExpression::Vector(VectorExpression::Reference(y)),
-                ) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y
-                        .eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied();
-                    Self::reduce_table_2d_y(op, *capacity, &set_tables.tables_2d[*i], x, y)
-                }
-                (ArgumentExpression::Element(x), ArgumentExpression::Vector(y)) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter();
-                    Self::reduce_table_2d_y(op, *capacity, &set_tables.tables_2d[*i], x, y)
-                }
-                (
                     ArgumentExpression::Set(SetExpression::Reference(x)),
                     ArgumentExpression::Element(y),
                 ) => {
@@ -187,24 +155,6 @@ impl SetReduceExpression {
                     let x = x.eval(state, function_cache, state_functions, registry);
                     let y = y.eval(state, function_cache, state_functions, registry);
                     Self::reduce_table_2d_x(op, *capacity, &set_tables.tables_2d[*i], x.ones(), y)
-                }
-                (
-                    ArgumentExpression::Vector(VectorExpression::Reference(x)),
-                    ArgumentExpression::Element(y),
-                ) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied();
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    Self::reduce_table_2d_x(op, *capacity, &set_tables.tables_2d[*i], x, y)
-                }
-                (ArgumentExpression::Vector(x), ArgumentExpression::Element(y)) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter();
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    Self::reduce_table_2d_x(op, *capacity, &set_tables.tables_2d[*i], x, y)
                 }
                 (
                     ArgumentExpression::Set(SetExpression::StateFunction(x)),
@@ -329,133 +279,6 @@ impl SetReduceExpression {
                         &y,
                     )
                 }
-                (
-                    ArgumentExpression::Set(SetExpression::Reference(x)),
-                    ArgumentExpression::Vector(VectorExpression::Reference(y)),
-                ) => {
-                    let y = y
-                        .eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied();
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    Self::reduce_table_2d(op, *capacity, &set_tables.tables_2d[*i], x.ones(), y)
-                }
-                (
-                    ArgumentExpression::Set(x),
-                    ArgumentExpression::Vector(VectorExpression::Reference(y)),
-                ) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y
-                        .eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied();
-                    Self::reduce_table_2d(op, *capacity, &set_tables.tables_2d[*i], x.ones(), y)
-                }
-                (
-                    ArgumentExpression::Set(SetExpression::Reference(x)),
-                    ArgumentExpression::Vector(y),
-                ) => {
-                    let y = y
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter();
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    Self::reduce_table_2d(op, *capacity, &set_tables.tables_2d[*i], x.ones(), y)
-                }
-                (ArgumentExpression::Set(x), ArgumentExpression::Vector(y)) => {
-                    let x = x.eval(state, function_cache, state_functions, registry);
-                    let y = y
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter();
-                    Self::reduce_table_2d(op, *capacity, &set_tables.tables_2d[*i], x.ones(), y)
-                }
-                (
-                    ArgumentExpression::Vector(VectorExpression::Reference(x)),
-                    ArgumentExpression::Set(SetExpression::Reference(y)),
-                ) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied();
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    Self::reduce_table_2d_set_y(op, *capacity, &set_tables.tables_2d[*i], x, y)
-                }
-                (
-                    ArgumentExpression::Vector(x),
-                    ArgumentExpression::Set(SetExpression::Reference(y)),
-                ) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter();
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    Self::reduce_table_2d_set_y(op, *capacity, &set_tables.tables_2d[*i], x, y)
-                }
-                (
-                    ArgumentExpression::Vector(VectorExpression::Reference(x)),
-                    ArgumentExpression::Set(y),
-                ) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied();
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    Self::reduce_table_2d_set_y(op, *capacity, &set_tables.tables_2d[*i], x, &y)
-                }
-                (ArgumentExpression::Vector(x), ArgumentExpression::Set(y)) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter();
-                    let y = y.eval(state, function_cache, state_functions, registry);
-                    Self::reduce_table_2d_set_y(op, *capacity, &set_tables.tables_2d[*i], x, &y)
-                }
-                (
-                    ArgumentExpression::Vector(VectorExpression::Reference(x)),
-                    ArgumentExpression::Vector(VectorExpression::Reference(y)),
-                ) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied();
-                    let y = y
-                        .eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied();
-                    Self::reduce_table_2d(op, *capacity, &set_tables.tables_2d[*i], x, y)
-                }
-                (
-                    ArgumentExpression::Vector(x),
-                    ArgumentExpression::Vector(VectorExpression::Reference(y)),
-                ) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter();
-                    let y = y
-                        .eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied();
-                    Self::reduce_table_2d(op, *capacity, &set_tables.tables_2d[*i], x, y)
-                }
-                (
-                    ArgumentExpression::Vector(VectorExpression::Reference(x)),
-                    ArgumentExpression::Vector(y),
-                ) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .iter()
-                        .copied();
-                    let y = y
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter();
-                    Self::reduce_table_2d(op, *capacity, &set_tables.tables_2d[*i], x, y)
-                }
-                (ArgumentExpression::Vector(x), ArgumentExpression::Vector(y)) => {
-                    let x = x
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter();
-                    let y = y
-                        .eval(state, function_cache, state_functions, registry)
-                        .into_iter();
-                    Self::reduce_table_2d(op, *capacity, &set_tables.tables_2d[*i], x, y)
-                }
             },
             Self::Table3D(op, capacity, i, x, y, z) => {
                 let args = ArgumentExpression::eval_args(
@@ -506,14 +329,6 @@ impl SetReduceExpression {
                     &set_tables.tables_1d[*i],
                     x.ones(),
                 )),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(x),
-                )) => Self::Constant(Self::reduce_table_1d(
-                    op,
-                    *capacity,
-                    &set_tables.tables_1d[*i],
-                    x.into_iter(),
-                )),
                 x => Self::Table1D(op.clone(), *capacity, *i, Box::new(x)),
             },
             Self::Table2D(op, capacity, i, x, y) => {
@@ -530,36 +345,12 @@ impl SetReduceExpression {
                         )),
                     ) => Self::Constant(Self::reduce_table_2d_y(op, *capacity, table, x, y.ones())),
                     (
-                        ArgumentExpression::Element(ElementExpression::Constant(x)),
-                        ArgumentExpression::Vector(VectorExpression::Reference(
-                            ReferenceExpression::Constant(y),
-                        )),
-                    ) => Self::Constant(Self::reduce_table_2d_y(
-                        op,
-                        *capacity,
-                        table,
-                        x,
-                        y.into_iter(),
-                    )),
-                    (
                         ArgumentExpression::Set(SetExpression::Reference(
                             ReferenceExpression::Constant(x),
                         )),
                         ArgumentExpression::Element(ElementExpression::Constant(y)),
                     ) => Self::Constant(Self::reduce_table_2d_x(op, *capacity, table, x.ones(), y)),
                     (
-                        ArgumentExpression::Vector(VectorExpression::Reference(
-                            ReferenceExpression::Constant(x),
-                        )),
-                        ArgumentExpression::Element(ElementExpression::Constant(y)),
-                    ) => Self::Constant(Self::reduce_table_2d_x(
-                        op,
-                        *capacity,
-                        table,
-                        x.into_iter(),
-                        y,
-                    )),
-                    (
                         ArgumentExpression::Set(SetExpression::Reference(
                             ReferenceExpression::Constant(x),
                         )),
@@ -572,48 +363,6 @@ impl SetReduceExpression {
                         table,
                         x.ones(),
                         &y,
-                    )),
-                    (
-                        ArgumentExpression::Set(SetExpression::Reference(
-                            ReferenceExpression::Constant(x),
-                        )),
-                        ArgumentExpression::Vector(VectorExpression::Reference(
-                            ReferenceExpression::Constant(y),
-                        )),
-                    ) => Self::Constant(Self::reduce_table_2d(
-                        op,
-                        *capacity,
-                        table,
-                        x.ones(),
-                        y.into_iter(),
-                    )),
-                    (
-                        ArgumentExpression::Vector(VectorExpression::Reference(
-                            ReferenceExpression::Constant(x),
-                        )),
-                        ArgumentExpression::Set(SetExpression::Reference(
-                            ReferenceExpression::Constant(y),
-                        )),
-                    ) => Self::Constant(Self::reduce_table_2d_set_y(
-                        op,
-                        *capacity,
-                        table,
-                        x.into_iter(),
-                        &y,
-                    )),
-                    (
-                        ArgumentExpression::Vector(VectorExpression::Reference(
-                            ReferenceExpression::Constant(x),
-                        )),
-                        ArgumentExpression::Vector(VectorExpression::Reference(
-                            ReferenceExpression::Constant(y),
-                        )),
-                    ) => Self::Constant(Self::reduce_table_2d(
-                        op,
-                        *capacity,
-                        table,
-                        x.into_iter(),
-                        y.into_iter(),
                     )),
                     (x, y) => Self::Table2D(op.clone(), *capacity, *i, Box::new(x), Box::new(y)),
                 }
@@ -664,21 +413,6 @@ impl SetReduceExpression {
         I: Iterator<Item = Element>,
     {
         let iter = x.map(|x| table.get(x));
-        op.eval(iter, capacity)
-    }
-
-    fn reduce_table_2d<I, J>(
-        op: &SetReduceOperator,
-        capacity: usize,
-        table: &Table2D<Set>,
-        x: I,
-        y: J,
-    ) -> Set
-    where
-        I: Iterator<Item = Element>,
-        J: Iterator<Item = Element> + Clone,
-    {
-        let iter = x.flat_map(|x| y.clone().map(move |y| table.get(x, y)));
         op.eval(iter, capacity)
     }
 
@@ -970,100 +704,6 @@ mod tests {
     }
 
     #[test]
-    fn table_1d_vector_reference_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_1d: vec![Table1D::new(vec![
-                    {
-                        let mut set = Set::with_capacity(3);
-                        set.insert(0);
-                        set.insert(1);
-                        set
-                    },
-                    {
-                        let mut set = Set::with_capacity(3);
-                        set.insert(1);
-                        set.insert(2);
-                        set
-                    },
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table1D(
-            SetReduceOperator::Intersection,
-            3,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(3);
-                set.insert(1);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_1d_vector_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                vector_variables: vec![vec![1, 0]],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_1d: vec![Table1D::new(vec![
-                    {
-                        let mut set = Set::with_capacity(3);
-                        set.insert(0);
-                        set.insert(1);
-                        set
-                    },
-                    {
-                        let mut set = Set::with_capacity(3);
-                        set.insert(1);
-                        set.insert(2);
-                        set
-                    },
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table1D(
-            SetReduceOperator::Intersection,
-            3,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reverse(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                    0,
-                ))),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(3);
-                set.insert(1);
-                set
-            }
-        );
-    }
-
-    #[test]
     fn table_1d_set_state_function_eval() {
         let mut state_metadata = StateMetadata::default();
         let ob = state_metadata.add_object_type("ob", 3);
@@ -1314,138 +954,6 @@ mod tests {
     }
 
     #[test]
-    fn table_2d_element_vector_reference_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_element_vector_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                vector_variables: vec![vec![1, 0]],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reverse(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                    0,
-                ))),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            }
-        );
-    }
-
-    #[test]
     fn table_2d_set_reference_element_eval() {
         let state = State::default();
         let state_functions = StateFunctions::default();
@@ -1565,138 +1073,6 @@ mod tests {
             0,
             Box::new(ArgumentExpression::Set(SetExpression::Complement(
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ))),
-            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(3);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_reference_element_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(3);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_element_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                vector_variables: vec![vec![1, 0]],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reverse(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                    0,
-                ))),
             ))),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
@@ -1998,888 +1374,6 @@ mod tests {
             ))),
             Box::new(ArgumentExpression::Set(SetExpression::Complement(
                 Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_set_reference_vector_reference_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Set(SetExpression::Reference(
-                ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }),
-            ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_set_vector_reference_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                set_variables: vec![Set::with_capacity(2)],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Set(SetExpression::Complement(
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_set_reference_vector_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                set_variables: vec![Set::with_capacity(2)],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Set(SetExpression::Reference(
-                ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }),
-            ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reverse(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                    vec![1, 0],
-                ))),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_set_vector_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                set_variables: vec![Set::with_capacity(2)],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Set(SetExpression::Complement(
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reverse(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                    vec![1, 0],
-                ))),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_reference_set_reference_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-            Box::new(ArgumentExpression::Set(SetExpression::Reference(
-                ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_reference_set_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                set_variables: vec![Set::with_capacity(2)],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-            Box::new(ArgumentExpression::Set(SetExpression::Complement(
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_set_reference_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                set_variables: vec![Set::with_capacity(2)],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reverse(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                    vec![1, 0],
-                ))),
-            ))),
-            Box::new(ArgumentExpression::Set(SetExpression::Reference(
-                ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_set_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                set_variables: vec![Set::with_capacity(2)],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reverse(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                    vec![1, 0],
-                ))),
-            ))),
-            Box::new(ArgumentExpression::Set(SetExpression::Complement(
-                Box::new(SetExpression::Reference(ReferenceExpression::Variable(0))),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_reference_eval() {
-        let state = State::default();
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_reference_vector_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                set_variables: vec![Set::with_capacity(2)],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reverse(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                    vec![1, 0],
-                ))),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_vector_reference_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                set_variables: vec![Set::with_capacity(2)],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reverse(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                    vec![1, 0],
-                ))),
-            ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-        );
-        assert_eq!(
-            expression.eval(&state, &mut function_cache, &state_functions, &registry),
-            {
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            }
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_eval() {
-        let state = State {
-            signature_variables: SignatureVariables {
-                set_variables: vec![Set::with_capacity(2)],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let state_functions = StateFunctions::default();
-        let mut function_cache = StateFunctionCache::new(&state_functions);
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reverse(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                    vec![1, 0],
-                ))),
-            ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reverse(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Constant(
-                    vec![1, 0],
-                ))),
             ))),
         );
         assert_eq!(
@@ -3304,8 +1798,13 @@ mod tests {
                     set
                 }),
             ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
+            Box::new(ArgumentExpression::Set(SetExpression::Reference(
+                ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }),
             ))),
         );
         assert_eq!(
@@ -3376,9 +1875,12 @@ mod tests {
                     set.insert(1);
                     set
                 }))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
             ],
         );
         assert_eq!(
@@ -3474,46 +1976,6 @@ mod tests {
                     set.insert(1);
                     set
                 }),
-            ))),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            SetReduceExpression::Constant({
-                let mut set = Set::with_capacity(3);
-                set.insert(1);
-                set
-            })
-        );
-    }
-
-    #[test]
-    fn table_1d_vector_constant_simplify() {
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_1d: vec![Table1D::new(vec![
-                    {
-                        let mut set = Set::with_capacity(3);
-                        set.insert(0);
-                        set.insert(1);
-                        set
-                    },
-                    {
-                        let mut set = Set::with_capacity(3);
-                        set.insert(1);
-                        set.insert(2);
-                        set
-                    },
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table1D(
-            SetReduceOperator::Intersection,
-            3,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
             ))),
         );
         assert_eq!(
@@ -3690,65 +2152,6 @@ mod tests {
     }
 
     #[test]
-    fn table_2d_element_vector_constant_simplify() {
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            SetReduceExpression::Constant({
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set
-            })
-        );
-    }
-
-    #[test]
     fn table_2d_set_element_constant_simplify() {
         let registry = TableRegistry {
             set_tables: TableData {
@@ -3797,65 +2200,6 @@ mod tests {
                     set.insert(1);
                     set
                 }),
-            ))),
-            Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            SetReduceExpression::Constant({
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(3);
-                set
-            })
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_element_constant_simplify() {
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
             ))),
             Box::new(ArgumentExpression::Element(ElementExpression::Constant(0))),
         );
@@ -3928,205 +2272,6 @@ mod tests {
                     set.insert(1);
                     set
                 }),
-            ))),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            SetReduceExpression::Constant({
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            })
-        );
-    }
-
-    #[test]
-    fn table_2d_set_vector_constant_simplify() {
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Set(SetExpression::Reference(
-                ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }),
-            ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            SetReduceExpression::Constant({
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            })
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_set_constant_simplify() {
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-            Box::new(ArgumentExpression::Set(SetExpression::Reference(
-                ReferenceExpression::Constant({
-                    let mut set = Set::with_capacity(2);
-                    set.insert(0);
-                    set.insert(1);
-                    set
-                }),
-            ))),
-        );
-        assert_eq!(
-            expression.simplify(&registry),
-            SetReduceExpression::Constant({
-                let mut set = Set::with_capacity(5);
-                set.insert(0);
-                set.insert(1);
-                set.insert(2);
-                set.insert(3);
-                set.insert(4);
-                set
-            })
-        );
-    }
-
-    #[test]
-    fn table_2d_vector_constant_simplify() {
-        let registry = TableRegistry {
-            set_tables: TableData {
-                tables_2d: vec![Table2D::new(vec![
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(1);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(2);
-                            set
-                        },
-                    ],
-                    vec![
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(3);
-                            set
-                        },
-                        {
-                            let mut set = Set::with_capacity(5);
-                            set.insert(0);
-                            set.insert(4);
-                            set
-                        },
-                    ],
-                ])],
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let expression = SetReduceExpression::Table2D(
-            SetReduceOperator::Union,
-            5,
-            0,
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
-            ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
             ))),
         );
         assert_eq!(
@@ -4259,8 +2404,13 @@ mod tests {
                     set
                 }),
             ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
+            Box::new(ArgumentExpression::Set(SetExpression::Reference(
+                ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }),
             ))),
         );
         assert_eq!(
@@ -4332,8 +2482,13 @@ mod tests {
                     set
                 }),
             ))),
-            Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                ReferenceExpression::Constant(vec![0, 1]),
+            Box::new(ArgumentExpression::Set(SetExpression::Reference(
+                ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }),
             ))),
         );
         assert_eq!(
@@ -4342,7 +2497,7 @@ mod tests {
                 SetReduceOperator::Union,
                 5,
                 0,
-                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0),)),
+                Box::new(ArgumentExpression::Element(ElementExpression::Variable(0))),
                 Box::new(ArgumentExpression::Set(SetExpression::Reference(
                     ReferenceExpression::Constant({
                         let mut set = Set::with_capacity(2);
@@ -4351,8 +2506,13 @@ mod tests {
                         set
                     }),
                 ))),
-                Box::new(ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
+                Box::new(ArgumentExpression::Set(SetExpression::Reference(
+                    ReferenceExpression::Constant({
+                        let mut set = Set::with_capacity(2);
+                        set.insert(0);
+                        set.insert(1);
+                        set
+                    }),
                 ))),
             )
         );
@@ -4409,9 +2569,12 @@ mod tests {
                     set.insert(1);
                     set
                 }))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
             ],
         );
         assert_eq!(
@@ -4487,9 +2650,12 @@ mod tests {
                     set.insert(1);
                     set
                 }))),
-                ArgumentExpression::Vector(VectorExpression::Reference(
-                    ReferenceExpression::Constant(vec![0, 1]),
-                )),
+                ArgumentExpression::Set(SetExpression::Reference(ReferenceExpression::Constant({
+                    let mut set = Set::with_capacity(2);
+                    set.insert(0);
+                    set.insert(1);
+                    set
+                }))),
             ],
         );
         assert_eq!(
@@ -4499,8 +2665,8 @@ mod tests {
                 5,
                 0,
                 vec![
-                    ArgumentExpression::Element(ElementExpression::Variable(0),),
-                    ArgumentExpression::Element(ElementExpression::Variable(0),),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
+                    ArgumentExpression::Element(ElementExpression::Variable(0)),
                     ArgumentExpression::Set(SetExpression::Reference(
                         ReferenceExpression::Constant({
                             let mut set = Set::with_capacity(2);
@@ -4509,8 +2675,13 @@ mod tests {
                             set
                         })
                     )),
-                    ArgumentExpression::Vector(VectorExpression::Reference(
-                        ReferenceExpression::Constant(vec![0, 1]),
+                    ArgumentExpression::Set(SetExpression::Reference(
+                        ReferenceExpression::Constant({
+                            let mut set = Set::with_capacity(2);
+                            set.insert(0);
+                            set.insert(1);
+                            set
+                        })
                     )),
                 ],
             )

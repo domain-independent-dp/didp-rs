@@ -4,7 +4,7 @@ use super::util::ParseErr;
 use super::util::{self, get_next_token_and_rest};
 use dypdl::expression::{
     BinaryOperator, ElementExpression, ReferenceExpression, SetElementOperator, SetExpression,
-    SetOperator, SetReduceExpression, SetReduceOperator, TableExpression, VectorExpression,
+    SetOperator, SetReduceExpression, SetReduceOperator, TableExpression,
 };
 use dypdl::variable_type::{Element, Set};
 use dypdl::{StateFunctions, StateMetadata, TableData, TableRegistry};
@@ -48,10 +48,6 @@ pub fn parse_expression<'a>(
                 ))
             } else if let Some((expression, rest)) =
                 parse_operation(name, rest, metadata, functions, registry, parameters)?
-            {
-                Ok((expression, rest))
-            } else if let Some((expression, rest)) =
-                parse_element_from_vector(name, rest, metadata, functions, registry, parameters)?
             {
                 Ok((expression, rest))
             } else if let Some((expression, rest)) =
@@ -135,35 +131,6 @@ fn parse_atom(
     }
 }
 
-fn parse_element_from_vector<'a>(
-    name: &str,
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
-) -> Result<Option<(ElementExpression, &'a [String])>, ParseErr> {
-    match name {
-        "last" => {
-            let (vector, rest) =
-                parse_vector_expression(tokens, metadata, functions, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok(Some((ElementExpression::Last(Box::new(vector)), rest)))
-        }
-        "at" => {
-            let (vector, rest) =
-                parse_vector_expression(tokens, metadata, functions, registry, parameters)?;
-            let (i, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok(Some((
-                ElementExpression::At(Box::new(vector), Box::new(i)),
-                rest,
-            )))
-        }
-        _ => Ok(None),
-    }
-}
-
 type TableExpressionResult<'a, T> = Option<(TableExpression<T>, &'a [String])>;
 
 pub fn parse_table_expression<'a, T: Clone>(
@@ -233,145 +200,6 @@ fn parse_parameterized_state_function<'a>(
         .get_element_function(&name)
         .map(|expression| Ok(Some((expression, rest))))
         .unwrap_or_else(|_| Ok(None))
-}
-
-pub fn parse_vector_expression<'a>(
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, usize>,
-) -> Result<(VectorExpression, &'a [String]), ParseErr> {
-    let (token, rest) = tokens
-        .split_first()
-        .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
-    match &token[..] {
-        "(" => {
-            let (name, rest) = rest
-                .split_first()
-                .ok_or_else(|| ParseErr::new("could not get token".to_string()))?;
-            if let Some((expression, rest)) = parse_table_expression(
-                name,
-                rest,
-                metadata,
-                functions,
-                registry,
-                parameters,
-                &registry.vector_tables,
-            )? {
-                Ok((
-                    VectorExpression::Reference(ReferenceExpression::Table(expression)),
-                    rest,
-                ))
-            } else if name == "if" {
-                let (condition, rest) = condition_parser::parse_expression(
-                    rest, metadata, functions, registry, parameters,
-                )?;
-                let (x, rest) =
-                    parse_vector_expression(rest, metadata, functions, registry, parameters)?;
-                let (y, rest) =
-                    parse_vector_expression(rest, metadata, functions, registry, parameters)?;
-                let rest = util::parse_closing(rest)?;
-                Ok((
-                    VectorExpression::If(Box::new(condition), Box::new(x), Box::new(y)),
-                    rest,
-                ))
-            } else if let Some((expression, rest)) =
-                parse_vector_operation(name, rest, metadata, functions, registry, parameters)?
-            {
-                Ok((expression, rest))
-            } else if name == "vector" {
-                parse_vector_from(rest, metadata, functions, registry, parameters)
-            } else {
-                Err(ParseErr::new(format!(
-                    "no such table or operation `{name}`",
-                )))
-            }
-        }
-        ")" => Err(ParseErr::new("unexpected `)`".to_string())),
-        _ => {
-            let set = parse_reference_atom(
-                token,
-                &registry.vector_tables.name_to_constant,
-                &metadata.name_to_vector_variable,
-            )?;
-            Ok((VectorExpression::Reference(set), rest))
-        }
-    }
-}
-
-fn parse_vector_from<'a>(
-    tokens: &'a [String],
-    metadata: &StateMetadata,
-    functions: &StateFunctions,
-    registry: &TableRegistry,
-    parameters: &FxHashMap<String, Element>,
-) -> Result<(VectorExpression, &'a [String]), ParseErr> {
-    if let Ok((set, rest)) = parse_set_expression(tokens, metadata, functions, registry, parameters)
-    {
-        let rest = util::parse_closing(rest)?;
-        Ok((VectorExpression::FromSet(Box::new(set)), rest))
-    } else {
-        let (vector, rest) = parse_element_vector(
-            tokens,
-            &registry.element_tables.name_to_constant,
-            parameters,
-        )?;
-        Ok((
-            VectorExpression::Reference(ReferenceExpression::Constant(vector)),
-            rest,
-        ))
-    }
-}
-
-fn parse_vector_operation<'a, 'b>(
-    name: &'a str,
-    tokens: &'a [String],
-    metadata: &'b StateMetadata,
-    functions: &'b StateFunctions,
-    registry: &'b TableRegistry,
-    parameters: &FxHashMap<String, usize>,
-) -> Result<Option<(VectorExpression, &'a [String])>, ParseErr> {
-    match name {
-        "reverse" => {
-            let (x, rest) =
-                parse_vector_expression(tokens, metadata, functions, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok(Some((VectorExpression::Reverse(Box::new(x)), rest)))
-        }
-        "indices" => {
-            let (x, rest) =
-                parse_vector_expression(tokens, metadata, functions, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok(Some((VectorExpression::Indices(Box::new(x)), rest)))
-        }
-        "set" => {
-            let (value, rest) =
-                parse_expression(tokens, metadata, functions, registry, parameters)?;
-            let (vector, rest) =
-                parse_vector_expression(rest, metadata, functions, registry, parameters)?;
-            let (i, rest) = parse_expression(rest, metadata, functions, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok(Some((
-                VectorExpression::Set(value, Box::new(vector), i),
-                rest,
-            )))
-        }
-        "push" => {
-            let (x, rest) = parse_expression(tokens, metadata, functions, registry, parameters)?;
-            let (y, rest) =
-                parse_vector_expression(rest, metadata, functions, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok(Some((VectorExpression::Push(x, Box::new(y)), rest)))
-        }
-        "pop" => {
-            let (x, rest) =
-                parse_vector_expression(tokens, metadata, functions, registry, parameters)?;
-            let rest = util::parse_closing(rest)?;
-            Ok(Some((VectorExpression::Pop(Box::new(x)), rest)))
-        }
-        _ => Ok(None),
-    }
 }
 
 fn parse_set_reduce_expression<'a, 'b>(
@@ -482,7 +310,7 @@ pub fn parse_set_expression<'a, 'b>(
             {
                 Ok((expression, rest))
             } else if let Some((expression, rest)) =
-                parse_set_from(name, rest, metadata, functions, registry, parameters)?
+                parse_set_from(name, rest, metadata, registry, parameters)?
             {
                 Ok((expression, rest))
             } else if name == "if" {
@@ -575,33 +403,22 @@ fn parse_set_from<'a>(
     name: &str,
     tokens: &'a [String],
     metadata: &StateMetadata,
-    functions: &StateFunctions,
     registry: &TableRegistry,
     parameters: &FxHashMap<String, Element>,
 ) -> Result<Option<(SetExpression, &'a [String])>, ParseErr> {
     if let Some(i) = metadata.name_to_object_type.get(name) {
         let capacity = metadata.object_numbers[*i];
-        if let Ok((vector, rest)) =
-            parse_vector_expression(tokens, metadata, functions, registry, parameters)
-        {
-            let rest = util::parse_closing(rest)?;
-            Ok(Some((
-                SetExpression::FromVector(capacity, Box::new(vector)),
-                rest,
-            )))
-        } else {
-            let (vector, rest) = parse_element_vector(
-                tokens,
-                &registry.element_tables.name_to_constant,
-                parameters,
-            )?;
-            let mut set = Set::with_capacity(capacity);
-            vector.into_iter().for_each(|v| set.insert(v));
-            Ok(Some((
-                SetExpression::Reference(ReferenceExpression::Constant(set)),
-                rest,
-            )))
-        }
+        let (vector, rest) = parse_element_vector(
+            tokens,
+            &registry.element_tables.name_to_constant,
+            parameters,
+        )?;
+        let mut set = Set::with_capacity(capacity);
+        vector.into_iter().for_each(|v| set.insert(v));
+        Ok(Some((
+            SetExpression::Reference(ReferenceExpression::Constant(set)),
+            rest,
+        )))
     } else {
         Ok(None)
     }
@@ -751,19 +568,6 @@ mod tests {
         name_to_set_variable.insert(String::from("s3"), 3);
         let set_variable_to_object = vec![0, 0, 0, 0];
 
-        let vector_variable_names = vec![
-            String::from("v0"),
-            String::from("v1"),
-            String::from("v2"),
-            String::from("v3"),
-        ];
-        let mut name_to_vector_variable = FxHashMap::default();
-        name_to_vector_variable.insert(String::from("v0"), 0);
-        name_to_vector_variable.insert(String::from("v1"), 1);
-        name_to_vector_variable.insert(String::from("v2"), 2);
-        name_to_vector_variable.insert(String::from("v3"), 3);
-        let vector_variable_to_object = vec![0, 0, 0, 0];
-
         let element_variable_names = vec![
             String::from("e0"),
             String::from("e1"),
@@ -809,9 +613,6 @@ mod tests {
             set_variable_names,
             name_to_set_variable,
             set_variable_to_object,
-            vector_variable_names,
-            name_to_vector_variable,
-            vector_variable_to_object,
             element_variable_names,
             name_to_element_variable,
             element_variable_to_object,
@@ -908,23 +709,9 @@ mod tests {
             name_to_table,
         };
 
-        let mut name_to_constant = FxHashMap::default();
-        name_to_constant.insert(String::from("vt0"), vec![0, 1]);
-        let tables_1d = vec![dypdl::Table1D::new(vec![vec![0, 1]])];
-        let mut name_to_table_1d = FxHashMap::default();
-        name_to_table_1d.insert(String::from("vt1"), 0);
-
-        let vector_tables = TableData {
-            name_to_constant,
-            tables_1d,
-            name_to_table_1d,
-            ..Default::default()
-        };
-
         TableRegistry {
             element_tables,
             set_tables,
-            vector_tables,
             ..Default::default()
         }
     }
@@ -1326,55 +1113,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_last_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "last", "v0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ElementExpression::Last(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(0)
-            )))
-        );
-        assert_eq!(rest, &tokens[4..]);
-    }
-
-    #[test]
-    fn parse_at_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "at", "v0", "1", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            ElementExpression::At(
-                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                    0
-                ))),
-                Box::new(ElementExpression::Constant(1))
-            )
-        );
-        assert_eq!(rest, &tokens[5..]);
-    }
-
-    #[test]
     fn parse_table_ok() {
         let metadata = generate_metadata();
         let functions = StateFunctions::default();
@@ -1594,461 +1332,6 @@ mod tests {
             &parameters,
             &registry.element_tables,
         );
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_err() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = [")", "(", "vector", "0", "1", "et0", "param", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_atom_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["v0", ")"].iter().map(|x| x.to_string()).collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            VectorExpression::Reference(ReferenceExpression::Variable(0))
-        );
-        assert_eq!(rest, &tokens[1..]);
-
-        let tokens: Vec<String> = ["vt0", ")"].iter().map(|x| x.to_string()).collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1]))
-        );
-        assert_eq!(rest, &tokens[1..]);
-    }
-
-    #[test]
-    fn parse_vector_atom_err() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["vv0", ")"].iter().map(|x| x.to_string()).collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_if_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "if", "true", "v0", "v1", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            VectorExpression::If(
-                Box::new(Condition::Constant(true)),
-                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                    0
-                ))),
-                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                    1
-                ))),
-            )
-        );
-        assert_eq!(rest, &tokens[6..]);
-    }
-
-    #[test]
-    fn parse_vector_if_err() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "if", "v0", "v1", "1", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = ["(", "if", "v0", "v1", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = ["(", "if", "true", "true", "v0", "v1", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_reverse_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "reverse", "v0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            VectorExpression::Reverse(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(0)
-            )))
-        );
-        assert_eq!(rest, &tokens[4..]);
-    }
-
-    #[test]
-    fn parse_vector_reverse_err_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "reverse", "e0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_indices_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "indices", "v0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            VectorExpression::Indices(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(0)
-            )))
-        );
-        assert_eq!(rest, &tokens[4..]);
-    }
-
-    #[test]
-    fn parse_vector_indices_err_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "indices", "e0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_set_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "set", "0", "v0", "0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            VectorExpression::Set(
-                ElementExpression::Constant(0),
-                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                    0
-                ))),
-                ElementExpression::Constant(0),
-            )
-        );
-        assert_eq!(rest, &tokens[6..]);
-    }
-
-    #[test]
-    fn parse_vector_set_err_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "set", "v0", "0", "0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_push_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "push", "0", "v0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            VectorExpression::Push(
-                ElementExpression::Constant(0),
-                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                    0
-                ))),
-            )
-        );
-        assert_eq!(rest, &tokens[5..]);
-    }
-
-    #[test]
-    fn parse_vector_push_err_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "push", "v0", "0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_pop_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "pop", "v0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            VectorExpression::Pop(Box::new(VectorExpression::Reference(
-                ReferenceExpression::Variable(0)
-            )))
-        );
-        assert_eq!(rest, &tokens[4..]);
-    }
-
-    #[test]
-    fn parse_vector_pop_err_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "pop", "e0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_constant_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "vector", "0", "1", "et0", "param", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            VectorExpression::Reference(ReferenceExpression::Constant(vec![0, 1, 1, 0]))
-        );
-        assert_eq!(rest, &tokens[7..]);
-    }
-
-    #[test]
-    fn parse_vector_constant_err() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "vector", "e0", "1", "et0", "param", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-
-        let tokens: Vec<String> = [
-            "(", "vector", "(", "et1", "0", ")", "1", "et0", "param", ")", ")",
-        ]
-        .iter()
-        .map(|x| x.to_string())
-        .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_table_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "vt1", "e0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            VectorExpression::Reference(ReferenceExpression::Table(TableExpression::Table1D(
-                0,
-                ElementExpression::Variable(0)
-            )))
-        );
-        assert_eq!(rest, &tokens[4..]);
-    }
-
-    #[test]
-    fn parse_vector_table_err() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-
-        let tokens: Vec<String> = ["(", "st1", "e0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_vector_from_set_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "vector", "s0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            VectorExpression::FromSet(Box::new(SetExpression::Reference(
-                ReferenceExpression::Variable(0)
-            )))
-        );
-        assert_eq!(rest, &tokens[4..]);
-    }
-
-    #[test]
-    fn parse_vector_from_set_err() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "vector", "v0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result =
-            parse_vector_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
     }
 
@@ -3039,31 +2322,6 @@ mod tests {
         .collect();
         let result = parse_set_expression(&tokens, &metadata, &functions, &registry, &parameters);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn parse_set_from_set_ok() {
-        let metadata = generate_metadata();
-        let functions = StateFunctions::default();
-        let registry = generate_registry();
-        let parameters = generate_parameters();
-        let tokens: Vec<String> = ["(", "something", "v0", ")", ")"]
-            .iter()
-            .map(|x| x.to_string())
-            .collect();
-        let result = parse_set_expression(&tokens, &metadata, &functions, &registry, &parameters);
-        assert!(result.is_ok());
-        let (expression, rest) = result.unwrap();
-        assert_eq!(
-            expression,
-            SetExpression::FromVector(
-                3,
-                Box::new(VectorExpression::Reference(ReferenceExpression::Variable(
-                    0
-                )))
-            )
-        );
-        assert_eq!(rest, &tokens[4..]);
     }
 
     #[test]
